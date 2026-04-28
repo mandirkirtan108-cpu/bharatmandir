@@ -18,3 +18,8 @@ export const templeAPI = {
   getSevas:     (id)          => api.get(`/api/temples/${id}/sevas`),
   health:       ()            => api.get('/api/health'),
 };
+
+export const routeAPI = {
+  plan:     (data)    => api.post('/api/route/plan', data),
+  presets:  ()        => api.get('/api/route/presets'),
+};

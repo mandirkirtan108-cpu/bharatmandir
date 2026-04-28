@@ -6,6 +6,7 @@ Entry point — run with: uvicorn main:app --reload
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import temples
+from routers import route_planner
 from db.connection import get_pool, close_pool
 import os
 from dotenv import load_dotenv
@@ -67,6 +68,7 @@ async def shutdown_event():
 # ─────────────────────────────────────────────
 
 app.include_router(temples.router)
+app.include_router(route_planner.router)
 
 
 # ─────────────────────────────────────────────

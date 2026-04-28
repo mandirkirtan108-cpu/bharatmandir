@@ -1,27 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import TempleCard from '../components/TempleCard';
 import Footer from '../components/Footer';
 import { templeAPI } from '../services/api';
-import { useTranslatedTemples } from '../hooks/useTranslatedData';
 
-const SECTS  = ['Shaiva', 'Vaishnav', 'Shakta', 'Smarta', 'Ganapatya'];
-const STATES = ['Madhya Pradesh', 'Uttar Pradesh', 'Maharashtra', 'Tamil Nadu', 'Gujarat', 'Karnataka', 'Rajasthan', 'Bihar', 'Odisha', 'Andhra Pradesh', 'Telangana', 'Kerala', 'West Bengal'];
-const TYPES  = ['Jyotirlinga', 'Shaktipeeth', 'Divya Desam', 'Char Dham', 'Regional Famous', 'Heritage', 'Cave Temple', 'Historical Ashram', 'Sacred Ghat', 'Astronomical'];
+const SECTS    = ['Shaiva', 'Vaishnav', 'Shakta', 'Smarta', 'Ganapatya'];
+const STATES   = ['Madhya Pradesh', 'Uttar Pradesh', 'Maharashtra', 'Tamil Nadu', 'Gujarat', 'Karnataka', 'Rajasthan', 'Bihar', 'Odisha', 'Andhra Pradesh', 'Telangana', 'Kerala', 'West Bengal'];
+const TYPES    = ['Jyotirlinga', 'Shaktipeeth', 'Divya Desam', 'Char Dham', 'Regional Famous', 'Heritage', 'Cave Temple', 'Historical Ashram', 'Sacred Ghat', 'Astronomical'];
+const SORT_OPTIONS = [
+  { value: 'name_asc',    label: 'Name (A → Z)' },
+  { value: 'name_desc',   label: 'Name (Z → A)' },
+  { value: 'rating_desc', label: 'Highest Rated' },
+  { value: 'city_asc',    label: 'City (A → Z)' },
+];
 
 export default function SearchPage() {
-  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const SORT_OPTIONS = [
-    { value: 'name_asc',    label: t('sort.name_asc') },
-    { value: 'name_desc',   label: t('sort.name_desc') },
-    { value: 'rating_desc', label: t('sort.rating_desc') },
-    { value: 'city_asc',    label: t('sort.city_asc') },
-  ];
 
   const [query,      setQuery]      = useState(searchParams.get('q') || '');
   const [results,    setResults]    = useState([]);
@@ -31,6 +27,7 @@ export default function SearchPage() {
   const [sort,       setSort]       = useState('name_asc');
   const [showFilter, setShowFilter] = useState(true);
 
+  // Filters
   const [selectedSects,  setSelectedSects]  = useState([]);
   const [selectedStates, setSelectedStates] = useState([]);
   const [selectedTypes,  setSelectedTypes]  = useState([]);
@@ -38,33 +35,40 @@ export default function SearchPage() {
   const [shaktipeeth,    setShaktipeeth]    = useState(false);
   const [freeEntry,      setFreeEntry]      = useState(false);
 
-  const { translated: displayResults, translating } = useTranslatedTemples(results);
-
   const PER_PAGE = 12;
 
   const fetchResults = useCallback(async (resetPage = true) => {
     setLoading(true);
     const currentPage = resetPage ? 1 : page;
     if (resetPage) setPage(1);
+
     try {
       let temples, count;
+
       if (query.trim()) {
+        // Full text search
         const res = await templeAPI.search(query.trim());
         temples   = res.data || [];
         count     = temples.length;
       } else {
-        const params = { per_page: 200 };
+        // Filtered browse
+        const params = { per_page: 200 }; // get all then sort client side
         if (selectedStates.length === 1) params.state = selectedStates[0];
         if (selectedSects.length  === 1) params.sect  = selectedSects[0];
         if (jyotirlinga) params.jyotirlinga = true;
         if (shaktipeeth) params.shaktipeeth = true;
+
         const res = await templeAPI.getAll(params);
         temples   = res.data.temples || [];
         count     = res.data.total   || 0;
       }
+
+      // Client-side additional filtering
       if (selectedSects.length  > 1) temples = temples.filter(t => selectedSects.includes(t.sect));
       if (selectedStates.length > 1) temples = temples.filter(t => selectedStates.includes(t.state));
       if (freeEntry)                 temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
+
+      // Sort
       temples = [...temples].sort((a, b) => {
         if (sort === 'name_asc')    return (a.name || '').localeCompare(b.name || '');
         if (sort === 'name_desc')   return (b.name || '').localeCompare(a.name || '');
@@ -72,7 +76,9 @@ export default function SearchPage() {
         if (sort === 'city_asc')    return (a.city || '').localeCompare(b.city || '');
         return 0;
       });
+
       setTotal(temples.length);
+      // Paginate
       const start = (currentPage - 1) * PER_PAGE;
       setResults(temples.slice(start, start + PER_PAGE));
     } catch (err) {
@@ -115,17 +121,17 @@ export default function SearchPage() {
 
       {/* ── Search Hero ── */}
       <div className="search-hero">
-        <h1 className="search-hero-title">{t('search.title')}</h1>
-        <p className="search-hero-sub">{t('search.subtitle')}</p>
+        <h1 className="search-hero-title">🔍 Find Your Temple</h1>
+        <p className="search-hero-sub">Search by name, deity, city, or use filters to discover sacred temples</p>
         <form className="search-bar" onSubmit={handleSearch}>
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder={t('search.input_placeholder')}
+            placeholder="Type temple name, deity, city..."
             autoFocus
           />
           <button type="submit" className="btn-primary">
-            <Search size={15} /> {t('search_btn')}
+            <Search size={15} /> Search
           </button>
         </form>
       </div>
@@ -139,42 +145,46 @@ export default function SearchPage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <span className="search-filter-title">
                 <SlidersHorizontal size={16} style={{ display: 'inline', marginRight: 6, color: 'var(--saffron)' }} />
-                {t('search.filters')}
+                Filters
               </span>
               {hasFilters && (
                 <button
                   onClick={clearAllFilters}
                   style={{ fontSize: 12, color: 'var(--saffron)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: 4 }}
                 >
-                  <X size={12} /> {t('search.clear_all')}
+                  <X size={12} /> Clear All
                 </button>
               )}
             </div>
 
-            {/* Special Categories */}
+            {/* Special Types */}
             <div className="search-filter-group">
-              <span className="search-filter-label">{t('search.special_categories')}</span>
+              <span className="search-filter-label">Special Categories</span>
               <label className="search-filter-option">
                 <input type="checkbox" checked={jyotirlinga} onChange={e => setJyotirlinga(e.target.checked)} />
-                ⚡ {t('search.jyotirlinga_filter')}
+                ⚡ Jyotirlinga (12)
               </label>
               <label className="search-filter-option">
                 <input type="checkbox" checked={shaktipeeth} onChange={e => setShaktipeeth(e.target.checked)} />
-                🌸 {t('search.shaktipeeth_filter')}
+                🌸 Shaktipeeth (51)
               </label>
               <label className="search-filter-option">
                 <input type="checkbox" checked={freeEntry} onChange={e => setFreeEntry(e.target.checked)} />
-                ✅ {t('search.free_entry')}
+                ✅ Free Entry
               </label>
             </div>
 
             {/* Sect */}
             <div className="search-filter-group">
-              <span className="search-filter-label">{t('search.sect')}</span>
+              <span className="search-filter-label">Sect / Tradition</span>
               <div className="search-filter-options">
                 {SECTS.map(s => (
                   <label key={s} className="search-filter-option">
-                    <input type="checkbox" checked={selectedSects.includes(s)} onChange={() => toggleItem(selectedSects, setSelectedSects, s)} />
+                    <input
+                      type="checkbox"
+                      checked={selectedSects.includes(s)}
+                      onChange={() => toggleItem(selectedSects, setSelectedSects, s)}
+                    />
                     {s}
                   </label>
                 ))}
@@ -183,11 +193,15 @@ export default function SearchPage() {
 
             {/* State */}
             <div className="search-filter-group">
-              <span className="search-filter-label">{t('search.state')}</span>
+              <span className="search-filter-label">State</span>
               <div className="search-filter-options" style={{ maxHeight: 200, overflowY: 'auto' }}>
                 {STATES.map(s => (
                   <label key={s} className="search-filter-option">
-                    <input type="checkbox" checked={selectedStates.includes(s)} onChange={() => toggleItem(selectedStates, setSelectedStates, s)} />
+                    <input
+                      type="checkbox"
+                      checked={selectedStates.includes(s)}
+                      onChange={() => toggleItem(selectedStates, setSelectedStates, s)}
+                    />
                     {s}
                   </label>
                 ))}
@@ -200,13 +214,17 @@ export default function SearchPage() {
             <div className="search-results-header">
               <div>
                 {loading
-                  ? <span style={{ color: 'var(--text-light)', fontSize: 14 }}>{t('search.searching')}</span>
+                  ? <span style={{ color: 'var(--text-light)', fontSize: 14 }}>Searching...</span>
                   : <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--brown)' }}>
-                      {total} {total !== 1 ? t('temples_count_plural') : t('temples_count_singular')} {t('search.found')}
+                      {total} temple{total !== 1 ? 's' : ''} found
                     </span>
                 }
               </div>
-              <select className="search-sort" value={sort} onChange={e => setSort(e.target.value)}>
+              <select
+                className="search-sort"
+                value={sort}
+                onChange={e => setSort(e.target.value)}
+              >
                 {SORT_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
@@ -229,31 +247,28 @@ export default function SearchPage() {
               </div>
             )}
 
+            {/* Loading */}
             {loading && (
               <div className="loading-wrap" style={{ minHeight: 200 }}>
                 <div className="spinner" />
-                <span className="loading-text">{t('search.searching')}</span>
+                <span className="loading-text">Searching temples...</span>
               </div>
             )}
 
-            {translating && (
-              <div style={{ textAlign: 'center', color: 'var(--saffron)', fontSize: 13, fontFamily: 'var(--font-hindi)', marginBottom: 12 }}>
-                अनुवाद हो रहा है...
-              </div>
-            )}
-
-            {!loading && displayResults.length === 0 && (
+            {/* Empty */}
+            {!loading && results.length === 0 && (
               <div className="empty-state">
                 <div className="empty-icon">🔍</div>
-                <div className="empty-title">{t('no_temples')}</div>
-                <p className="empty-msg">{t('search.empty_msg')}</p>
-                <button className="btn-primary" style={{ marginTop: 16 }} onClick={clearAllFilters}>{t('search.clear_filters')}</button>
+                <div className="empty-title">No temples found</div>
+                <p className="empty-msg">Try different keywords or clear some filters</p>
+                <button className="btn-primary" style={{ marginTop: 16 }} onClick={clearAllFilters}>Clear Filters</button>
               </div>
             )}
 
-            {!loading && displayResults.length > 0 && (
+            {/* Grid */}
+            {!loading && results.length > 0 && (
               <div className="search-result-grid">
-                {displayResults.map((temple, i) => (
+                {results.map((temple, i) => (
                   <TempleCard key={temple.id || i} temple={temple} />
                 ))}
               </div>
@@ -262,14 +277,24 @@ export default function SearchPage() {
             {/* Pagination */}
             {!loading && totalPages > 1 && (
               <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 40 }}>
-                <button className="btn-outline" style={{ padding: '8px 20px', fontSize: 13 }} disabled={page === 1} onClick={() => { setPage(p => p - 1); fetchResults(false); }}>
-                  {t('pagination.prev')}
+                <button
+                  className="btn-outline"
+                  style={{ padding: '8px 20px', fontSize: 13 }}
+                  disabled={page === 1}
+                  onClick={() => { setPage(p => p - 1); fetchResults(false); }}
+                >
+                  ← Previous
                 </button>
                 <span style={{ display: 'flex', alignItems: 'center', fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--text-mid)', padding: '0 16px' }}>
-                  {t('pagination.page_of', { page, total: totalPages })}
+                  Page {page} of {totalPages}
                 </span>
-                <button className="btn-outline" style={{ padding: '8px 20px', fontSize: 13 }} disabled={page === totalPages} onClick={() => { setPage(p => p + 1); fetchResults(false); }}>
-                  {t('pagination.next')}
+                <button
+                  className="btn-outline"
+                  style={{ padding: '8px 20px', fontSize: 13 }}
+                  disabled={page === totalPages}
+                  onClick={() => { setPage(p => p + 1); fetchResults(false); }}
+                >
+                  Next →
                 </button>
               </div>
             )}

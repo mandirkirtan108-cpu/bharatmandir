@@ -1,80 +1,86 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import TempleCard from '../components/TempleCard';
 import Footer from '../components/Footer';
 import { templeAPI } from '../services/api';
-import { useTranslatedTemples } from '../hooks/useTranslatedData';
+
+const DEITY_FILTERS = [
+  { label: 'All Temples',    value: '' },
+  { label: '🔱 Shiva',       value: 'Lord Shiva' },
+  { label: '🪷 Vishnu',      value: 'Lord Vishnu' },
+  { label: '🏹 Ram',         value: 'Lord Ram' },
+  { label: '🎵 Krishna',     value: 'Lord Krishna' },
+  { label: '⚔️ Durga/Shakti',value: 'Goddess' },
+  { label: '🐘 Ganesha',     value: 'Lord Ganesha' },
+  { label: '⭐ Jyotirlinga', value: 'jyotirlinga' },
+  { label: '🌸 Shaktipeeth', value: 'shaktipeeth' },
+];
+
+const STATES = [
+  'All States',
+  'Madhya Pradesh',
+  'Uttar Pradesh',
+  'Maharashtra',
+  'Tamil Nadu',
+  'Gujarat',
+  'Karnataka',
+  'Rajasthan',
+];
 
 export default function HomePage() {
-  const { t } = useTranslation();
   const [searchParams]  = useSearchParams();
-  const [temples,       setTemples]       = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState(null);
-  const [total,         setTotal]         = useState(0);
+  const [temples,   setTemples]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState(null);
+  const [total,     setTotal]     = useState(0);
   const [activeFilter,  setActiveFilter]  = useState('');
   const [activeState,   setActiveState]   = useState('All States');
   const [searchQuery,   setSearchQuery]   = useState(searchParams.get('search') || '');
   const [totalTemples,  setTotalTemples]  = useState(0);
-  const { translated: displayTemples, translating } = useTranslatedTemples(temples);
 
-  const DEITY_FILTERS = [
-    { label: t('filter.all'),          value: '' },
-    { label: '🔱 Shiva',               value: 'Lord Shiva' },
-    { label: '🪷 Vishnu',              value: 'Lord Vishnu' },
-    { label: '🏹 Ram',                 value: 'Lord Ram' },
-    { label: '🎵 Krishna',             value: 'Lord Krishna' },
-    { label: '⚔️ Durga/Shakti',        value: 'Goddess' },
-    { label: '🐘 Ganesha',             value: 'Lord Ganesha' },
-    { label: '⭐ ' + t('filter.jyotirlinga'), value: 'jyotirlinga' },
-    { label: '🌸 ' + t('filter.shaktipeeth'), value: 'shaktipeeth' },
-  ];
-
-  const STATES = [
-    t('filter.all_states_raw'),
-    'Madhya Pradesh', 'Uttar Pradesh', 'Maharashtra',
-    'Tamil Nadu', 'Gujarat', 'Karnataka', 'Rajasthan',
-  ];
-
+  // Load health stats once
   useEffect(() => {
     templeAPI.health()
       .then(res => setTotalTemples(res.data.total_temples || 0))
       .catch(() => {});
   }, []);
 
+  // Load temples whenever filter/search changes
   useEffect(() => {
     const fetchTemples = async () => {
       setLoading(true);
       setError(null);
       try {
         let temples, count;
+
         if (searchQuery) {
           const res = await templeAPI.search(searchQuery);
           temples   = res.data;
           count     = res.data.length;
         } else {
           const params = { per_page: 50 };
-          if (activeFilter === 'jyotirlinga')      params.jyotirlinga = true;
+          if (activeFilter === 'jyotirlinga')  params.jyotirlinga = true;
           else if (activeFilter === 'shaktipeeth') params.shaktipeeth = true;
-          else if (activeFilter)                   params.deity = activeFilter;
-          if (activeState !== t('filter.all_states_raw')) params.state = activeState;
+          else if (activeFilter) params.deity = activeFilter;
+          if (activeState !== 'All States') params.state = activeState;
 
           const res = await templeAPI.getAll(params);
           temples   = res.data.temples;
           count     = res.data.total;
         }
+
         setTemples(temples || []);
         setTotal(count || 0);
       } catch (err) {
         console.error('Failed to fetch temples:', err);
-        setError(t('error.backend'));
+        setError('Could not connect to backend. Make sure FastAPI is running on port 8000.');
       } finally {
         setLoading(false);
       }
     };
+
     fetchTemples();
   }, [activeFilter, activeState, searchQuery]);
 
@@ -88,7 +94,7 @@ export default function HomePage() {
     const q = e.target.elements.search.value.trim();
     setSearchQuery(q);
     setActiveFilter('');
-    setActiveState(t('filter.all_states_raw'));
+    setActiveState('All States');
   };
 
   return (
@@ -99,18 +105,21 @@ export default function HomePage() {
       <section className="hero">
         <div className="hero-om">OM</div>
         <div className="hero-inner">
-          <div className="hero-badge">{t('hero_badge')}</div>
+          <div className="hero-badge">🔱 Sacred Temples of India</div>
           <h1 className="hero-title">
-            {t('hero_title')}<br />
-            <span>{t('hero_subtitle')}</span>
+            Discover the Divine<br />
+            <span>Temples of Bharat</span>
           </h1>
-          <p className="hero-subtitle">{t('hero_desc')}</p>
+          <p className="hero-subtitle">
+            A platform to connect every devotee with the sacred temples
+            across every corner of India — with history, mantras, and directions.
+          </p>
           <div className="hero-actions">
             <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 10 }}>
               <input
                 name="search"
                 defaultValue={searchQuery}
-                placeholder={t('hero_search_placeholder')}
+                placeholder="Search by temple, deity, or city..."
                 style={{
                   padding: '12px 20px', borderRadius: '50px', border: 'none',
                   width: 300, fontSize: 15, fontFamily: 'var(--font-body)',
@@ -118,7 +127,7 @@ export default function HomePage() {
                 }}
               />
               <button type="submit" className="btn-primary">
-                <Search size={15} /> {t('search_btn')}
+                <Search size={15} /> Search
               </button>
             </form>
           </div>
@@ -130,19 +139,19 @@ export default function HomePage() {
         <div className="stats-grid">
           <div className="stat-item">
             <span className="stat-number">{totalTemples || '10+'}</span>
-            <span className="stat-label">{t('stats.temples')}</span>
+            <span className="stat-label">Temples Listed</span>
           </div>
           <div className="stat-item">
             <span className="stat-number">28</span>
-            <span className="stat-label">{t('stats.states')}</span>
+            <span className="stat-label">States Covered</span>
           </div>
           <div className="stat-item">
             <span className="stat-number">12</span>
-            <span className="stat-label">{t('stats.jyotirlinga')}</span>
+            <span className="stat-label">Jyotirlingas</span>
           </div>
           <div className="stat-item">
             <span className="stat-number">51</span>
-            <span className="stat-label">{t('stats.shaktipeeth')}</span>
+            <span className="stat-label">Shaktipeeths</span>
           </div>
         </div>
       </div>
@@ -167,7 +176,7 @@ export default function HomePage() {
                 className={`filter-chip ${activeState === s && !searchQuery ? 'active' : ''}`}
                 onClick={() => { setActiveState(s); setSearchQuery(''); }}
               >
-                {s === t('filter.all_states_raw') ? t('filter.all_states') : s}
+                {s === 'All States' ? '🗺️ All States' : s}
               </button>
             ))}
           </div>
@@ -180,53 +189,53 @@ export default function HomePage() {
           <div className="section-header">
             <h2 className="section-title">
               {searchQuery
-                ? `${t('results_for')} "${searchQuery}"`
+                ? `Results for "${searchQuery}"`
                 : activeFilter
-                  ? t('filtered')
-                  : t('all_sacred')}
+                  ? `Filtered Temples`
+                  : 'All Sacred Temples'}
             </h2>
             {!loading && (
-              <span className="section-count">
-                {total} {total !== 1 ? t('temples_count_plural') : t('temples_count_singular')}
-              </span>
+              <span className="section-count">{total} temple{total !== 1 ? 's' : ''}</span>
             )}
           </div>
 
+          {/* Loading */}
           {loading && (
             <div className="loading-wrap">
               <div className="spinner" />
-              <span className="loading-text">{t('loading')}</span>
+              <span className="loading-text">Loading temples...</span>
             </div>
           )}
 
-          {translating && (
-            <div style={{ textAlign: 'center', color: 'var(--saffron)', fontSize: 13, fontFamily: 'var(--font-hindi)', marginBottom: 12 }}>
-              अनुवाद हो रहा है...
-            </div>
-          )}
-
+          {/* Error */}
           {error && !loading && (
             <div className="error-wrap">
               <div className="error-icon">⚠️</div>
-              <div className="error-title">{t('error.title')}</div>
+              <div className="error-title">Could not load temples</div>
               <div className="error-msg">{error}</div>
-              <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => window.location.reload()}>
-                {t('try_again')}
+              <button
+                className="btn-primary"
+                style={{ marginTop: 16 }}
+                onClick={() => window.location.reload()}
+              >
+                Try Again
               </button>
             </div>
           )}
 
-          {!loading && !error && displayTemples.length === 0 && (
+          {/* Empty */}
+          {!loading && !error && temples.length === 0 && (
             <div className="empty-state">
               <div className="empty-icon">🔍</div>
-              <div className="empty-title">{t('no_temples')}</div>
-              <p className="empty-msg">{t('try_different')}</p>
+              <div className="empty-title">No temples found</div>
+              <p className="empty-msg">Try a different search or filter</p>
             </div>
           )}
 
-          {!loading && !error && displayTemples.length > 0 && (
+          {/* Grid */}
+          {!loading && !error && temples.length > 0 && (
             <div className="temples-grid">
-              {displayTemples.map((temple, i) => (
+              {temples.map((temple, i) => (
                 <TempleCard
                   key={temple.id || i}
                   temple={temple}

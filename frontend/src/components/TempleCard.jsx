@@ -1,11 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, QrCode } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 export default function TempleCard({ temple, style }) {
   const navigate = useNavigate();
-  const { t } = useTranslation();
 
+  // Safety guard — if no slug, don't render a broken link
   if (!temple || !temple.slug) {
     console.warn('TempleCard: missing slug for temple:', temple);
     return null;
@@ -42,13 +41,15 @@ export default function TempleCard({ temple, style }) {
           <span className="placeholder-name">{temple.city?.toUpperCase()}</span>
         </div>
 
+        {/* Badge — Jyotirlinga or Shaktipeeth */}
         {(temple.is_jyotirlinga || temple.is_shaktipeeth) && (
           <span className="card-top-badge">
-            {temple.is_jyotirlinga ? t('badge.jyotirlinga') : t('badge.shaktipeeth')}
+            {temple.is_jyotirlinga ? '⚡ Jyotirlinga' : '🌸 Shaktipeeth'}
           </span>
         )}
 
-        <button className="card-qr-btn" onClick={handleQR} title={t('card.view_qr')}>
+        {/* QR Button */}
+        <button className="card-qr-btn" onClick={handleQR} title="View QR Code">
           <QrCode size={13} /> QR
         </button>
       </div>
@@ -78,13 +79,13 @@ export default function TempleCard({ temple, style }) {
       {/* ── Card Footer ── */}
       <div className="card-footer">
         <span className="card-sect">
-          {temple.sect || temple.temple_type || t('card.temple')}
+          {temple.sect || temple.temple_type || 'Temple'}
         </span>
         {temple.is_jyotirlinga && (
-          <span className="card-special">{t('card.12_jyotirlinga')}</span>
+          <span className="card-special">12 Jyotirlingas</span>
         )}
         {temple.is_shaktipeeth && !temple.is_jyotirlinga && (
-          <span className="card-special">{t('card.51_shaktipeeth')}</span>
+          <span className="card-special">51 Shaktipeeths</span>
         )}
       </div>
 

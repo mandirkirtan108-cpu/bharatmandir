@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Search, Map } from 'lucide-react';
 
 export default function Navbar() {
   const [query,    setQuery]    = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate  = useNavigate();
   const location  = useLocation();
-  const { t, i18n } = useTranslation();
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -21,16 +19,10 @@ export default function Navbar() {
   const isActive = (path) => location.pathname === path;
 
   const NAV_LINKS = [
-    { to: '/',       label: t('nav.home') },
-    { to: '/search', label: t('nav.search') },
-    { to: '/map',    label: t('nav.map') },
-  ];
-
-  const LANGUAGES = [
-    { code: 'en', label: 'EN' },
-    { code: 'hi', label: 'हि' },
-    { code: 'mr', label: 'म' },
-    { code: 'ta', label: 'த' },
+    { to: '/',              label: 'Home' },
+    { to: '/search',        label: '🔍 Search' },
+    { to: '/map',           label: '🗺️ Map View' },
+    { to: '/route-planner', label: '🛣️ Route Planner' },
   ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
@@ -52,7 +44,7 @@ export default function Navbar() {
             <span className="nav-logo-icon">🛕</span>
             <div>
               <span className="nav-logo-name">BharatMandir</span>
-              <span className="nav-logo-sub">{t('nav.logo_sub')}</span>
+              <span className="nav-logo-sub">Temple Discovery Platform</span>
             </div>
           </Link>
 
@@ -62,13 +54,13 @@ export default function Navbar() {
             <input
               className="nav-search-input"
               type="text"
-              placeholder={t('search_placeholder')}
+              placeholder="Search temples, deities, cities..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </form>
 
-          {/* Nav Links + Language Switcher */}
+          {/* Nav Links */}
           <div className="nav-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {NAV_LINKS.map(link => (
               <Link
@@ -91,29 +83,6 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-
-            {/* Language Switcher */}
-            <div style={{ display: 'flex', gap: 4, borderLeft: '1px solid var(--cream-dark)', paddingLeft: 8 }}>
-              {LANGUAGES.map(lang => (
-                <button
-                  key={lang.code}
-                  onClick={() => i18n.changeLanguage(lang.code)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 50,
-                    fontSize: 11,
-                    fontWeight: i18n.language === lang.code ? 700 : 400,
-                    background: i18n.language === lang.code ? 'var(--saffron)' : 'transparent',
-                    color: i18n.language === lang.code ? 'white' : 'var(--text-mid)',
-                    border: `1px solid ${i18n.language === lang.code ? 'var(--saffron)' : 'var(--cream-dark)'}`,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {lang.label}
-                </button>
-              ))}
-            </div>
           </div>
 
         </div>
