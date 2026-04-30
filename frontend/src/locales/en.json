@@ -3,7 +3,8 @@
     "home": "Home",
     "search": "🔍 Search",
     "map": "🗺️ Map View",
-    "logo_sub": "Temple Discovery Platform"
+    "logo_sub": "Temple Discovery Platform",
+    "route": "🛣️ Route Planner"
   },
   "search_placeholder": "Search temples, deities, cities...",
   "hero_search_placeholder": "Search by temple, deity, or city...",
@@ -94,7 +95,6 @@
     "state": "State",
     "deity": "Deity",
     "timing": "Timing",
-    "entry": "Entry",
     "pincode": "Pincode",
     "get_directions": "Get Directions",
     "official_website": "Official Website",

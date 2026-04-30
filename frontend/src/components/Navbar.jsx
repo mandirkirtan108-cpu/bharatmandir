@@ -5,11 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 
 export default function Navbar() {
-  const [query,   setQuery] = useState('');
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const { t }               = useTranslation();
-  const { lang, changeLang } = useLang();
+  const [query,    setQuery]   = useState('');
+  const navigate   = useNavigate();
+  const location   = useLocation();
+  const { t }                  = useTranslation();
+  const { lang, changeLang }   = useLang();
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -62,51 +62,24 @@ export default function Navbar() {
             />
           </form>
 
-          <div className="nav-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {NAV_LINKS.map(link => (
+          {/* nav-actions: NO inline style gap/flex — CSS handles it */}
+          <div className="nav-actions">
+            {NAV_LINKS.map((link, index) => (
               <Link
                 key={link.to}
                 to={link.to}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 50,
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 12,
-                  letterSpacing: '.05em',
-                  textDecoration: 'none',
-                  transition: 'var(--transition)',
-                  background: isActive(link.to) ? 'var(--saffron)' : 'transparent',
-                  color: isActive(link.to) ? 'white' : 'var(--text-mid)',
-                  border: `2px solid ${isActive(link.to) ? 'var(--saffron)' : 'var(--cream-dark)'}`,
-                  whiteSpace: 'nowrap',
-                }}
+                className={`nav-link nav-link-${index}${isActive(link.to) ? ' active' : ''}`}
               >
                 {link.label}
               </Link>
             ))}
 
-            <div style={{ width: 1, height: 24, background: 'var(--cream-dark)', margin: '0 4px' }} />
+            <div className="nav-divider" />
 
             <select
+              className="nav-lang-select"
               value={lang}
               onChange={(e) => changeLang(e.target.value)}
-              style={{
-                padding: '7px 28px 7px 12px',
-                borderRadius: 50,
-                border: '2px solid var(--cream-dark)',
-                background: 'white',
-                color: 'var(--brown)',
-                fontFamily: 'var(--font-display)',
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                outline: 'none',
-                letterSpacing: '.05em',
-                appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23B84D00' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 10px center',
-              }}
             >
               <option value="en">🌐 English</option>
               <option value="hi">🇮🇳 हिंदी</option>
