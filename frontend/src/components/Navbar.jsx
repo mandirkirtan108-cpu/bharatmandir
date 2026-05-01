@@ -26,6 +26,7 @@ export default function Navbar() {
     { to: '/search',        label: t('nav.search') },
     { to: '/map',           label: t('nav.map') },
     { to: '/route-planner', label: t('nav.route') },
+    { to: '/panchang',      label: '🪔 Panchang' },
   ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';

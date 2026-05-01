@@ -7,6 +7,7 @@ import MapPage            from './pages/MapPage';
 import SearchPage         from './pages/SearchPage';
 import RoutePlannerPage   from './pages/RoutePlannerPage';
 import AdminAddTemplePage from './pages/AdminAddTemplePage';
+import PanchangPage     from './pages/PanchangPage';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/search"        element={<SearchPage />} />
           <Route path="/route-planner" element={<RoutePlannerPage />} />
           <Route path="/admin/add"     element={<AdminAddTemplePage />} />
+          <Route path="/panchang"      element={<PanchangPage />} />
         </Routes>
       </BrowserRouter>
     </LangProvider>
