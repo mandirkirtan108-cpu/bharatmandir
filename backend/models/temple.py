@@ -7,8 +7,8 @@ FastAPI uses these to:
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import time, datetime
+from typing import Optional, List, Any
+from datetime import time
 
 
 class TempleListItem(BaseModel):
@@ -21,7 +21,7 @@ class TempleListItem(BaseModel):
     uuid:             str
     name:             str
     name_hindi:       Optional[str] = None
-    slug:             Optional[str] = None 
+    slug:             Optional[str] = None
     city:             str
     state:            str
     primary_deity:    Optional[str] = None
@@ -32,7 +32,7 @@ class TempleListItem(BaseModel):
     longitude:        Optional[float] = None
     hero_image_url:   Optional[str] = None
     average_rating:   Optional[float] = None
-    category_tags:    Optional[List[str]] = []
+    category_tags:    Optional[List[str]] = Field(default_factory=list)
     status:           str
 
     class Config:
@@ -51,7 +51,7 @@ class MantraResponse(BaseModel):
     id:               int
     title:            str
     sanskrit:         Optional[str] = None
-    slug:             Optional[str] = None 
+    slug:             Optional[str] = None
     transliteration:  Optional[str] = None
     meaning:          Optional[str] = None
     mantra_type:      Optional[str] = None
@@ -98,7 +98,7 @@ class TempleDetail(BaseModel):
     name:                   str
     name_hindi:             Optional[str] = None
     name_local:             Optional[str] = None
-    slug:                   str
+    slug:                   Optional[str] = None     # Optional to match TempleListItem
 
     # Location
     latitude:               Optional[float] = None
@@ -111,7 +111,7 @@ class TempleDetail(BaseModel):
 
     # Deity & Religion
     primary_deity:          Optional[str] = None
-    secondary_deities:      Optional[List[str]] = []
+    secondary_deities:      Optional[List[str]] = Field(default_factory=list)
     sect:                   Optional[str] = None
     temple_type:            Optional[str] = None
 
@@ -130,8 +130,8 @@ class TempleDetail(BaseModel):
     estimated_year_built:   Optional[str] = None
 
     # Practical Info
-    opening_time:           Optional[str] = None
-    closing_time:           Optional[str] = None
+    opening_time:           Optional[time] = None   # Proper time type, not str
+    closing_time:           Optional[time] = None   # Proper time type, not str
     entry_fee:              Optional[float] = None
     dress_code:             Optional[str] = None
     best_time_to_visit:     Optional[str] = None
@@ -142,7 +142,7 @@ class TempleDetail(BaseModel):
 
     # Media
     hero_image_url:         Optional[str] = None
-    category_tags:          Optional[List[str]] = []
+    category_tags:          Optional[List[str]] = Field(default_factory=list)
 
     # Ratings
     average_rating:         Optional[float] = None
@@ -168,4 +168,4 @@ class APIResponse(BaseModel):
     """Standard API response wrapper."""
     success:    bool
     message:    str
-    data:       Optional[dict] = None
+    data:       Optional[Any] = None    # Any supports dicts, lists, nested models

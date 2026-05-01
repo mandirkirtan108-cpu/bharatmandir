@@ -3,6 +3,7 @@ BharatMandir FastAPI Application
 Entry point — run with: uvicorn main:app --reload
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +18,24 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ─────────────────────────────────────────────
+# Lifespan (replaces deprecated on_event)
+# ─────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 BharatMandir API starting...")
+    try:
+        get_pool()
+        print("✅ Database pool ready")
+    except Exception as e:
+        print(f"⚠️  Could not connect to DB on startup: {e}")
+        print("🔄  Will retry connection on first API request...")
+    yield
+    close_pool()
+    print("🔒 Database pool closed")
+
+
+# ─────────────────────────────────────────────
 # App initialization
 # ─────────────────────────────────────────────
 
@@ -26,6 +45,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 
 # ─────────────────────────────────────────────
@@ -36,42 +56,26 @@ app = FastAPI(
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # ─────────────────────────────────────────────
-# CORS
+# CORS — reads production origin from .env
 # ─────────────────────────────────────────────
+
+_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+_prod_origin = os.getenv("CORS_ORIGIN")
+if _prod_origin:
+    _origins.append(_prod_origin)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ─────────────────────────────────────────────
-# Startup / Shutdown Events
-# ─────────────────────────────────────────────
-
-@app.on_event("startup")
-async def startup_event():
-    print("🚀 BharatMandir API starting...")
-    try:
-        get_pool()
-        print("✅ Database pool ready")
-    except Exception as e:
-        print(f"⚠️  Could not connect to DB on startup: {e}")
-        print("🔄  Will retry connection on first API request...")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    close_pool()
-    print("🔒 Database pool closed")
-
 
 # ─────────────────────────────────────────────
 # Register Routers
@@ -79,7 +83,7 @@ async def shutdown_event():
 
 app.include_router(temples.router)
 app.include_router(route_planner.router)
-app.include_router(admin.router)       # ← NEW: Admin routes
+app.include_router(admin.router)
 
 # ─────────────────────────────────────────────
 # Root & Health Check
@@ -112,4 +116,4 @@ def health_check():
             "status":   "unhealthy",
             "database": "disconnected",
             "error":    str(e),
-        }
+        }                                 

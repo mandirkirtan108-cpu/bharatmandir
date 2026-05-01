@@ -6,9 +6,11 @@ POST   /api/admin/temples/{id}/media   → Upload image/video
 GET    /api/admin/temples/{id}/media   → List media for temple
 DELETE /api/admin/media/{id}           → Delete media
 GET    /api/admin/temples              → List all temples (admin view)
+
+All routes require the header:  X-Admin-Key: <your ADMIN_SECRET_KEY from .env>
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, Depends, Header
 from fastapi.responses import JSONResponse
 from typing import Optional
 import sys, os, uuid, re
@@ -28,6 +30,16 @@ ALLOWED_IMAGE = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 ALLOWED_VIDEO = {"video/mp4", "video/webm", "video/ogg"}
 MAX_IMG = 10 * 1024 * 1024    # 10 MB
 MAX_VID = 200 * 1024 * 1024   # 200 MB
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+_ADMIN_SECRET = os.getenv("ADMIN_SECRET_KEY", "change-me-now")
+
+
+def require_admin(x_admin_key: str = Header(..., description="Admin secret key")):
+    """Dependency — rejects requests that don't carry the correct admin key."""
+    if x_admin_key != _ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden: invalid admin key")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,7 +72,7 @@ def ensure_media_table():
 
 # ── POST /api/admin/temples — Create new temple ───────────────────────────────
 
-@router.post("/temples", status_code=201)
+@router.post("/temples", status_code=201, dependencies=[Depends(require_admin)])
 def create_temple(
     # Required
     name:                 str            = Form(...),
@@ -213,7 +225,7 @@ def create_temple(
 
 # ── POST /api/admin/temples/{id}/media — Upload image or video ────────────────
 
-@router.post("/temples/{temple_id}/media", status_code=201)
+@router.post("/temples/{temple_id}/media", status_code=201, dependencies=[Depends(require_admin)])
 def upload_media(
     temple_id:  int,
     file:       UploadFile = File(...),
@@ -255,9 +267,7 @@ def upload_media(
 
     with get_db_cursor() as cur:
         if is_hero and is_image:
-            # Remove previous hero flag
             cur.execute("UPDATE temple_media SET is_hero = FALSE WHERE temple_id = %s", (temple_id,))
-            # Update temples table hero_image_url
             cur.execute("UPDATE temples SET hero_image_url = %s WHERE id = %s", (file_url, temple_id))
 
         cur.execute("""
@@ -279,7 +289,7 @@ def upload_media(
 
 # ── GET /api/admin/temples/{id}/media — List media ────────────────────────────
 
-@router.get("/temples/{temple_id}/media")
+@router.get("/temples/{temple_id}/media", dependencies=[Depends(require_admin)])
 def get_temple_media(temple_id: int):
     ensure_media_table()
     with get_db_cursor() as cur:
@@ -304,7 +314,7 @@ def get_temple_media(temple_id: int):
 
 # ── DELETE /api/admin/media/{id} — Delete a media item ───────────────────────
 
-@router.delete("/media/{media_id}")
+@router.delete("/media/{media_id}", dependencies=[Depends(require_admin)])
 def delete_media(media_id: int):
     ensure_media_table()
     with get_db_cursor() as cur:
@@ -326,7 +336,7 @@ def delete_media(media_id: int):
 
 # ── GET /api/admin/temples — List all temples (admin view) ────────────────────
 
-@router.get("/temples")
+@router.get("/temples", dependencies=[Depends(require_admin)])
 def list_temples_admin(
     page:     int = Query(1,  ge=1),
     per_page: int = Query(20, ge=1, le=100),

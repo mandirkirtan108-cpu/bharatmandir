@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, Fragment } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+
 
 // ── Field config ──────────────────────────────────────────────────────────────
 const SECTS     = ['', 'Shaiva', 'Vaishnava', 'Shakta', 'Smartha', 'Jain', 'Buddhist', 'Sikh', 'Other'];
@@ -231,13 +232,67 @@ export default function AdminAddTemplePage() {
   };
 
   const handleSubmit = async () => {
-    if (!validate()) { setStep(1); return; }
-    setSubmitting(true);
-    // Simulate API call
-    await new Promise(r => setTimeout(r, 1800));
-    setResult({ success: true, message: 'Temple has been successfully added to BharatMandir.', slug: 'demo-temple', templeId: 99 });
+  if (!validate()) { setStep(1); return; }
+  setSubmitting(true);
+
+  try {
+    const fd = new FormData();
+
+    // Required fields
+    fd.append('name',  form.name.trim());
+    fd.append('city',  form.city.trim());
+    fd.append('state', form.state.trim());
+
+    // Optional text fields
+    const optionalFields = [
+      'name_hindi','name_local','address','district','pincode',
+      'primary_deity','secondary_deities','sect','temple_type',
+      'history','significance','architecture_style','estimated_year_built',
+      'opening_time','closing_time','entry_fee','dress_code',
+      'best_time_to_visit','nearest_railway','nearest_airport',
+      'website_url','phone','category_tags',
+    ];
+    optionalFields.forEach(key => {
+      if (form[key] !== '' && form[key] !== null && form[key] !== undefined) {
+        fd.append(key, form[key]);
+      }
+    });
+
+    // Coordinates
+    if (form.latitude)  fd.append('latitude',  parseFloat(form.latitude));
+    if (form.longitude) fd.append('longitude', parseFloat(form.longitude));
+
+    // Boolean flags
+    fd.append('is_jyotirlinga',   form.is_jyotirlinga);
+    fd.append('is_shaktipeeth',   form.is_shaktipeeth);
+    fd.append('is_heritage_site', form.is_heritage_site);
+    fd.append('is_asi_protected', form.is_asi_protected);
+
+    // Hero image
+    if (heroImage) fd.append('hero_image', heroImage);
+
+    // Step 1: create the temple
+    const { adminAPI } = await import('../services/api');
+    const res = await adminAPI.createTemple(fd);
+
+    const { temple_id, slug } = res.data;
+
+    // Step 2: upload additional media if any
+    for (const m of mediaFiles) {
+      const mfd = new FormData();
+      mfd.append('file', m.file);
+      if (m.caption) mfd.append('caption', m.caption);
+      await adminAPI.uploadMedia(temple_id, mfd);
+    }
+
+    setResult({ success: true, message: 'Temple has been successfully added to BharatMandir.', slug, templeId: temple_id });
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.message || 'Something went wrong';
+    setResult({ success: false, message: detail });
+  } finally {
     setSubmitting(false);
-  };
+  }
+};
 
   const stepClass = n => `atp-step-btn${step === n ? ' active' : step > n ? ' done' : ''}`;
   const goToStep  = n => { if (n < step) setStep(n); else if (n === 2 && step === 1 && validate()) setStep(2); else if (n === 3 && step < 3) { if (validate()) setStep(n); } };
@@ -284,18 +339,18 @@ export default function AdminAddTemplePage() {
         <div className="atp-steps-wrap">
           <div className="atp-steps">
             {[
-              { n: 1, label: 'Basic Info' },
-              { n: 2, label: 'Details & Timings' },
-              { n: 3, label: 'Photos & Videos' },
-            ].map(({ n, label }, i) => (
-              <>
-                {i > 0 && <div className="atp-step-divider" key={`div-${n}`} />}
-                <button key={n} className={stepClass(n)} onClick={() => goToStep(n)}>
-                  <span className="atp-step-num">{step > n ? '✓' : n}</span>
-                  {label}
-                </button>
-              </>
-            ))}
+  { n: 1, label: 'Basic Info' },
+  { n: 2, label: 'Details & Timings' },
+  { n: 3, label: 'Photos & Videos' },
+].map(({ n, label }, i) => (
+  <Fragment key={n}>
+    {i > 0 && <div className="atp-step-divider" />}
+    <button className={stepClass(n)} onClick={() => goToStep(n)}>
+      <span className="atp-step-num">{step > n ? '✓' : n}</span>
+      {label}
+    </button>
+  </Fragment>
+))}
           </div>
         </div>
 

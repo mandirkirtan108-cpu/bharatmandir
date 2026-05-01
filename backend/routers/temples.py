@@ -130,7 +130,7 @@ def search_temples(
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT
-                id, uuid, name, name_hindi,slug,
+                id, uuid, name, name_hindi, slug,
                 city, state, primary_deity,
                 temple_type, is_jyotirlinga, is_shaktipeeth,
                 latitude, longitude,
@@ -181,14 +181,13 @@ def temples_nearby(
     """
     Find temples within radius_km of given coordinates.
     Example: /api/temples/nearby?lat=23.1828&lng=75.7682&radius_km=10
-    This powers the MAP VIEW in your React app.
     """
     radius_meters = radius_km * 1000
 
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT
-                id, uuid, name, name_hindi,slug,
+                id, uuid, name, name_hindi, slug,
                 city, state, primary_deity,
                 temple_type, is_jyotirlinga, is_shaktipeeth,
                 latitude, longitude,
@@ -221,6 +220,7 @@ def temples_nearby(
 # ─────────────────────────────────────────────
 # GET /api/temples/{slug}
 # Full temple detail page
+# IMPORTANT: Keep this AFTER /search and /nearby
 # ─────────────────────────────────────────────
 
 @router.get("/{slug}", response_model=TempleDetail)
@@ -261,12 +261,8 @@ def get_temple(slug: str):
 
 @router.get("/{temple_id}/mantras", response_model=List[MantraResponse])
 def get_temple_mantras(temple_id: int):
-    """
-    Get all verified mantras for a temple.
-    Example: /api/temples/1/mantras
-    """
+    """Get all verified mantras for a temple."""
     with get_db_cursor() as cur:
-        # Verify temple exists first
         cur.execute(
             "SELECT id FROM temples WHERE id = %s AND status = 'published'",
             (temple_id,)
@@ -337,3 +333,45 @@ def get_temple_sevas(temple_id: int):
         """, (temple_id,))
 
         return [dict(s) for s in cur.fetchall()]
+
+
+# ─────────────────────────────────────────────
+# GET /api/temples/{id}/media
+# Public endpoint — no admin key required
+# ─────────────────────────────────────────────
+
+@router.get("/{temple_id}/media")
+def get_temple_media_public(temple_id: int):
+    """
+    Get all images and videos for a temple (public).
+    Used by the temple detail page gallery/slider.
+    Example: /api/temples/1/media
+    """
+    with get_db_cursor() as cur:
+        cur.execute(
+            "SELECT id FROM temples WHERE id = %s AND status = 'published'",
+            (temple_id,)
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Temple not found")
+
+        # Check if temple_media table exists — gracefully return empty if not
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_name = 'temple_media'
+            ) AS exists
+        """)
+        if not cur.fetchone()["exists"]:
+            return {"media": [], "total": 0}
+
+        cur.execute("""
+            SELECT id, media_type, file_url, caption, is_hero, sort_order
+            FROM temple_media
+            WHERE temple_id = %s
+            ORDER BY is_hero DESC, sort_order ASC, uploaded_at ASC
+        """, (temple_id,))
+
+        media = [dict(m) for m in cur.fetchall()]
+
+    return {"media": media, "total": len(media)}
