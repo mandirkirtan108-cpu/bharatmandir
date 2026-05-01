@@ -120,50 +120,31 @@ const styles = `
   /* ══════════════════════════════════════════
      PHOTO GALLERY — High Quality
   ══════════════════════════════════════════ */
-  .tdp-gallery-wrap {
-    background: #ffffff;
-    position: relative;
-  }
-  .tdp-gallery-inner {
-    max-width: 820px;
-    margin: 0 auto;
-  }
+  .tdp-gallery-wrap { background: #ffffff; position: relative; }
+  .tdp-gallery-inner { max-width: 820px; margin: 0 auto; }
 
-  /* Main photo */
   .tdp-main-photo {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 4/3;
-    overflow: hidden;
-    cursor: zoom-in;
-    background: #f5f0e8;
+    position: relative; width: 100%; aspect-ratio: 4/3;
+    overflow: hidden; cursor: zoom-in; background: #f5f0e8;
   }
   @media (min-width: 640px) {
     .tdp-main-photo { aspect-ratio: 16/10; max-height: 480px; }
   }
   .tdp-main-photo img {
-    width: 100%; height: 100%;
-    object-fit: contain;
-    object-position: center;
-    display: block;
-    transition: transform 0.5s ease;
+    width: 100%; height: 100%; object-fit: contain; object-position: center;
+    display: block; transition: transform 0.5s ease;
     image-rendering: high-quality;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-    transform: translateZ(0);
+    -webkit-backface-visibility: hidden; backface-visibility: hidden; transform: translateZ(0);
   }
   .tdp-main-photo:hover img { transform: translateZ(0) scale(1.015); }
 
-  /* Om fallback */
   .tdp-no-photo {
     width: 100%; aspect-ratio: 16/9;
     background: linear-gradient(160deg, #3D1F00, #1A0A00);
     display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-hindi); font-size: 120px;
-    color: rgba(255,255,255,0.07);
+    font-family: var(--font-hindi); font-size: 120px; color: rgba(255,255,255,0.07);
   }
 
-  /* Gallery nav arrows */
   .tdp-photo-nav {
     position: absolute; top: 50%; transform: translateY(-50%);
     background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.15);
@@ -177,7 +158,6 @@ const styles = `
   .tdp-photo-nav.prev { left: 12px; }
   .tdp-photo-nav.next { right: 12px; }
 
-  /* Counter */
   .tdp-photo-counter {
     position: absolute; bottom: 14px; right: 14px;
     background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
@@ -186,21 +166,15 @@ const styles = `
     font-family: var(--font-body); letter-spacing: .04em;
   }
 
-  /* Thumbnail strip */
   .tdp-thumb-strip {
-    display: flex; gap: 6px; overflow-x: auto;
-    padding: 10px 14px;
-    background: #ffffff;
-    border-bottom: 1px solid var(--cream-dark);
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+    display: flex; gap: 6px; overflow-x: auto; padding: 10px 14px;
+    background: #ffffff; border-bottom: 1px solid var(--cream-dark);
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
   }
   .tdp-thumb-strip::-webkit-scrollbar { display: none; }
   .tdp-thumb {
-    flex: 0 0 70px; height: 52px;
-    border-radius: 8px; overflow: hidden;
-    cursor: pointer; border: 2px solid transparent;
-    transition: var(--tr); opacity: 0.55;
+    flex: 0 0 70px; height: 52px; border-radius: 8px; overflow: hidden;
+    cursor: pointer; border: 2px solid transparent; transition: var(--tr); opacity: 0.55;
   }
   .tdp-thumb.active { border-color: var(--saffron); opacity: 1; }
   .tdp-thumb:hover { opacity: 0.85; }
@@ -208,52 +182,35 @@ const styles = `
 
   /* ── Lightbox ── */
   .tdp-lightbox {
-    position: fixed; inset: 0; z-index: 1000;
-    background: rgba(0,0,0,0.97);
+    position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.97);
     display: flex; align-items: center; justify-content: center;
     animation: fadeIn 0.2s ease;
   }
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-  .tdp-lightbox-img-wrap {
-    max-width: 96vw; max-height: 90vh;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .tdp-lightbox img {
-    max-width: 96vw; max-height: 88vh;
-    object-fit: contain; border-radius: 6px;
-    image-rendering: -webkit-optimize-contrast;
-  }
+  .tdp-lightbox-img-wrap { max-width: 96vw; max-height: 90vh; display: flex; align-items: center; justify-content: center; }
+  .tdp-lightbox img { max-width: 96vw; max-height: 88vh; object-fit: contain; border-radius: 6px; }
   .tdp-lightbox-close {
     position: absolute; top: 14px; right: 14px;
     background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
-    color: white; border-radius: 50%;
-    width: 44px; height: 44px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; z-index: 10;
-    transition: var(--tr);
+    color: white; border-radius: 50%; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: var(--tr);
   }
   .tdp-lightbox-close:hover { background: rgba(255,255,255,0.2); }
   .tdp-lb-arrow {
     position: absolute; top: 50%; transform: translateY(-50%);
     background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
-    color: white; border-radius: 50%;
-    width: 48px; height: 48px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: var(--tr);
+    color: white; border-radius: 50%; width: 48px; height: 48px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--tr);
   }
   .tdp-lb-arrow:hover { background: rgba(255,255,255,0.2); }
   .tdp-lb-arrow.prev { left: 14px; }
   .tdp-lb-arrow.next { right: 14px; }
-  .tdp-lb-counter {
-    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-    color: rgba(255,255,255,0.5); font-size: 13px; font-family: var(--font-body);
-  }
+  .tdp-lb-counter { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.5); font-size: 13px; font-family: var(--font-body); }
 
   /* ══════════════════════════════════════════
      BODY / DETAIL SECTIONS
   ══════════════════════════════════════════ */
   .tdp-body { max-width: 900px; margin: 0 auto; padding: 0 16px 80px; }
-
   .tdp-section { padding: 28px 0; border-bottom: 1px solid var(--cream-dark); }
   .tdp-section:last-child { border-bottom: none; }
   .tdp-sec-head {
@@ -265,191 +222,64 @@ const styles = `
     width: 38px; height: 38px; border-radius: 10px;
     background: linear-gradient(135deg, rgba(232,101,10,0.12), rgba(200,150,12,0.06));
     border: 1px solid rgba(232,101,10,0.18);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
   }
 
-  /* Tags */
   .tdp-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 20px 0 4px; }
-  .tdp-chip {
-    background: white; border: 1px solid var(--cream-dark);
-    border-radius: 50px; padding: 5px 14px;
-    font-size: 13px; color: var(--text-mid);
-    font-family: var(--font-body); font-weight: 400;
-  }
+  .tdp-chip { background: white; border: 1px solid var(--cream-dark); border-radius: 50px; padding: 5px 14px; font-size: 13px; color: var(--text-mid); font-family: var(--font-body); font-weight: 400; }
 
-  /* History */
-  .tdp-history-text {
-    font-size: 16px; line-height: 1.9;
-    color: var(--text-mid); margin-bottom: 18px;
-    font-family: var(--font-body); font-weight: 400;
-  }
-  .tdp-significance {
-    background: linear-gradient(135deg, #FFFBF0, #FDF5E0);
-    border: 1px solid #E8D098;
-    border-left: 4px solid var(--saffron);
-    border-radius: var(--radius); padding: 20px;
-  }
-  .tdp-significance-label {
-    font-family: var(--font-display); font-size: 10px;
-    letter-spacing: .14em; text-transform: uppercase;
-    color: var(--saffron); margin-bottom: 10px; font-weight: 600;
-  }
+  .tdp-history-text { font-size: 16px; line-height: 1.9; color: var(--text-mid); margin-bottom: 18px; font-family: var(--font-body); font-weight: 400; }
+  .tdp-significance { background: linear-gradient(135deg, #FFFBF0, #FDF5E0); border: 1px solid #E8D098; border-left: 4px solid var(--saffron); border-radius: var(--radius); padding: 20px; }
+  .tdp-significance-label { font-family: var(--font-display); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--saffron); margin-bottom: 10px; font-weight: 600; }
   .tdp-significance-text { font-size: 15px; line-height: 1.8; color: var(--text-mid); }
 
-  /* Info Grid */
-  .tdp-info-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-  }
-  .tdp-info-item {
-    background: white; border-radius: var(--radius);
-    border: 1px solid var(--cream-dark); padding: 14px 16px;
-    transition: var(--tr);
-  }
+  .tdp-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tdp-info-item { background: white; border-radius: var(--radius); border: 1px solid var(--cream-dark); padding: 14px 16px; transition: var(--tr); }
   .tdp-info-item:hover { box-shadow: 0 4px 16px var(--shadow); }
   .tdp-info-item.full { grid-column: 1/-1; }
-  .tdp-info-label {
-    font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-    color: var(--text-light); font-family: var(--font-display); font-weight: 600;
-    margin-bottom: 5px;
-  }
-  .tdp-info-value {
-    font-size: 15px; font-weight: 500; color: var(--text-dark);
-    display: flex; align-items: center; gap: 6px; font-family: var(--font-body);
-  }
+  .tdp-info-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-light); font-family: var(--font-display); font-weight: 600; margin-bottom: 5px; }
+  .tdp-info-value { font-size: 15px; font-weight: 500; color: var(--text-dark); display: flex; align-items: center; gap: 6px; font-family: var(--font-body); }
 
-  /* Mantras */
-  .tdp-mantra {
-    background: linear-gradient(135deg, rgba(45,18,0,0.97), rgba(90,45,10,0.95));
-    border-radius: var(--radius-lg); padding: 24px 22px; margin-bottom: 14px;
-    color: white; position: relative; overflow: hidden;
-  }
-  .tdp-mantra::before {
-    content: 'ॐ'; position: absolute; right: -10px; bottom: -10px;
-    font-family: var(--font-hindi); font-size: 100px;
-    color: rgba(255,255,255,0.04); line-height: 1; user-select: none;
-  }
-  .tdp-mantra-title {
-    font-family: var(--font-display); font-size: 15px;
-    letter-spacing: .05em; color: var(--gold-light); margin-bottom: 14px; font-weight: 600;
-  }
-  .tdp-mantra-sanskrit {
-    font-family: var(--font-hindi); font-size: 22px; line-height: 1.75;
-    color: white; margin-bottom: 12px; letter-spacing: .02em;
-  }
-  .tdp-mantra-roman {
-    font-size: 14px; color: rgba(255,255,255,0.6);
-    font-style: italic; line-height: 1.75; margin-bottom: 10px;
-    font-family: var(--font-body);
-  }
-  .tdp-mantra-meaning {
-    font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.7;
-    border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; margin-top: 6px;
-    font-family: var(--font-body);
-  }
+  .tdp-mantra { background: linear-gradient(135deg, rgba(45,18,0,0.97), rgba(90,45,10,0.95)); border-radius: var(--radius-lg); padding: 24px 22px; margin-bottom: 14px; color: white; position: relative; overflow: hidden; }
+  .tdp-mantra::before { content: 'ॐ'; position: absolute; right: -10px; bottom: -10px; font-family: var(--font-hindi); font-size: 100px; color: rgba(255,255,255,0.04); line-height: 1; user-select: none; }
+  .tdp-mantra-title { font-family: var(--font-display); font-size: 15px; letter-spacing: .05em; color: var(--gold-light); margin-bottom: 14px; font-weight: 600; }
+  .tdp-mantra-sanskrit { font-family: var(--font-hindi); font-size: 22px; line-height: 1.75; color: white; margin-bottom: 12px; letter-spacing: .02em; }
+  .tdp-mantra-roman { font-size: 14px; color: rgba(255,255,255,0.6); font-style: italic; line-height: 1.75; margin-bottom: 10px; font-family: var(--font-body); }
+  .tdp-mantra-meaning { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.7; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; margin-top: 6px; font-family: var(--font-body); }
 
-  /* Festivals */
-  .tdp-festival {
-    display: flex; gap: 16px; padding: 18px 0;
-    border-bottom: 1px solid var(--cream-dark); align-items: flex-start;
-  }
+  .tdp-festival { display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--cream-dark); align-items: flex-start; }
   .tdp-festival:last-child { border-bottom: none; }
-  .tdp-festival-month {
-    flex-shrink: 0; width: 50px; height: 50px;
-    background: linear-gradient(135deg, var(--saffron), var(--saffron-dark));
-    border-radius: 14px; color: white;
-    font-family: var(--font-display); font-size: 12px; font-weight: 700;
-    letter-spacing: .06em; text-transform: uppercase;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .tdp-festival-name {
-    font-family: var(--font-display); font-size: 18px; font-weight: 700;
-    color: var(--brown); margin-bottom: 5px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .tdp-major-badge {
-    font-size: 9px; background: rgba(232,101,10,0.1);
-    border: 1px solid rgba(232,101,10,0.3); color: var(--saffron);
-    padding: 2px 8px; border-radius: 50px; font-family: var(--font-body);
-    letter-spacing: .08em; text-transform: uppercase; font-weight: 600;
-  }
+  .tdp-festival-month { flex-shrink: 0; width: 50px; height: 50px; background: linear-gradient(135deg, var(--saffron), var(--saffron-dark)); border-radius: 14px; color: white; font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; justify-content: center; }
+  .tdp-festival-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--brown); margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+  .tdp-major-badge { font-size: 9px; background: rgba(232,101,10,0.1); border: 1px solid rgba(232,101,10,0.3); color: var(--saffron); padding: 2px 8px; border-radius: 50px; font-family: var(--font-body); letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
   .tdp-festival-desc { font-size: 14px; color: var(--text-light); line-height: 1.65; margin-top: 5px; font-family: var(--font-body); }
 
-  /* Sevas */
-  .tdp-seva {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 20px; background: white;
-    border-radius: var(--radius); border: 1px solid var(--cream-dark);
-    margin-bottom: 10px; gap: 12px; transition: var(--tr);
-  }
+  .tdp-seva { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: white; border-radius: var(--radius); border: 1px solid var(--cream-dark); margin-bottom: 10px; gap: 12px; transition: var(--tr); }
   .tdp-seva:hover { box-shadow: 0 4px 16px var(--shadow); }
   .tdp-seva-name { font-weight: 500; font-size: 15px; color: var(--text-dark); font-family: var(--font-body); }
   .tdp-seva-timing { font-size: 12px; color: var(--text-light); margin-top: 4px; font-family: var(--font-body); }
-  .tdp-seva-price {
-    font-family: var(--font-display); font-size: 18px; font-weight: 700;
-    color: var(--saffron); white-space: nowrap; flex-shrink: 0;
-  }
+  .tdp-seva-price { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--saffron); white-space: nowrap; flex-shrink: 0; }
 
-  /* QR */
-  .tdp-qr-card {
-    background: linear-gradient(135deg, var(--brown), var(--brown-mid));
-    border-radius: var(--radius-lg); padding: 28px 20px;
-    display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center;
-  }
+  .tdp-qr-card { background: linear-gradient(135deg, var(--brown), var(--brown-mid)); border-radius: var(--radius-lg); padding: 28px 20px; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
   .tdp-qr-id { font-family: var(--font-display); font-size: 12px; letter-spacing: .16em; color: var(--gold-light); font-weight: 600; }
   .tdp-qr-hint { font-size: 12px; color: rgba(255,255,255,0.45); font-family: var(--font-body); }
-  .tdp-qr-btn {
-    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
-    color: white; border-radius: 50px; padding: 10px 24px;
-    font-size: 12px; cursor: pointer; width: 100%;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    text-decoration: none; font-family: var(--font-body);
-    transition: var(--tr);
-  }
+  .tdp-qr-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); color: white; border-radius: 50px; padding: 10px 24px; font-size: 12px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; font-family: var(--font-body); transition: var(--tr); }
   .tdp-qr-btn:hover { background: rgba(255,255,255,0.18); }
 
-  /* Translating pill */
-  .tdp-translating {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: rgba(232,101,10,0.15); border: 1px solid rgba(232,101,10,0.4);
-    color: var(--gold-light); padding: 5px 14px; border-radius: 50px;
-    font-size: 11px; font-family: var(--font-hindi); margin-bottom: 14px;
-  }
+  .tdp-translating { display: inline-flex; align-items: center; gap: 6px; background: rgba(232,101,10,0.15); border: 1px solid rgba(232,101,10,0.4); color: var(--gold-light); padding: 5px 14px; border-radius: 50px; font-size: 11px; font-family: var(--font-hindi); margin-bottom: 14px; }
 
-  /* Sticky bar */
-  .tdp-sticky-bar {
-    position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
-    background: white; border-top: 1px solid var(--cream-dark);
-    padding: 12px 16px; display: flex; gap: 10px;
-    box-shadow: 0 -4px 24px rgba(61,31,0,0.1);
-  }
-  .tdp-cta-primary {
-    flex: 1; background: linear-gradient(135deg, var(--saffron), var(--saffron-dark));
-    color: white; border: none; border-radius: 50px; padding: 13px 20px;
-    font-family: var(--font-display); font-size: 14px; font-weight: 600; letter-spacing: .04em;
-    cursor: pointer; text-decoration: none;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    box-shadow: 0 4px 14px rgba(232,101,10,0.3);
-  }
-  .tdp-cta-outline {
-    background: white; color: var(--text-mid);
-    border: 2px solid var(--cream-dark); border-radius: 50%; padding: 0;
-    width: 48px; height: 48px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; text-decoration: none; transition: var(--tr);
-  }
+  .tdp-sticky-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 200; background: white; border-top: 1px solid var(--cream-dark); padding: 12px 16px; display: flex; gap: 10px; box-shadow: 0 -4px 24px rgba(61,31,0,0.1); }
+  .tdp-cta-primary { flex: 1; background: linear-gradient(135deg, var(--saffron), var(--saffron-dark)); color: white; border: none; border-radius: 50px; padding: 13px 20px; font-family: var(--font-display); font-size: 14px; font-weight: 600; letter-spacing: .04em; cursor: pointer; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 4px 14px rgba(232,101,10,0.3); }
+  .tdp-cta-outline { background: white; color: var(--text-mid); border: 2px solid var(--cream-dark); border-radius: 50%; padding: 0; width: 48px; height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: none; transition: var(--tr); }
   .tdp-cta-outline:hover { border-color: var(--saffron); color: var(--saffron); }
 
-  /* Responsive */
   @media (min-width: 640px) {
     .tdp-header { padding: 36px 32px 40px; }
     .tdp-body { padding: 0 24px 80px; }
     .tdp-thumb-strip { padding: 12px 20px; }
     .tdp-thumb { flex: 0 0 90px; height: 65px; }
   }
-  @media (min-width: 768px) {
-    .tdp-sticky-bar { display: none; }
-  }
+  @media (min-width: 768px) { .tdp-sticky-bar { display: none; } }
   @media (max-width: 767px) {
     .tdp-body { padding-bottom: 100px; }
     .tdp-info-grid { grid-template-columns: 1fr; }
@@ -587,11 +417,7 @@ export default function TempleDetailPage() {
       {lightbox !== null && (
         <div className="tdp-lightbox" onClick={() => setLightbox(null)}>
           <div className="tdp-lightbox-img-wrap" onClick={e => e.stopPropagation()}>
-            <img
-              src={allImages[lightbox]}
-              alt={`${displayTemple.name} — photo ${lightbox + 1}`}
-              loading="eager"
-            />
+            <img src={allImages[lightbox]} alt={`${displayTemple.name} — photo ${lightbox + 1}`} loading="eager" />
           </div>
           <button className="tdp-lightbox-close" onClick={() => setLightbox(null)}><X size={20} /></button>
           {allImages.length > 1 && (
@@ -643,45 +469,36 @@ export default function TempleDetailPage() {
       {/* ══ 2. PHOTO GALLERY ══ */}
       <div className="tdp-gallery-wrap">
         <div className="tdp-gallery-inner">
-        {allImages.length > 0 ? (
-          <>
-            <div className="tdp-main-photo" onClick={() => setLightbox(slideIdx)}>
-              <img
-                src={allImages[slideIdx]}
-                alt={`${displayTemple.name} — photo ${slideIdx + 1}`}
-                loading="eager"
-                decoding="async"
-              />
-              {allImages.length > 1 && (
-                <>
-                  <button className="tdp-photo-nav prev" onClick={e => { e.stopPropagation(); goSlide(slideIdx - 1); }}>
-                    <ChevronLeft size={20} />
-                  </button>
-                  <button className="tdp-photo-nav next" onClick={e => { e.stopPropagation(); goSlide(slideIdx + 1); }}>
-                    <ChevronLeft size={20} style={{ transform: 'rotate(180deg)' }} />
-                  </button>
-                  <div className="tdp-photo-counter">{slideIdx + 1} / {allImages.length}</div>
-                </>
-              )}
-            </div>
-
-            {allImages.length > 1 && (
-              <div className="tdp-thumb-strip">
-                {allImages.map((src, i) => (
-                  <div
-                    key={src}
-                    className={`tdp-thumb${i === slideIdx ? ' active' : ''}`}
-                    onClick={() => goSlide(i)}
-                  >
-                    <img src={src} alt="" loading="lazy" decoding="async" />
-                  </div>
-                ))}
+          {allImages.length > 0 ? (
+            <>
+              <div className="tdp-main-photo" onClick={() => setLightbox(slideIdx)}>
+                <img src={allImages[slideIdx]} alt={`${displayTemple.name} — photo ${slideIdx + 1}`} loading="eager" decoding="async" />
+                {allImages.length > 1 && (
+                  <>
+                    <button className="tdp-photo-nav prev" onClick={e => { e.stopPropagation(); goSlide(slideIdx - 1); }}>
+                      <ChevronLeft size={20} />
+                    </button>
+                    <button className="tdp-photo-nav next" onClick={e => { e.stopPropagation(); goSlide(slideIdx + 1); }}>
+                      <ChevronLeft size={20} style={{ transform: 'rotate(180deg)' }} />
+                    </button>
+                    <div className="tdp-photo-counter">{slideIdx + 1} / {allImages.length}</div>
+                  </>
+                )}
               </div>
-            )}
-          </>
-        ) : (
-          <div className="tdp-no-photo">ॐ</div>
-        )}
+
+              {allImages.length > 1 && (
+                <div className="tdp-thumb-strip">
+                  {allImages.map((src, i) => (
+                    <div key={src} className={`tdp-thumb${i === slideIdx ? ' active' : ''}`} onClick={() => goSlide(i)}>
+                      <img src={src} alt="" loading="lazy" decoding="async" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="tdp-no-photo">ॐ</div>
+          )}
         </div>
       </div>
 
@@ -859,7 +676,6 @@ export default function TempleDetailPage() {
           <QrCode size={18} />
         </button>
       </div>
-
       <Footer />
     </>
   );

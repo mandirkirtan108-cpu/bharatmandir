@@ -2,7 +2,6 @@ import { useState, useRef, Fragment } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
-
 // ── Field config ──────────────────────────────────────────────────────────────
 const SECTS     = ['', 'Shaiva', 'Vaishnava', 'Shakta', 'Smartha', 'Jain', 'Buddhist', 'Sikh', 'Other'];
 const TYPES     = ['', 'Temple', 'Mandir', 'Devasthan', 'Peeth', 'Mutt', 'Shrine', 'Other'];
@@ -60,8 +59,6 @@ const styles = `
   body { font-family: var(--font-body); background: var(--cream); color: var(--text-dark); }
 
   .atp-page { min-height: 100vh; background: var(--cream); }
-
-
 
   /* ── Hero Header ── */
   .atp-hero { position: relative; background: linear-gradient(180deg, rgba(61,31,0,.92) 0%, rgba(184,77,0,.7) 60%, rgba(253,248,240,1) 100%), url('https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Mahakaleshwar_Temple_Ujjain.jpg/1280px-Mahakaleshwar_Temple_Ujjain.jpg') center/cover no-repeat; padding: 60px 24px 80px; text-align: center; overflow: hidden; }
@@ -232,67 +229,67 @@ export default function AdminAddTemplePage() {
   };
 
   const handleSubmit = async () => {
-  if (!validate()) { setStep(1); return; }
-  setSubmitting(true);
+    if (!validate()) { setStep(1); return; }
+    setSubmitting(true);
 
-  try {
-    const fd = new FormData();
+    try {
+      const fd = new FormData();
 
-    // Required fields
-    fd.append('name',  form.name.trim());
-    fd.append('city',  form.city.trim());
-    fd.append('state', form.state.trim());
+      // Required fields
+      fd.append('name',  form.name.trim());
+      fd.append('city',  form.city.trim());
+      fd.append('state', form.state.trim());
 
-    // Optional text fields
-    const optionalFields = [
-      'name_hindi','name_local','address','district','pincode',
-      'primary_deity','secondary_deities','sect','temple_type',
-      'history','significance','architecture_style','estimated_year_built',
-      'opening_time','closing_time','entry_fee','dress_code',
-      'best_time_to_visit','nearest_railway','nearest_airport',
-      'website_url','phone','category_tags',
-    ];
-    optionalFields.forEach(key => {
-      if (form[key] !== '' && form[key] !== null && form[key] !== undefined) {
-        fd.append(key, form[key]);
+      // Optional text fields
+      const optionalFields = [
+        'name_hindi','name_local','address','district','pincode',
+        'primary_deity','secondary_deities','sect','temple_type',
+        'history','significance','architecture_style','estimated_year_built',
+        'opening_time','closing_time','entry_fee','dress_code',
+        'best_time_to_visit','nearest_railway','nearest_airport',
+        'website_url','phone','category_tags',
+      ];
+      optionalFields.forEach(key => {
+        if (form[key] !== '' && form[key] !== null && form[key] !== undefined) {
+          fd.append(key, form[key]);
+        }
+      });
+
+      // Coordinates
+      if (form.latitude)  fd.append('latitude',  parseFloat(form.latitude));
+      if (form.longitude) fd.append('longitude', parseFloat(form.longitude));
+
+      // Boolean flags
+      fd.append('is_jyotirlinga',   form.is_jyotirlinga);
+      fd.append('is_shaktipeeth',   form.is_shaktipeeth);
+      fd.append('is_heritage_site', form.is_heritage_site);
+      fd.append('is_asi_protected', form.is_asi_protected);
+
+      // Hero image
+      if (heroImage) fd.append('hero_image', heroImage);
+
+      // Step 1: create the temple
+      const { adminAPI } = await import('../services/api');
+      const res = await adminAPI.createTemple(fd);
+
+      const { temple_id, slug } = res.data;
+
+      // Step 2: upload additional media if any
+      for (const m of mediaFiles) {
+        const mfd = new FormData();
+        mfd.append('file', m.file);
+        if (m.caption) mfd.append('caption', m.caption);
+        await adminAPI.uploadMedia(temple_id, mfd);
       }
-    });
 
-    // Coordinates
-    if (form.latitude)  fd.append('latitude',  parseFloat(form.latitude));
-    if (form.longitude) fd.append('longitude', parseFloat(form.longitude));
-
-    // Boolean flags
-    fd.append('is_jyotirlinga',   form.is_jyotirlinga);
-    fd.append('is_shaktipeeth',   form.is_shaktipeeth);
-    fd.append('is_heritage_site', form.is_heritage_site);
-    fd.append('is_asi_protected', form.is_asi_protected);
-
-    // Hero image
-    if (heroImage) fd.append('hero_image', heroImage);
-
-    // Step 1: create the temple
-    const { adminAPI } = await import('../services/api');
-    const res = await adminAPI.createTemple(fd);
-
-    const { temple_id, slug } = res.data;
-
-    // Step 2: upload additional media if any
-    for (const m of mediaFiles) {
-      const mfd = new FormData();
-      mfd.append('file', m.file);
-      if (m.caption) mfd.append('caption', m.caption);
-      await adminAPI.uploadMedia(temple_id, mfd);
+      setResult({ success: true, message: 'Temple has been successfully added to BharatMandir.', slug, templeId: temple_id });
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.message || 'Something went wrong';
+      setResult({ success: false, message: detail });
+    } finally {
+      setSubmitting(false);
     }
-
-    setResult({ success: true, message: 'Temple has been successfully added to BharatMandir.', slug, templeId: temple_id });
-  } catch (err) {
-    const detail = err.response?.data?.detail || err.message || 'Something went wrong';
-    setResult({ success: false, message: detail });
-  } finally {
-    setSubmitting(false);
-  }
-};
+  };
 
   const stepClass = n => `atp-step-btn${step === n ? ' active' : step > n ? ' done' : ''}`;
   const goToStep  = n => { if (n < step) setStep(n); else if (n === 2 && step === 1 && validate()) setStep(2); else if (n === 3 && step < 3) { if (validate()) setStep(n); } };
@@ -339,18 +336,18 @@ export default function AdminAddTemplePage() {
         <div className="atp-steps-wrap">
           <div className="atp-steps">
             {[
-  { n: 1, label: 'Basic Info' },
-  { n: 2, label: 'Details & Timings' },
-  { n: 3, label: 'Photos & Videos' },
-].map(({ n, label }, i) => (
-  <Fragment key={n}>
-    {i > 0 && <div className="atp-step-divider" />}
-    <button className={stepClass(n)} onClick={() => goToStep(n)}>
-      <span className="atp-step-num">{step > n ? '✓' : n}</span>
-      {label}
-    </button>
-  </Fragment>
-))}
+              { n: 1, label: 'Basic Info' },
+              { n: 2, label: 'Details & Timings' },
+              { n: 3, label: 'Photos & Videos' },
+            ].map(({ n, label }, i) => (
+              <Fragment key={n}>
+                {i > 0 && <div className="atp-step-divider" />}
+                <button className={stepClass(n)} onClick={() => goToStep(n)}>
+                  <span className="atp-step-num">{step > n ? '✓' : n}</span>
+                  {label}
+                </button>
+              </Fragment>
+            ))}
           </div>
         </div>
 

@@ -255,7 +255,7 @@ Suggest temples along this actual road route, create an optimized visiting plan.
             <p style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'var(--text-light)', letterSpacing: '.08em', marginBottom: 10 }}>
               {t('route.popular_routes')}
             </p>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div className="route-presets" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {PRESET_ROUTES.map(p => (
                 <button
                   key={p.label}
@@ -279,7 +279,10 @@ Suggest temples along this actual road route, create an optimized visiting plan.
             border: '1px solid var(--cream-dark)', boxShadow: '0 4px 24px var(--shadow)', marginBottom: 32,
           }}>
             {/* Start + Destination */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', marginBottom: 24 }}>
+            <div
+              className="route-form-inner"
+              style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 12, alignItems: 'center', marginBottom: 24 }}
+            >
               <div>
                 <label style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.08em', color: 'var(--text-light)', display: 'block', marginBottom: 6 }}>
                   {t('route.from')}
@@ -297,7 +300,10 @@ Suggest temples along this actual road route, create an optimized visiting plan.
                 </div>
               </div>
 
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--cream-dark)', flexShrink: 0 }}>
+              <div
+                className="route-arrow-divider"
+                style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--cream-dark)', flexShrink: 0 }}
+              >
                 <ChevronRight size={18} color="var(--saffron)" />
               </div>
 
@@ -320,12 +326,15 @@ Suggest temples along this actual road route, create an optimized visiting plan.
             </div>
 
             {/* Travel Mode + Time */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+            <div
+              className="route-form-grid"
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}
+            >
               <div>
                 <label style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.08em', color: 'var(--text-light)', display: 'block', marginBottom: 8 }}>
                   {t('route.travel_mode')}
                 </label>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div className="route-mode-group" style={{ display: 'flex', gap: 8 }}>
                   {TRAVEL_MODES.map(m => (
                     <button
                       key={m.value}
@@ -350,7 +359,7 @@ Suggest temples along this actual road route, create an optimized visiting plan.
                   <Clock size={11} style={{ display: 'inline', marginRight: 4 }} />
                   {t('route.time_available')}
                 </label>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div className="route-time-group" style={{ display: 'flex', gap: 6 }}>
                   {TIME_OPTIONS.map(opt => (
                     <button
                       key={opt.value}
@@ -423,36 +432,43 @@ Suggest temples along this actual road route, create an optimized visiting plan.
               <div style={{
                 background: 'linear-gradient(135deg, var(--brown) 0%, var(--brown-mid) 100%)',
                 borderRadius: 'var(--radius-lg)', padding: '28px 32px', marginBottom: 28,
-                color: 'white', display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'center',
+                color: 'white',
               }}>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
-                    {t('route.your_route')}
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700 }}>{result.route_summary.start}</span>
-                    <span style={{ color: 'var(--gold-light)', fontSize: 20 }}>→</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700 }}>{result.route_summary.destination}</span>
+                <div
+                  className="route-summary-inner"
+                  style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'center' }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.1em', color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+                      {t('route.your_route')}
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700 }}>{result.route_summary.start}</span>
+                      <span style={{ color: 'var(--gold-light)', fontSize: 20 }}>→</span>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700 }}>{result.route_summary.destination}</span>
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: 'flex', gap: 28 }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold-light)', fontWeight: 700 }}>{result.route_summary.total_distance}</span>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{t('route.distance')}</span>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold-light)', fontWeight: 700 }}>{result.route_summary.estimated_travel_time}</span>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{t('route.travel_time')}</span>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold-light)', fontWeight: 700 }}>{result.recommended_temples?.length || 0}</span>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{t('route.temples')}</span>
+                  <div className="route-summary-stats" style={{ display: 'flex', gap: 28 }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold-light)', fontWeight: 700 }}>{result.route_summary.total_distance}</span>
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{t('route.distance')}</span>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold-light)', fontWeight: 700 }}>{result.route_summary.estimated_travel_time}</span>
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{t('route.travel_time')}</span>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold-light)', fontWeight: 700 }}>{result.recommended_temples?.length || 0}</span>
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{t('route.temples')}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
-
+              <div
+                className="route-results-grid"
+                style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}
+              >
                 {/* Temple Cards */}
                 <div>
                   <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--brown)', marginBottom: 16 }}>
@@ -478,7 +494,7 @@ Suggest temples along this actual road route, create an optimized visiting plan.
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--brown)', fontWeight: 700 }}>{temple.name}</h3>
-                          <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 12 }}>
+                          <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 12, flexWrap: 'wrap' }}>
                             <span style={{ background: 'var(--cream)', borderRadius: 50, padding: '3px 10px', fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--font-display)' }}>
                               📍 {temple.distance_from_route_km}
                             </span>

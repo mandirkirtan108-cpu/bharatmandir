@@ -85,6 +85,9 @@ app.include_router(temples.router)
 app.include_router(route_planner.router)
 app.include_router(admin.router)
 
+from routers import spiritual_chat
+app.include_router(spiritual_chat.router)
+
 # ─────────────────────────────────────────────
 # Root & Health Check
 # ─────────────────────────────────────────────
@@ -116,4 +119,4 @@ def health_check():
             "status":   "unhealthy",
             "database": "disconnected",
             "error":    str(e),
-        }                                 
+        }
