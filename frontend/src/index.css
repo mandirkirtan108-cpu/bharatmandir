@@ -461,6 +461,43 @@ a{text-decoration:none;color:inherit;}button{font-family:inherit;}img{max-width:
   /* Filters bar offset (navbar is now shorter without search) */
   .filters-bar { top: 57px; }
   .map-page { height: calc(100vh - 57px - 41px); }
+
+  /* ── Route Planner mobile fixes ── */
+  .route-results-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .route-summary-inner {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .route-summary-stats {
+    justify-content: flex-start;
+    gap: 20px;
+  }
+  .route-mode-group,
+  .route-time-group {
+    flex-wrap: wrap;
+  }
+  .route-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Panchang mobile fixes ── */
+  .panchang-angas {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .panchang-timings {
+    grid-template-columns: 1fr !important;
+  }
+  .panchang-do-avoid {
+    grid-template-columns: 1fr !important;
+  }
+  .muhurat-results-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .muhurat-form-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
 }
 
 /* ── 640px: large phones ── */
@@ -559,6 +596,29 @@ a{text-decoration:none;color:inherit;}button{font-family:inherit;}img{max-width:
   /* Footer */
   .footer { padding: 28px 16px; }
   .footer-name { font-size: 18px; }
+
+  /* ── Route Planner small phone fixes ── */
+  .route-form-inner {
+    grid-template-columns: 1fr 40px 1fr !important;
+  }
+  .route-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .route-presets {
+    flex-wrap: wrap;
+  }
+  .muhurat-occasion-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .muhurat-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .panchang-angas {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .panchang-choghadiya {
+    flex-wrap: wrap;
+  }
 }
 
 /* ── 480px: small phones ── */
@@ -592,4 +652,19 @@ a{text-decoration:none;color:inherit;}button{font-family:inherit;}img{max-width:
   /* Add temple btn: icon only */
   .nav-add-btn span { display: none; }
   .nav-add-btn { padding: 8px 10px; }
+
+  /* Route Planner: from→to arrow row on tiny screens */
+  .route-form-inner {
+    grid-template-columns: 1fr !important;
+  }
+  .route-arrow-divider { display: none; }
+
+  /* Occasion grid: 2-col */
+  .muhurat-occasion-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  /* Panchang angas: 2+3 */
+  .panchang-angas {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }

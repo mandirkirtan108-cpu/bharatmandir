@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, PlusCircle, Menu, X, Home, Map, Navigation, CalendarDays, Sparkles } from 'lucide-react';
+import { Search, PlusCircle, Menu, X, Home, Map, Navigation, CalendarDays, Globe } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 
@@ -47,11 +47,11 @@ export default function Navbar() {
   }, [sidebarOpen]);
 
   const NAV_LINKS = [
-    { to: '/',               label: t('nav.home'),   icon: <Home size={17} /> },
-    { to: '/search',         label: t('nav.search'), icon: <Search size={17} /> },
-    { to: '/map',            label: t('nav.map'),    icon: <Map size={17} /> },
-    { to: '/route-planner',  label: t('nav.route'),  icon: <Navigation size={17} /> },
-    { to: '/panchang',       label: '🪔 Panchang',   icon: <CalendarDays size={17} /> },
+    { to: '/',              label: t('nav.home'),   icon: <Home size={17} /> },
+    { to: '/search',        label: t('nav.search'), icon: <Search size={17} /> },
+    { to: '/map',           label: t('nav.map'),    icon: <Map size={17} /> },
+    { to: '/route-planner', label: t('nav.route'),  icon: <Navigation size={17} /> },
+    { to: '/panchang',      label: '🪔 Panchang',   icon: <CalendarDays size={17} /> },
   ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
@@ -104,7 +104,7 @@ export default function Navbar() {
               </Link>
             ))}
 
-            {/* ── AI Spiritual Guide ── */}
+            {/* ── AI Spiritual Guide pill ── */}
             <Link
               to="/spiritual-guide"
               style={{
@@ -210,8 +210,8 @@ export default function Navbar() {
             onClick={() => setSidebarOpen(false)}
             style={{ color: '#FF6B00', fontWeight: 700 }}
           >
-            <span className="sidebar-link-icon"><Sparkles size={17} /></span>
-            🕉️ AI Spiritual Guide
+            <span className="sidebar-link-icon">🕉️</span>
+            AI Spiritual Guide
           </Link>
         </nav>
 

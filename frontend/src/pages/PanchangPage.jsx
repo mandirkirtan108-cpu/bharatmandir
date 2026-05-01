@@ -339,8 +339,11 @@ Return ONLY valid JSON, no markdown, start directly with {:
                   </div>
                 </div>
 
-                {/* 5 Angas */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 18 }}>
+                {/* 5 Angas — RESPONSIVE CLASS ADDED */}
+                <div
+                  className="panchang-angas"
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 18 }}
+                >
                   {[
                     { label: 'Tithi',    icon: '🌙', val: dailyResult.tithi?.name,      sub: dailyResult.tithi?.nature },
                     { label: 'Nakshatra',icon: '⭐', val: dailyResult.nakshatra?.name,  sub: dailyResult.nakshatra?.lord },
@@ -360,8 +363,11 @@ Return ONLY valid JSON, no markdown, start directly with {:
                   ))}
                 </div>
 
-                {/* 3 key timings */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}>
+                {/* 3 key timings — RESPONSIVE CLASS ADDED */}
+                <div
+                  className="panchang-timings"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}
+                >
                   {[
                     { label: '🌅 BRAHMA MUHURAT', time: dailyResult.brahma_muhurat?.time, note: dailyResult.brahma_muhurat?.benefit, bg: '#f0fdf4', border: '#86efac', color: '#15803d', labelColor: '#16a34a' },
                     { label: '☀️ ABHIJIT MUHURAT', time: dailyResult.abhijit_muhurat?.time, note: dailyResult.abhijit_muhurat?.benefit, bg: '#f0f9ff', border: '#7dd3fc', color: '#075985', labelColor: '#0369a1' },
@@ -381,7 +387,7 @@ Return ONLY valid JSON, no markdown, start directly with {:
                     <p style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'var(--brown)', marginBottom: 10, letterSpacing: '.05em' }}>
                       🕐 CHOGHADIYA
                     </p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div className="panchang-choghadiya" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {dailyResult.choghadiya.map((c, i) => (
                         <div key={i} style={{
                           padding: '8px 14px', borderRadius: 8,
@@ -397,8 +403,11 @@ Return ONLY valid JSON, no markdown, start directly with {:
                   </div>
                 )}
 
-                {/* Do / Avoid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {/* Do / Avoid — RESPONSIVE CLASS ADDED */}
+                <div
+                  className="panchang-do-avoid"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
+                >
                   {[
                     { title: '✅ DO TODAY', items: dailyResult.do_today, bg: '#f0fdf4', border: '#86efac', color: '#15803d', hdr: '#16a34a' },
                     { title: '🚫 AVOID TODAY', items: dailyResult.avoid_today, bg: '#fef2f2', border: '#fca5a5', color: '#b91c1c', hdr: '#dc2626' },
@@ -428,10 +437,13 @@ Return ONLY valid JSON, no markdown, start directly with {:
               Select your occasion — Pandit Ji will find the most auspicious time
             </p>
 
-            {/* Occasion Grid */}
+            {/* Occasion Grid — RESPONSIVE CLASS ADDED */}
             <div style={{ marginBottom: 24 }}>
               <label style={labelStyle}>SELECT YOUR OCCASION</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))', gap: 10 }}>
+              <div
+                className="muhurat-occasion-grid"
+                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))', gap: 10 }}
+              >
                 {MUHURAT_TYPES.map(m => (
                   <button key={m.id} onClick={() => setSelected(m.id)} style={{
                     padding: '14px 10px', borderRadius: 'var(--radius)',
@@ -449,8 +461,11 @@ Return ONLY valid JSON, no markdown, start directly with {:
               </div>
             </div>
 
-            {/* Personal Details */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}>
+            {/* Personal Details — RESPONSIVE CLASS ADDED */}
+            <div
+              className="muhurat-form-grid"
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}
+            >
               <div>
                 <label style={labelStyle}>DATE FOR MUHURAT</label>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)}
@@ -546,7 +561,11 @@ Return ONLY valid JSON, no markdown, start directly with {:
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}>
+              {/* Main + Sidebar — RESPONSIVE CLASS ADDED */}
+              <div
+                className="muhurat-results-grid"
+                style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}
+              >
 
                 {/* LEFT col */}
                 <div>
@@ -675,12 +694,6 @@ Return ONLY valid JSON, no markdown, start directly with {:
                       ))}
                     </div>
                   )}
-
-                  {/* Claude badge */}
-                  <div style={{ background: 'white', borderRadius: 'var(--radius)', padding: '12px 16px', border: '1px solid var(--cream-dark)', textAlign: 'center' }}>
-                    <p style={{ fontSize: 11, color: 'var(--text-light)', fontFamily: 'var(--font-display)', letterSpacing: '.06em' }}>✨ POWERED BY CLAUDE AI</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 3 }}>Vedic knowledge · Anthropic Claude Sonnet</p>
-                  </div>
                 </div>
               </div>
             </div>
