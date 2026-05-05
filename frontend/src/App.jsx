@@ -6,7 +6,7 @@ import TempleQRPage          from './pages/TempleQRPage';
 import MapPage               from './pages/MapPage';
 import SearchPage            from './pages/SearchPage';
 import RoutePlannerPage      from './pages/RoutePlannerPage';
-import AdminaddTemplePage    from './pages/AdminaddTemplePage';
+import AdminaddTemplePage    from './pages/AdminAddTemplePage';
 import PanchangPage          from './pages/PanchangPage';
 import SpiritualGuidePage    from './pages/SpiritualGuidePage';
 import FestivalCalendarPage  from './pages/FestivalCalendarPage';
@@ -23,7 +23,7 @@ export default function App() {
           <Route path="/map"                element={<MapPage />} />
           <Route path="/search"             element={<SearchPage />} />
           <Route path="/route-planner"      element={<RoutePlannerPage />} />
-          <Route path="/admin/add"          element={<AdminaddTemplePage />} />
+          <Route path="/admin/add"          element={<AdminAddTemplePage />} />
           <Route path="/panchang"           element={<PanchangPage />} />
           <Route path="/spiritual-guide"    element={<SpiritualGuidePage />} />
           <Route path="/festivals"          element={<FestivalCalendarPage />} />
