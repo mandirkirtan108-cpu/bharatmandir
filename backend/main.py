@@ -17,10 +17,6 @@ load_dotenv()
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ─────────────────────────────────────────────
-# Lifespan (replaces deprecated on_event)
-# ─────────────────────────────────────────────
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 BharatMandir API starting...")
@@ -34,11 +30,6 @@ async def lifespan(app: FastAPI):
     close_pool()
     print("🔒 Database pool closed")
 
-
-# ─────────────────────────────────────────────
-# App initialization
-# ─────────────────────────────────────────────
-
 app = FastAPI(
     title="BharatMandir API",
     description="Temple Discovery Platform — PostgreSQL + PostGIS Backend",
@@ -48,25 +39,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ─────────────────────────────────────────────
-# Static files — serve uploaded images/videos
-# /uploads/filename.jpg → backend/uploads/filename.jpg
-# ─────────────────────────────────────────────
-
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
-
-# ─────────────────────────────────────────────
-# CORS — reads production origin from .env
-# ─────────────────────────────────────────────
 
 _origins = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
+    "https://bharatmandir.vercel.app",
 ]
 _prod_origin = os.getenv("CORS_ORIGIN")
-if _prod_origin:
+if _prod_origin and _prod_origin not in _origins:
     _origins.append(_prod_origin)
 
 app.add_middleware(
@@ -77,19 +60,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─────────────────────────────────────────────
-# Register Routers
-# ─────────────────────────────────────────────
-
 app.include_router(temples.router)
 app.include_router(route_planner.router)
 app.include_router(admin.router)
 app.include_router(festivals.router)
 app.include_router(spiritual_chat.router)
-
-# ─────────────────────────────────────────────
-# Root & Health Check
-# ─────────────────────────────────────────────
 
 @app.get("/")
 def root():
@@ -99,7 +74,6 @@ def root():
         "status":  "running",
         "docs":    "/api/docs",
     }
-
 
 @app.get("/api/health")
 def health_check():
