@@ -612,7 +612,7 @@ export default function AdminAddTemplePage() {
 
               {/* Review */}
               <div className="atp-review">
-                <div className="atp-review-title">🕉️ Review Before Submitting</div>
+                <div className="atp-review-title">🕉️ Review Befor Submitting</div>
                 <div className="atp-review-grid">
                   {[
                     ['Temple Name',      form.name || '—'],
