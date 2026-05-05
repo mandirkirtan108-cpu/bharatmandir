@@ -6,18 +6,11 @@ import TempleQRPage          from './pages/TempleQRPage';
 import MapPage               from './pages/MapPage';
 import SearchPage            from './pages/SearchPage';
 import RoutePlannerPage      from './pages/RoutePlannerPage';
+import AdminAddTemplePage    from './pages/AdminAddTemplePage';
 import PanchangPage          from './pages/PanchangPage';
 import SpiritualGuidePage    from './pages/SpiritualGuidePage';
-import AdminAddTemplePage from './pages/AdminAddTemplePage';
 import FestivalCalendarPage  from './pages/FestivalCalendarPage';
 import AdminAddFestivalPage  from './pages/AdminAddFestivalPage';
-
-const AdminAddTemplePage = () => (
-  <div style={{ padding: '2rem' }}>
-    <h1>Add Temple</h1>
-    <p>This page is under construction.</p>
-  </div>
-);
 
 export default function App() {
   return (
