@@ -6,7 +6,7 @@ import TempleQRPage          from './pages/TempleQRPage';
 import MapPage               from './pages/MapPage';
 import SearchPage            from './pages/SearchPage';
 import RoutePlannerPage      from './pages/RoutePlannerPage';
-import AdminaddTemplePage    from './pages/AdminAddTemplePage';
+import AdminAddTemplePage    from './pages/AdminAddTemplePage';
 import PanchangPage          from './pages/PanchangPage';
 import SpiritualGuidePage    from './pages/SpiritualGuidePage';
 import FestivalCalendarPage  from './pages/FestivalCalendarPage';
