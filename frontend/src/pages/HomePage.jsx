@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link, useLocation } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
@@ -28,6 +28,7 @@ const STATES = [
 
 export default function HomePage() {
   const [searchParams]                    = useSearchParams();
+  const location                          = useLocation();
   const { t }                             = useTranslation();
   const [temples,       setTemples]       = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -39,6 +40,8 @@ export default function HomePage() {
   const [totalTemples,  setTotalTemples]  = useState(0);
 
   const { translated: displayTemples, translating } = useTranslatedTemples(temples);
+
+  const isActive = (path) => location.pathname === path;
 
   useEffect(() => {
     templeAPI.health()
@@ -92,7 +95,6 @@ export default function HomePage() {
     setActiveState('All States');
   };
 
-  // Helper to get filter label — uses translation key if available, else raw label
   const getFilterLabel = (f) => {
     if (f.labelKey) return (f.emoji ? f.emoji + ' ' : '') + t(f.labelKey);
     return f.label;
@@ -249,6 +251,44 @@ export default function HomePage() {
       </section>
 
       <Footer />
+
+      {/* ── Floating AI Guide Button ── */}
+      <Link
+        to="/spiritual-guide"
+        style={{
+          position: 'fixed',
+          bottom: 28,
+          right: 28,
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '12px 20px',
+          borderRadius: 50,
+          fontSize: 14,
+          fontWeight: 700,
+          textDecoration: 'none',
+          whiteSpace: 'nowrap',
+          border: '2px solid #FF6B00',
+          background: isActive('/spiritual-guide')
+            ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
+            : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
+          color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
+          boxShadow: '0 4px 20px rgba(255,107,0,0.35)',
+          transition: 'all .2s',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'scale(1.07)';
+          e.currentTarget.style.boxShadow = '0 6px 28px rgba(255,107,0,0.50)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.boxShadow = '0 4px 20px rgba(255,107,0,0.35)';
+        }}
+      >
+        🕉️ AI Guide
+      </Link>
+
     </div>
   );
 }

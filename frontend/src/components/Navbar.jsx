@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, PlusCircle, Menu, X, Home, Map, Navigation, CalendarDays, Sparkles } from 'lucide-react';
+import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 
@@ -24,12 +24,10 @@ export default function Navbar() {
 
   const isActive = (path) => location.pathname === path;
 
-  // Close sidebar on route change
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
 
-  // Close sidebar on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (sidebarOpen && sidebarRef.current && !sidebarRef.current.contains(e.target)) {
@@ -40,19 +38,15 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sidebarOpen]);
 
-  // Prevent body scroll when sidebar open
   useEffect(() => {
     document.body.style.overflow = sidebarOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [sidebarOpen]);
 
   const NAV_LINKS = [
-    { to: '/',              label: t('nav.home'),      icon: <Home size={17} /> },
-    { to: '/search',        label: t('nav.search'),    icon: <Search size={17} /> },
-    { to: '/map',           label: t('nav.map'),       icon: <Map size={17} /> },
-    { to: '/route-planner', label: t('nav.route'),     icon: <Navigation size={17} /> },
-    { to: '/panchang',      label: '🪔 Panchang',      icon: <CalendarDays size={17} /> },
-    { to: '/festivals',     label: '🌸 Festivals',     icon: <Sparkles size={17} /> },
+    { to: '/route-planner', label: t('nav.route'),  icon: <Navigation size={17} /> },
+    { to: '/panchang',      label: '🪔 Panchang',   icon: <CalendarDays size={17} /> },
+    { to: '/festivals',     label: '🌸 Festivals',  icon: <Sparkles size={17} /> },
   ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
@@ -77,7 +71,7 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* Desktop search */}
+          {/* Desktop search — only one search bar kept */}
           <form className="nav-search-form nav-search-desktop" onSubmit={handleSearch}>
             <Search size={16} className="nav-search-icon" />
             <input
@@ -103,31 +97,6 @@ export default function Navbar() {
               </Link>
             ))}
 
-            {/* ── AI Spiritual Guide pill ── */}
-            <Link
-              to="/spiritual-guide"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: '7px 14px',
-                borderRadius: 50,
-                fontSize: 12,
-                fontWeight: 700,
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
-                border: '2px solid #FF6B00',
-                background: isActive('/spiritual-guide')
-                  ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
-                  : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-                color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
-                boxShadow: '0 2px 8px rgba(255,107,0,0.20)',
-                transition: 'all .2s',
-              }}
-            >
-              🕉️ AI Guide
-            </Link>
-
             <div className="nav-divider" />
 
             <Link to="/admin/add" className="nav-add-btn">
@@ -135,9 +104,13 @@ export default function Navbar() {
               <span>Add Temple</span>
             </Link>
 
-            {/* ── Add Festival shortcut ── */}
-            <Link to="/admin/add-festival" className="nav-add-btn" style={{ background: 'linear-gradient(135deg,#C8960C,#a07008)' }}>
-              <span>＋ Festival</span>
+            {/* ── Add Festival — fixed styling ── */}
+            <Link
+              to="/admin/add-festival"
+              className="nav-add-btn nav-add-festival-btn"
+            >
+              <Sparkles size={15} />
+              <span>Festival</span>
             </Link>
 
             <div className="nav-divider" />
@@ -185,17 +158,7 @@ export default function Navbar() {
           </button>
         </div>
 
-        {/* Mobile search inside sidebar */}
-        <form className="sidebar-search" onSubmit={handleSearch}>
-          <Search size={16} className="nav-search-icon" />
-          <input
-            className="nav-search-input"
-            type="text"
-            placeholder={t('search_placeholder')}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </form>
+        {/* ── Sidebar search removed ── */}
 
         <nav className="sidebar-nav">
           {NAV_LINKS.map((link) => (
@@ -210,7 +173,6 @@ export default function Navbar() {
             </Link>
           ))}
 
-          {/* ── AI Guide in sidebar ── */}
           <Link
             to="/spiritual-guide"
             className={`sidebar-link${isActive('/spiritual-guide') ? ' active' : ''}`}
@@ -221,7 +183,6 @@ export default function Navbar() {
             AI Spiritual Guide
           </Link>
 
-          {/* ── Add Festival in sidebar ── */}
           <Link
             to="/admin/add-festival"
             className={`sidebar-link${isActive('/admin/add-festival') ? ' active' : ''}`}
