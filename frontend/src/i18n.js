@@ -18,12 +18,16 @@ i18n
       ta: { translation: ta },
     },
     fallbackLng: 'en',
-    interpolation: { escapeValue: false },
 
-    // Save user's chosen language to localStorage
-    // so it persists on refresh
+    // FIX: Default to 'en' always — let user manually switch language.
+    // Browser language detector was auto-setting lang to 'hi'/'mr'/'ta'
+    // for Indian users, triggering Anthropic API translation calls that
+    // fail on live (no valid API key in browser env) → blank page.
+    lng: 'en',
+
+    interpolation: { escapeValue: false },
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['localStorage'],      // only localStorage, NOT navigator
       caches: ['localStorage'],
       lookupLocalStorage: 'bharatmandir_lang',
     },
