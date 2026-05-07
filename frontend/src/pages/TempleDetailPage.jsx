@@ -10,9 +10,16 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function proxyImageUrl(url) {
   if (!url) return null;
+  // Local relative paths → prepend backend base
   if (!url.startsWith('http')) return `${API_BASE}${url}`;
+  // Localhost images → use directly (dev only)
   if (url.includes('localhost') || url.includes('127.0.0.1')) return url;
-  return `${API_BASE}/api/proxy/image?url=${encodeURIComponent(url)}`;
+  // Wikimedia / Wikipedia → use proxy (needs User-Agent spoofing)
+  if (url.includes('wikimedia.org') || url.includes('wikipedia.org')) {
+    return `${API_BASE}/api/proxy/image?url=${encodeURIComponent(url)}`;
+  }
+  // All other external URLs (cloudinary, ibb, unsplash, etc.) → direct load
+  return url;
 }
 function formatTime(t) {
   if (!t) return null;
@@ -198,18 +205,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--c);color:var(--k);-webkit
 @media(max-width:640px){.hero{height:auto;min-height:400px;}.hero-h1{font-size:28px;}.ig,.sg,.chip-grid,.dc{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:18px 16px;}}
 `;
 
-// SmartImage with loading placeholder
-function SmartImage({ src, alt }) {
+// SmartImage with loading placeholder and proxy fallback
+function SmartImage({ src, alt, directSrc }) {
   const [ok, setOk] = useState(false);
-  useEffect(() => setOk(false), [src]);
+  const [imgSrc, setImgSrc] = useState(src);
+  useEffect(() => { setOk(false); setImgSrc(src); }, [src]);
+  const handleError = () => {
+    if (imgSrc !== directSrc && directSrc) { setImgSrc(directSrc); }
+    else { setOk(false); }
+  };
   return (
     <div style={{ position:'absolute', inset:0 }}>
       {!ok && (
         <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Noto Sans Devanagari',sans-serif", fontSize:72, color:'rgba(255,255,255,.06)', background:'#0D0500' }}>ॐ</div>
       )}
-      <img src={src} alt={alt} className="hero-img"
+      <img src={imgSrc} alt={alt} className="hero-img"
         style={{ opacity: ok ? 1 : 0 }}
-        onLoad={() => setOk(true)} onError={() => setOk(false)} />
+        onLoad={() => setOk(true)} onError={handleError} />
     </div>
   );
 }
@@ -338,7 +350,7 @@ export default function TempleDetailPage() {
 
       {/* ══ HERO ══ */}
       <div className="hero">
-        {heroImg ? <SmartImage src={heroImg} alt={T.name}/> : <div className="hero-diya">🪔</div>}
+        {heroImg ? <SmartImage src={heroImg} alt={T.name} directSrc={T.hero_image_url}/> : <div className="hero-diya">🪔</div>}
         <div className="hero-grad"/>
         <div className="hero-body">
           {/* Breadcrumb */}
@@ -610,6 +622,30 @@ export default function TempleDetailPage() {
             {v(T.website_url)     &&<div className="crow"><div className="clbl">Website</div><a href={T.website_url} target="_blank" rel="noopener noreferrer" className="clink">🌐 Visit Official Website →</a></div>}
             {v(T.best_time_to_call)&&<div className="crow"><div className="clbl">Best Time to Call</div><div className="cval">⏰ {T.best_time_to_call}</div></div>}
             {v(T.trust_registration_no)&&<div className="crow"><div className="clbl">Registration No.</div><div className="cval">{T.trust_registration_no}</div></div>}
+
+            {/* Show empty state if no contact info available yet */}
+            {!v(T.phone) && !v(T.whatsapp_number) && !v(T.official_email) && !v(T.website_url) &&
+             !v(T.facebook_page) && !v(T.youtube_channel) && !v(T.instagram_handle) && (
+              <div style={{
+                textAlign:'center', padding:'28px 20px',
+                background:'var(--p)', borderRadius:12,
+                border:'1px dashed var(--b2)'
+              }}>
+                <div style={{fontSize:36, marginBottom:10}}>📋</div>
+                <div style={{fontSize:14, fontWeight:600, color:'var(--km)', marginBottom:6}}>
+                  Contact details not yet available
+                </div>
+                <div style={{fontSize:12, color:'var(--kl)', lineHeight:1.6}}>
+                  We're working on gathering contact information for this temple.
+                  {mapsUrl && (
+                    <> You can <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                      style={{color:'var(--s)', textDecoration:'none', fontWeight:600}}>
+                      view it on Google Maps
+                    </a> for directions.</>
+                  )}
+                </div>
+              </div>
+            )}
 
             {(v(T.facebook_page)||v(T.youtube_channel)||v(T.instagram_handle))&&(
               <>
