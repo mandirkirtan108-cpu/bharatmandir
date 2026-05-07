@@ -32,6 +32,33 @@ router = APIRouter(
 
 
 # ─────────────────────────────────────────────
+# Helper — slug ya integer id dono resolve kare
+# ─────────────────────────────────────────────
+
+def resolve_temple_id(cur, temple_id: str) -> int:
+    """
+    temple_id string ho sakti hai:
+      - "123"              → integer id se dhundo
+      - "jagannath-temple" → slug se dhundo
+    Dono cases mein published temple ka integer id return karta hai.
+    """
+    if temple_id.isdigit():
+        cur.execute(
+            "SELECT id FROM temples WHERE id = %s AND status = 'published'",
+            (int(temple_id),)
+        )
+    else:
+        cur.execute(
+            "SELECT id FROM temples WHERE slug = %s AND status = 'published'",
+            (temple_id,)
+        )
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Temple not found")
+    return row['id']
+
+
+# ─────────────────────────────────────────────
 # GET /api/temples
 # List with filtering + pagination
 # ─────────────────────────────────────────────
@@ -247,7 +274,6 @@ def get_temple(slug: str):
         raise HTTPException(status_code=404, detail=f"Temple '{slug}' not found")
 
     d = dict(temple)
-    # Convert TIME objects to strings for JSON serialisation
     for f in ['opening_time', 'closing_time',
               'afternoon_closure_start', 'afternoon_closure_end']:
         if d.get(f):
@@ -261,22 +287,16 @@ def get_temple(slug: str):
 # ─────────────────────────────────────────────
 
 @router.get("/{temple_id}/mantras", response_model=List[MantraResponse])
-def get_temple_mantras(temple_id: int):
+def get_temple_mantras(temple_id: str):
     with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT id FROM temples WHERE id = %s AND status = 'published'",
-            (temple_id,)
-        )
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Temple not found")
-
+        tid = resolve_temple_id(cur, temple_id)
         cur.execute("""
             SELECT id, title, sanskrit, transliteration,
                    meaning, mantra_type, deity
             FROM mantras
             WHERE temple_id = %s AND verified = TRUE
             ORDER BY sort_order ASC
-        """, (temple_id,))
+        """, (tid,))
         return [dict(m) for m in cur.fetchall()]
 
 
@@ -285,22 +305,16 @@ def get_temple_mantras(temple_id: int):
 # ─────────────────────────────────────────────
 
 @router.get("/{temple_id}/festivals", response_model=List[FestivalResponse])
-def get_temple_festivals(temple_id: int):
+def get_temple_festivals(temple_id: str):
     with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT id FROM temples WHERE id = %s AND status = 'published'",
-            (temple_id,)
-        )
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Temple not found")
-
+        tid = resolve_temple_id(cur, temple_id)
         cur.execute("""
             SELECT name, description, significance,
                    month, hindu_month, duration_days, is_major
             FROM festivals
             WHERE temple_id = %s
             ORDER BY month ASC NULLS LAST
-        """, (temple_id,))
+        """, (tid,))
         return [dict(f) for f in cur.fetchall()]
 
 
@@ -309,22 +323,16 @@ def get_temple_festivals(temple_id: int):
 # ─────────────────────────────────────────────
 
 @router.get("/{temple_id}/sevas", response_model=List[SevaResponse])
-def get_temple_sevas(temple_id: int):
+def get_temple_sevas(temple_id: str):
     with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT id FROM temples WHERE id = %s AND status = 'published'",
-            (temple_id,)
-        )
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Temple not found")
-
+        tid = resolve_temple_id(cur, temple_id)
         cur.execute("""
             SELECT id, name, description, price,
                    is_free, timing, advance_booking, booking_url
             FROM sevas
             WHERE temple_id = %s AND verified = TRUE
             ORDER BY price ASC NULLS LAST
-        """, (temple_id,))
+        """, (tid,))
         return [dict(s) for s in cur.fetchall()]
 
 
@@ -333,20 +341,10 @@ def get_temple_sevas(temple_id: int):
 # ─────────────────────────────────────────────
 
 @router.get("/{temple_id}/puja-schedule", response_model=List[PujaScheduleItem])
-def get_puja_schedule(temple_id: int):
-    """
-    Fetch the dynamic puja / aarti timetable for a temple.
-    Rows are from temple_puja_schedule (added in migration v2).
-    """
+def get_puja_schedule(temple_id: str):
     with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT id FROM temples WHERE id = %s AND status = 'published'",
-            (temple_id,)
-        )
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Temple not found")
-
-    rows = get_temple_puja_schedule(temple_id)
+        tid = resolve_temple_id(cur, temple_id)
+    rows = get_temple_puja_schedule(tid)
     result = []
     for r in rows:
         d = dict(r)
@@ -361,20 +359,10 @@ def get_puja_schedule(temple_id: int):
 # ─────────────────────────────────────────────
 
 @router.get("/{temple_id}/priests", response_model=List[PriestResponse])
-def get_priests(temple_id: int):
-    """
-    Fetch priest details for a temple.
-    Private fields (email) are excluded from the response.
-    """
+def get_priests(temple_id: str):
     with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT id FROM temples WHERE id = %s AND status = 'published'",
-            (temple_id,)
-        )
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Temple not found")
-
-    priests = get_temple_priests(temple_id)
+        tid = resolve_temple_id(cur, temple_id)
+    priests = get_temple_priests(tid)
     return [dict(p) for p in priests]
 
 
@@ -383,17 +371,10 @@ def get_priests(temple_id: int):
 # ─────────────────────────────────────────────
 
 @router.get("/{temple_id}/committee", response_model=CommitteeResponse)
-def get_committee(temple_id: int):
-    """Fetch the managing committee record for a temple."""
+def get_committee(temple_id: str):
     with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT id FROM temples WHERE id = %s AND status = 'published'",
-            (temple_id,)
-        )
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Temple not found")
-
-    committee = get_temple_committee(temple_id)
+        tid = resolve_temple_id(cur, temple_id)
+    committee = get_temple_committee(tid)
     if not committee:
         raise HTTPException(status_code=404, detail="No committee record found for this temple")
     return dict(committee)
@@ -407,7 +388,6 @@ def get_committee(temple_id: int):
 
 @router.get("/{temple_id}/registration", response_model=RegistrationResponse)
 def get_registration(temple_id: int):
-    """Fetch the consent / OTP registration record for a temple (admin use)."""
     reg = get_temple_registration(temple_id)
     if not reg:
         raise HTTPException(status_code=404, detail="No registration found for this temple")
@@ -433,12 +413,6 @@ def create_or_update_registration(
     body: RegistrationCreate,
     request: Request,
 ):
-    """
-    Submit or update the consent + OTP registration for a temple.
-    All five consent flags must be True to be considered complete.
-    OTP verification is handled separately.
-    """
-    # Verify temple exists (any status — registration happens before publish)
     with get_db_cursor() as cur:
         cur.execute("SELECT id FROM temples WHERE id = %s", (temple_id,))
         if not cur.fetchone():
@@ -459,22 +433,17 @@ def create_or_update_registration(
 
     reg_data = body.model_dump()
     reg_data['ip_address'] = request.client.host if request.client else None
-    result = upsert_registration(temple_id, reg_data)
+    upsert_registration(temple_id, reg_data)
     reg = get_temple_registration(temple_id)
     return dict(reg)
 
 
 class OTPVerify(_Base):
-    otp_code: str   # In production, verify this against a stored/sent OTP
+    otp_code: str
 
 
 @router.post("/{temple_id}/registration/verify-otp")
 def verify_otp(temple_id: int, body: OTPVerify):
-    """
-    Mark the registration OTP as verified.
-    Production: compare body.otp_code against the OTP sent via SMS.
-    Current implementation trusts the code (extend with real OTP service).
-    """
     reg = get_temple_registration(temple_id)
     if not reg:
         raise HTTPException(status_code=404, detail="No registration found — submit registration first")
