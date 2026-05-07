@@ -11,6 +11,8 @@ from routers import temples, route_planner, admin, festivals, spiritual_chat
 from db.connection import get_pool, close_pool
 import os
 from dotenv import load_dotenv
+from routers import proxy          # imports ke saath
+  
 
 load_dotenv()
 
@@ -86,6 +88,7 @@ app.include_router(route_planner.router)
 app.include_router(admin.router)
 app.include_router(festivals.router)
 app.include_router(spiritual_chat.router)
+app.include_router(proxy.router)
 
 # ─────────────────────────────────────────────
 # Root & Health Check
