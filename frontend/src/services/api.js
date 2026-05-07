@@ -5,7 +5,7 @@ const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET_KEY || '';
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 20000,
+  timeout: 30000,
 });
 
 const adminApi = axios.create({
