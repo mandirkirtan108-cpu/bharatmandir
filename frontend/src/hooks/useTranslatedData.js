@@ -27,17 +27,31 @@ export function useTranslatedTemples(temples) {
 }
 
 // Hook for a single temple
+// FIX: Initialize with temple directly so there's never a blank render cycle.
+// Show English data immediately, translate in background for other languages.
 export function useTranslatedTemple(temple) {
-  const { lang }                      = useLang();
+  const { lang } = useLang();
+
+  // KEY FIX: useState(temple) not useState(null)
+  // This means T is never null when temple data exists
   const [translated,  setTranslated]  = useState(temple);
   const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
-    if (!temple) { setTranslated(temple); return; }
-    if (lang === 'en') { setTranslated(temple); return; }
+    if (!temple) { setTranslated(null); return; }
+
+    // English — set immediately, no API call
+    if (lang === 'en') {
+      setTranslated(temple);
+      return;
+    }
+
+    // Other languages — show English first, translate in background
+    setTranslated(temple); // show data immediately
     setTranslating(true);
     translateTemple(temple, lang)
       .then(setTranslated)
+      .catch(() => setTranslated(temple))
       .finally(() => setTranslating(false));
   }, [temple, lang]);
 
