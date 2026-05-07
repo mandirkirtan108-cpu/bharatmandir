@@ -13,8 +13,8 @@ from db.connection import get_db_cursor
 def insert_temple_from_pipeline(cleaned_row: dict) -> dict:
     """
     Insert a single cleaned temple row.
-    ON CONFLICT DO NOTHING = skip duplicates safely.
-    Returns inserted record or None if duplicate.
+    ON CONFLICT DO UPDATE = upsert (insert or update all fields).
+    Returns inserted/updated record.
     """
     with get_db_cursor() as cur:
         cur.execute("""
@@ -122,7 +122,128 @@ def insert_temple_from_pipeline(cleaned_row: dict) -> dict:
                 %(wikidata_id)s, %(wikipedia_url)s, %(osm_id)s,
                 FALSE, FALSE
             )
-            ON CONFLICT (slug) DO NOTHING
+            ON CONFLICT (slug) DO UPDATE SET
+                name                    = EXCLUDED.name,
+                name_hindi              = EXCLUDED.name_hindi,
+                name_local              = EXCLUDED.name_local,
+                latitude                = EXCLUDED.latitude,
+                longitude               = EXCLUDED.longitude,
+                location                = EXCLUDED.location,
+                address                 = EXCLUDED.address,
+                city                    = EXCLUDED.city,
+                district                = EXCLUDED.district,
+                state                   = EXCLUDED.state,
+                pincode                 = EXCLUDED.pincode,
+                primary_deity           = EXCLUDED.primary_deity,
+                secondary_deities       = EXCLUDED.secondary_deities,
+                sect                    = EXCLUDED.sect,
+                temple_type             = EXCLUDED.temple_type,
+                is_jyotirlinga          = EXCLUDED.is_jyotirlinga,
+                is_shaktipeeth          = EXCLUDED.is_shaktipeeth,
+                is_divya_desam          = EXCLUDED.is_divya_desam,
+                is_ashtavinayak         = EXCLUDED.is_ashtavinayak,
+                is_char_dham            = EXCLUDED.is_char_dham,
+                is_heritage_site        = EXCLUDED.is_heritage_site,
+                is_asi_protected        = EXCLUDED.is_asi_protected,
+                is_pancha_bhuta         = EXCLUDED.is_pancha_bhuta,
+                is_51_shakti_peeths     = EXCLUDED.is_51_shakti_peeths,
+                is_unesco_heritage      = EXCLUDED.is_unesco_heritage,
+                is_state_heritage       = EXCLUDED.is_state_heritage,
+                history                 = EXCLUDED.history,
+                sthala_purana           = EXCLUDED.sthala_purana,
+                significance            = EXCLUDED.significance,
+                history_hindi           = EXCLUDED.history_hindi,
+                puranic_stories         = EXCLUDED.puranic_stories,
+                architecture_style      = EXCLUDED.architecture_style,
+                estimated_year_built    = EXCLUDED.estimated_year_built,
+                founded_by              = EXCLUDED.founded_by,
+                last_renovation_year    = EXCLUDED.last_renovation_year,
+                building_condition      = EXCLUDED.building_condition,
+                opening_time            = EXCLUDED.opening_time,
+                closing_time            = EXCLUDED.closing_time,
+                afternoon_closure_start = EXCLUDED.afternoon_closure_start,
+                afternoon_closure_end   = EXCLUDED.afternoon_closure_end,
+                entry_fee               = EXCLUDED.entry_fee,
+                dress_code              = EXCLUDED.dress_code,
+                best_time_to_visit      = EXCLUDED.best_time_to_visit,
+                nearest_railway         = EXCLUDED.nearest_railway,
+                nearest_airport         = EXCLUDED.nearest_airport,
+                nearest_bus_stand       = EXCLUDED.nearest_bus_stand,
+                local_landmark          = EXCLUDED.local_landmark,
+                google_maps_link        = EXCLUDED.google_maps_link,
+                website_url             = EXCLUDED.website_url,
+                phone                   = EXCLUDED.phone,
+                whatsapp_number         = EXCLUDED.whatsapp_number,
+                official_email          = EXCLUDED.official_email,
+                facebook_page           = EXCLUDED.facebook_page,
+                youtube_channel         = EXCLUDED.youtube_channel,
+                instagram_handle        = EXCLUDED.instagram_handle,
+                best_time_to_call       = EXCLUDED.best_time_to_call,
+                hero_image_url          = EXCLUDED.hero_image_url,
+                google_place_id         = EXCLUDED.google_place_id,
+                video_aarti_url         = EXCLUDED.video_aarti_url,
+                video_intro_url         = EXCLUDED.video_intro_url,
+                video_360_url           = EXCLUDED.video_360_url,
+                live_stream_url         = EXCLUDED.live_stream_url,
+                prasad_type             = EXCLUDED.prasad_type,
+                category_tags           = EXCLUDED.category_tags,
+                source                  = EXCLUDED.source,
+                managing_authority      = EXCLUDED.managing_authority,
+                trust_name              = EXCLUDED.trust_name,
+                trust_registration_no   = EXCLUDED.trust_registration_no,
+                setting_environment     = EXCLUDED.setting_environment,
+                online_puja_available   = EXCLUDED.online_puja_available,
+                live_darshan_available  = EXCLUDED.live_darshan_available,
+                weekly_special_day      = EXCLUDED.weekly_special_day,
+                puja_rudrabhishek       = EXCLUDED.puja_rudrabhishek,
+                puja_satyanarayan       = EXCLUDED.puja_satyanarayan,
+                puja_havan_homa         = EXCLUDED.puja_havan_homa,
+                puja_laghu_rudra        = EXCLUDED.puja_laghu_rudra,
+                puja_mahamrityunjaya    = EXCLUDED.puja_mahamrityunjaya,
+                puja_griha_pravesh      = EXCLUDED.puja_griha_pravesh,
+                puja_naamkaran          = EXCLUDED.puja_naamkaran,
+                puja_vivah              = EXCLUDED.puja_vivah,
+                puja_annaprashan        = EXCLUDED.puja_annaprashan,
+                puja_mundan             = EXCLUDED.puja_mundan,
+                puja_pitru_tarpan       = EXCLUDED.puja_pitru_tarpan,
+                puja_sahasranamarchana  = EXCLUDED.puja_sahasranamarchana,
+                facility_electricity        = EXCLUDED.facility_electricity,
+                facility_water_supply       = EXCLUDED.facility_water_supply,
+                facility_clean_toilets      = EXCLUDED.facility_clean_toilets,
+                facility_wheelchair         = EXCLUDED.facility_wheelchair,
+                facility_dharamshala        = EXCLUDED.facility_dharamshala,
+                facility_prasad_dining      = EXCLUDED.facility_prasad_dining,
+                facility_parking            = EXCLUDED.facility_parking,
+                facility_security           = EXCLUDED.facility_security,
+                facility_cctv               = EXCLUDED.facility_cctv,
+                facility_pa_system          = EXCLUDED.facility_pa_system,
+                facility_internet_wifi      = EXCLUDED.facility_internet_wifi,
+                facility_library_pathshala  = EXCLUDED.facility_library_pathshala,
+                facility_gaushaala          = EXCLUDED.facility_gaushaala,
+                facility_medical_support    = EXCLUDED.facility_medical_support,
+                prog_free_food          = EXCLUDED.prog_free_food,
+                prog_medical_camps      = EXCLUDED.prog_medical_camps,
+                prog_scholarship_edu    = EXCLUDED.prog_scholarship_edu,
+                prog_womens_selfhelp    = EXCLUDED.prog_womens_selfhelp,
+                prog_bhajan_kirtan      = EXCLUDED.prog_bhajan_kirtan,
+                prog_disaster_relief    = EXCLUDED.prog_disaster_relief,
+                accept_online_donations = EXCLUDED.accept_online_donations,
+                upi_id                  = EXCLUDED.upi_id,
+                bank_account_name       = EXCLUDED.bank_account_name,
+                bank_name_branch        = EXCLUDED.bank_name_branch,
+                bank_account_number     = EXCLUDED.bank_account_number,
+                bank_ifsc               = EXCLUDED.bank_ifsc,
+                certificate_80g_no      = EXCLUDED.certificate_80g_no,
+                donation_temple_renovation  = EXCLUDED.donation_temple_renovation,
+                donation_annadanam          = EXCLUDED.donation_annadanam,
+                donation_priest_salary      = EXCLUDED.donation_priest_salary,
+                donation_vedic_education    = EXCLUDED.donation_vedic_education,
+                donation_festival           = EXCLUDED.donation_festival,
+                donation_medical_camps      = EXCLUDED.donation_medical_camps,
+                donation_general            = EXCLUDED.donation_general,
+                wikidata_id             = EXCLUDED.wikidata_id,
+                wikipedia_url           = EXCLUDED.wikipedia_url,
+                osm_id                  = EXCLUDED.osm_id
             RETURNING id, name, slug
         """, cleaned_row)
 
@@ -131,26 +252,29 @@ def insert_temple_from_pipeline(cleaned_row: dict) -> dict:
 
 def bulk_insert_temples(cleaned_rows: list) -> dict:
     """
-    Insert multiple temples and return summary stats.
-    Processes one by one so a single failure 
+    Upsert multiple temples and return summary stats.
+    Processes one by one so a single failure
     doesn't kill the entire batch.
     """
     results = {
         'inserted': [],
-        'skipped':  [],
+        'updated':  [],
         'failed':   []
     }
+
+    existing_slugs = _get_existing_slugs([r['slug'] for r in cleaned_rows])
 
     for i, row in enumerate(cleaned_rows):
         try:
             record = insert_temple_from_pipeline(row)
 
             if record:
-                results['inserted'].append(record)
-                print(f"  ✅ [{i+1}] Inserted: {row['name']}")
-            else:
-                results['skipped'].append(row['name'])
-                print(f"  ⏭️  [{i+1}] Skipped (duplicate): {row['name']}")
+                if row['slug'] in existing_slugs:
+                    results['updated'].append(record)
+                    print(f"  🔄 [{i+1}] Updated: {row['name']}")
+                else:
+                    results['inserted'].append(record)
+                    print(f"  ✅ [{i+1}] Inserted: {row['name']}")
 
         except Exception as e:
             results['failed'].append({
@@ -159,4 +283,20 @@ def bulk_insert_temples(cleaned_rows: list) -> dict:
             })
             print(f"  ❌ [{i+1}] Failed: {row.get('name')} → {e}")
 
+    print(f"\n📊 Summary: {len(results['inserted'])} inserted, "
+          f"{len(results['updated'])} updated, "
+          f"{len(results['failed'])} failed")
+
     return results
+
+
+def _get_existing_slugs(slugs: list) -> set:
+    """Return the set of slugs that already exist in the DB."""
+    if not slugs:
+        return set()
+    with get_db_cursor() as cur:
+        cur.execute(
+            "SELECT slug FROM temples WHERE slug = ANY(%s)",
+            (slugs,)
+        )
+        return {row['slug'] for row in cur.fetchall()}
