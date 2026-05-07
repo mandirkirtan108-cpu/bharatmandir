@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect, Fragment } from 'react';
+import { useState, useRef, Fragment } from 'react';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SECTS = ['','Shaiva','Vaishnava','Shakta','Smartha','Jain','Buddhist','Sikh','Other'];
@@ -158,41 +160,24 @@ const css = `
 html{scroll-behavior:smooth;}
 body{font-family:var(--ff-u);background:var(--cream);color:var(--ink);-webkit-font-smoothing:antialiased;}
 
-/* TICKER */
-.ticker{background:var(--ink);padding:7px 0;overflow:hidden;position:relative;}
-.ticker::before,.ticker::after{content:'';position:absolute;top:0;bottom:0;width:60px;z-index:2;}
-.ticker::before{left:0;background:linear-gradient(90deg,var(--ink),transparent);}
-.ticker::after{right:0;background:linear-gradient(270deg,var(--ink),transparent);}
-.ticker-t{display:flex;align-items:center;width:max-content;animation:tick 30s linear infinite;}
-@keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.tm{font-family:var(--ff-b);font-style:italic;font-size:12px;color:#D4A828;letter-spacing:.14em;text-transform:uppercase;padding:0 6px;white-space:nowrap;}
-.tm.h{color:rgba(212,168,40,.55);font-family:var(--ff-hi);font-style:normal;letter-spacing:.04em;text-transform:none;}
-.ts{color:rgba(212,168,40,.3);padding:0 10px;font-size:12px;}
-.sacred-line{height:3px;background:linear-gradient(90deg,var(--s1),var(--s2) 25%,var(--g3) 50%,var(--s2) 75%,var(--s1));}
-
-/* HEADER */
-.hdr{background:rgba(253,250,243,.97);backdrop-filter:blur(20px);border-bottom:1px solid var(--bd2);box-shadow:var(--sh1);position:sticky;top:0;z-index:200;}
-.hdr-w{max-width:1100px;margin:0 auto;padding:0 32px;height:60px;display:flex;align-items:center;justify-content:space-between;}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
-.logo-d{font-size:20px;animation:diya 3s ease-in-out infinite;}
-@keyframes diya{0%,100%{filter:drop-shadow(0 0 4px rgba(212,96,10,.3));}50%{filter:drop-shadow(0 0 11px rgba(212,96,10,.7));}}
-.logo-n{font-family:var(--ff-h);font-size:18px;font-weight:700;color:var(--ink);}
-.logo-n b{color:var(--s2);}
-.logo-s{font-size:10px;color:var(--inkll);letter-spacing:.03em;margin-top:1px;}
-.admin-badge{background:linear-gradient(135deg,var(--s1),var(--g2));color:#fff;font-family:var(--ff-h);font-size:10px;letter-spacing:.1em;padding:4px 12px;border-radius:50px;}
-
 /* HERO */
-.hero{background:linear-gradient(180deg,rgba(24,15,6,.93) 0%,rgba(184,77,0,.72) 55%,rgba(253,250,243,1) 100%),url('https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Mahakaleshwar_Temple_Ujjain.jpg/1280px-Mahakaleshwar_Temple_Ujjain.jpg') center/cover no-repeat;padding:52px 24px 70px;text-align:center;position:relative;overflow:hidden;}
-.hero-om{position:absolute;font-size:280px;color:rgba(255,255,255,.035);font-family:var(--ff-hi);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;line-height:1;animation:pom 8s ease-in-out infinite;}
-@keyframes pom{0%,100%{opacity:.035;transform:translate(-50%,-50%) scale(1);}50%{opacity:.07;transform:translate(-50%,-50%) scale(1.04);}}
+.hero{position:relative;background:linear-gradient(160deg,#1A0A00 0%,#3D1F00 35%,#6B3A10 65%,#B84D00 100%);padding:56px 24px 72px;text-align:center;overflow:hidden;}
+.hero-bg{position:absolute;inset:0;pointer-events:none;}
+.hero-float{position:absolute;font-size:clamp(20px,3.5vw,44px);opacity:.12;animation:floatUp 7s ease-in-out infinite;}
+.hero-float:nth-child(1){top:12%;left:6%;animation-delay:0s;}
+.hero-float:nth-child(2){top:55%;left:12%;animation-delay:1.4s;}
+.hero-float:nth-child(3){top:18%;right:8%;animation-delay:.7s;}
+.hero-float:nth-child(4){bottom:18%;right:5%;animation-delay:2.1s;}
+.hero-float:nth-child(5){top:70%;right:18%;animation-delay:1.8s;}
+@keyframes floatUp{0%,100%{transform:translateY(0) rotate(-4deg);opacity:.12;}50%{transform:translateY(-16px) rotate(4deg);opacity:.22;}}
 .hero-inner{position:relative;z-index:1;}
-.hero-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(200,150,12,.18);border:1px solid rgba(240,192,64,.35);backdrop-filter:blur(8px);color:#F0C040;padding:5px 18px;border-radius:50px;font-family:var(--ff-h);font-size:11px;letter-spacing:.12em;margin-bottom:16px;}
-.hero h1{font-family:var(--ff-h);font-weight:900;color:#fff;font-size:clamp(28px,4.5vw,50px);line-height:1.1;margin-bottom:10px;text-shadow:0 2px 20px rgba(0,0,0,.4);}
+.hero-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(200,150,12,.18);border:1px solid rgba(240,192,64,.35);backdrop-filter:blur(8px);color:#F0C040;padding:5px 18px;border-radius:50px;font-family:var(--ff-h);font-size:11px;letter-spacing:.14em;margin-bottom:16px;}
+.hero h1{font-family:var(--ff-h);font-weight:900;color:#fff;font-size:clamp(28px,5vw,52px);line-height:1.1;margin-bottom:10px;text-shadow:0 2px 20px rgba(0,0,0,.4);}
 .hero h1 span{color:#F0C040;}
-.hero p{font-family:var(--ff-b);font-size:16px;color:rgba(255,255,255,.72);}
+.hero p{font-family:var(--ff-hi);font-size:15px;color:rgba(255,255,255,.7);}
 
 /* PROGRESS */
-.progress-wrap{background:var(--white);border-bottom:2px solid var(--bd2);position:sticky;top:60px;z-index:100;box-shadow:0 2px 8px rgba(100,50,10,.07);}
+.progress-wrap{background:var(--white);border-bottom:2px solid var(--bd2);position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(100,50,10,.07);}
 .progress{max-width:1000px;margin:0 auto;padding:0 24px;display:flex;align-items:center;overflow-x:auto;gap:0;}
 .step{display:flex;align-items:center;flex-shrink:0;}
 .step-btn{display:flex;align-items:center;gap:8px;padding:15px 16px;border:none;background:transparent;cursor:pointer;border-bottom:3px solid transparent;transition:all .25s;font-family:var(--ff-u);font-size:12px;color:var(--inkll);white-space:nowrap;}
@@ -359,7 +344,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   .page{padding:24px 14px 60px;}
   .fsec{padding:18px 16px;}
   .summary-grid{grid-template-columns:1fr 1fr;}
-  .hdr-w{padding:0 16px;}
   .sched-hdr,.sched-row{grid-template-columns:1fr 90px 80px 32px;font-size:11px;}
   .form-nav{gap:8px;}
 }
@@ -534,38 +518,19 @@ export default function AdminAddTemplePage() {
     <>
       <style>{css}</style>
 
-      {/* TICKER */}
-      <div className="ticker">
-        <div className="ticker-t">
-          {['OM NAMAH SHIVAYA','ॐ नमः शिवाय','JAI SHRI RAM','जय श्री राम','HARE KRISHNA','हरे कृष्ण हरे राम','BHARAT MANDIR','भारत मंदिर',
-            'OM NAMAH SHIVAYA','ॐ नमः शिवाय','JAI SHRI RAM','जय श्री राम','HARE KRISHNA','हरे कृष्ण हरे राम','BHARAT MANDIR','भारत मंदिर'].map((t,i) => (
-            <span key={i} className={`tm${/[\u0900-\u097F]/.test(t) ? ' h' : ''}`}>{t}</span>
-          ))}
-        </div>
-      </div>
-      <div className="sacred-line" />
-
-      {/* HEADER */}
-      <header className="hdr">
-        <div className="hdr-w">
-          <a className="logo" href="#">
-            <span className="logo-d">🪔</span>
-            <div>
-              <div className="logo-n">Bharat<b>Mandir</b></div>
-              <div className="logo-s">Sacred Temples of India</div>
-            </div>
-          </a>
-          <div className="admin-badge">ADMIN PANEL</div>
-        </div>
-      </header>
+      <Navbar />
 
       {/* HERO */}
       <div className="hero">
-        <div className="hero-om">ॐ</div>
+        <div className="hero-bg">
+          {['🛕','🪔','✨','🔱','🌸'].map((e, i) => (
+            <div key={i} className="hero-float">{e}</div>
+          ))}
+        </div>
         <div className="hero-inner">
-          <div className="hero-chip">🕉️ &nbsp; ADD NEW TEMPLE</div>
-          <h1>Register a <span>Sacred Temple</span></h1>
-          <p>Complete all sections to add the temple to BharatMandir's directory</p>
+          <div className="hero-chip">⚙️ ADMIN PANEL</div>
+          <h1>Add New <span>Temple</span></h1>
+          <p>मंदिर पंजीकरण — Register a sacred temple to BharatMandir</p>
         </div>
       </div>
 
@@ -1202,6 +1167,7 @@ export default function AdminAddTemplePage() {
           </>
         )}
       </div>
+      <Footer />
     </>
   );
 }
