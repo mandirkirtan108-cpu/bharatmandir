@@ -10,9 +10,13 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function proxyImageUrl(url) {
   if (!url) return null;
+  // Local relative paths → prepend backend base
   if (!url.startsWith('http')) return `${API_BASE}${url}`;
+  // Localhost images → use directly (dev only)
   if (url.includes('localhost') || url.includes('127.0.0.1')) return url;
-  return `${API_BASE}/api/proxy/image?url=${encodeURIComponent(url)}`;
+  // All external images → load directly from browser (avoids Railway network restrictions)
+  // The browser can fetch Wikimedia/Wikipedia images directly without CORS issues
+  return url;
 }
 function formatTime(t) {
   if (!t) return null;
@@ -201,7 +205,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--c);color:var(--k);-webkit
 // SmartImage with loading placeholder
 function SmartImage({ src, alt }) {
   const [ok, setOk] = useState(false);
-  useEffect(() => setOk(false), [src]);
+  useEffect(() => { setOk(false); }, [src]);
   return (
     <div style={{ position:'absolute', inset:0 }}>
       {!ok && (
@@ -209,7 +213,10 @@ function SmartImage({ src, alt }) {
       )}
       <img src={src} alt={alt} className="hero-img"
         style={{ opacity: ok ? 1 : 0 }}
-        onLoad={() => setOk(true)} onError={() => setOk(false)} />
+        onLoad={() => setOk(true)}
+        onError={() => setOk(false)}
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous" />
     </div>
   );
 }
@@ -610,6 +617,30 @@ export default function TempleDetailPage() {
             {v(T.website_url)     &&<div className="crow"><div className="clbl">Website</div><a href={T.website_url} target="_blank" rel="noopener noreferrer" className="clink">🌐 Visit Official Website →</a></div>}
             {v(T.best_time_to_call)&&<div className="crow"><div className="clbl">Best Time to Call</div><div className="cval">⏰ {T.best_time_to_call}</div></div>}
             {v(T.trust_registration_no)&&<div className="crow"><div className="clbl">Registration No.</div><div className="cval">{T.trust_registration_no}</div></div>}
+
+            {/* Show empty state if no contact info available yet */}
+            {!v(T.phone) && !v(T.whatsapp_number) && !v(T.official_email) && !v(T.website_url) &&
+             !v(T.facebook_page) && !v(T.youtube_channel) && !v(T.instagram_handle) && (
+              <div style={{
+                textAlign:'center', padding:'28px 20px',
+                background:'var(--p)', borderRadius:12,
+                border:'1px dashed var(--b2)'
+              }}>
+                <div style={{fontSize:36, marginBottom:10}}>📋</div>
+                <div style={{fontSize:14, fontWeight:600, color:'var(--km)', marginBottom:6}}>
+                  Contact details not yet available
+                </div>
+                <div style={{fontSize:12, color:'var(--kl)', lineHeight:1.6}}>
+                  We're working on gathering contact information for this temple.
+                  {mapsUrl && (
+                    <> You can <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                      style={{color:'var(--s)', textDecoration:'none', fontWeight:600}}>
+                      view it on Google Maps
+                    </a> for directions.</>
+                  )}
+                </div>
+              </div>
+            )}
 
             {(v(T.facebook_page)||v(T.youtube_channel)||v(T.instagram_handle))&&(
               <>
