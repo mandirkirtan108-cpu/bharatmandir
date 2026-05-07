@@ -202,21 +202,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--c);color:var(--k);-webkit
 @media(max-width:640px){.hero{height:auto;min-height:400px;}.hero-h1{font-size:28px;}.ig,.sg,.chip-grid,.dc{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:18px 16px;}}
 `;
 
-// SmartImage with loading placeholder
+// SmartImage with loading placeholder — shows diya on any error
 function SmartImage({ src, alt }) {
-  const [ok, setOk] = useState(false);
-  useEffect(() => { setOk(false); }, [src]);
+  const [status, setStatus] = useState('loading'); // 'loading' | 'ok' | 'error'
+  useEffect(() => { setStatus('loading'); }, [src]);
+  if (status === 'error') return null; // fall through to diya in parent
   return (
     <div style={{ position:'absolute', inset:0 }}>
-      {!ok && (
+      {status === 'loading' && (
         <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Noto Sans Devanagari',sans-serif", fontSize:72, color:'rgba(255,255,255,.06)', background:'#0D0500' }}>ॐ</div>
       )}
       <img src={src} alt={alt} className="hero-img"
-        style={{ opacity: ok ? 1 : 0 }}
-        onLoad={() => setOk(true)}
-        onError={() => setOk(false)}
-        referrerPolicy="no-referrer"
-        crossOrigin="anonymous" />
+        style={{ opacity: status === 'ok' ? 1 : 0 }}
+        onLoad={() => setStatus('ok')}
+        onError={() => setStatus('error')}
+        referrerPolicy="no-referrer" />
     </div>
   );
 }
@@ -345,7 +345,13 @@ export default function TempleDetailPage() {
 
       {/* ══ HERO ══ */}
       <div className="hero">
-        {heroImg ? <SmartImage src={heroImg} alt={T.name}/> : <div className="hero-diya">🪔</div>}
+        {heroImg ? (
+          <>
+            <SmartImage src={heroImg} alt={T.name}/>
+            {/* diya shows behind image; SmartImage returns null on error, revealing it */}
+            <div className="hero-diya">🪔</div>
+          </>
+        ) : <div className="hero-diya">🪔</div>}
         <div className="hero-grad"/>
         <div className="hero-body">
           {/* Breadcrumb */}
