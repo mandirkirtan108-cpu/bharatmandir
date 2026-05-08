@@ -388,9 +388,7 @@ export default function TempleDetailPage() {
           <div className="hero-acts">
             {mapsUrl && <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="btn btn-fill">🗺️ Get Directions</a>}
             {v(T.website_url) && <a href={T.website_url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost">🌐 Website</a>}
-            {T.live_darshan_available==='yes' && v(T.live_stream_url) && (
-              <a href={T.live_stream_url} target="_blank" rel="noopener noreferrer" className="btn btn-red">🔴 Live Darshan</a>
-            )}
+            
           </div>
         </div>
       </div>
