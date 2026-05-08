@@ -7,3 +7,4 @@ anthropic
 aiofiles
 pillow
 requests
+bcrypt
