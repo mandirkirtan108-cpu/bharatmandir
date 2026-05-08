@@ -480,16 +480,82 @@ export default function AdminAddTemplePage() {
   const removeFest = id => setFestivs(p => p.filter(x=>x.id!==id));
   const setFest    = (id,k,v) => setFestivs(p => p.map(x=>x.id===id ? {...x,[k]:v} : x));
 
-  function submitForm() {
-    const stateAbbr = (form.state || 'XX').substring(0,2).toUpperCase();
-    const rand = Math.floor(Math.random() * 9000 + 1000);
-    setQrId(`MKT-${stateAbbr}-${rand}`);
-    setSubmitted(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
+  // ── CONSENTS (must be defined BEFORE submitForm uses it) ──────────────────
   const allConsents = consents.every(Boolean);
   const toggleConsent = i => setConsents(c => { const a=[...c]; a[i]=!a[i]; return a; });
+
+async function submitForm() {
+  // allConsents ab properly defined hai upar
+  if (!consents.every(Boolean)) return;
+  
+  const token = sessionStorage.getItem('bm_access_token');
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  
+  // FormData banao kyunki backend Form(...) expect karta hai
+  const fd = new FormData();
+  
+  // Basic fields
+  fd.append('name', form.name);
+  fd.append('city', form.city);
+  fd.append('state', form.state);
+  fd.append('status', form.status || 'draft');
+  fd.append('source', form.source || 'admin_form');
+  
+  // Optional string fields
+  const strFields = [
+    'name_hindi','name_local','temple_type','sect','managing_authority',
+    'trust_name','trust_registration_no','primary_deity','secondary_deities',
+    'address','district','pincode','setting_environment','google_maps_link',
+    'nearest_railway','nearest_airport','nearest_bus_stand','local_landmark',
+    'history','history_hindi','sthala_purana','significance','puranic_stories',
+    'estimated_year_built','founded_by','last_renovation_year','building_condition',
+    'opening_time','closing_time','afternoon_closure_start','afternoon_closure_end',
+    'weekly_special_day','online_puja_available','live_darshan_available',
+    'live_stream_url','prasad_type','dress_code','best_time_to_visit',
+    'phone','whatsapp_number','official_email','website_url','facebook_page',
+    'youtube_channel','instagram_handle','best_time_to_call',
+    'video_aarti_url','video_intro_url','video_360_url',
+    'upi_id','certificate_80g_no','bank_account_name','bank_name_branch',
+    'bank_account_number','bank_ifsc',
+    'hero_image_url',
+  ];
+  strFields.forEach(k => { if (form[k]) fd.append(k, form[k]); });
+  
+  // Number fields
+  if (form.latitude)  fd.append('latitude',  form.latitude);
+  if (form.longitude) fd.append('longitude', form.longitude);
+  if (form.entry_fee) fd.append('entry_fee', form.entry_fee);
+  
+  // Architecture style (stored separately in state)
+  if (archStyle) fd.append('architecture_style', archStyle);
+  
+  // Boolean fields
+  const boolFields = [
+    ...DESIGNATIONS.map(d=>d.key), ...PUJAS.map(p=>p.key),
+    ...FACILITIES.map(f=>f.key), ...PROGRAMS.map(p=>p.key),
+    ...DONATION_CATS.map(d=>d.key), 'accept_online_donations',
+  ];
+  boolFields.forEach(k => fd.append(k, form[k] ? 'true' : 'false'));
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/temples`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      // Content-Type set mat karo — browser automatically multipart boundary set karta hai
+      body: fd,
+    });
+    
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to save temple');
+    
+    setQrId(data.mkt_id);
+    setSubmitted(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+  } catch (err) {
+    alert('Error saving temple: ' + err.message);
+  }
+}
 
   // ── SUMMARY DATA ──────────────────────────────────────────────────────────
   const summaryItems = [
