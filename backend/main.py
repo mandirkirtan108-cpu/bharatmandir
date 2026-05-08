@@ -11,10 +11,10 @@ from routers import temples, route_planner, admin, festivals, spiritual_chat
 from db.connection import get_pool, close_pool
 import os
 from dotenv import load_dotenv
-from routers import proxy  
+
+from routers import proxy
+from routers.ai import router as ai_router
 from routers.admin_auth import router as admin_auth_router
-       
-  
 
 load_dotenv()
 
@@ -52,7 +52,9 @@ _origins = [
     "http://127.0.0.1:5173",
     "https://bharatmandir.vercel.app",
 ]
+
 _prod_origin = os.getenv("CORS_ORIGIN")
+
 if _prod_origin and _prod_origin not in _origins:
     _origins.append(_prod_origin)
 
@@ -174,6 +176,7 @@ app.include_router(admin.router)
 app.include_router(festivals.router)
 app.include_router(spiritual_chat.router)
 app.include_router(proxy.router)
+app.include_router(ai_router, prefix="/api/ai")
 app.include_router(admin_auth_router)
 
 @app.get("/")
@@ -181,25 +184,28 @@ def root():
     return {
         "project": "BharatMandir",
         "version": "1.0.0",
-        "status":  "running",
-        "docs":    "/api/docs",
+        "status": "running",
+        "docs": "/api/docs",
     }
 
 @app.get("/api/health")
 def health_check():
     try:
         from db.connection import get_db_cursor
+
         with get_db_cursor() as cur:
             cur.execute("SELECT COUNT(*) as count FROM temples")
             result = cur.fetchone()
+
         return {
-            "status":        "healthy",
-            "database":      "connected",
+            "status": "healthy",
+            "database": "connected",
             "total_temples": result["count"],
         }
+
     except Exception as e:
         return {
-            "status":   "unhealthy",
+            "status": "unhealthy",
             "database": "disconnected",
-            "error":    str(e),
+            "error": str(e),
         }

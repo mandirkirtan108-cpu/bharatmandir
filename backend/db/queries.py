@@ -167,6 +167,25 @@ def search_temples(query: str, limit=20):
         return cur.fetchall()
 
 
+def get_temples_by_city(city_name: str):
+    """Get all temples in a specific city, ordered by name."""
+    with get_db_cursor() as cur:
+        cur.execute("""
+            SELECT
+                id, uuid, name, name_hindi, slug,
+                city, state, primary_deity, address,
+                temple_type, is_jyotirlinga, is_shaktipeeth,
+                latitude, longitude, hero_image_url,
+                average_rating, category_tags, status
+            FROM temples
+            WHERE
+                status = 'published'
+                AND LOWER(city) = LOWER(%s)
+            ORDER BY name ASC
+        """, (city_name,))
+        return cur.fetchall()
+
+
 # ─────────────────────────────────────────────
 # Related data — READ
 # ─────────────────────────────────────────────
