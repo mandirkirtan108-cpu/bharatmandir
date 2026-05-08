@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Clock, Star, Sparkles, AlertCircle, Loader2, Key, Sun, CheckCircle } from 'lucide-react';
+import { Calendar, Clock, Star, Sparkles, AlertCircle, Loader2, Sun, CheckCircle } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -30,28 +30,7 @@ const VERDICT_COLOR = { excellent: '#16a34a', good: '#2563eb', average: '#d97706
 const VERDICT_BG    = { excellent: '#f0fdf4', good: '#eff6ff', average: '#fffbeb', avoid: '#fef2f2' };
 const VERDICT_ICON  = { excellent: '🌟', good: '✅', average: '⚡', avoid: '❌' };
 
-async function askClaude(apiKey, prompt) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2500,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error?.message || `Claude API error ${res.status}`);
-  }
-  const data = await res.json();
-  return data.content?.[0]?.text || '';
-}
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function Card({ children, accent, style = {} }) {
   return (
@@ -78,8 +57,6 @@ function SectionTitle({ icon, children }) {
 }
 
 export default function PanchangPage() {
-  const [apiKey,       setApiKey]       = useState(() => localStorage.getItem('bm_claude_key') || '');
-  const [showKey,      setShowKey]      = useState(false);
   const [selected,     setSelected]     = useState(null);
   const [date,         setDate]         = useState(TODAY);
   const [rashi,        setRashi]        = useState('');
@@ -91,7 +68,6 @@ export default function PanchangPage() {
   const [dailyResult,  setDailyResult]  = useState(null);
   const [error,        setError]        = useState(null);
 
-  const saveKey = () => { localStorage.setItem('bm_claude_key', apiKey); setShowKey(false); };
   const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
 
   const getFullDate = (d) => {
@@ -102,37 +78,18 @@ export default function PanchangPage() {
     };
   };
 
-  // ── Daily Panchang ──────────────────────────────────────────────────────────
+  // ── Daily Panchang — backend call ─────────────────────────────────────────
   const fetchDailyPanchang = async () => {
-    if (!apiKey.trim()) { setShowKey(true); return; }
     setDailyLoading(true); setDailyResult(null); setError(null);
-    const { full, day } = getFullDate(date);
-
-    const prompt = `You are a learned Vedic pandit expert in Hindu Panchang calculations.
-Provide the complete Panchang for: ${full} (${day}), City: ${city || 'India (general)'}
-
-Return ONLY valid JSON, no markdown, no explanation, start directly with {:
-{
-  "tithi": { "name": "", "number": "", "deity": "", "nature": "" },
-  "nakshatra": { "name": "", "hindi": "", "lord": "", "quality": "" },
-  "yoga": { "name": "", "nature": "auspicious/inauspicious", "meaning": "" },
-  "karana": { "name": "", "nature": "" },
-  "var": { "day": "", "lord": "", "color": "", "good_for": "" },
-  "rahu_kaal": { "time": "" },
-  "brahma_muhurat": { "time": "", "benefit": "" },
-  "abhijit_muhurat": { "time": "", "benefit": "" },
-  "choghadiya": [
-    { "time": "", "name": "", "nature": "good/bad/neutral", "good_for": "" }
-  ],
-  "overall_day": "excellent/good/average/inauspicious",
-  "pandit_blessings": "A warm Sanskrit-flavoured blessing sentence for the day",
-  "do_today": ["action 1", "action 2", "action 3"],
-  "avoid_today": ["thing 1", "thing 2", "thing 3"]
-}`;
-
     try {
-      const raw = await askClaude(apiKey, prompt);
-      setDailyResult(JSON.parse(raw.replace(/```json|```/g, '').trim()));
+      const res = await fetch(`${API_BASE}/api/panchang/daily`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, city: city || 'India' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to load Panchang');
+      setDailyResult(data);
     } catch (e) {
       setError('Could not load Panchang: ' + e.message);
     } finally {
@@ -140,50 +97,27 @@ Return ONLY valid JSON, no markdown, no explanation, start directly with {:
     }
   };
 
-  // ── Muhurat Finder ──────────────────────────────────────────────────────────
+  // ── Muhurat Finder — backend call ─────────────────────────────────────────
   const findMuhurat = async () => {
     if (!selected) { setError('Please select a Muhurat type first.'); return; }
-    if (!apiKey.trim()) { setShowKey(true); return; }
     setLoading(true); setResult(null); setError(null);
-    const { full, day } = getFullDate(date);
-
-    const prompt = `You are a highly learned Vedic pandit — expert in Muhurat Shastra and Jyotish. A devotee seeks your guidance.
-
-QUERY:
-- Muhurat for: ${selectedType?.label} (${selectedType?.hindi})
-- Date: ${full} (${day})
-- Person's name: ${name || 'Not provided'}
-- Rashi (Moon sign): ${rashi || 'Not provided'}
-- City: ${city || 'India (general)'}
-
-Analyse the tithi, nakshatra, yoga, var and planetary positions. Give a warm, authoritative pandit-style response.
-
-Return ONLY valid JSON, no markdown, start directly with {:
-{
-  "verdict": "excellent/good/average/avoid",
-  "verdict_reason": "One clear sentence why",
-  "pandit_message": "Warm, wise 3-4 sentence message to the devotee as a real pandit would speak",
-  "auspicious_timings": [
-    { "time": "07:15 AM - 09:00 AM", "quality": "Shreshtha (Best)", "reason": "" }
-  ],
-  "timings_to_avoid": [
-    { "time": "", "reason": "" }
-  ],
-  "tithi_today": { "name": "", "is_auspicious_for_this_muhurat": true, "reason": "" },
-  "nakshatra_today": { "name": "", "is_auspicious_for_this_muhurat": true, "reason": "" },
-  "rituals_recommended": ["ritual 1", "ritual 2", "ritual 3"],
-  "mantras": [
-    { "deity": "", "mantra": "", "chant_times": 108, "purpose": "" }
-  ],
-  "special_notes": ["note 1", "note 2"],
-  "alternative_dates": [
-    { "date": "", "quality": "Excellent/Good", "reason": "" }
-  ]
-}`;
-
     try {
-      const raw = await askClaude(apiKey, prompt);
-      setResult(JSON.parse(raw.replace(/```json|```/g, '').trim()));
+      const res = await fetch(`${API_BASE}/api/panchang/muhurat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          muhurat_type:  selected,
+          muhurat_label: selectedType?.label || selected,
+          muhurat_hindi: selectedType?.hindi || '',
+          date,
+          name:  name || '',
+          rashi: rashi || '',
+          city:  city || 'India',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to get Muhurat');
+      setResult(data);
     } catch (e) {
       setError('Could not get Muhurat: ' + e.message);
     } finally {
@@ -239,46 +173,6 @@ Return ONLY valid JSON, no markdown, start directly with {:
 
         <div className="container" style={{ maxWidth: 960, paddingTop: 36 }}>
 
-          {/* ── API Key Banner ── */}
-          <div style={{
-            background: 'white', borderRadius: 'var(--radius-lg)', padding: '14px 20px',
-            border: `2px solid ${apiKey ? 'rgba(34,197,94,0.3)' : 'rgba(234,179,8,0.4)'}`,
-            marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Key size={15} color={apiKey ? '#16a34a' : 'var(--gold)'} />
-              <span style={{ fontSize: 13, color: 'var(--text-mid)' }}>
-                {apiKey
-                  ? '✅ Claude API key saved — Pandit Ji is ready to guide you!'
-                  : '⚠️ Add your Anthropic API key to activate Pandit Ji'}
-              </span>
-            </div>
-            <button className="btn-outline" style={{ fontSize: 12, padding: '6px 16px' }} onClick={() => setShowKey(v => !v)}>
-              {apiKey ? '🔑 Change Key' : '🔑 Add Key'}
-            </button>
-          </div>
-
-          {showKey && (
-            <div style={{
-              background: 'white', borderRadius: 'var(--radius)', padding: '18px 20px',
-              border: '2px solid var(--saffron)', marginBottom: 20, boxShadow: '0 4px 16px rgba(232,101,10,0.1)',
-            }}>
-              <p style={{ fontSize: 13, color: 'var(--text-light)', marginBottom: 10 }}>
-                🔒 Stored in your browser only · Get key at{' '}
-                <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: 'var(--saffron)' }}>
-                  console.anthropic.com
-                </a>
-              </p>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <input
-                  type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-                  placeholder="sk-ant-..." onKeyDown={e => e.key === 'Enter' && saveKey()}
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-                <button className="btn-primary" style={{ padding: '10px 22px' }} onClick={saveKey}>Save</button>
-              </div>
-            </div>
-          )}
 
           {/* ════════════════════════════════════════════════════════
               SECTION 1 — Daily Panchang

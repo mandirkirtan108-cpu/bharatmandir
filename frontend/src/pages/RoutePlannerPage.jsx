@@ -42,8 +42,6 @@ export default function RoutePlannerPage() {
   const [loading, setLoading]   = useState(false);
   const [result,  setResult]    = useState(null);
   const [error,   setError]     = useState(null);
-  const [apiKey,  setApiKey]    = useState(() => localStorage.getItem('bm_openai_key') || '');
-  const [showKey, setShowKey]   = useState(false);
 
   const togglePref = (p) => {
     setForm(f => ({
@@ -52,11 +50,6 @@ export default function RoutePlannerPage() {
         ? f.preferences.filter(x => x !== p)
         : [...f.preferences, p],
     }));
-  };
-
-  const saveKey = () => {
-    localStorage.setItem('bm_openai_key', apiKey);
-    setShowKey(false);
   };
 
   const handlePreset = (preset) => {
@@ -68,95 +61,28 @@ export default function RoutePlannerPage() {
       setError('Please enter both start and destination.');
       return;
     }
-    if (!apiKey.trim()) {
-      setError('Please enter your OpenAI API key first.');
-      setShowKey(true);
-      return;
-    }
     setLoading(true);
     setError(null);
     setResult(null);
 
-    const systemPrompt = `You are an advanced AI travel and spiritual guide for BharatMandir — India's temple discovery platform. 
-Your task: Suggest temples that naturally fall along the user's travel route.
-
-RULES:
-- Only suggest REAL, well-known temples that actually exist along the given route.
-- Temples must be within 5-10 km of the main road/highway.
-- Be practical — respect the user's time limit.
-- Return ONLY valid JSON, no extra text, no markdown fences.
-
-OUTPUT FORMAT (strict JSON):
-{
-  "route_summary": {
-    "start": "",
-    "destination": "",
-    "total_distance": "",
-    "estimated_travel_time": ""
-  },
-  "recommended_temples": [
-    {
-      "name": "",
-      "location": "",
-      "distance_from_route_km": "3 km",
-      "estimated_stop_time_minutes": 30,
-      "importance": "high",
-      "deity": "",
-      "why_visit": ""
-    }
-  ],
-  "optimized_plan": [
-    {
-      "stop_number": 1,
-      "temple_name": "",
-      "arrival_time_hint": "9:00 AM",
-      "arrival_order_reason": ""
-    }
-  ],
-  "insights": [
-    "Best time to start journey",
-    "Crowd tips",
-    "Special festival alerts or local tips"
-  ]
-}`;
-
-    const userPrompt = `Plan a spiritual route:
-- From: ${form.start}
-- To: ${form.destination}
-- Travel mode: ${form.travel_mode}
-- Time available: ${form.time_available} hours
-- Preferences: ${form.preferences.length ? form.preferences.join(', ') : 'Any temples'}
-
-Suggest temples along this actual road route, create an optimized visiting plan.`;
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetch(`${API_BASE}/api/route/plan`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.4,
-          max_tokens: 2000,
+          start:          form.start,
+          destination:    form.destination,
+          travel_mode:    form.travel_mode,
+          time_available: parseInt(form.time_available),
+          preferences:    form.preferences,
         }),
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || 'OpenAI API error');
-      }
-
       const data = await res.json();
-      let raw = data.choices?.[0]?.message?.content || '';
-      raw = raw.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(raw);
-      setResult(parsed);
+      if (!res.ok) throw new Error(data.detail || 'Failed to plan route');
+      setResult(data);
     } catch (e) {
       setError(e.message || 'Something went wrong. Please try again.');
     } finally {
@@ -204,47 +130,6 @@ Suggest temples along this actual road route, create an optimized visiting plan.
 
         <div className="container" style={{ maxWidth: 900, paddingTop: 48 }}>
 
-          {/* API Key Banner */}
-          <div style={{
-            background: 'white', borderRadius: 'var(--radius-lg)', padding: '16px 20px',
-            border: '1px solid var(--cream-dark)', marginBottom: 24,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Sparkles size={18} color="var(--gold)" />
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--text-mid)' }}>
-                {apiKey ? '✅ OpenAI Key saved (browser only)' : '⚠️ No API key — add your OpenAI key to enable AI planning'}
-              </span>
-            </div>
-            <button className="btn-outline" style={{ fontSize: 12, padding: '6px 16px' }} onClick={() => setShowKey(v => !v)}>
-              {showKey ? 'Hide' : apiKey ? 'Change Key' : 'Add Key'}
-            </button>
-          </div>
-
-          {showKey && (
-            <div style={{
-              background: 'white', borderRadius: 'var(--radius)', padding: 20,
-              border: '2px solid var(--saffron)', marginBottom: 24, boxShadow: '0 4px 20px rgba(232,101,10,0.15)',
-            }}>
-              <p style={{ fontSize: 13, color: 'var(--text-light)', marginBottom: 10 }}>
-                Your key is stored only in your browser (localStorage). Never sent to our servers.
-              </p>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="sk-..."
-                  style={{
-                    flex: 1, padding: '10px 14px', borderRadius: 8,
-                    border: '2px solid var(--cream-dark)', fontFamily: 'var(--font-body)', fontSize: 14,
-                    outline: 'none',
-                  }}
-                />
-                <button className="btn-primary" style={{ padding: '10px 20px' }} onClick={saveKey}>Save</button>
-              </div>
-            </div>
-          )}
 
           {/* Quick Presets — RESPONSIVE CLASS ADDED */}
           <div style={{ marginBottom: 28 }}>
