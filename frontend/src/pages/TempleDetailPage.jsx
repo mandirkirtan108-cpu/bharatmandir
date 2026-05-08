@@ -410,11 +410,6 @@ export default function TempleDetailPage() {
             {v(T.setting_environment) && <span className="hero-meta-item">🌿 {T.setting_environment}</span>}
           </div>
 
-          <div className="hero-acts">
-            {mapsUrl && <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="btn btn-fill">🗺️ Get Directions</a>}
-            {v(T.website_url) && <a href={T.website_url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost">🌐 Website</a>}
-            
-          </div>
         </div>
       </div>
 
