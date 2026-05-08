@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-54 -78 108 156" width="512" height="512">
+  <title>Hindu Temple Icon</title>
+  <!-- Topmost spire tip -->
+  <polygon points="0,-78 -3,-58 3,-58" fill="#F5A623"/>
+  <!-- Top finial ball -->
+  <ellipse cx="0" cy="-52" rx="5" ry="5.5" fill="#F5A623"/>
+  <!-- Spire level 1 -->
+  <polygon points="0,-58 -10,-42 10,-42" fill="#E8941A"/>
+  <rect x="-10" y="-42" width="20" height="5" rx="1" fill="#C47A10"/>
+  <!-- Spire level 2 -->
+  <polygon points="0,-50 -16,-30 16,-30" fill="#F5A623"/>
+  <rect x="-16" y="-30" width="32" height="6" rx="1" fill="#C47A10"/>
+  <!-- Spire level 3 -->
+  <polygon points="0,-36 -22,-18 22,-18" fill="#E8941A"/>
+  <rect x="-22" y="-18" width="44" height="6" rx="1" fill="#C47A10"/>
+  <!-- Spire level 4 -->
+  <polygon points="0,-24 -28,-6 28,-6" fill="#F5A623"/>
+  <rect x="-28" y="-6" width="56" height="7" rx="1" fill="#C47A10"/>
+  <!-- Main tower body -->
+  <rect x="-28" y="1" width="56" height="22" rx="2" fill="#E8941A"/>
+  <!-- Tower window -->
+  <rect x="-8" y="4" width="16" height="14" rx="2" fill="#C47A10"/>
+  <ellipse cx="0" cy="4" rx="8" ry="4" fill="#C47A10"/>
+  <!-- Main hall platform top -->
+  <rect x="-36" y="23" width="72" height="8" rx="1" fill="#C47A10"/>
+  <!-- Main hall body -->
+  <rect x="-36" y="31" width="72" height="24" rx="2" fill="#F5A623"/>
+  <!-- Hall columns -->
+  <rect x="-30" y="34" width="6" height="18" rx="1" fill="#C47A10"/>
+  <rect x="-10" y="34" width="6" height="18" rx="1" fill="#C47A10"/>
+  <rect x="4" y="34" width="6" height="18" rx="1" fill="#C47A10"/>
+  <rect x="24" y="34" width="6" height="18" rx="1" fill="#C47A10"/>
+  <!-- Entry arch -->
+  <rect x="-8" y="38" width="16" height="17" rx="1" fill="#C47A10"/>
+  <ellipse cx="0" cy="38" rx="8" ry="5" fill="#C47A10"/>
+  <!-- Base steps -->
+  <rect x="-42" y="55" width="84" height="8" rx="1" fill="#E8941A"/>
+  <rect x="-48" y="63" width="96" height="8" rx="2" fill="#C47A10"/>
+  <!-- Ground base -->
+  <rect x="-54" y="71" width="108" height="7" rx="2" fill="#A86210"/>
+</svg>
