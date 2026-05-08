@@ -619,27 +619,8 @@ export default function TempleDetailPage() {
             {v(T.best_time_to_call)&&<div className="crow"><div className="clbl">Best Time to Call</div><div className="cval">⏰ {T.best_time_to_call}</div></div>}
             {v(T.trust_registration_no)&&<div className="crow"><div className="clbl">Registration No.</div><div className="cval">{T.trust_registration_no}</div></div>}
 
-            {(v(T.facebook_page)||v(T.youtube_channel)||v(T.instagram_handle))&&(
-              <>
-                <div style={{fontSize:11,color:'var(--kl)',margin:'14px 0 8px',textTransform:'uppercase',letterSpacing:'.08em',fontWeight:700}}>Social Media</div>
-                <div className="social-row">
-                  {v(T.facebook_page)   &&<a href={T.facebook_page} target="_blank" rel="noopener noreferrer" className="soc-btn">📘 Facebook</a>}
-                  {v(T.youtube_channel) &&<a href={T.youtube_channel} target="_blank" rel="noopener noreferrer" className="soc-btn">📺 YouTube</a>}
-                  {v(T.instagram_handle)&&<a href={`https://instagram.com/${T.instagram_handle.replace('@','')}`} target="_blank" rel="noopener noreferrer" className="soc-btn">📸 Instagram</a>}
-                </div>
-              </>
-            )}
 
-            {(v(T.video_aarti_url)||v(T.video_intro_url)||v(T.video_360_url))&&(
-              <>
-                <div style={{fontSize:11,color:'var(--kl)',margin:'14px 0 8px',textTransform:'uppercase',letterSpacing:'.08em',fontWeight:700}}>Videos</div>
-                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                  {v(T.video_aarti_url)&&<a href={T.video_aarti_url} target="_blank" rel="noopener noreferrer" className="abtn red" style={{flex:1,minWidth:110,margin:0}}>🔴 Aarti Video</a>}
-                  {v(T.video_intro_url)&&<a href={T.video_intro_url} target="_blank" rel="noopener noreferrer" className="abtn" style={{flex:1,minWidth:110,margin:0}}>▶️ Temple Tour</a>}
-                  {v(T.video_360_url)  &&<a href={T.video_360_url}   target="_blank" rel="noopener noreferrer" className="abtn out" style={{flex:1,minWidth:110,margin:0}}>360° View</a>}
-                </div>
-              </>
-            )}
+            
           </div>
         </div>
 
