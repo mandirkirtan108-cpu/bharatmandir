@@ -344,6 +344,7 @@ export default function TempleDetailPage() {
         {heroImg ? (
           <>
             <SmartImage src={heroImg} alt={T.name}/>
+            
           </>
         ) : <div className="hero-diya"></div>}
         <div className="hero-grad"/>
