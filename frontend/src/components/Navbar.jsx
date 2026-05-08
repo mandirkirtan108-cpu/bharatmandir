@@ -79,8 +79,8 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* Desktop search */}
-          
+          {/* ── Spacer: pushes nav links away from logo ── */}
+          <div style={{ flex: 1 }} />
 
           {/* Desktop nav links */}
           <div className="nav-actions nav-actions-desktop">
