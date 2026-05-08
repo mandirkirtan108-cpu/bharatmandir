@@ -71,7 +71,7 @@ export default function Navbar() {
       <nav className="navbar">
         <div className="navbar-inner">
 
-          <Link to="/" className="nav-logo">
+          <Link to="/" className="nav-logo" style={{ marginRight: '60px' }}>
             <span className="nav-logo-icon">🛕</span>
             <div>
               <span className="nav-logo-name">BharatMandir</span>
