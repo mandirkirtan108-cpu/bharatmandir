@@ -13,7 +13,7 @@ POST   /api/admin/temples/{id}/priests           → Add priest (Step 4)
 POST   /api/admin/temples/{id}/committee         → Set committee (Step 4)
 PUT    /api/admin/temples/{id}/puja-schedule     → Replace puja schedule (Step 5)
 
-All routes require header:  X-Admin-Key: <ADMIN_SECRET_KEY>
+All routes require JWT Bearer token (Authorization: Bearer <token>)
 """
 
 import os
@@ -24,7 +24,7 @@ import random
 from typing import Optional, List
 
 from fastapi import (
-    APIRouter, HTTPException, Header, Depends,
+    APIRouter, HTTPException, Depends,
     UploadFile, File, Form, Query, Body
 )
 from pydantic import BaseModel
@@ -34,14 +34,13 @@ from db.queries import (
     upsert_priest, upsert_committee,
     replace_puja_schedule,
 )
+from routers.admin_auth import get_current_admin
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
 # ─────────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────────
-
-ADMIN_KEY = os.getenv("ADMIN_SECRET_KEY", "change-me-in-production")
 
 UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads"
@@ -52,15 +51,6 @@ ALLOWED_IMAGE = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 ALLOWED_VIDEO = {"video/mp4", "video/webm", "video/ogg"}
 MAX_IMG = 10  * 1024 * 1024   # 10 MB
 MAX_VID = 200 * 1024 * 1024   # 200 MB
-
-
-# ─────────────────────────────────────────────
-# Auth guard
-# ─────────────────────────────────────────────
-
-def verify_admin(x_admin_key: str = Header(...)):
-    if x_admin_key != ADMIN_KEY:
-        raise HTTPException(status_code=401, detail="Invalid admin key")
 
 
 # ─────────────────────────────────────────────
@@ -137,7 +127,7 @@ class PriestCreate(BaseModel):
     full_name:              str
     title_designation:      Optional[str] = None
     phone:                  str
-    email:                  Optional[str] = None   # stored but never returned publicly
+    email:                  Optional[str] = None
     qualification:          Optional[str] = None
     sampradaya:             Optional[str] = None
     languages_known:        Optional[str] = None
@@ -156,19 +146,41 @@ class CommitteeCreate(BaseModel):
 
 class PujaScheduleRow(BaseModel):
     puja_name:  str
-    puja_time:  str          # "HH:MM" or "HH:MM:SS"
+    puja_time:  str
     puja_type:  str = "Aarti"
     sort_order: int = 0
 
 
+class TempleFieldUpdate(BaseModel):
+    name:                Optional[str] = None
+    name_hindi:          Optional[str] = None
+    primary_deity:       Optional[str] = None
+    sect:                Optional[str] = None
+    temple_type:         Optional[str] = None
+    architecture_style:  Optional[str] = None
+    estimated_year_built: Optional[str] = None
+    city:                Optional[str] = None
+    state:               Optional[str] = None
+    address:             Optional[str] = None
+    opening_time:        Optional[str] = None
+    closing_time:        Optional[str] = None
+    entry_fee:           Optional[float] = None
+    dress_code:          Optional[str] = None
+    best_time_to_visit:  Optional[str] = None
+    nearest_railway:     Optional[str] = None
+    nearest_airport:     Optional[str] = None
+    history:             Optional[str] = None
+    significance:        Optional[str] = None
+    website_url:         Optional[str] = None
+
+
 # ─────────────────────────────────────────────
 # POST /api/admin/temples — Create temple
-# Accepts all v2 registration form fields.
-# Optional hero_image upload inline (Step 6).
 # ─────────────────────────────────────────────
 
-@router.post("/temples", status_code=201, dependencies=[Depends(verify_admin)])
+@router.post("/temples", status_code=201)
 async def create_temple(
+    admin: dict = Depends(get_current_admin),
     # ── Step 1: Identity ──────────────────────
     name:                  str            = Form(...),
     name_hindi:            Optional[str]  = Form(None),
@@ -196,7 +208,7 @@ async def create_temple(
 
     # ── Deity ─────────────────────────────────
     primary_deity:         Optional[str]  = Form(None),
-    secondary_deities:     Optional[str]  = Form(None),   # comma-separated
+    secondary_deities:     Optional[str]  = Form(None),
     sect:                  Optional[str]  = Form(None),
 
     # ── Step 3: History & significance ────────
@@ -233,7 +245,6 @@ async def create_temple(
     live_darshan_available:     Optional[str] = Form("no"),
     live_stream_url:            Optional[str] = Form(None),
     prasad_type:                Optional[str] = Form(None),
-    # Puja service flags
     puja_rudrabhishek:          bool = Form(False),
     puja_satyanarayan:          bool = Form(False),
     puja_havan_homa:            bool = Form(False),
@@ -248,7 +259,8 @@ async def create_temple(
     puja_sahasranamarchana:     bool = Form(False),
 
     # ── Step 6: Media ─────────────────────────
-    hero_image:            Optional[UploadFile] = File(None),  # inline upload at create
+    hero_image:            Optional[UploadFile] = File(None),
+    hero_image_url:        Optional[str]  = Form(None),   # URL string fallback
     video_aarti_url:       Optional[str]  = Form(None),
     video_intro_url:       Optional[str]  = Form(None),
     video_360_url:         Optional[str]  = Form(None),
@@ -256,12 +268,11 @@ async def create_temple(
     # ── Step 7: Finance ───────────────────────
     bank_account_name:     Optional[str]  = Form(None),
     bank_name_branch:      Optional[str]  = Form(None),
-    bank_account_number:   Optional[str]  = Form(None),   # encrypt in production!
+    bank_account_number:   Optional[str]  = Form(None),
     bank_ifsc:             Optional[str]  = Form(None),
     upi_id:                Optional[str]  = Form(None),
     certificate_80g_no:    Optional[str]  = Form(None),
     accept_online_donations: bool = Form(False),
-    # Donation cause flags
     donation_temple_renovation: bool = Form(False),
     donation_annadanam:          bool = Form(False),
     donation_priest_salary:      bool = Form(False),
@@ -269,7 +280,6 @@ async def create_temple(
     donation_festival:           bool = Form(False),
     donation_medical_camps:      bool = Form(False),
     donation_general:            bool = Form(False),
-    # Facility flags
     facility_electricity:        bool = Form(False),
     facility_water_supply:       bool = Form(False),
     facility_clean_toilets:      bool = Form(False),
@@ -284,14 +294,12 @@ async def create_temple(
     facility_library_pathshala:  bool = Form(False),
     facility_gaushaala:          bool = Form(False),
     facility_medical_support:    bool = Form(False),
-    # Community program flags
     prog_free_food:              bool = Form(False),
     prog_medical_camps:          bool = Form(False),
     prog_scholarship_edu:        bool = Form(False),
     prog_womens_selfhelp:        bool = Form(False),
     prog_bhajan_kirtan:          bool = Form(False),
     prog_disaster_relief:        bool = Form(False),
-    # Contact & social
     phone:                 Optional[str]  = Form(None),
     whatsapp_number:       Optional[str]  = Form(None),
     official_email:        Optional[str]  = Form(None),
@@ -300,27 +308,17 @@ async def create_temple(
     youtube_channel:       Optional[str]  = Form(None),
     instagram_handle:      Optional[str]  = Form(None),
     best_time_to_call:     Optional[str]  = Form(None),
-
-    # ── Practical ─────────────────────────────
     entry_fee:             Optional[float]= Form(None),
     dress_code:            Optional[str]  = Form(None),
     best_time_to_visit:    Optional[str]  = Form(None),
-
-    # ── Meta ──────────────────────────────────
-    category_tags:         Optional[str]  = Form(None),   # comma-separated
+    category_tags:         Optional[str]  = Form(None),
     status:                str            = Form("draft"),
     source:                str            = Form("admin_form"),
 ):
-    """
-    Create a new temple with all registration form fields.
-    Hero image can be uploaded inline; additional media goes to POST /{id}/media.
-    mkt_id (QR code ID) is auto-generated.
-    """
     base_slug = slugify(name, city)
     state_code = state.strip()[:2].upper()
     mkt_id = f"MKT-{state_code}-{random.randint(1000, 9999)}"
 
-    # ── Handle optional inline hero image ─────
     hero_url = None
     if hero_image and hero_image.filename:
         if hero_image.content_type not in ALLOWED_IMAGE:
@@ -329,6 +327,8 @@ async def create_temple(
         if len(data) > MAX_IMG:
             raise HTTPException(400, "Hero image too large — max 10 MB")
         hero_url = save_upload(data, hero_image.filename, prefix=f"{base_slug}-hero-")
+    elif hero_image_url:
+        hero_url = hero_image_url  # URL string directly use karo
 
     sec_d = [d.strip() for d in secondary_deities.split(",")] if secondary_deities else []
     tags  = [t.strip() for t in category_tags.split(",")]      if category_tags      else []
@@ -336,7 +336,6 @@ async def create_temple(
     has_coords = latitude is not None and longitude is not None
 
     with get_db_cursor() as cur:
-        # Ensure slug is unique
         cur.execute("SELECT id FROM temples WHERE slug = %s", (base_slug,))
         if cur.fetchone():
             base_slug = f"{base_slug}-{uuid.uuid4().hex[:6]}"
@@ -477,8 +476,9 @@ async def create_temple(
 # GET /api/admin/temples  — list all (admin view)
 # ─────────────────────────────────────────────
 
-@router.get("/temples", dependencies=[Depends(verify_admin)])
+@router.get("/temples")
 def list_temples_admin(
+    admin: dict = Depends(get_current_admin),
     status:   Optional[str] = Query(None),
     page:     int = Query(1,  ge=1),
     per_page: int = Query(20, ge=1, le=100),
@@ -487,7 +487,7 @@ def list_temples_admin(
     offset = (page - 1) * per_page
     conditions, params = [], []
 
-    if status:
+    if status and status != "all":
         conditions.append("status = %s")
         params.append(status)
 
@@ -518,39 +518,85 @@ def list_temples_admin(
 
 
 # ─────────────────────────────────────────────
-# PATCH /api/admin/temples/{id}  — general field update
-# Called by the Edit modal in TempleDetailPage
+# GET /api/admin/temples/{id}  — single temple (any status)
 # ─────────────────────────────────────────────
 
-class TempleFieldUpdate(BaseModel):
-    name:                Optional[str] = None
-    name_hindi:          Optional[str] = None
-    primary_deity:       Optional[str] = None
-    sect:                Optional[str] = None
-    temple_type:         Optional[str] = None
-    architecture_style:  Optional[str] = None
-    estimated_year_built: Optional[str] = None
-    city:                Optional[str] = None
-    state:               Optional[str] = None
-    address:             Optional[str] = None
-    opening_time:        Optional[str] = None
-    closing_time:        Optional[str] = None
-    entry_fee:           Optional[float] = None
-    dress_code:          Optional[str] = None
-    best_time_to_visit:  Optional[str] = None
-    nearest_railway:     Optional[str] = None
-    nearest_airport:     Optional[str] = None
-    history:             Optional[str] = None
-    significance:        Optional[str] = None
-    website_url:         Optional[str] = None
+@router.get("/temples/{temple_id}")
+def get_temple_admin(
+    temple_id: int,
+    admin: dict = Depends(get_current_admin),
+):
+    """Get a single temple by ID — works for any status (draft, review, published, etc.)."""
+    with get_db_cursor() as cur:
+        cur.execute("""
+            SELECT id, uuid, name, name_hindi, name_local, slug, mkt_id,
+                   managing_authority, trust_name, trust_registration_no,
+                   latitude, longitude, address, city, district, state, pincode,
+                   setting_environment, google_maps_link,
+                   nearest_bus_stand, local_landmark,
+                   nearest_railway, nearest_airport,
+                   primary_deity, secondary_deities, sect, temple_type,
+                   is_jyotirlinga, is_shaktipeeth, is_divya_desam,
+                   is_ashtavinayak, is_char_dham, is_heritage_site,
+                   is_asi_protected, is_pancha_bhuta, is_51_shakti_peeths,
+                   is_unesco_heritage, is_state_heritage,
+                   history, history_hindi, sthala_purana, significance,
+                   architecture_style, estimated_year_built, founded_by,
+                   last_renovation_year, building_condition, puranic_stories,
+                   opening_time, closing_time,
+                   afternoon_closure_start, afternoon_closure_end,
+                   weekly_special_day,
+                   puja_rudrabhishek, puja_satyanarayan, puja_havan_homa,
+                   puja_laghu_rudra, puja_mahamrityunjaya, puja_griha_pravesh,
+                   puja_naamkaran, puja_vivah, puja_annaprashan, puja_mundan,
+                   puja_pitru_tarpan, puja_sahasranamarchana,
+                   online_puja_available, live_darshan_available,
+                   live_stream_url, prasad_type,
+                   hero_image_url, video_aarti_url, video_intro_url, video_360_url,
+                   bank_account_name, bank_name_branch, bank_ifsc,
+                   upi_id, certificate_80g_no,
+                   accept_online_donations,
+                   donation_temple_renovation, donation_annadanam,
+                   donation_priest_salary, donation_vedic_education,
+                   donation_festival, donation_medical_camps, donation_general,
+                   facility_electricity, facility_water_supply,
+                   facility_clean_toilets, facility_wheelchair,
+                   facility_dharamshala, facility_prasad_dining,
+                   facility_parking, facility_security, facility_cctv,
+                   facility_pa_system, facility_internet_wifi,
+                   facility_library_pathshala, facility_gaushaala,
+                   facility_medical_support,
+                   prog_free_food, prog_medical_camps, prog_scholarship_edu,
+                   prog_womens_selfhelp, prog_bhajan_kirtan, prog_disaster_relief,
+                   phone, whatsapp_number, official_email, website_url,
+                   facebook_page, youtube_channel, instagram_handle, best_time_to_call,
+                   entry_fee, dress_code, best_time_to_visit,
+                   average_rating, total_ratings,
+                   status, verified, category_tags,
+                   submitted_at, published_at, created_at
+            FROM temples
+            WHERE id = %s
+        """, (temple_id,))
+        temple = cur.fetchone()
+    if not temple:
+        raise HTTPException(status_code=404, detail="Temple not found")
+    d = dict(temple)
+    for f in ['opening_time', 'closing_time', 'afternoon_closure_start', 'afternoon_closure_end']:
+        if d.get(f):
+            d[f] = str(d[f])
+    return d
 
 
-@router.patch("/temples/{temple_id}", dependencies=[Depends(verify_admin)])
-def update_temple_fields(temple_id: int, body: TempleFieldUpdate):
-    """
-    Partial update for temple fields — called by the Edit modal in TempleDetailPage.
-    Only updates fields that are explicitly provided (not None).
-    """
+# ─────────────────────────────────────────────
+# PATCH /api/admin/temples/{id}  — general field update
+# ─────────────────────────────────────────────
+
+@router.patch("/temples/{temple_id}")
+def update_temple_fields(
+    temple_id: int,
+    body: TempleFieldUpdate,
+    admin: dict = Depends(get_current_admin),
+):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(422, "No fields provided to update")
@@ -576,8 +622,12 @@ def update_temple_fields(temple_id: int, body: TempleFieldUpdate):
 # PATCH /api/admin/temples/{id}/status
 # ─────────────────────────────────────────────
 
-@router.patch("/temples/{temple_id}/status", dependencies=[Depends(verify_admin)])
-def update_status(temple_id: int, body: TempleStatusUpdate):
+@router.patch("/temples/{temple_id}/status")
+def update_status(
+    temple_id: int,
+    body: TempleStatusUpdate,
+    admin: dict = Depends(get_current_admin),
+):
     """Transition a temple through the status workflow."""
     if body.status not in VALID_STATUSES:
         raise HTTPException(422, f"status must be one of: {VALID_STATUSES}")
@@ -601,8 +651,11 @@ def update_status(temple_id: int, body: TempleStatusUpdate):
 # PATCH /api/admin/temples/{id}/verify
 # ─────────────────────────────────────────────
 
-@router.patch("/temples/{temple_id}/verify", dependencies=[Depends(verify_admin)])
-def verify_temple(temple_id: int):
+@router.patch("/temples/{temple_id}/verify")
+def verify_temple(
+    temple_id: int,
+    admin: dict = Depends(get_current_admin),
+):
     """Mark a temple as admin-verified."""
     with get_db_cursor() as cur:
         cur.execute(
@@ -617,19 +670,18 @@ def verify_temple(temple_id: int):
 
 
 # ─────────────────────────────────────────────
-# POST /api/admin/temples/{id}/media  — upload image or video
-# (Preserved from original admin.py — uses file_url column)
+# POST /api/admin/temples/{id}/media
 # ─────────────────────────────────────────────
 
-@router.post("/temples/{temple_id}/media", status_code=201, dependencies=[Depends(verify_admin)])
+@router.post("/temples/{temple_id}/media", status_code=201)
 async def upload_media(
     temple_id:  int,
+    admin: dict = Depends(get_current_admin),
     file:       UploadFile = File(...),
     caption:    Optional[str] = Form(None),
     is_hero:    bool          = Form(False),
     sort_order: int           = Form(0),
 ):
-    """Upload an image or video and attach it to a temple via temple_media."""
     ensure_media_table()
 
     ct       = file.content_type
@@ -650,7 +702,6 @@ async def upload_media(
     with get_db_cursor() as cur:
         cur.execute("SELECT id FROM temples WHERE id = %s", (temple_id,))
         if not cur.fetchone():
-            # Clean up saved file
             fpath = os.path.join(UPLOAD_DIR, file_url.lstrip("/uploads/"))
             if os.path.exists(fpath):
                 os.remove(fpath)
@@ -678,11 +729,13 @@ async def upload_media(
 
 # ─────────────────────────────────────────────
 # GET /api/admin/temples/{id}/media
-# (Preserved from original admin.py)
 # ─────────────────────────────────────────────
 
-@router.get("/temples/{temple_id}/media", dependencies=[Depends(verify_admin)])
-def get_temple_media(temple_id: int):
+@router.get("/temples/{temple_id}/media")
+def get_temple_media(
+    temple_id: int,
+    admin: dict = Depends(get_current_admin),
+):
     ensure_media_table()
     with get_db_cursor() as cur:
         cur.execute("SELECT id FROM temples WHERE id = %s", (temple_id,))
@@ -707,11 +760,13 @@ def get_temple_media(temple_id: int):
 
 # ─────────────────────────────────────────────
 # DELETE /api/admin/media/{id}
-# (Preserved from original admin.py — deletes from disk too)
 # ─────────────────────────────────────────────
 
-@router.delete("/media/{media_id}", dependencies=[Depends(verify_admin)])
-def delete_media(media_id: int):
+@router.delete("/media/{media_id}")
+def delete_media(
+    media_id: int,
+    admin: dict = Depends(get_current_admin),
+):
     ensure_media_table()
     with get_db_cursor() as cur:
         cur.execute("SELECT file_url, temple_id FROM temple_media WHERE id = %s", (media_id,))
@@ -719,7 +774,6 @@ def delete_media(media_id: int):
         if not m:
             raise HTTPException(404, "Media not found")
 
-        # Delete the file from disk
         relative = m["file_url"].replace("/uploads/", "", 1)
         fpath = os.path.join(UPLOAD_DIR, relative)
         if os.path.exists(fpath):
@@ -732,7 +786,6 @@ def delete_media(media_id: int):
 
 # ─────────────────────────────────────────────
 # POST /api/admin/temples/{id}/upload-video
-# Stores into the specific video_*_url column (not temple_media)
 # ─────────────────────────────────────────────
 
 VALID_VIDEO_SLOTS = {
@@ -741,16 +794,13 @@ VALID_VIDEO_SLOTS = {
     "360":   "video_360_url",
 }
 
-@router.post("/temples/{temple_id}/upload-video", dependencies=[Depends(verify_admin)])
+@router.post("/temples/{temple_id}/upload-video")
 async def upload_video(
     temple_id:  int,
+    admin: dict = Depends(get_current_admin),
     file:       UploadFile = File(...),
-    video_slot: str        = Form("intro"),   # aarti | intro | 360
+    video_slot: str        = Form("intro"),
 ):
-    """
-    Upload a video file and store its URL in the dedicated column.
-    Different from /media — this targets the temple.video_*_url columns (Step 6).
-    """
     if file.content_type not in ALLOWED_VIDEO:
         raise HTTPException(400, "Use MP4, WebM, or OGG")
     if video_slot not in VALID_VIDEO_SLOTS:
@@ -780,9 +830,12 @@ async def upload_video(
 # POST /api/admin/temples/{id}/priests  (Step 4)
 # ─────────────────────────────────────────────
 
-@router.post("/temples/{temple_id}/priests", dependencies=[Depends(verify_admin)])
-def add_priest(temple_id: int, body: PriestCreate):
-    """Add a priest record to a temple."""
+@router.post("/temples/{temple_id}/priests")
+def add_priest(
+    temple_id: int,
+    body: PriestCreate,
+    admin: dict = Depends(get_current_admin),
+):
     with get_db_cursor() as cur:
         cur.execute("SELECT id FROM temples WHERE id = %s", (temple_id,))
         if not cur.fetchone():
@@ -796,9 +849,12 @@ def add_priest(temple_id: int, body: PriestCreate):
 # POST /api/admin/temples/{id}/committee  (Step 4)
 # ─────────────────────────────────────────────
 
-@router.post("/temples/{temple_id}/committee", dependencies=[Depends(verify_admin)])
-def set_committee(temple_id: int, body: CommitteeCreate):
-    """Set (replace) the managing committee for a temple."""
+@router.post("/temples/{temple_id}/committee")
+def set_committee(
+    temple_id: int,
+    body: CommitteeCreate,
+    admin: dict = Depends(get_current_admin),
+):
     with get_db_cursor() as cur:
         cur.execute("SELECT id FROM temples WHERE id = %s", (temple_id,))
         if not cur.fetchone():
@@ -812,12 +868,12 @@ def set_committee(temple_id: int, body: CommitteeCreate):
 # PUT /api/admin/temples/{id}/puja-schedule  (Step 5)
 # ─────────────────────────────────────────────
 
-@router.put("/temples/{temple_id}/puja-schedule", dependencies=[Depends(verify_admin)])
-def set_puja_schedule(temple_id: int, rows: List[PujaScheduleRow] = Body(...)):
-    """
-    Replace the full puja schedule for a temple.
-    Send an ordered array; all existing rows are deleted first.
-    """
+@router.put("/temples/{temple_id}/puja-schedule")
+def set_puja_schedule(
+    temple_id: int,
+    rows: List[PujaScheduleRow] = Body(...),
+    admin: dict = Depends(get_current_admin),
+):
     with get_db_cursor() as cur:
         cur.execute("SELECT id FROM temples WHERE id = %s", (temple_id,))
         if not cur.fetchone():

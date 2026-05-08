@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles } from 'lucide-react';
+import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
+import { useAdminAuth } from '../hooks/useAdminAuth';
 
 export default function Navbar() {
   const [query, setQuery] = useState('');
@@ -12,6 +13,7 @@ export default function Navbar() {
   const { t } = useTranslation();
   const { lang, changeLang } = useLang();
   const sidebarRef = useRef(null);
+  const { isAdmin, logout } = useAdminAuth();
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -51,6 +53,12 @@ export default function Navbar() {
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
 
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+    setSidebarOpen(false);
+  };
+
   return (
     <>
       <div className="ticker-wrap">
@@ -71,7 +79,7 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* Desktop search — only one search bar kept */}
+          {/* Desktop search */}
           <form className="nav-search-form nav-search-desktop" onSubmit={handleSearch}>
             <Search size={16} className="nav-search-icon" />
             <input
@@ -104,7 +112,6 @@ export default function Navbar() {
               <span>Add Temple</span>
             </Link>
 
-            {/* ── Add Festival — fixed styling ── */}
             <Link
               to="/admin/add-festival"
               className="nav-add-btn nav-add-festival-btn"
@@ -112,6 +119,59 @@ export default function Navbar() {
               <Sparkles size={15} />
               <span>Festival</span>
             </Link>
+
+            <div className="nav-divider" />
+
+            {/* ── Admin Panel link — only shown when authenticated ── */}
+            {isAdmin ? (
+              <>
+                <Link
+                  to="/admin/panel"
+                  className={`nav-add-btn${isActive('/admin/panel') ? ' active' : ''}`}
+                  style={{
+                    background: isActive('/admin/panel')
+                      ? 'linear-gradient(135deg, var(--brown-mid), var(--brown))'
+                      : 'transparent',
+                    color: isActive('/admin/panel') ? 'white' : 'var(--brown-mid)',
+                    borderColor: 'var(--brown-mid)',
+                  }}
+                  title="Admin Panel"
+                >
+                  <LayoutDashboard size={15} />
+                  <span>Panel</span>
+                </Link>
+
+                <button
+                  onClick={handleLogout}
+                  title="Logout from admin"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '8px 12px', borderRadius: 50,
+                    border: '2px solid var(--cream-dark)', background: 'transparent',
+                    color: 'var(--text-light)', cursor: 'pointer',
+                    fontFamily: 'var(--font-display)', fontSize: 12,
+                    letterSpacing: '.04em', transition: 'all .2s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.color = 'var(--text-light)'; }}
+                >
+                  <LogOut size={14} />
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/admin/login"
+                className="nav-add-btn"
+                style={{
+                  color: 'var(--text-light)',
+                  borderColor: 'var(--cream-dark)',
+                }}
+                title="Admin Login"
+              >
+                <LayoutDashboard size={15} />
+                <span>Admin</span>
+              </Link>
+            )}
 
             <div className="nav-divider" />
 
@@ -158,8 +218,6 @@ export default function Navbar() {
           </button>
         </div>
 
-        {/* ── Sidebar search removed ── */}
-
         <nav className="sidebar-nav">
           {NAV_LINKS.map((link) => (
             <Link
@@ -192,6 +250,46 @@ export default function Navbar() {
             <span className="sidebar-link-icon">🌸</span>
             Add Festival
           </Link>
+
+          {/* Admin links in sidebar — only when authenticated */}
+          {isAdmin ? (
+            <>
+              <Link
+                to="/admin/panel"
+                className={`sidebar-link${isActive('/admin/panel') ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
+              >
+                <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
+                Admin Panel
+              </Link>
+
+              <button
+                onClick={handleLogout}
+                className="sidebar-link"
+                style={{
+                  background: 'none', border: 'none', width: '100%',
+                  textAlign: 'left', cursor: 'pointer', color: '#ef4444',
+                  fontFamily: 'var(--font-display)', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '12px 20px', fontSize: 14,
+                }}
+              >
+                <span className="sidebar-link-icon"><LogOut size={17} /></span>
+                Admin Logout
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/admin/login"
+              className={`sidebar-link${isActive('/admin/login') ? ' active' : ''}`}
+              onClick={() => setSidebarOpen(false)}
+              style={{ color: 'var(--text-light)' }}
+            >
+              <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
+              Admin Login
+            </Link>
+          )}
         </nav>
 
         <div className="sidebar-footer">
