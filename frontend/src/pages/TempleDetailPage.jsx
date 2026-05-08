@@ -344,10 +344,8 @@ export default function TempleDetailPage() {
         {heroImg ? (
           <>
             <SmartImage src={heroImg} alt={T.name}/>
-            {/* diya shows behind image; SmartImage returns null on error, revealing it */}
-            <div className="hero-diya">🪔</div>
           </>
-        ) : <div className="hero-diya">🪔</div>}
+        ) : <div className="hero-diya"></div>}
         <div className="hero-grad"/>
         <div className="hero-body">
           {/* Breadcrumb */}

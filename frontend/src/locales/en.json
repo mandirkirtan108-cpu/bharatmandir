@@ -37,7 +37,7 @@
   "temples_count_plural": "temples",
   "error": {
     "title": "Could not load temples",
-    "backend": "Could not connect to backend. Make sure FastAPI is running on port 8000."
+    "backend": "Unable to load temples. Please check your connection and try again."
   },
   "badge": {
     "jyotirlinga": "Jyotirlinga",
