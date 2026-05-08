@@ -80,18 +80,7 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop search */}
-          <form className="nav-search-form nav-search-desktop" onSubmit={handleSearch}>
-            <Search size={16} className="nav-search-icon" />
-            <input
-              id="nav-search"
-              name="nav-search"
-              className="nav-search-input"
-              type="text"
-              placeholder={t('search_placeholder')}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </form>
+          
 
           {/* Desktop nav links */}
           <div className="nav-actions nav-actions-desktop">
