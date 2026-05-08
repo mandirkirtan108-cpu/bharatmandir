@@ -10,10 +10,15 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function proxyImageUrl(url) {
   if (!url) return null;
+  // Local file served by your backend
   if (!url.startsWith('http')) return `${API_BASE}${url}`;
   if (url.includes('localhost') || url.includes('127.0.0.1')) return url;
+  // Wikipedia/Wikimedia — use directly, no proxy needed
+  if (url.includes('wikimedia.org') || url.includes('wikipedia.org')) return url;
+  // Everything else — proxy
   return `${API_BASE}/api/proxy/image?url=${encodeURIComponent(url)}`;
 }
+
 function formatTime(t) {
   if (!t) return null;
   const p = String(t).split(':');
@@ -199,19 +204,39 @@ body{font-family:'DM Sans',sans-serif;background:var(--c);color:var(--k);-webkit
 `;
 
 // SmartImage with loading placeholder — shows diya on any error
-function SmartImage({ src, alt }) {
-  const [status, setStatus] = useState('loading'); // 'loading' | 'ok' | 'error'
-  useEffect(() => { setStatus('loading'); }, [src]);
-  if (status === 'error') return null; // fall through to diya in parent
+function SmartImage({ src, alt, wikipediaTitle }) {
+  const [imgSrc, setImgSrc] = useState(src);
+  const [status, setStatus] = useState('loading');
+
+  useEffect(() => { setImgSrc(src); setStatus('loading'); }, [src]);
+
+  const handleError = async () => {
+    // Try Wikipedia API if we have a title
+    if (wikipediaTitle) {
+      try {
+        const res = await fetch(
+          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikipediaTitle)}`
+        );
+        const data = await res.json();
+        const wikiImg = data.originalimage?.source || data.thumbnail?.source;
+        if (wikiImg) { setImgSrc(wikiImg); return; }
+      } catch (_) {}
+    }
+    setStatus('error');
+  };
+
+  if (status === 'error') return null;
   return (
     <div style={{ position:'absolute', inset:0 }}>
       {status === 'loading' && (
-        <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Noto Sans Devanagari',sans-serif", fontSize:72, color:'rgba(255,255,255,.06)', background:'#0D0500' }}>ॐ</div>
+        <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center',
+          justifyContent:'center', fontFamily:"'Noto Sans Devanagari',sans-serif",
+          fontSize:72, color:'rgba(255,255,255,.06)', background:'#0D0500' }}>ॐ</div>
       )}
-      <img src={src} alt={alt} className="hero-img"
+      <img src={imgSrc} alt={alt} className="hero-img"
         style={{ opacity: status === 'ok' ? 1 : 0 }}
         onLoad={() => setStatus('ok')}
-        onError={() => setStatus('error')}
+        onError={handleError}
         referrerPolicy="no-referrer" />
     </div>
   );
@@ -341,9 +366,9 @@ export default function TempleDetailPage() {
 
       {/* ══ HERO ══ */}
       <div className="hero">
-        {heroImg ? (
-          <>
-            <SmartImage src={heroImg} alt={T.name}/>
+       {heroImg ? (
+  <>
+    <SmartImage src={heroImg} alt={T.name} wikipediaTitle={T.name}/>
             
           </>
         ) : <div className="hero-diya"></div>}
