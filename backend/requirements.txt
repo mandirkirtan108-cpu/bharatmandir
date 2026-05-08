@@ -8,3 +8,5 @@ aiofiles
 pillow
 requests
 bcrypt
+passlib[bcrypt]
+python-jose[cryptography]
