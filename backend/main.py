@@ -12,7 +12,7 @@ from db.connection import get_pool, close_pool
 import os
 from dotenv import load_dotenv
 from routers import proxy          # imports ke saath
-  
+from routers.ai import router as ai_router
 
 load_dotenv()
 
@@ -68,6 +68,7 @@ app.include_router(admin.router)
 app.include_router(festivals.router)
 app.include_router(spiritual_chat.router)
 app.include_router(proxy.router)
+app.include_router(ai_router, prefix="/api/ai")
 
 @app.get("/")
 def root():
