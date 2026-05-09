@@ -1,6 +1,7 @@
 import { useState, useRef, Fragment } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { adminAPI } from '../services/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SECTS = ['','Shaiva','Vaishnava','Shakta','Smartha','Jain','Buddhist','Sikh','Other'];
@@ -485,23 +486,16 @@ export default function AdminAddTemplePage() {
   const toggleConsent = i => setConsents(c => { const a=[...c]; a[i]=!a[i]; return a; });
 
 async function submitForm() {
-  // allConsents ab properly defined hai upar
   if (!consents.every(Boolean)) return;
-  
-  const token = sessionStorage.getItem('bm_access_token');
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-  
-  // FormData banao kyunki backend Form(...) expect karta hai
+
   const fd = new FormData();
-  
-  // Basic fields
+
   fd.append('name', form.name);
   fd.append('city', form.city);
   fd.append('state', form.state);
   fd.append('status', form.status || 'draft');
   fd.append('source', form.source || 'admin_form');
-  
-  // Optional string fields
+
   const strFields = [
     'name_hindi','name_local','temple_type','sect','managing_authority',
     'trust_name','trust_registration_no','primary_deity','secondary_deities',
@@ -516,44 +510,31 @@ async function submitForm() {
     'youtube_channel','instagram_handle','best_time_to_call',
     'video_aarti_url','video_intro_url','video_360_url',
     'upi_id','certificate_80g_no','bank_account_name','bank_name_branch',
-    'bank_account_number','bank_ifsc',
-    'hero_image_url',
+    'bank_account_number','bank_ifsc','hero_image_url',
   ];
   strFields.forEach(k => { if (form[k]) fd.append(k, form[k]); });
-  
-  // Number fields
+
   if (form.latitude)  fd.append('latitude',  form.latitude);
   if (form.longitude) fd.append('longitude', form.longitude);
   if (form.entry_fee) fd.append('entry_fee', form.entry_fee);
-  
-  // Architecture style (stored separately in state)
-  if (archStyle) fd.append('architecture_style', archStyle);
-  
-  // Boolean fields
+  if (archStyle)      fd.append('architecture_style', archStyle);
+
   const boolFields = [
-    ...DESIGNATIONS.map(d=>d.key), ...PUJAS.map(p=>p.key),
-    ...FACILITIES.map(f=>f.key), ...PROGRAMS.map(p=>p.key),
-    ...DONATION_CATS.map(d=>d.key), 'accept_online_donations',
+    ...DESIGNATIONS.map(d => d.key), ...PUJAS.map(p => p.key),
+    ...FACILITIES.map(f => f.key),   ...PROGRAMS.map(p => p.key),
+    ...DONATION_CATS.map(d => d.key), 'accept_online_donations',
   ];
   boolFields.forEach(k => fd.append(k, form[k] ? 'true' : 'false'));
 
   try {
-    const res = await fetch(`${API_BASE}/api/admin/temples`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      // Content-Type set mat karo — browser automatically multipart boundary set karta hai
-      body: fd,
-    });
-    
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Failed to save temple');
-    
-    setQrId(data.mkt_id);
+    // Use adminApi — token automatically attached via interceptor
+    const res = await adminAPI.createTemple(fd);
+    setQrId(res.data.mkt_id);
     setSubmitted(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    
   } catch (err) {
-    alert('Error saving temple: ' + err.message);
+    const msg = err.response?.data?.detail || err.message || 'Failed to save temple';
+    alert('Error saving temple: ' + msg);
   }
 }
 
