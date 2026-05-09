@@ -13,7 +13,9 @@ function proxyImageUrl(url) {
   // Local file served by your backend
   if (!url.startsWith('http')) return `${API_BASE}${url}`;
   if (url.includes('localhost') || url.includes('127.0.0.1')) return url;
-  // Wikipedia/Wikimedia — use directly, no proxy needed
+  // Cloudinary — direct serve, no proxy needed (best quality)
+  if (url.includes('cloudinary.com')) return url;
+  // Wikipedia/Wikimedia — direct, no proxy needed
   if (url.includes('wikimedia.org') || url.includes('wikipedia.org')) return url;
   // Everything else — proxy
   return `${API_BASE}/api/proxy/image?url=${encodeURIComponent(url)}`;
