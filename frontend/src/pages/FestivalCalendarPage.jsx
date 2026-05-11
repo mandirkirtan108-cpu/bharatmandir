@@ -356,7 +356,7 @@ export default function FestivalCalendarPage() {
           {claudeLoading && (
             <div className="claude-status">
               <span className="claude-spinner">✨</span>
-              Claude AI se festivals fetch ho rahe hain…
+              festivals is loading
             </div>
           )}
           {claudeError && !claudeLoading && (
