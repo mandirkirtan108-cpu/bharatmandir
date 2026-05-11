@@ -21,60 +21,67 @@ const GREGORIAN_MONTHS = [
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-// Emoji / color mapping by keyword (for API festivals that don't have these columns)
 const DEITY_EMOJI_MAP = {
-  shiva: { emoji: '🔱', color: '#5B4FDB' },
-  vishnu: { emoji: '🪔', color: '#1D4ED8' },
-  krishna: { emoji: '🪈', color: '#1D4ED8' },
-  rama: { emoji: '🏹', color: '#2E8B57' },
-  hanuman: { emoji: '🐒', color: '#E8650A' },
-  ganesha: { emoji: '🐘', color: '#D97706' },
-  durga: { emoji: '🪆', color: '#BE185D' },
-  lakshmi: { emoji: '✨', color: '#C8960C' },
+  shiva:     { emoji: '🔱', color: '#5B4FDB' },
+  vishnu:    { emoji: '🪔', color: '#1D4ED8' },
+  krishna:   { emoji: '🪈', color: '#1D4ED8' },
+  rama:      { emoji: '🏹', color: '#2E8B57' },
+  hanuman:   { emoji: '🐒', color: '#E8650A' },
+  ganesha:   { emoji: '🐘', color: '#D97706' },
+  durga:     { emoji: '🪆', color: '#BE185D' },
+  lakshmi:   { emoji: '✨', color: '#C8960C' },
   saraswati: { emoji: '🌸', color: '#C8960C' },
-  surya: { emoji: '🪁', color: '#E8650A' },
-  kali: { emoji: '🌺', color: '#7C3AED' },
+  surya:     { emoji: '☀️', color: '#E8650A' },
+  kali:      { emoji: '🌺', color: '#7C3AED' },
   jagannath: { emoji: '🛕', color: '#E85C2A' },
-  murugan: { emoji: '🌟', color: '#DC2626' },
+  murugan:   { emoji: '🌟', color: '#DC2626' },
 };
 
 const FESTIVAL_NAME_MAP = {
-  'makar sankranti': { emoji: '🪁', color: '#E8650A' },
-  'vasant panchami': { emoji: '🌸', color: '#C8960C' },
-  'maha shivaratri': { emoji: '🔱', color: '#5B4FDB' },
-  'holi': { emoji: '🎨', color: '#E85CA0' },
-  'ugadi': { emoji: '🪔', color: '#E8650A' },
-  'gudi padwa': { emoji: '🪔', color: '#E8650A' },
-  'ram navami': { emoji: '🏹', color: '#2E8B57' },
-  'hanuman jayanti': { emoji: '🐒', color: '#E8650A' },
-  'akshaya tritiya': { emoji: '✨', color: '#C8960C' },
-  'rath yatra': { emoji: '🛕', color: '#E85C2A' },
-  'guru purnima': { emoji: '📿', color: '#8B5CF6' },
-  'naga panchami': { emoji: '🐍', color: '#065F46' },
-  'raksha bandhan': { emoji: '🪢', color: '#E85CA0' },
-  'janmashtami': { emoji: '🪈', color: '#1D4ED8' },
-  'ganesh chaturthi': { emoji: '🐘', color: '#D97706' },
-  'navratri': { emoji: '🪆', color: '#BE185D' },
-  'dussehra': { emoji: '🏹', color: '#DC2626' },
-  'vijayadashami': { emoji: '🏹', color: '#DC2626' },
-  'diwali': { emoji: '🪔', color: '#F59E0B' },
-  'govardhan puja': { emoji: '⛰️', color: '#1D4ED8' },
-  'bhai dooj': { emoji: '🌺', color: '#E85CA0' },
-  'kartik purnima': { emoji: '🌕', color: '#0EA5E9' },
-  'gita jayanti': { emoji: '📖', color: '#1D4ED8' },
-  'vivah panchami': { emoji: '💐', color: '#EC4899' },
-  'pongal': { emoji: '🌾', color: '#E8650A' },
-  'onam': { emoji: '🌺', color: '#16a34a' },
-  'bihu': { emoji: '🌾', color: '#D97706' },
+  'makar sankranti':   { emoji: '🪁', color: '#E8650A' },
+  'vasant panchami':   { emoji: '🌸', color: '#C8960C' },
+  'maha shivaratri':   { emoji: '🔱', color: '#5B4FDB' },
+  'mahashivratri':     { emoji: '🔱', color: '#5B4FDB' },
+  'holika dahan':      { emoji: '🔥', color: '#DC2626' },
+  'holi':              { emoji: '🎨', color: '#E85CA0' },
+  'ugadi':             { emoji: '🪔', color: '#E8650A' },
+  'gudi padwa':        { emoji: '🪔', color: '#E8650A' },
+  'ram navami':        { emoji: '🏹', color: '#2E8B57' },
+  'hanuman jayanti':   { emoji: '🐒', color: '#E8650A' },
+  'akshaya tritiya':   { emoji: '✨', color: '#C8960C' },
+  'buddha purnima':    { emoji: '☸️',  color: '#D97706' },
+  'nirjala ekadashi':  { emoji: '💧', color: '#1D4ED8' },
+  'rath yatra':        { emoji: '🛕', color: '#E85C2A' },
+  'guru purnima':      { emoji: '📿', color: '#8B5CF6' },
+  'naga panchami':     { emoji: '🐍', color: '#065F46' },
+  'nag panchami':      { emoji: '🐍', color: '#065F46' },
+  'raksha bandhan':    { emoji: '🪢', color: '#E85CA0' },
+  'janmashtami':       { emoji: '🪈', color: '#1D4ED8' },
+  'ganesh chaturthi':  { emoji: '🐘', color: '#D97706' },
+  'navratri':          { emoji: '🪆', color: '#BE185D' },
+  'dussehra':          { emoji: '🏹', color: '#DC2626' },
+  'vijayadashami':     { emoji: '🏹', color: '#DC2626' },
+  'karwa chauth':      { emoji: '🌕', color: '#C8960C' },
+  'dhanteras':         { emoji: '🪙', color: '#C8960C' },
+  'diwali':            { emoji: '🪔', color: '#F59E0B' },
+  'govardhan puja':    { emoji: '⛰️', color: '#1D4ED8' },
+  'bhai dooj':         { emoji: '🌺', color: '#E85CA0' },
+  'kartik purnima':    { emoji: '🌕', color: '#0EA5E9' },
+  'vivah panchami':    { emoji: '💐', color: '#EC4899' },
+  'gita jayanti':      { emoji: '📖', color: '#1D4ED8' },
+  'pongal':            { emoji: '🌾', color: '#E8650A' },
+  'onam':              { emoji: '🌺', color: '#16a34a' },
+  'bihu':              { emoji: '🌾', color: '#D97706' },
+  'sakat chauth':      { emoji: '🌙', color: '#5B4FDB' },
+  'shattila ekadashi': { emoji: '📿', color: '#8B5CF6' },
+  'bhishma ashtami':   { emoji: '⚔️', color: '#DC2626' },
 };
 
 function getEmojiColor(festival) {
   const nameLower = (festival.name || '').toLowerCase();
-  // Check name map first
   for (const [key, val] of Object.entries(FESTIVAL_NAME_MAP)) {
     if (nameLower.includes(key)) return val;
   }
-  // Check significance / description for deity keywords
   const text = `${festival.significance || ''} ${festival.description || ''}`.toLowerCase();
   for (const [deity, val] of Object.entries(DEITY_EMOJI_MAP)) {
     if (text.includes(deity) || nameLower.includes(deity)) return val;
@@ -82,55 +89,58 @@ function getEmojiColor(festival) {
   return { emoji: '🛕', color: '#E8650A' };
 }
 
-// ── Curated SEED festivals (national-level, no temple_id) ─────────────────────
-// These fill the calendar before API data loads, and show universal Hindu festivals
-const SEED_FESTIVALS = [
-  { _seed: true, name:'Makar Sankranti', month:1, significance:'Sun enters Capricorn — harvest festival, kite flying', hindu_month:'Pausha', is_major:true, duration_days:1 },
-  { _seed: true, name:'Vasant Panchami', month:2, significance:'Onset of spring, worship of Saraswati Devi', hindu_month:'Magha', is_major:true, duration_days:1 },
-  { _seed: true, name:'Maha Shivaratri', month:2, significance:'Night of Lord Shiva, fasting and all-night vigil', hindu_month:'Phalguna', is_major:true, duration_days:1 },
-  { _seed: true, name:'Holi', month:3, significance:'Festival of colours, triumph of devotee Prahlada', hindu_month:'Phalguna', is_major:true, duration_days:2 },
-  { _seed: true, name:'Ugadi / Gudi Padwa', month:3, significance:'Hindu New Year — Telugu and Marathi traditions', hindu_month:'Chaitra', is_major:true, duration_days:1 },
-  { _seed: true, name:'Ram Navami', month:4, significance:'Celebration of the birth of Lord Rama', hindu_month:'Chaitra', is_major:true, duration_days:1 },
-  { _seed: true, name:'Hanuman Jayanti', month:4, significance:'Birth anniversary of Lord Hanuman', hindu_month:'Chaitra', is_major:true, duration_days:1 },
-  { _seed: true, name:'Akshaya Tritiya', month:5, significance:'Most auspicious day for new beginnings and wealth', hindu_month:'Vaishakha', is_major:true, duration_days:1 },
-  { _seed: true, name:'Rath Yatra', month:7, significance:'Grand chariot festival of Lord Jagannath in Puri', hindu_month:'Ashadha', is_major:true, duration_days:9 },
-  { _seed: true, name:'Guru Purnima', month:7, significance:'Day of reverence to spiritual and academic teachers', hindu_month:'Ashadha', is_major:false, duration_days:1 },
-  { _seed: true, name:'Naga Panchami', month:8, significance:'Worship of serpent deities across India', hindu_month:'Shravana', is_major:false, duration_days:1 },
-  { _seed: true, name:'Raksha Bandhan', month:8, significance:'Sacred bond of love between brother and sister', hindu_month:'Shravana', is_major:true, duration_days:1 },
-  { _seed: true, name:'Janmashtami', month:8, significance:'Birth of Lord Krishna, midnight celebrations', hindu_month:'Bhadrapada', is_major:true, duration_days:2 },
-  { _seed: true, name:'Ganesh Chaturthi', month:9, significance:'Birth of Lord Ganesha, 10-day celebration', hindu_month:'Bhadrapada', is_major:true, duration_days:10 },
-  { _seed: true, name:'Navratri (Sharad)', month:10, significance:'Nine nights of Devi worship, Garba and Dandiya', hindu_month:'Ashwin', is_major:true, duration_days:9 },
-  { _seed: true, name:'Dussehra / Vijayadashami', month:10, significance:'Victory of Rama over Ravana, triumph of good over evil', hindu_month:'Ashwin', is_major:true, duration_days:1 },
-  { _seed: true, name:'Diwali', month:11, significance:'Festival of lights, Lakshmi Puja, return of Lord Rama', hindu_month:'Kartika', is_major:true, duration_days:5 },
-  { _seed: true, name:'Govardhan Puja', month:11, significance:'Celebration of Krishna lifting Govardhan Hill', hindu_month:'Kartika', is_major:false, duration_days:1 },
-  { _seed: true, name:'Bhai Dooj', month:11, significance:'Celebration of sibling love on the day after Diwali', hindu_month:'Kartika', is_major:false, duration_days:1 },
-  { _seed: true, name:'Kartik Purnima', month:11, significance:'Holy bath in sacred rivers — Tripuri Purnima', hindu_month:'Kartika', is_major:true, duration_days:1 },
-  { _seed: true, name:'Vivah Panchami', month:12, significance:'Divine marriage ceremony of Rama and Sita', hindu_month:'Margashirsha', is_major:false, duration_days:1 },
-  { _seed: true, name:'Gita Jayanti', month:12, significance:'Day the Bhagavad Gita was revealed by Lord Krishna', hindu_month:'Margashirsha', is_major:true, duration_days:1 },
-];
-
-const DEITY_FILTERS = ['All','Shiva','Vishnu','Ganesha','Durga','Lakshmi','Krishna','Rama','Saraswati'];
-const TYPE_FILTERS  = ['All','Major','With Temple'];
-
 // ── Unique key for dedup ───────────────────────────────────────────────────────
 function festKey(f) {
   return `${(f.name || '').toLowerCase().trim()}::${f.month}`;
 }
 
+const DEITY_FILTERS = ['All','Shiva','Vishnu','Ganesha','Durga','Lakshmi','Krishna','Rama','Saraswati'];
+const TYPE_FILTERS  = ['All','Major','With Temple'];
+
+// ── Claude API prompt ─────────────────────────────────────────────────────────
+const CLAUDE_PROMPT = `Give me a complete list of ALL Hindu festivals for the year 2025 — both major and minor.
+Return ONLY a valid JSON array. No explanation, no markdown, no backticks, no extra text.
+Each object must have these exact fields:
+{
+  "name": "Festival Name in English",
+  "month": 1,
+  "exact_date": "2025-01-14",
+  "display_date": "14 January 2025",
+  "hindu_tithi": "Pausha Shukla Chaturdashi",
+  "hindu_month": "Pausha",
+  "significance": "One line significance in English",
+  "description": "3-4 lines detailed description about rituals, story and importance in English",
+  "is_major": true,
+  "duration_days": 1,
+  "deity": "Surya",
+  "emoji": "🪁",
+  "color": "#E8650A"
+}
+Rules:
+- Include at least 60 festivals covering all months and all regions of India
+- Sort by exact_date ascending
+- is_major = true only for nationally celebrated festivals
+- deity field = main deity worshipped (Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other)
+- emoji should match the festival mood
+- color should be a hex color matching the festival theme
+- Include: Ekadashis, Purnimas, Chaturthi vrats, regional festivals like Pongal/Onam/Bihu/Ugadi/Baisakhi, all Navratris, all major pujas`;
+
 export default function FestivalCalendarPage() {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [viewMode, setViewMode]           = useState('calendar');
-  const [deityFilter, setDeityFilter]     = useState('All');
-  const [typeFilter, setTypeFilter]       = useState('All');
-  const [searchQuery, setSearchQuery]     = useState('');
-  const [apiFestivals, setApiFestivals]   = useState([]);
-  const [loading, setLoading]             = useState(true);
+  const [selectedMonth, setSelectedMonth]     = useState(new Date().getMonth() + 1);
+  const [viewMode, setViewMode]               = useState('calendar');
+  const [deityFilter, setDeityFilter]         = useState('All');
+  const [typeFilter, setTypeFilter]           = useState('All');
+  const [searchQuery, setSearchQuery]         = useState('');
+  const [apiFestivals, setApiFestivals]       = useState([]);   // from your backend
+  const [claudeFestivals, setClaudeFestivals] = useState([]);   // from Claude AI
+  const [loading, setLoading]                 = useState(true);
+  const [claudeLoading, setClaudeLoading]     = useState(true);
+  const [claudeError, setClaudeError]         = useState(false);
   const [selectedFestival, setSelectedFestival] = useState(null);
-  const [lastFetch, setLastFetch]         = useState(Date.now());
 
   const currentYear = new Date().getFullYear();
 
-  // ── Fetch from API ──────────────────────────────────────────────────────────
+  // ── Fetch from your backend ─────────────────────────────────────────────────
   const fetchFestivals = useCallback(() => {
     setLoading(true);
     axios.get(`${API_BASE}/api/festivals?limit=500`)
@@ -139,43 +149,89 @@ export default function FestivalCalendarPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { fetchFestivals(); }, [fetchFestivals]);
+  // ── Fetch from Claude AI ────────────────────────────────────────────────────
+  const fetchFestivalsFromClaude = useCallback(async () => {
+    setClaudeLoading(true);
+    setClaudeError(false);
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': import.meta.env.VITE_CLAUDE_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 8000,
+          messages: [{ role: 'user', content: CLAUDE_PROMPT }],
+        }),
+      });
 
-  // Listen for custom event dispatched by AdminAddFestivalPage after successful submit
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+      const data = await response.json();
+      const text = data.content?.[0]?.text || '[]';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const festivals = JSON.parse(clean);
+      setClaudeFestivals(Array.isArray(festivals) ? festivals : []);
+    } catch (err) {
+      console.error('Claude API error:', err);
+      setClaudeError(true);
+      setClaudeFestivals([]);
+    } finally {
+      setClaudeLoading(false);
+    }
+  }, []);
+
+  // ── On mount ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const handler = () => { fetchFestivals(); setLastFetch(Date.now()); };
+    fetchFestivals();
+    fetchFestivalsFromClaude();
+  }, [fetchFestivals, fetchFestivalsFromClaude]);
+
+  // ── Listen for admin add event ──────────────────────────────────────────────
+  useEffect(() => {
+    const handler = () => fetchFestivals();
     window.addEventListener('festival:added', handler);
     return () => window.removeEventListener('festival:added', handler);
   }, [fetchFestivals]);
 
-  // ── Merge seed + API (dedup by name+month) ──────────────────────────────────
+  // ── Merge Claude + Backend (dedup by name+month) ────────────────────────────
   const allFestivals = useMemo(() => {
     const apiKeys = new Set(apiFestivals.map(festKey));
-    const seeds = SEED_FESTIVALS.filter(f => !apiKeys.has(festKey(f)));
+
+    // Remove duplicates: drop Claude festivals that already exist in backend
+    const claudeFiltered = claudeFestivals.filter(f => !apiKeys.has(festKey(f)));
+
     const enrichedAPI = apiFestivals.map(f => {
       const { emoji, color } = getEmojiColor(f);
       return { ...f, emoji: f.emoji || emoji, color: f.color || color };
     });
-    const enrichedSeeds = seeds.map(f => {
+
+    const enrichedClaude = claudeFiltered.map(f => {
       const { emoji, color } = getEmojiColor(f);
-      return { ...f, emoji, color };
+      return { ...f, _claude: true, emoji: f.emoji || emoji, color: f.color || color };
     });
-    return [...enrichedSeeds, ...enrichedAPI];
-  }, [apiFestivals]);
+
+    return [...enrichedClaude, ...enrichedAPI];
+  }, [apiFestivals, claudeFestivals]);
 
   // ── Apply filters ───────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return allFestivals.filter(f => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const inName = (f.name || '').toLowerCase().includes(q);
-        const inSig  = (f.significance || '').toLowerCase().includes(q);
-        const inDesc = (f.description || '').toLowerCase().includes(q);
+        const inName   = (f.name || '').toLowerCase().includes(q);
+        const inSig    = (f.significance || '').toLowerCase().includes(q);
+        const inDesc   = (f.description || '').toLowerCase().includes(q);
         const inTemple = (f.temple_name || '').toLowerCase().includes(q);
-        if (!inName && !inSig && !inDesc && !inTemple) return false;
+        const inDeity  = (f.deity || '').toLowerCase().includes(q);
+        if (!inName && !inSig && !inDesc && !inTemple && !inDeity) return false;
       }
       if (deityFilter !== 'All') {
-        const text = `${f.name} ${f.significance || ''} ${f.description || ''}`.toLowerCase();
+        const text = `${f.name} ${f.significance || ''} ${f.description || ''} ${f.deity || ''}`.toLowerCase();
         if (!text.includes(deityFilter.toLowerCase())) return false;
       }
       if (typeFilter === 'Major' && !f.is_major) return false;
@@ -192,23 +248,33 @@ export default function FestivalCalendarPage() {
       const m = Number(f.month);
       if (m >= 1 && m <= 12) map[m].push(f);
     });
-    // Sort: major first, then by name
+    // Sort: by exact_date first, then major first, then by name
     Object.values(map).forEach(arr =>
-      arr.sort((a, b) => (b.is_major ? 1 : 0) - (a.is_major ? 1 : 0) || (a.name || '').localeCompare(b.name || ''))
+      arr.sort((a, b) => {
+        if (a.exact_date && b.exact_date) return a.exact_date.localeCompare(b.exact_date);
+        return (b.is_major ? 1 : 0) - (a.is_major ? 1 : 0) || (a.name || '').localeCompare(b.name || '');
+      })
     );
     return map;
   }, [filtered]);
 
   const currentMonthFestivals = byMonth[selectedMonth] || [];
-  const totalCount = filtered.length;
-  const apiCount = apiFestivals.length;
+  const totalCount  = filtered.length;
+  const apiCount    = apiFestivals.length;
+  const claudeCount = claudeFestivals.length;
+  const isAnyLoading = loading || claudeLoading;
 
-  const goMonth = (dir) => setSelectedMonth(m => {
+  const goMonth = dir => setSelectedMonth(m => {
     let next = m + dir;
     if (next < 1) next = 12;
     if (next > 12) next = 1;
     return next;
   });
+
+  const handleRefresh = () => {
+    fetchFestivals();
+    fetchFestivalsFromClaude();
+  };
 
   return (
     <>
@@ -231,13 +297,35 @@ export default function FestivalCalendarPage() {
             <span className="fest-stat">12 Months</span>
             <span className="fest-stat-dot">·</span>
             <span className="fest-stat">{currentYear}</span>
+            {claudeCount > 0 && (
+              <>
+                <span className="fest-stat-dot">·</span>
+                <span className="fest-stat" style={{ color: '#c4b5fd' }}>✨ {claudeCount} AI Curated</span>
+              </>
+            )}
             {apiCount > 0 && (
               <>
                 <span className="fest-stat-dot">·</span>
-                <span className="fest-stat" style={{ color: '#86efac' }}>{apiCount} Temple Festivals</span>
+                <span className="fest-stat" style={{ color: '#86efac' }}>🛕 {apiCount} Temple Festivals</span>
               </>
             )}
           </div>
+
+          {/* Claude loading/error status */}
+          {claudeLoading && (
+            <div className="claude-status">
+              <span className="claude-spinner">✨</span>
+              Claude AI se festivals fetch ho rahe hain…
+            </div>
+          )}
+          {claudeError && !claudeLoading && (
+            <div className="claude-status claude-status-err">
+              ⚠️ Claude API se fetch nahi hua.{' '}
+              <button onClick={fetchFestivalsFromClaude} style={{ background:'none',border:'none',color:'inherit',cursor:'pointer',textDecoration:'underline' }}>
+                Retry karo
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -248,7 +336,7 @@ export default function FestivalCalendarPage() {
             <Search size={16} />
             <input
               className="fest-search"
-              placeholder="Search festivals, temples…"
+              placeholder="Search festivals, deity, temples…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
@@ -271,10 +359,11 @@ export default function FestivalCalendarPage() {
           <div className="fest-controls-right">
             <button
               className="fest-refresh-btn"
-              onClick={fetchFestivals}
+              onClick={handleRefresh}
               title="Refresh festivals"
+              disabled={isAnyLoading}
             >
-              <RefreshCw size={14} className={loading ? 'spinning' : ''} />
+              <RefreshCw size={14} className={isAnyLoading ? 'spinning' : ''} />
             </button>
             <div className="fest-view-toggle">
               <button className={viewMode === 'calendar' ? 'active' : ''} onClick={() => setViewMode('calendar')}>
@@ -290,10 +379,10 @@ export default function FestivalCalendarPage() {
 
       <div className="container fest-body">
 
-        {loading && apiFestivals.length === 0 ? (
+        {isAnyLoading && allFestivals.length === 0 ? (
           <div className="fest-loading">
             <div className="fest-loading-spinner">🪔</div>
-            <p>Loading sacred festivals…</p>
+            <p>Claude AI se festivals load ho rahe hain…</p>
           </div>
         ) : viewMode === 'calendar' ? (
           <>
@@ -302,8 +391,8 @@ export default function FestivalCalendarPage() {
               <button className="month-nav-btn" onClick={() => goMonth(-1)}><ChevronLeft size={18} /></button>
               <div className="month-pills">
                 {GREGORIAN_MONTHS.map((m, i) => {
-                  const mNum = i + 1;
-                  const count = (byMonth[mNum] || []).length;
+                  const mNum   = i + 1;
+                  const count  = (byMonth[mNum] || []).length;
                   const hasAPI = (byMonth[mNum] || []).some(f => f.temple_id);
                   return (
                     <button
@@ -330,15 +419,26 @@ export default function FestivalCalendarPage() {
                   {HINDU_MONTHS[(selectedMonth + 1) % 12]} / {HINDU_MONTHS[selectedMonth % 12]}
                 </p>
               </div>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
                 {currentMonthFestivals.some(f => f.temple_id) && (
-                  <span className="month-api-badge">🛕 Includes Temple Festivals</span>
+                  <span className="month-api-badge">🛕 Temple Festivals</span>
+                )}
+                {currentMonthFestivals.some(f => f._claude) && (
+                  <span className="month-claude-badge">✨ AI Curated</span>
                 )}
                 <span className="month-fest-count">
                   {currentMonthFestivals.length} festival{currentMonthFestivals.length !== 1 ? 's' : ''}
                 </span>
               </div>
             </div>
+
+            {/* ── Partial load notice ── */}
+            {claudeLoading && allFestivals.length > 0 && (
+              <div className="partial-notice">
+                <span className="claude-spinner" style={{ fontSize:14 }}>✨</span>
+                More festivals load ho rahe hain Claude AI se…
+              </div>
+            )}
 
             {currentMonthFestivals.length === 0 ? (
               <div className="fest-empty">
@@ -360,7 +460,7 @@ export default function FestivalCalendarPage() {
           /* ── All festivals list view ── */
           <div className="fest-list-view">
             {GREGORIAN_MONTHS.map((mName, mi) => {
-              const mNum = mi + 1;
+              const mNum  = mi + 1;
               const fests = byMonth[mNum] || [];
               if (fests.length === 0) return null;
               return (
@@ -368,7 +468,7 @@ export default function FestivalCalendarPage() {
                   <div className="fest-list-month-header">
                     <span className="fest-list-month-name">{mName}</span>
                     <span className="fest-list-month-count">{fests.length}</span>
-                    <span className="fest-list-hindu-month" style={{ fontFamily:'var(--font-hindi)', fontSize:13, color:'var(--text-light)', marginLeft:8 }}>
+                    <span className="fest-list-hindu-month">
                       {HINDU_MONTHS[(mNum + 1) % 12]}
                     </span>
                   </div>
@@ -416,11 +516,17 @@ export default function FestivalCalendarPage() {
         .fest-stat{font-family:var(--font-display);font-size:13px;letter-spacing:.08em;color:var(--gold-light);background:rgba(255,255,255,.08);padding:5px 14px;border-radius:50px;border:1px solid rgba(200,150,12,.3);}
         .fest-stat-dot{color:rgba(255,255,255,.3);}
 
+        /* ── Claude status ── */
+        .claude-status{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-family:var(--font-display);font-size:12px;color:rgba(255,255,255,.6);background:rgba(255,255,255,.07);padding:6px 16px;border-radius:50px;border:1px solid rgba(255,255,255,.12);}
+        .claude-status-err{color:rgba(255,180,120,.8);border-color:rgba(255,150,50,.2);}
+        .claude-spinner{animation:floatDiya 1.5s ease-in-out infinite;display:inline-block;}
+        .partial-notice{display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-size:12px;color:var(--text-light);background:rgba(232,101,10,.06);border:1px solid rgba(232,101,10,.15);border-radius:50px;padding:6px 16px;margin-bottom:16px;}
+
         /* ── Controls ── */
         .fest-controls-bar{background:white;border-bottom:2px solid var(--cream-dark);padding:14px 0;position:sticky;top:70px;z-index:100;box-shadow:0 2px 12px var(--shadow);}
         .fest-controls-inner{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
         .fest-controls-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
-        .fest-search-wrap{display:flex;align-items:center;gap:8px;background:var(--cream);border:2px solid var(--cream-dark);border-radius:50px;padding:7px 16px;flex:0 0 230px;transition:var(--transition);}
+        .fest-search-wrap{display:flex;align-items:center;gap:8px;background:var(--cream);border:2px solid var(--cream-dark);border-radius:50px;padding:7px 16px;flex:0 0 240px;transition:var(--transition);}
         .fest-search-wrap:focus-within{border-color:var(--saffron);background:white;}
         .fest-search-wrap svg{color:var(--text-light);flex-shrink:0;}
         .fest-search{border:none;background:transparent;font-family:var(--font-body);font-size:14px;color:var(--text-dark);outline:none;width:100%;}
@@ -431,7 +537,8 @@ export default function FestivalCalendarPage() {
         .fest-chip:hover{border-color:var(--saffron-light);color:var(--saffron);}
         .fest-chip.active{background:var(--saffron);color:white;border-color:var(--saffron);}
         .fest-refresh-btn{width:34px;height:34px;border-radius:50%;border:2px solid var(--cream-dark);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-light);transition:var(--transition);}
-        .fest-refresh-btn:hover{border-color:var(--saffron);color:var(--saffron);}
+        .fest-refresh-btn:hover:not(:disabled){border-color:var(--saffron);color:var(--saffron);}
+        .fest-refresh-btn:disabled{opacity:.5;cursor:not-allowed;}
         .fest-refresh-btn .spinning{animation:spin .8s linear infinite;}
         @keyframes spin{to{transform:rotate(360deg);}}
         .fest-view-toggle{display:flex;background:var(--cream);border:2px solid var(--cream-dark);border-radius:50px;overflow:hidden;}
@@ -467,6 +574,7 @@ export default function FestivalCalendarPage() {
         .month-heading-hindi{font-family:var(--font-hindi);font-size:14px;color:var(--text-light);margin-top:2px;}
         .month-fest-count{font-family:var(--font-display);font-size:13px;letter-spacing:.06em;color:var(--saffron);background:rgba(232,101,10,.08);padding:4px 14px;border-radius:50px;border:1px solid rgba(232,101,10,.2);}
         .month-api-badge{font-family:var(--font-display);font-size:11px;letter-spacing:.04em;color:#16a34a;background:rgba(16,163,74,.08);padding:4px 12px;border-radius:50px;border:1px solid rgba(16,163,74,.2);}
+        .month-claude-badge{font-family:var(--font-display);font-size:11px;letter-spacing:.04em;color:#7C3AED;background:rgba(124,58,237,.08);padding:4px 12px;border-radius:50px;border:1px solid rgba(124,58,237,.2);}
 
         /* ── Festival grid / cards ── */
         .fest-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;}
@@ -475,13 +583,16 @@ export default function FestivalCalendarPage() {
         .fest-card-top{padding:20px 20px 14px;display:flex;align-items:flex-start;gap:14px;}
         .fest-card-emoji{font-size:28px;flex-shrink:0;width:54px;height:54px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);background:var(--cream);}
         .fest-card-info{flex:1;min-width:0;}
-        .fest-card-name{font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--brown);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .fest-card-name{font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--brown);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .fest-card-date{font-size:11px;font-weight:600;margin-bottom:2px;}
         .fest-card-sub{font-family:var(--font-hindi);font-size:12px;color:var(--text-light);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .fest-card-badges{display:flex;gap:5px;flex-wrap:wrap;}
         .fest-badge{font-size:10px;padding:2px 8px;border-radius:50px;font-family:var(--font-display);letter-spacing:.04em;border:1px solid;}
         .fest-badge-major{color:var(--saffron-dark);background:rgba(232,101,10,.08);border-color:rgba(232,101,10,.25);}
         .fest-badge-days{color:var(--brown-mid);background:var(--cream);border-color:var(--cream-dark);}
         .fest-badge-temple{color:#16a34a;background:rgba(16,163,74,.06);border-color:rgba(16,163,74,.25);}
+        .fest-badge-claude{color:#7C3AED;background:rgba(124,58,237,.06);border-color:rgba(124,58,237,.25);}
+        .fest-badge-deity{color:#1D4ED8;background:rgba(29,78,216,.06);border-color:rgba(29,78,216,.2);}
         .fest-card-temple{font-family:var(--font-hindi);font-size:11px;color:#16a34a;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .fest-card-accent{height:4px;}
         /* Compact */
@@ -503,16 +614,18 @@ export default function FestivalCalendarPage() {
         .fest-list-month-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
         .fest-list-month-name{font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--brown);}
         .fest-list-month-count{font-family:var(--font-display);font-size:11px;color:white;background:var(--saffron);padding:2px 9px;border-radius:50px;}
+        .fest-list-hindu-month{font-family:var(--font-hindi);font-size:13px;color:var(--text-light);margin-left:4px;}
         .fest-list-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
 
         /* ── Modal ── */
         .fest-modal-overlay{position:fixed;inset:0;z-index:500;background:rgba(26,10,0,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadeIn .2s ease;}
         @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
-        .fest-modal{background:var(--cream);border-radius:var(--radius-lg);max-width:540px;width:100%;overflow:hidden;animation:slideUp .25s ease;box-shadow:0 32px 80px rgba(26,10,0,.4);max-height:90vh;overflow-y:auto;}
+        .fest-modal{background:var(--cream);border-radius:var(--radius-lg);max-width:560px;width:100%;overflow:hidden;animation:slideUp .25s ease;box-shadow:0 32px 80px rgba(26,10,0,.4);max-height:90vh;overflow-y:auto;}
         @keyframes slideUp{from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;}}
         .fest-modal-header{padding:28px 28px 20px;display:flex;align-items:flex-start;gap:16px;}
         .fest-modal-emoji{font-size:40px;flex-shrink:0;width:70px;height:70px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);background:white;box-shadow:0 4px 16px var(--shadow);}
-        .fest-modal-title{font-family:var(--font-display);font-size:22px;font-weight:700;color:var(--brown);margin-bottom:6px;}
+        .fest-modal-title{font-family:var(--font-display);font-size:22px;font-weight:700;color:var(--brown);margin-bottom:4px;}
+        .fest-modal-date{font-family:var(--font-display);font-size:13px;color:var(--saffron);font-weight:600;margin-bottom:4px;}
         .fest-modal-hint{font-family:var(--font-hindi);font-size:13px;color:var(--saffron);}
         .fest-modal-body{padding:0 28px 28px;}
         .fest-modal-divider{height:1px;background:var(--cream-dark);margin-bottom:20px;}
@@ -545,10 +658,10 @@ export default function FestivalCalendarPage() {
   );
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
+// ── FestivalCard ───────────────────────────────────────────────────────────────
 function FestivalCard({ festival, compact, onClick }) {
   const { emoji, color } = { emoji: festival.emoji || '🛕', color: festival.color || '#E8650A' };
+
   return (
     <div
       className={`fest-card${compact ? ' fest-card-compact' : ''}`}
@@ -560,18 +673,44 @@ function FestivalCard({ festival, compact, onClick }) {
         </div>
         <div className="fest-card-info">
           <div className="fest-card-name" title={festival.name}>{festival.name}</div>
-          {festival.significance && (
-            <div className="fest-card-sub" title={festival.significance}>{festival.significance}</div>
+
+          {/* Date display */}
+          {festival.display_date && (
+            <div className="fest-card-date" style={{ color }}>
+              📅 {festival.display_date}
+            </div>
           )}
+
+          {/* Hindu tithi */}
+          {festival.hindu_tithi && (
+            <div className="fest-card-sub" title={festival.hindu_tithi}>
+              {festival.hindu_tithi}
+            </div>
+          )}
+
+          {/* Significance if no tithi */}
+          {!festival.hindu_tithi && festival.significance && (
+            <div className="fest-card-sub" title={festival.significance}>
+              {festival.significance}
+            </div>
+          )}
+
           <div className="fest-card-badges">
             {festival.is_major && <span className="fest-badge fest-badge-major">⭐ Major</span>}
             {festival.duration_days > 1 && (
               <span className="fest-badge fest-badge-days">{festival.duration_days} days</span>
             )}
+            {festival.deity && festival.deity !== 'Other' && (
+              <span className="fest-badge fest-badge-deity">{festival.deity}</span>
+            )}
             {festival.temple_id && (
               <span className="fest-badge fest-badge-temple">🛕 Temple</span>
             )}
+            {festival._claude && (
+              <span className="fest-badge fest-badge-claude">✨ AI</span>
+            )}
           </div>
+
           {festival.temple_name && (
             <div className="fest-card-temple" title={`${festival.temple_name}, ${festival.temple_city || ''}`}>
               📍 {festival.temple_name}{festival.temple_city ? `, ${festival.temple_city}` : ''}
@@ -584,6 +723,7 @@ function FestivalCard({ festival, compact, onClick }) {
   );
 }
 
+// ── FestivalModal ──────────────────────────────────────────────────────────────
 function FestivalModal({ festival, onClose }) {
   const monthName  = GREGORIAN_MONTHS[(festival.month || 1) - 1] || '';
   const hinduMonth = festival.hindu_month || HINDU_MONTHS[((festival.month || 1) - 1) % 12] || '';
@@ -592,18 +732,23 @@ function FestivalModal({ festival, onClose }) {
   return (
     <div className="fest-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="fest-modal">
-        <div className="fest-modal-header" style={{ background: `linear-gradient(135deg,${color}18,transparent)` }}>
+        <div className="fest-modal-header" style={{ background: `${color}12` }}>
           <div className="fest-modal-emoji" style={{ border: `2px solid ${color}30` }}>{emoji}</div>
           <div>
             <div className="fest-modal-title">{festival.name}</div>
-            <div className="fest-modal-hint">
-              {festival.is_major && '⭐ Major Festival  ·  '}
-              {festival.duration_days > 1 ? `${festival.duration_days} Days` : ''}
-            </div>
+            {festival.display_date && (
+              <div className="fest-modal-date">📅 {festival.display_date}</div>
+            )}
+            {festival.hindu_tithi && (
+              <div className="fest-modal-hint">{festival.hindu_tithi}</div>
+            )}
             <div style={{ display:'flex', gap:6, marginTop:8, flexWrap:'wrap' }}>
               {festival.is_major && <span className="fest-badge fest-badge-major">⭐ Major</span>}
               {festival.temple_id && <span className="fest-badge fest-badge-temple">🛕 Temple Festival</span>}
-              {festival._seed && <span className="fest-badge" style={{ color:'var(--text-light)', borderColor:'var(--cream-dark)', background:'var(--cream)' }}>National</span>}
+              {festival._claude && <span className="fest-badge fest-badge-claude">✨ AI Curated</span>}
+              {festival.deity && festival.deity !== 'Other' && (
+                <span className="fest-badge fest-badge-deity">{festival.deity}</span>
+              )}
             </div>
           </div>
         </div>
@@ -611,7 +756,7 @@ function FestivalModal({ festival, onClose }) {
         <div className="fest-modal-body">
           <div className="fest-modal-divider" />
 
-          {/* Temple info if from DB */}
+          {/* Temple info */}
           {festival.temple_name && (
             <div className="fest-modal-temple-box">
               <div className="fest-modal-temple-label">🛕 CELEBRATED AT</div>
@@ -623,13 +768,19 @@ function FestivalModal({ festival, onClose }) {
           )}
 
           {festival.significance && (
-            <p className="fest-modal-text">{festival.significance}</p>
+            <p className="fest-modal-text"><strong>Significance:</strong> {festival.significance}</p>
           )}
           {festival.description && festival.description !== festival.significance && (
             <p className="fest-modal-text">{festival.description}</p>
           )}
 
           <div className="fest-modal-meta">
+            {festival.display_date && (
+              <div className="fest-meta-item" style={{ gridColumn:'1 / -1' }}>
+                <div className="fest-meta-label">DATE 2025</div>
+                <div className="fest-meta-value" style={{ color }}>{festival.display_date}</div>
+              </div>
+            )}
             <div className="fest-meta-item">
               <div className="fest-meta-label">GREGORIAN MONTH</div>
               <div className="fest-meta-value">{monthName}</div>
@@ -638,14 +789,22 @@ function FestivalModal({ festival, onClose }) {
               <div className="fest-meta-label">HINDU MONTH</div>
               <div className="fest-meta-value" style={{ fontFamily:'var(--font-hindi)' }}>{hinduMonth}</div>
             </div>
+            {festival.hindu_tithi && (
+              <div className="fest-meta-item">
+                <div className="fest-meta-label">TITHI</div>
+                <div className="fest-meta-value" style={{ fontSize:13 }}>{festival.hindu_tithi}</div>
+              </div>
+            )}
             <div className="fest-meta-item">
               <div className="fest-meta-label">DURATION</div>
-              <div className="fest-meta-value">{festival.duration_days || 1} {(festival.duration_days || 1) === 1 ? 'Day' : 'Days'}</div>
+              <div className="fest-meta-value">
+                {festival.duration_days || 1} {(festival.duration_days || 1) === 1 ? 'Day' : 'Days'}
+              </div>
             </div>
             <div className="fest-meta-item">
               <div className="fest-meta-label">SOURCE</div>
               <div className="fest-meta-value" style={{ fontSize:13 }}>
-                {festival._seed ? 'National Calendar' : festival.source || 'Temple Record'}
+                {festival._claude ? '✨ Claude AI' : festival.source || '🛕 Temple Record'}
               </div>
             </div>
           </div>
@@ -653,19 +812,11 @@ function FestivalModal({ festival, onClose }) {
           <div className="fest-modal-actions">
             <button className="fest-modal-close" onClick={onClose}>Close</button>
             {festival.temple_slug ? (
-              <Link
-                to={`/temple/${festival.temple_slug}`}
-                className="fest-modal-cta"
-                onClick={onClose}
-              >
+              <Link to={`/temple/${festival.temple_slug}`} className="fest-modal-cta" onClick={onClose}>
                 <MapPin size={14} /> Visit Temple
               </Link>
             ) : (
-              <Link
-                to={`/search?q=${encodeURIComponent(festival.name)}`}
-                className="fest-modal-cta"
-                onClick={onClose}
-              >
+              <Link to={`/search?q=${encodeURIComponent(festival.name)}`} className="fest-modal-cta" onClick={onClose}>
                 <MapPin size={14} /> Find Temples
               </Link>
             )}
