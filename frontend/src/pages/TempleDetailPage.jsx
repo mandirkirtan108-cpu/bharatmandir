@@ -5,20 +5,12 @@ import Footer from '../components/Footer';
 import { templeAPI } from '../services/api';
 import { useTranslatedTemple } from '../hooks/useTranslatedData';
 
-const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// No processing — use URL exactly as stored in DB, same as TempleCard on homepage
 function proxyImageUrl(url) {
-  if (!url) return null;
-  // Local file served by your backend
-  if (!url.startsWith('http')) return `${API_BASE}${url}`;
-  if (url.includes('localhost') || url.includes('127.0.0.1')) return url;
-  // Cloudinary — direct serve, no proxy needed (best quality)
-  if (url.includes('cloudinary.com')) return url;
-  // Wikipedia/Wikimedia — direct, no proxy needed
-  if (url.includes('wikimedia.org') || url.includes('wikipedia.org')) return url;
-  // Everything else — proxy
-  return `${API_BASE}/api/proxy/image?url=${encodeURIComponent(url)}`;
+  return url || null;
 }
 
 function formatTime(t) {
@@ -35,7 +27,7 @@ function parseTags(tags) {
   if (!tags) return [];
   if (Array.isArray(tags)) return tags.filter(Boolean);
   const s = String(tags).trim();
-  if (s.startsWith('[')) { try { return JSON.parse(s).filter(Boolean); } catch (_) {} }
+  if (s.startsWith('[')) { try { return JSON.parse(s).filter(Boolean); } catch (_) { } }
   return s.split(',').map(t => t.trim()).filter(Boolean);
 }
 function v(x) { return x && String(x).trim() !== '' && String(x) !== 'null' && String(x) !== 'false'; }
@@ -63,8 +55,35 @@ body{font-family:'DM Sans',sans-serif;background:var(--c);color:var(--k);-webkit
 @keyframes diya{0%,100%{filter:drop-shadow(0 0 16px rgba(255,150,50,.5))}50%{filter:drop-shadow(0 0 32px rgba(255,200,80,.9))}}
 
 /* HERO */
-.hero{position:relative;height:88vh;min-height:500px;max-height:720px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;background:#0D0500;}
-.hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .8s;}
+/* HERO — add these 2 lines */
+.hero {
+ position: relative;
+  height: 72vh;              /* 88vh → 72vh */
+  min-height: 460px;
+  max-height: 620px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  background: #0D0500;
+  transform: translateZ(0);        /* NEW — own GPU compositing layer */
+  isolation: isolate;              /* NEW — prevents stacking context bleed */
+}
+
+.hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;   /* top → center karo */
+  transition: opacity .8s;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
 .hero-grad{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,5,0,.1) 0%,rgba(10,5,0,0) 30%,rgba(10,5,0,.65) 65%,rgba(10,5,0,.97) 100%);pointer-events:none;}
 .hero-diya{position:absolute;top:22%;left:50%;transform:translateX(-50%);font-size:56px;animation:diya 3s ease-in-out infinite;z-index:2;}
 .hero-body{position:relative;z-index:3;padding:0 52px 60px;max-width:900px;animation:up .7s ease .1s both;}
@@ -205,42 +224,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--c);color:var(--k);-webkit
 @media(max-width:640px){.hero{height:auto;min-height:400px;}.hero-h1{font-size:28px;}.ig,.sg,.chip-grid,.dc{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:18px 16px;}}
 `;
 
-// SmartImage with loading placeholder — shows diya on any error
-function SmartImage({ src, alt, wikipediaTitle }) {
-  const [imgSrc, setImgSrc] = useState(src);
-  const [status, setStatus] = useState('loading');
-
-  useEffect(() => { setImgSrc(src); setStatus('loading'); }, [src]);
-
-  const handleError = async () => {
-    // Try Wikipedia API if we have a title
-    if (wikipediaTitle) {
-      try {
-        const res = await fetch(
-          `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikipediaTitle)}`
-        );
-        const data = await res.json();
-        const wikiImg = data.originalimage?.source || data.thumbnail?.source;
-        if (wikiImg) { setImgSrc(wikiImg); return; }
-      } catch (_) {}
-    }
-    setStatus('error');
-  };
-
-  if (status === 'error') return null;
+// Hero image — same logic as TempleCard on homepage, no processing
+function HeroImage({ src, alt }) {
+  if (!src) return null;
   return (
-    <div style={{ position:'absolute', inset:0 }}>
-      {status === 'loading' && (
-        <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center',
-          justifyContent:'center', fontFamily:"'Noto Sans Devanagari',sans-serif",
-          fontSize:72, color:'rgba(255,255,255,.06)', background:'#0D0500' }}>ॐ</div>
-      )}
-      <img src={imgSrc} alt={alt} className="hero-img"
-        style={{ opacity: status === 'ok' ? 1 : 0 }}
-        onLoad={() => setStatus('ok')}
-        onError={handleError}
-        referrerPolicy="no-referrer" />
-    </div>
+    <img
+      src={src}
+      alt={alt}
+      className="hero-img"
+      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+    />
   );
 }
 
@@ -250,29 +243,29 @@ function II({ label, value, full, icon }) {
   return (
     <div className={`ii${full ? ' full' : ''}`}>
       <div className="il">{label}</div>
-      <div className="iv">{icon && <span style={{marginRight:4}}>{icon}</span>}{value}</div>
+      <div className="iv">{icon && <span style={{ marginRight: 4 }}>{icon}</span>}{value}</div>
     </div>
   );
 }
 
 // Section label
 function SLabel({ text }) {
-  return <p style={{ fontSize:11, color:'var(--kl)', marginBottom:10, textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700 }}>{text}</p>;
+  return <p style={{ fontSize: 11, color: 'var(--kl)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700 }}>{text}</p>;
 }
 
 export default function TempleDetailPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
 
-  const [temple,       setTemple]       = useState(null);
-  const [mantras,      setMantras]      = useState([]);
-  const [festivals,    setFestivals]    = useState([]);
-  const [sevas,        setSevas]        = useState([]);
+  const [temple, setTemple] = useState(null);
+  const [mantras, setMantras] = useState([]);
+  const [festivals, setFestivals] = useState([]);
+  const [sevas, setSevas] = useState([]);
   const [pujaSchedule, setPujaSchedule] = useState([]);
-  const [priests,      setPriests]      = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState(null);
-  const [activeNav,    setActiveNav]    = useState('overview');
+  const [priests, setPriests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeNav, setActiveNav] = useState('overview');
 
   const { translated: T } = useTranslatedTemple(temple);
 
@@ -289,13 +282,13 @@ export default function TempleDetailPage() {
           templeAPI.getFestivals(id),
           templeAPI.getSevas(id),
           templeAPI.getPujaSchedule ? templeAPI.getPujaSchedule(id) : Promise.reject(),
-          templeAPI.getPriests      ? templeAPI.getPriests(id)      : Promise.reject(),
+          templeAPI.getPriests ? templeAPI.getPriests(id) : Promise.reject(),
         ]);
-        if (m.status  === 'fulfilled') setMantras(m.value.data       || []);
-        if (f.status  === 'fulfilled') setFestivals(f.value.data     || []);
-        if (s.status  === 'fulfilled') setSevas(s.value.data         || []);
+        if (m.status === 'fulfilled') setMantras(m.value.data || []);
+        if (f.status === 'fulfilled') setFestivals(f.value.data || []);
+        if (s.status === 'fulfilled') setSevas(s.value.data || []);
         if (ps.status === 'fulfilled') setPujaSchedule(ps.value.data || []);
-        if (pr.status === 'fulfilled') setPriests(pr.value.data      || []);
+        if (pr.status === 'fulfilled') setPriests(pr.value.data || []);
       } catch (err) {
         setError(err?.response?.status === 404 ? 'Temple not found.' : 'Failed to load temple.');
       } finally { setLoading(false); }
@@ -304,61 +297,61 @@ export default function TempleDetailPage() {
     window.scrollTo(0, 0);
   }, [slug, navigate]);
 
-  if (loading) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/><span style={{color:'var(--kl)',fontSize:14}}>Loading temple…</span></div></>);
-  if (error)   return (<><style>{CSS}</style><Navbar/><div className="err"><div style={{fontSize:60}}>🛕</div><h2 style={{fontFamily:"'Playfair Display',serif",fontSize:28}}>Temple Not Found</h2><p style={{color:'var(--kl)'}}>{error}</p><button className="btn btn-fill" style={{marginTop:16}} onClick={()=>navigate('/')}>← All Temples</button></div></>);
-  if (!T) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/></div></>);
+  if (loading) return (<><style>{CSS}</style><Navbar /><div className="loading"><div className="spinner" /><span style={{ color: 'var(--kl)', fontSize: 14 }}>Loading temple…</span></div></>);
+  if (error) return (<><style>{CSS}</style><Navbar /><div className="err"><div style={{ fontSize: 60 }}>🛕</div><h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28 }}>Temple Not Found</h2><p style={{ color: 'var(--kl)' }}>{error}</p><button className="btn btn-fill" style={{ marginTop: 16 }} onClick={() => navigate('/')}>← All Temples</button></div></>);
+  if (!T) return (<><style>{CSS}</style><Navbar /><div className="loading"><div className="spinner" /></div></>);
 
-  const heroImg  = proxyImageUrl(T.hero_image_url);
+  const heroImg = proxyImageUrl(T.hero_image_url);
   const openTime = formatTime(T.opening_time);
-  const closeTime= formatTime(T.closing_time);
-  const acStart  = formatTime(T.afternoon_closure_start);
-  const acEnd    = formatTime(T.afternoon_closure_end);
-  const fee      = displayFee(T.entry_fee);
-  const tags     = parseTags(T.category_tags);
-  const mapsUrl  = T.latitude ? `https://www.google.com/maps/search/?api=1&query=${T.latitude},${T.longitude}` : T.google_maps_link || null;
+  const closeTime = formatTime(T.closing_time);
+  const acStart = formatTime(T.afternoon_closure_start);
+  const acEnd = formatTime(T.afternoon_closure_end);
+  const fee = displayFee(T.entry_fee);
+  const tags = parseTags(T.category_tags);
+  const mapsUrl = T.latitude ? `https://www.google.com/maps/search/?api=1&query=${T.latitude},${T.longitude}` : T.google_maps_link || null;
 
   const pujaServices = [
-    ['puja_rudrabhishek','Rudrabhishek'],['puja_satyanarayan','Satyanarayan Katha'],
-    ['puja_havan_homa','Havan / Homa'],['puja_laghu_rudra','Laghu Rudra'],
-    ['puja_mahamrityunjaya','Mahamrityunjaya'],['puja_griha_pravesh','Griha Pravesh'],
-    ['puja_naamkaran','Naamkaran'],['puja_vivah','Vivah Puja'],
-    ['puja_annaprashan','Annaprashan'],['puja_mundan','Mundan'],
-    ['puja_pitru_tarpan','Pitru Tarpan'],['puja_sahasranamarchana','Sahasranamarchana'],
+    ['puja_rudrabhishek', 'Rudrabhishek'], ['puja_satyanarayan', 'Satyanarayan Katha'],
+    ['puja_havan_homa', 'Havan / Homa'], ['puja_laghu_rudra', 'Laghu Rudra'],
+    ['puja_mahamrityunjaya', 'Mahamrityunjaya'], ['puja_griha_pravesh', 'Griha Pravesh'],
+    ['puja_naamkaran', 'Naamkaran'], ['puja_vivah', 'Vivah Puja'],
+    ['puja_annaprashan', 'Annaprashan'], ['puja_mundan', 'Mundan'],
+    ['puja_pitru_tarpan', 'Pitru Tarpan'], ['puja_sahasranamarchana', 'Sahasranamarchana'],
   ].filter(([k]) => T[k]);
 
   const facilities = [
-    ['facility_electricity','⚡ Electricity'],['facility_water_supply','💧 Water'],
-    ['facility_clean_toilets','🚻 Toilets'],['facility_wheelchair','♿ Wheelchair Access'],
-    ['facility_dharamshala','🏠 Dharamshala'],['facility_prasad_dining','🍱 Prasad Dining'],
-    ['facility_parking','🅿️ Parking'],['facility_security','🔒 Security'],
-    ['facility_cctv','📹 CCTV'],['facility_pa_system','🔊 PA System'],
-    ['facility_internet_wifi','📶 WiFi'],['facility_library_pathshala','📚 Library'],
-    ['facility_gaushaala','🐄 Gaushaala'],['facility_medical_support','🏥 Medical Support'],
+    ['facility_electricity', '⚡ Electricity'], ['facility_water_supply', '💧 Water'],
+    ['facility_clean_toilets', '🚻 Toilets'], ['facility_wheelchair', '♿ Wheelchair Access'],
+    ['facility_dharamshala', '🏠 Dharamshala'], ['facility_prasad_dining', '🍱 Prasad Dining'],
+    ['facility_parking', '🅿️ Parking'], ['facility_security', '🔒 Security'],
+    ['facility_cctv', '📹 CCTV'], ['facility_pa_system', '🔊 PA System'],
+    ['facility_internet_wifi', '📶 WiFi'], ['facility_library_pathshala', '📚 Library'],
+    ['facility_gaushaala', '🐄 Gaushaala'], ['facility_medical_support', '🏥 Medical Support'],
   ].filter(([k]) => T[k]);
 
   const programs = [
-    ['prog_free_food','🍱 Free Food (Annadanam)'],['prog_medical_camps','🏥 Medical Camps'],
-    ['prog_scholarship_edu','📚 Scholarship & Education'],['prog_womens_selfhelp','👩 Women Self-Help'],
-    ['prog_bhajan_kirtan','🎵 Bhajan & Kirtan'],['prog_disaster_relief','🆘 Disaster Relief'],
+    ['prog_free_food', '🍱 Free Food (Annadanam)'], ['prog_medical_camps', '🏥 Medical Camps'],
+    ['prog_scholarship_edu', '📚 Scholarship & Education'], ['prog_womens_selfhelp', '👩 Women Self-Help'],
+    ['prog_bhajan_kirtan', '🎵 Bhajan & Kirtan'], ['prog_disaster_relief', '🆘 Disaster Relief'],
   ].filter(([k]) => T[k]);
 
   // Build nav dynamically based on what data exists
   const navItems = [
-    { id:'overview',   label:'Overview',  show: true },
-    { id:'history',    label:'History',   show: v(T.history)||v(T.significance)||v(T.puranic_stories) },
-    { id:'puja',       label:'Puja',      show: pujaSchedule.length>0 || pujaServices.length>0 },
-    { id:'mantras',    label:'Mantras',   show: mantras.length>0 },
-    { id:'festivals',  label:'Festivals', show: festivals.length>0 },
-    { id:'sevas',      label:'Sevas',     show: sevas.length>0 },
-    { id:'facilities', label:'Facilities',show: facilities.length>0||programs.length>0 },
-    { id:'priests',    label:'Priests',   show: priests.length>0 },
-    { id:'contact',    label:'Contact',   show: true },
+    { id: 'overview', label: 'Overview', show: true },
+    { id: 'history', label: 'History', show: v(T.history) || v(T.significance) || v(T.puranic_stories) },
+    { id: 'puja', label: 'Puja', show: pujaSchedule.length > 0 || pujaServices.length > 0 },
+    { id: 'mantras', label: 'Mantras', show: mantras.length > 0 },
+    { id: 'festivals', label: 'Festivals', show: festivals.length > 0 },
+    { id: 'sevas', label: 'Sevas', show: sevas.length > 0 },
+    { id: 'facilities', label: 'Facilities', show: facilities.length > 0 || programs.length > 0 },
+    { id: 'priests', label: 'Priests', show: priests.length > 0 },
+    { id: 'contact', label: 'Contact', show: true },
   ].filter(n => n.show);
 
   const scrollTo = (id) => {
     setActiveNav(id);
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return (
@@ -368,13 +361,10 @@ export default function TempleDetailPage() {
 
       {/* ══ HERO ══ */}
       <div className="hero">
-       {heroImg ? (
-  <>
-    <SmartImage src={heroImg} alt={T.name} wikipediaTitle={T.name}/>
-            
-          </>
+        {heroImg ? (
+          <HeroImage src={heroImg} alt={T.name} />
         ) : <div className="hero-diya"></div>}
-        <div className="hero-grad"/>
+        <div className="hero-grad" />
         <div className="hero-body">
           {/* Breadcrumb */}
           <div className="hero-bc">
@@ -386,19 +376,19 @@ export default function TempleDetailPage() {
 
           {/* Classification badges */}
           <div className="badges">
-            {T.is_jyotirlinga    && <span className="badge saffron">⚡ Jyotirlinga</span>}
-            {T.is_shaktipeeth    && <span className="badge saffron">🌸 Shaktipeeth</span>}
-            {T.is_char_dham      && <span className="badge saffron">🔱 Char Dham</span>}
-            {T.is_ashtavinayak   && <span className="badge saffron">🐘 Ashtavinayak</span>}
-            {T.is_divya_desam    && <span className="badge saffron">🪷 Divya Desam</span>}
-            {T.is_pancha_bhuta   && <span className="badge saffron">🌊 Pancha Bhuta</span>}
+            {T.is_jyotirlinga && <span className="badge saffron">⚡ Jyotirlinga</span>}
+            {T.is_shaktipeeth && <span className="badge saffron">🌸 Shaktipeeth</span>}
+            {T.is_char_dham && <span className="badge saffron">🔱 Char Dham</span>}
+            {T.is_ashtavinayak && <span className="badge saffron">🐘 Ashtavinayak</span>}
+            {T.is_divya_desam && <span className="badge saffron">🪷 Divya Desam</span>}
+            {T.is_pancha_bhuta && <span className="badge saffron">🌊 Pancha Bhuta</span>}
             {T.is_51_shakti_peeths && <span className="badge saffron">51 Shakti Peeths</span>}
-            {T.is_heritage_site  && <span className="badge blue">🏛️ Heritage</span>}
-            {T.is_unesco_heritage&& <span className="badge blue">🌍 UNESCO</span>}
+            {T.is_heritage_site && <span className="badge blue">🏛️ Heritage</span>}
+            {T.is_unesco_heritage && <span className="badge blue">🌍 UNESCO</span>}
             {T.is_state_heritage && <span className="badge blue">⭐ State Heritage</span>}
-            {T.is_asi_protected  && <span className="badge blue">🏺 ASI Protected</span>}
-            {T.verified          && <span className="badge green">✓ Verified</span>}
-            {v(T.sect)           && <span className="badge saffron">{T.sect}</span>}
+            {T.is_asi_protected && <span className="badge blue">🏺 ASI Protected</span>}
+            {T.verified && <span className="badge green">✓ Verified</span>}
+            {v(T.sect) && <span className="badge saffron">{T.sect}</span>}
           </div>
 
           <h1 className="hero-h1">{T.name}</h1>
@@ -408,7 +398,7 @@ export default function TempleDetailPage() {
             <span className="hero-meta-item">📍 {T.city}, {T.state}</span>
             {v(T.primary_deity) && <span className="hero-meta-item">🙏 {T.primary_deity}</span>}
             {openTime && <span className="hero-meta-item">🕐 {openTime} – {closeTime}</span>}
-            {fee && <span className="hero-meta-item">{fee==='Free Entry'?'✅ Free Entry':fee}</span>}
+            {fee && <span className="hero-meta-item">{fee === 'Free Entry' ? '✅ Free Entry' : fee}</span>}
             {v(T.setting_environment) && <span className="hero-meta-item">🌿 {T.setting_environment}</span>}
           </div>
 
@@ -418,7 +408,7 @@ export default function TempleDetailPage() {
       {/* ══ STICKY NAV ══ */}
       <div className="snav">
         {navItems.map(n => (
-          <div key={n.id} className={`snav-item${activeNav===n.id?' on':''}`} onClick={()=>scrollTo(n.id)}>{n.label}</div>
+          <div key={n.id} className={`snav-item${activeNav === n.id ? ' on' : ''}`} onClick={() => scrollTo(n.id)}>{n.label}</div>
         ))}
       </div>
 
@@ -426,7 +416,7 @@ export default function TempleDetailPage() {
         {/* ══════════ MAIN COLUMN ══════════ */}
         <div>
           {tags.length > 0 && (
-            <div className="tags">{tags.map(t=><span key={t} className="tag">#{t}</span>)}</div>
+            <div className="tags">{tags.map(t => <span key={t} className="tag">#{t}</span>)}</div>
           )}
 
           {/* ── OVERVIEW ── */}
@@ -436,96 +426,96 @@ export default function TempleDetailPage() {
             {/* Timing strip */}
             {(openTime || fee || acStart) && (
               <div className="tstrip">
-                {openTime  && <div className="tblock"><div className="tval">{openTime}</div><div className="tlbl">Opens</div></div>}
+                {openTime && <div className="tblock"><div className="tval">{openTime}</div><div className="tlbl">Opens</div></div>}
                 {closeTime && <div className="tblock"><div className="tval">{closeTime}</div><div className="tlbl">Closes</div></div>}
-                {acStart && acEnd && <div className="tblock"><div className="tval" style={{fontSize:15}}>{acStart}–{acEnd}</div><div className="tlbl">Afternoon Break</div></div>}
-                {fee       && <div className="tblock"><div className="tval" style={{fontSize:18}}>{fee}</div><div className="tlbl">Entry</div></div>}
-                {v(T.prasad_type) && <div className="tblock"><div className="tval" style={{fontFamily:"'DM Sans'",fontSize:13,fontWeight:600}}>{T.prasad_type}</div><div className="tlbl">Prasad</div></div>}
+                {acStart && acEnd && <div className="tblock"><div className="tval" style={{ fontSize: 15 }}>{acStart}–{acEnd}</div><div className="tlbl">Afternoon Break</div></div>}
+                {fee && <div className="tblock"><div className="tval" style={{ fontSize: 18 }}>{fee}</div><div className="tlbl">Entry</div></div>}
+                {v(T.prasad_type) && <div className="tblock"><div className="tval" style={{ fontFamily: "'DM Sans'", fontSize: 13, fontWeight: 600 }}>{T.prasad_type}</div><div className="tlbl">Prasad</div></div>}
               </div>
             )}
 
             <div className="ig">
-              <II label="Primary Deity"      value={T.primary_deity}         icon="🙏"/>
-              <II label="Sect"               value={T.sect}/>
-              <II label="Temple Type"        value={T.temple_type}/>
-              <II label="Architecture"       value={T.architecture_style}/>
-              <II label="Est. Year Built"    value={T.estimated_year_built}/>
-              <II label="Founded By"         value={T.founded_by}/>
-              <II label="Last Renovation"    value={T.last_renovation_year}/>
-              <II label="Building Condition" value={T.building_condition}/>
-              <II label="Managing Authority" value={T.managing_authority}/>
-              <II label="Trust Name"         value={T.trust_name}/>
-              <II label="Setting"            value={T.setting_environment}    icon="🌿"/>
-              <II label="Local Landmark"     value={T.local_landmark}         icon="🏛️"/>
-              <II label="Weekly Special Day" value={T.weekly_special_day}     icon="⭐"/>
-              <II label="Dress Code"         value={T.dress_code}             icon="👗"/>
-              {v(T.online_puja_available) && T.online_puja_available!=='no' && (
-                <II label="Online Puja" value={T.online_puja_available==='yes'?'Available ✅':'Coming Soon 🔜'}/>
+              <II label="Primary Deity" value={T.primary_deity} icon="🙏" />
+              <II label="Sect" value={T.sect} />
+              <II label="Temple Type" value={T.temple_type} />
+              <II label="Architecture" value={T.architecture_style} />
+              <II label="Est. Year Built" value={T.estimated_year_built} />
+              <II label="Founded By" value={T.founded_by} />
+              <II label="Last Renovation" value={T.last_renovation_year} />
+              <II label="Building Condition" value={T.building_condition} />
+              <II label="Managing Authority" value={T.managing_authority} />
+              <II label="Trust Name" value={T.trust_name} />
+              <II label="Setting" value={T.setting_environment} icon="🌿" />
+              <II label="Local Landmark" value={T.local_landmark} icon="🏛️" />
+              <II label="Weekly Special Day" value={T.weekly_special_day} icon="⭐" />
+              <II label="Dress Code" value={T.dress_code} icon="👗" />
+              {v(T.online_puja_available) && T.online_puja_available !== 'no' && (
+                <II label="Online Puja" value={T.online_puja_available === 'yes' ? 'Available ✅' : 'Coming Soon 🔜'} />
               )}
-              <II label="Local Name"         value={T.name_local}/>
-              <II label="Best Time to Visit" value={T.best_time_to_visit}     icon="📅" full/>
-              <II label="Address"            value={T.address}                icon="📌" full/>
+              <II label="Local Name" value={T.name_local} />
+              <II label="Best Time to Visit" value={T.best_time_to_visit} icon="📅" full />
+              <II label="Address" value={T.address} icon="📌" full />
             </div>
           </div>
 
           {/* ── HISTORY & SIGNIFICANCE ── */}
-          {(v(T.history)||v(T.significance)||v(T.sthala_purana)||v(T.puranic_stories)||v(T.history_hindi)) && (
+          {(v(T.history) || v(T.significance) || v(T.sthala_purana) || v(T.puranic_stories) || v(T.history_hindi)) && (
             <div className="sec" id="history">
               <div className="sec-h"><div className="sec-icon">📜</div>History & Significance</div>
 
               {v(T.history) && <p className="prose">{T.history}</p>}
 
               {v(T.sthala_purana) && (
-                <p className="prose prose-sm" style={{fontStyle:'italic',marginBottom:14}}>{T.sthala_purana}</p>
+                <p className="prose prose-sm" style={{ fontStyle: 'italic', marginBottom: 14 }}>{T.sthala_purana}</p>
               )}
 
               {v(T.puranic_stories) && (
                 <div className="puranic">
                   <div className="puranic-lbl">📖 Puranic Story</div>
-                  <p className="prose-sm" style={{fontStyle:'italic'}}>{T.puranic_stories}</p>
+                  <p className="prose-sm" style={{ fontStyle: 'italic' }}>{T.puranic_stories}</p>
                 </div>
               )}
 
               {v(T.significance) && (
                 <div className="significance">
                   <div className="sig-lbl">✨ Why Visit</div>
-                  <p style={{fontSize:14,lineHeight:1.8,color:'var(--km)'}}>{T.significance}</p>
+                  <p style={{ fontSize: 14, lineHeight: 1.8, color: 'var(--km)' }}>{T.significance}</p>
                 </div>
               )}
 
               {v(T.history_hindi) && (
                 <div className="hindi-block">
                   <div className="hindi-lbl">हिंदी में इतिहास</div>
-                  <p style={{fontFamily:"'Noto Sans Devanagari',sans-serif",fontSize:14,lineHeight:1.9,color:'var(--km)'}}>{T.history_hindi}</p>
+                  <p style={{ fontFamily: "'Noto Sans Devanagari',sans-serif", fontSize: 14, lineHeight: 1.9, color: 'var(--km)' }}>{T.history_hindi}</p>
                 </div>
               )}
             </div>
           )}
 
           {/* ── PUJA & SERVICES ── */}
-          {(pujaSchedule.length>0 || pujaServices.length>0) && (
+          {(pujaSchedule.length > 0 || pujaServices.length > 0) && (
             <div className="sec" id="puja">
               <div className="sec-h"><div className="sec-icon">🕉️</div>Puja & Aarti</div>
 
               {pujaSchedule.length > 0 && (
                 <>
-                  <SLabel text="Daily Schedule"/>
-                  {pujaSchedule.map((p,i)=>(
+                  <SLabel text="Daily Schedule" />
+                  {pujaSchedule.map((p, i) => (
                     <div key={i} className="prow">
-                      <div><span className="pname">{p.puja_name}</span>{p.puja_type&&<span style={{fontSize:11,color:'var(--kl)',marginLeft:8}}>{p.puja_type}</span>}</div>
+                      <div><span className="pname">{p.puja_name}</span>{p.puja_type && <span style={{ fontSize: 11, color: 'var(--kl)', marginLeft: 8 }}>{p.puja_type}</span>}</div>
                       <span className="ptime">{formatTime(p.puja_time)}</span>
                     </div>
                   ))}
-                  {pujaServices.length>0 && <div style={{height:16}}/>}
+                  {pujaServices.length > 0 && <div style={{ height: 16 }} />}
                 </>
               )}
 
               {pujaServices.length > 0 && (
                 <>
-                  <SLabel text="Available Puja Services"/>
+                  <SLabel text="Available Puja Services" />
                   <div className="chip-grid">
-                    {pujaServices.map(([,name])=>(
-                      <div key={name} className="chip chip-saffron"><div className="dot"/>{name}</div>
+                    {pujaServices.map(([, name]) => (
+                      <div key={name} className="chip chip-saffron"><div className="dot" />{name}</div>
                     ))}
                   </div>
                 </>
@@ -537,12 +527,12 @@ export default function TempleDetailPage() {
           {mantras.length > 0 && (
             <div className="sec" id="mantras">
               <div className="sec-h"><div className="sec-icon">🕉️</div>Mantras</div>
-              {mantras.map(m=>(
+              {mantras.map(m => (
                 <div key={m.id} className="mantra">
-                  <div className="m-title">{m.title}{m.mantra_type&&<span style={{opacity:.4,fontWeight:400,marginLeft:8,fontSize:11}}>· {m.mantra_type}</span>}</div>
-                  {m.sanskrit        && <div className="m-sk">{m.sanskrit}</div>}
+                  <div className="m-title">{m.title}{m.mantra_type && <span style={{ opacity: .4, fontWeight: 400, marginLeft: 8, fontSize: 11 }}>· {m.mantra_type}</span>}</div>
+                  {m.sanskrit && <div className="m-sk">{m.sanskrit}</div>}
                   {m.transliteration && <div className="m-ro">{m.transliteration}</div>}
-                  {m.meaning         && <div className="m-mn">{m.meaning}</div>}
+                  {m.meaning && <div className="m-mn">{m.meaning}</div>}
                 </div>
               ))}
             </div>
@@ -552,17 +542,17 @@ export default function TempleDetailPage() {
           {festivals.length > 0 && (
             <div className="sec" id="festivals">
               <div className="sec-h"><div className="sec-icon">🎉</div>Annual Festivals</div>
-              {festivals.map((f,i)=>(
+              {festivals.map((f, i) => (
                 <div key={i} className="fest">
-                  <div className="fest-mo">{f.month?MONTHS[f.month]:'—'}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:16,fontWeight:700,color:'var(--k)'}}>
-                      {f.name}{f.is_major&&<span className="major">★ Major</span>}
+                  <div className="fest-mo">{f.month ? MONTHS[f.month] : '—'}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--k)' }}>
+                      {f.name}{f.is_major && <span className="major">★ Major</span>}
                     </div>
-                    {f.hindu_month&&<div style={{fontSize:11,color:'var(--s)',marginTop:2}}>{f.hindu_month} Month</div>}
-                    {f.duration_days&&<div style={{fontSize:11,color:'var(--kl)',marginTop:2}}>{f.duration_days} day{f.duration_days>1?'s':''}</div>}
-                    {f.description&&<p style={{fontSize:13,color:'var(--kl)',lineHeight:1.6,marginTop:6}}>{f.description}</p>}
-                    {f.significance&&<p style={{fontSize:12,color:'var(--kl)',lineHeight:1.5,marginTop:4,fontStyle:'italic'}}>{f.significance}</p>}
+                    {f.hindu_month && <div style={{ fontSize: 11, color: 'var(--s)', marginTop: 2 }}>{f.hindu_month} Month</div>}
+                    {f.duration_days && <div style={{ fontSize: 11, color: 'var(--kl)', marginTop: 2 }}>{f.duration_days} day{f.duration_days > 1 ? 's' : ''}</div>}
+                    {f.description && <p style={{ fontSize: 13, color: 'var(--kl)', lineHeight: 1.6, marginTop: 6 }}>{f.description}</p>}
+                    {f.significance && <p style={{ fontSize: 12, color: 'var(--kl)', lineHeight: 1.5, marginTop: 4, fontStyle: 'italic' }}>{f.significance}</p>}
                   </div>
                 </div>
               ))}
@@ -573,38 +563,38 @@ export default function TempleDetailPage() {
           {sevas.length > 0 && (
             <div className="sec" id="sevas">
               <div className="sec-h"><div className="sec-icon">🙏</div>Sevas & Offerings</div>
-              {sevas.map(s=>(
+              {sevas.map(s => (
                 <div key={s.id} className="seva">
                   <div>
-                    <div style={{fontSize:14,fontWeight:500,color:'var(--k)'}}>{s.name}</div>
-                    {s.description&&<div style={{fontSize:12,color:'var(--kl)',marginTop:2}}>{s.description}</div>}
-                    {s.timing&&<div style={{fontSize:11,color:'var(--kl)',marginTop:3}}>⏰ {s.timing}</div>}
-                    {s.advance_booking&&<div style={{fontSize:11,color:'var(--s)',marginTop:3,fontWeight:600}}>📅 Advance booking required</div>}
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--k)' }}>{s.name}</div>
+                    {s.description && <div style={{ fontSize: 12, color: 'var(--kl)', marginTop: 2 }}>{s.description}</div>}
+                    {s.timing && <div style={{ fontSize: 11, color: 'var(--kl)', marginTop: 3 }}>⏰ {s.timing}</div>}
+                    {s.advance_booking && <div style={{ fontSize: 11, color: 'var(--s)', marginTop: 3, fontWeight: 600 }}>📅 Advance booking required</div>}
                   </div>
-                  <div className="seva-price">{s.is_free?'✅ Free':s.price?`₹${s.price}`:'—'}</div>
+                  <div className="seva-price">{s.is_free ? '✅ Free' : s.price ? `₹${s.price}` : '—'}</div>
                 </div>
               ))}
             </div>
           )}
 
           {/* ── FACILITIES & PROGRAMS ── */}
-          {(facilities.length>0 || programs.length>0) && (
+          {(facilities.length > 0 || programs.length > 0) && (
             <div className="sec" id="facilities">
               <div className="sec-h"><div className="sec-icon">🏗️</div>Facilities & Programs</div>
-              {facilities.length>0&&(
+              {facilities.length > 0 && (
                 <>
-                  <SLabel text="Available Facilities"/>
+                  <SLabel text="Available Facilities" />
                   <div className="chip-grid">
-                    {facilities.map(([,name])=><div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}
+                    {facilities.map(([, name]) => <div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}
                   </div>
                 </>
               )}
-              {programs.length>0&&(
+              {programs.length > 0 && (
                 <>
-                  <div style={{height:14}}/>
-                  <SLabel text="Community Programs"/>
+                  <div style={{ height: 14 }} />
+                  <SLabel text="Community Programs" />
                   <div className="chip-grid">
-                    {programs.map(([,name])=><div key={name} className="chip chip-blue">{name}</div>)}
+                    {programs.map(([, name]) => <div key={name} className="chip chip-blue">{name}</div>)}
                   </div>
                 </>
               )}
@@ -615,15 +605,15 @@ export default function TempleDetailPage() {
           {priests.length > 0 && (
             <div className="sec" id="priests">
               <div className="sec-h"><div className="sec-icon">🧘</div>Head Priests & Staff</div>
-              {priests.map(p=>(
+              {priests.map(p => (
                 <div key={p.id} className="priest">
-                  <div className="priest-name">{p.full_name}{p.is_head_priest&&<span className="priest-head">Head Priest</span>}</div>
-                  {p.title_designation&&<div className="priest-d">🪷 {p.title_designation}</div>}
-                  {p.sampradaya      &&<div className="priest-d">📿 Sampradaya: {p.sampradaya}</div>}
-                  {p.years_of_service&&<div className="priest-d">⏳ Serving {p.years_of_service} years</div>}
-                  {p.languages_known &&<div className="priest-d">🗣️ Languages: {p.languages_known}</div>}
-                  {p.qualification   &&<div className="priest-d">🎓 {p.qualification}</div>}
-                  {p.appointment_type&&<div className="priest-d">📋 {p.appointment_type}</div>}
+                  <div className="priest-name">{p.full_name}{p.is_head_priest && <span className="priest-head">Head Priest</span>}</div>
+                  {p.title_designation && <div className="priest-d">🪷 {p.title_designation}</div>}
+                  {p.sampradaya && <div className="priest-d">📿 Sampradaya: {p.sampradaya}</div>}
+                  {p.years_of_service && <div className="priest-d">⏳ Serving {p.years_of_service} years</div>}
+                  {p.languages_known && <div className="priest-d">🗣️ Languages: {p.languages_known}</div>}
+                  {p.qualification && <div className="priest-d">🎓 {p.qualification}</div>}
+                  {p.appointment_type && <div className="priest-d">📋 {p.appointment_type}</div>}
                 </div>
               ))}
             </div>
@@ -632,15 +622,15 @@ export default function TempleDetailPage() {
           {/* ── CONTACT ── */}
           <div className="sec" id="contact">
             <div className="sec-h"><div className="sec-icon">📞</div>Contact & Connect</div>
-            {v(T.phone)           &&<div className="crow"><div className="clbl">Phone</div><a href={`tel:${T.phone}`} className="clink">📞 {T.phone}</a></div>}
-            {v(T.whatsapp_number) &&<div className="crow"><div className="clbl">WhatsApp</div><a href={`https://wa.me/${T.whatsapp_number.replace(/\D/g,'')}`} className="clink" target="_blank" rel="noopener noreferrer">💬 Chat on WhatsApp →</a></div>}
-            {v(T.official_email)  &&<div className="crow"><div className="clbl">Email</div><a href={`mailto:${T.official_email}`} className="clink">✉️ {T.official_email}</a></div>}
-            {v(T.website_url)     &&<div className="crow"><div className="clbl">Website</div><a href={T.website_url} target="_blank" rel="noopener noreferrer" className="clink">🌐 Visit Official Website →</a></div>}
-            {v(T.best_time_to_call)&&<div className="crow"><div className="clbl">Best Time to Call</div><div className="cval">⏰ {T.best_time_to_call}</div></div>}
-            {v(T.trust_registration_no)&&<div className="crow"><div className="clbl">Registration No.</div><div className="cval">{T.trust_registration_no}</div></div>}
+            {v(T.phone) && <div className="crow"><div className="clbl">Phone</div><a href={`tel:${T.phone}`} className="clink">📞 {T.phone}</a></div>}
+            {v(T.whatsapp_number) && <div className="crow"><div className="clbl">WhatsApp</div><a href={`https://wa.me/${T.whatsapp_number.replace(/\D/g, '')}`} className="clink" target="_blank" rel="noopener noreferrer">💬 Chat on WhatsApp →</a></div>}
+            {v(T.official_email) && <div className="crow"><div className="clbl">Email</div><a href={`mailto:${T.official_email}`} className="clink">✉️ {T.official_email}</a></div>}
+            {v(T.website_url) && <div className="crow"><div className="clbl">Website</div><a href={T.website_url} target="_blank" rel="noopener noreferrer" className="clink">🌐 Visit Official Website →</a></div>}
+            {v(T.best_time_to_call) && <div className="crow"><div className="clbl">Best Time to Call</div><div className="cval">⏰ {T.best_time_to_call}</div></div>}
+            {v(T.trust_registration_no) && <div className="crow"><div className="clbl">Registration No.</div><div className="cval">{T.trust_registration_no}</div></div>}
 
 
-            
+
           </div>
         </div>
 
@@ -651,13 +641,13 @@ export default function TempleDetailPage() {
           {pujaSchedule.length > 0 && (
             <div className="card">
               <div className="card-h">⏰ Today's Schedule</div>
-              {pujaSchedule.slice(0,7).map((p,i)=>(
+              {pujaSchedule.slice(0, 7).map((p, i) => (
                 <div key={i} className="prow">
                   <span className="pname">{p.puja_name}</span>
                   <span className="ptime">{formatTime(p.puja_time)}</span>
                 </div>
               ))}
-              {T.live_darshan_available==='yes' && v(T.live_stream_url) && (
+              {T.live_darshan_available === 'yes' && v(T.live_stream_url) && (
                 <a href={T.live_stream_url} target="_blank" rel="noopener noreferrer" className="abtn red">🔴 Watch Live Aarti</a>
               )}
             </div>
@@ -669,12 +659,12 @@ export default function TempleDetailPage() {
             <div className="sg">
               <div className="stat"><span className="sv">{T.city}</span><span className="sl2">City</span></div>
               <div className="stat"><span className="sv">{T.state}</span><span className="sl2">State</span></div>
-              {v(T.primary_deity)&&<div className="stat" style={{gridColumn:'1/-1'}}><span className="sv" style={{fontSize:13}}>{T.primary_deity}</span><span className="sl2">Deity</span></div>}
-              {openTime&&<div className="stat"><span className="sv">{openTime}</span><span className="sl2">Opens</span></div>}
-              {closeTime&&<div className="stat"><span className="sv">{closeTime}</span><span className="sl2">Closes</span></div>}
-              {fee&&<div className="stat" style={{gridColumn:'1/-1'}}><span className="sv" style={{fontSize:16}}>{fee}</span><span className="sl2">Entry Fee</span></div>}
-              {v(T.estimated_year_built)&&<div className="stat" style={{gridColumn:'1/-1'}}><span className="sv" style={{fontSize:12}}>{T.estimated_year_built}</span><span className="sl2">Established</span></div>}
-              {v(T.architecture_style)&&<div className="stat" style={{gridColumn:'1/-1'}}><span className="sv" style={{fontSize:12}}>{T.architecture_style}</span><span className="sl2">Architecture</span></div>}
+              {v(T.primary_deity) && <div className="stat" style={{ gridColumn: '1/-1' }}><span className="sv" style={{ fontSize: 13 }}>{T.primary_deity}</span><span className="sl2">Deity</span></div>}
+              {openTime && <div className="stat"><span className="sv">{openTime}</span><span className="sl2">Opens</span></div>}
+              {closeTime && <div className="stat"><span className="sv">{closeTime}</span><span className="sl2">Closes</span></div>}
+              {fee && <div className="stat" style={{ gridColumn: '1/-1' }}><span className="sv" style={{ fontSize: 16 }}>{fee}</span><span className="sl2">Entry Fee</span></div>}
+              {v(T.estimated_year_built) && <div className="stat" style={{ gridColumn: '1/-1' }}><span className="sv" style={{ fontSize: 12 }}>{T.estimated_year_built}</span><span className="sl2">Established</span></div>}
+              {v(T.architecture_style) && <div className="stat" style={{ gridColumn: '1/-1' }}><span className="sv" style={{ fontSize: 12 }}>{T.architecture_style}</span><span className="sl2">Architecture</span></div>}
             </div>
           </div>
 
@@ -682,23 +672,23 @@ export default function TempleDetailPage() {
           {T.accept_online_donations && (
             <div className="card">
               <div className="card-h">💰 Support This Temple</div>
-              <p style={{fontSize:12,color:'var(--kl)',marginBottom:10}}>Your donation maintains this sacred space</p>
+              <p style={{ fontSize: 12, color: 'var(--kl)', marginBottom: 10 }}>Your donation maintains this sacred space</p>
               <div className="dc">
-                {T.donation_temple_renovation&&<div className="cause"><div className="cause-i">🛕</div><div className="cause-n">Renovation</div></div>}
-                {T.donation_annadanam        &&<div className="cause"><div className="cause-i">🍱</div><div className="cause-n">Annadanam</div></div>}
-                {T.donation_priest_salary    &&<div className="cause"><div className="cause-i">🧘</div><div className="cause-n">Priest Salary</div></div>}
-                {T.donation_vedic_education  &&<div className="cause"><div className="cause-i">📚</div><div className="cause-n">Vedic Edu</div></div>}
-                {T.donation_festival         &&<div className="cause"><div className="cause-i">🎉</div><div className="cause-n">Festivals</div></div>}
-                {T.donation_medical_camps    &&<div className="cause"><div className="cause-i">🏥</div><div className="cause-n">Medical</div></div>}
-                {T.donation_general          &&<div className="cause"><div className="cause-i">🙏</div><div className="cause-n">General</div></div>}
+                {T.donation_temple_renovation && <div className="cause"><div className="cause-i">🛕</div><div className="cause-n">Renovation</div></div>}
+                {T.donation_annadanam && <div className="cause"><div className="cause-i">🍱</div><div className="cause-n">Annadanam</div></div>}
+                {T.donation_priest_salary && <div className="cause"><div className="cause-i">🧘</div><div className="cause-n">Priest Salary</div></div>}
+                {T.donation_vedic_education && <div className="cause"><div className="cause-i">📚</div><div className="cause-n">Vedic Edu</div></div>}
+                {T.donation_festival && <div className="cause"><div className="cause-i">🎉</div><div className="cause-n">Festivals</div></div>}
+                {T.donation_medical_camps && <div className="cause"><div className="cause-i">🏥</div><div className="cause-n">Medical</div></div>}
+                {T.donation_general && <div className="cause"><div className="cause-i">🙏</div><div className="cause-n">General</div></div>}
               </div>
-              {v(T.upi_id)&&(
+              {v(T.upi_id) && (
                 <>
-                  <p style={{fontSize:11,textAlign:'center',color:'var(--kl)',margin:'8px 0 4px'}}>UPI: <strong>{T.upi_id}</strong></p>
-                  <button className="abtn" onClick={()=>window.open(`upi://pay?pa=${T.upi_id}`)}>💳 Donate via UPI</button>
+                  <p style={{ fontSize: 11, textAlign: 'center', color: 'var(--kl)', margin: '8px 0 4px' }}>UPI: <strong>{T.upi_id}</strong></p>
+                  <button className="abtn" onClick={() => window.open(`upi://pay?pa=${T.upi_id}`)}>💳 Donate via UPI</button>
                 </>
               )}
-              {v(T.certificate_80g_no)&&<p style={{fontSize:11,color:'var(--ok)',marginTop:8,textAlign:'center'}}>80G Exempt: {T.certificate_80g_no}</p>}
+              {v(T.certificate_80g_no) && <p style={{ fontSize: 11, color: 'var(--ok)', marginTop: 8, textAlign: 'center' }}>80G Exempt: {T.certificate_80g_no}</p>}
             </div>
           )}
 
@@ -706,27 +696,27 @@ export default function TempleDetailPage() {
           <div className="card">
             <div className="card-h">📍 How to Reach</div>
             <div className="map-ph">🛕</div>
-            {v(T.nearest_railway)  &&<div className="map-row"><span>🚂</span>{T.nearest_railway}</div>}
-            {v(T.nearest_airport)  &&<div className="map-row"><span>✈️</span>{T.nearest_airport}</div>}
-            {v(T.nearest_bus_stand)&&<div className="map-row"><span>🚌</span>{T.nearest_bus_stand}</div>}
-            {v(T.local_landmark)   &&<div className="map-row"><span>🏛️</span>Near: {T.local_landmark}</div>}
-            {v(T.address)          &&<div className="map-row"><span>📌</span>{T.address}</div>}
-            {v(T.pincode)          &&<div className="map-row"><span>📮</span>PIN: {T.pincode}</div>}
-            {mapsUrl&&<a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="abtn">🗺️ Open in Google Maps</a>}
+            {v(T.nearest_railway) && <div className="map-row"><span>🚂</span>{T.nearest_railway}</div>}
+            {v(T.nearest_airport) && <div className="map-row"><span>✈️</span>{T.nearest_airport}</div>}
+            {v(T.nearest_bus_stand) && <div className="map-row"><span>🚌</span>{T.nearest_bus_stand}</div>}
+            {v(T.local_landmark) && <div className="map-row"><span>🏛️</span>Near: {T.local_landmark}</div>}
+            {v(T.address) && <div className="map-row"><span>📌</span>{T.address}</div>}
+            {v(T.pincode) && <div className="map-row"><span>📮</span>PIN: {T.pincode}</div>}
+            {mapsUrl && <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="abtn">🗺️ Open in Google Maps</a>}
           </div>
 
           {/* Verified */}
           <div className="card">
             <div className="verified">
-              <span style={{fontSize:24}}>✅</span>
+              <span style={{ fontSize: 24 }}>✅</span>
               <div>
                 <div className="vtext">Verified on BharatMandir</div>
-                <div style={{fontSize:10,color:'var(--ok)',opacity:.7,marginTop:2}}>
-                  {v(T.mkt_id)?`ID: ${T.mkt_id}`:'Details reviewed & approved'}
+                <div style={{ fontSize: 10, color: 'var(--ok)', opacity: .7, marginTop: 2 }}>
+                  {v(T.mkt_id) ? `ID: ${T.mkt_id}` : 'Details reviewed & approved'}
                 </div>
               </div>
             </div>
-            {v(T.managing_authority)&&<div style={{fontSize:12,color:'var(--kl)',marginTop:10,padding:'8px 10px',background:'var(--p)',borderRadius:8}}>🏛️ {T.managing_authority}</div>}
+            {v(T.managing_authority) && <div style={{ fontSize: 12, color: 'var(--kl)', marginTop: 10, padding: '8px 10px', background: 'var(--p)', borderRadius: 8 }}>🏛️ {T.managing_authority}</div>}
           </div>
 
         </div>
