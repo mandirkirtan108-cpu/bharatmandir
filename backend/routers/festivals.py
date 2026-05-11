@@ -32,11 +32,16 @@ class FestivalCreate(BaseModel):
     significance: Optional[str] = None
     month:        int
     hindu_month:  Optional[str] = None
-    typical_date: Optional[str] = None    # NEW: from schema typical_date field
+    typical_date: Optional[str] = None
     duration_days: int = 1
     is_major:     bool = False
     source:       Optional[str] = 'manual'
     ai_generated: bool = False
+    # Frontend display fields (accepted so POST does not error; stored if columns exist)
+    deity:        Optional[str] = None
+    type:         Optional[str] = None
+    emoji:        Optional[str] = None
+    color:        Optional[str] = None
 
 
 # ── GET /api/festivals ─────────────────────────────────────────────────────────
@@ -48,17 +53,19 @@ def get_all_festivals(
     limit:    int            = Query(200, ge=1, le=500),
 ):
     with get_db_cursor() as cur:
-        conditions = ["f.temple_id = t.id", "t.status = 'published'"]
+        where_parts = []
         params = []
 
         if month is not None:
-            conditions.append("f.month = %s")
+            where_parts.append("f.month = %s")
             params.append(month)
         if is_major is not None:
-            conditions.append("f.is_major = %s")
+            where_parts.append("f.is_major = %s")
             params.append(is_major)
 
-        where = " AND ".join(conditions)
+        where_clause = ""
+        if where_parts:
+            where_clause = "WHERE " + " AND ".join(where_parts)
 
         cur.execute(f"""
             SELECT
@@ -71,7 +78,8 @@ def get_all_festivals(
                 t.city AS temple_city,
                 t.slug AS temple_slug
             FROM festivals f
-            JOIN temples t ON {where}
+            JOIN temples t ON f.temple_id = t.id AND t.status = 'published'
+            {where_clause}
             ORDER BY f.month ASC NULLS LAST, f.is_major DESC, f.name ASC
             LIMIT %s
         """, params + [limit])

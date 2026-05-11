@@ -701,7 +701,7 @@ function FestivalCard({ festival, compact, onClick }) {
 
 function FestivalModal({ festival, onClose }) {
   const monthName = GREGORIAN_MONTHS[festival.month - 1] || '';
-  const hinduMonth = HINDU_MONTHS[(festival.month) % 12] || '';
+  const hinduMonth = HINDU_MONTHS[(festival.month - 1) % 12] || '';
 
   return (
     <div className="fest-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
