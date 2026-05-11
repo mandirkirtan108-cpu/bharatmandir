@@ -97,33 +97,25 @@ function festKey(f) {
 const DEITY_FILTERS = ['All','Shiva','Vishnu','Ganesha','Durga','Lakshmi','Krishna','Rama','Saraswati'];
 const TYPE_FILTERS  = ['All','Major','With Temple'];
 
-// ── Claude API prompt ─────────────────────────────────────────────────────────
-const CLAUDE_PROMPT = `Give me a complete list of ALL Hindu festivals for the year 2025 — both major and minor.
+// ── Claude API prompts (split into 2 batches to avoid max_tokens truncation) ──
+function makePrompt(months) {
+  return `List ALL Hindu festivals for 2025 in months: ${months}.
 Return ONLY a valid JSON array. No explanation, no markdown, no backticks, no extra text.
-Each object must have these exact fields:
-{
-  "name": "Festival Name in English",
-  "month": 1,
-  "exact_date": "2025-01-14",
-  "display_date": "14 January 2025",
-  "hindu_tithi": "Pausha Shukla Chaturdashi",
-  "hindu_month": "Pausha",
-  "significance": "One line significance in English",
-  "description": "3-4 lines detailed description about rituals, story and importance in English",
-  "is_major": true,
-  "duration_days": 1,
-  "deity": "Surya",
-  "emoji": "🪁",
-  "color": "#E8650A"
-}
+Each object must have EXACTLY these fields:
+{"name":"string","month":1,"exact_date":"2025-01-14","display_date":"14 January 2025","hindu_tithi":"string","hindu_month":"string","significance":"one sentence","description":"2-3 sentences max","is_major":true,"duration_days":1,"deity":"Surya","emoji":"🪁","color":"#E8650A"}
 Rules:
-- Include at least 60 festivals covering all months and all regions of India
+- Cover every festival, vrat, Ekadashi, Purnima, Chaturthi in those months
+- Include regional festivals (Pongal, Onam, Bihu, Ugadi, Baisakhi etc.) where applicable
+- is_major=true only for nationally celebrated festivals
+- deity: Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other
+- description max 2-3 sentences (keep short to avoid truncation)
 - Sort by exact_date ascending
-- is_major = true only for nationally celebrated festivals
-- deity field = main deity worshipped (Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other)
-- emoji should match the festival mood
-- color should be a hex color matching the festival theme
-- Include: Ekadashis, Purnimas, Chaturthi vrats, regional festivals like Pongal/Onam/Bihu/Ugadi/Baisakhi, all Navratris, all major pujas`;
+- Output ONLY the JSON array, nothing else`;
+}
+
+// Batch 1: Jan–Jun  |  Batch 2: Jul–Dec
+const PROMPT_H1 = makePrompt('January, February, March, April, May, June');
+const PROMPT_H2 = makePrompt('July, August, September, October, November, December');
 
 export default function FestivalCalendarPage() {
   const [selectedMonth, setSelectedMonth]       = useState(new Date().getMonth() + 1);
@@ -150,13 +142,67 @@ export default function FestivalCalendarPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Fetch from Claude AI ────────────────────────────────────────────────────
+  // ── Single Claude API call helper ──────────────────────────────────────────
+  const callClaudeAPI = useCallback(async (prompt, apiKey) => {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        // ✅ 5000 tokens per half-year batch is plenty; well under limit
+        max_tokens: 5000,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error?.message || `HTTP ${response.status}`);
+    }
+    if (data.error) {
+      throw new Error(data.error.message || 'Unknown API error');
+    }
+
+    const rawText = data.content?.[0]?.text || '[]';
+
+    // Strip markdown fences if present
+    const cleaned = rawText
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+
+    try {
+      const parsed = JSON.parse(cleaned);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (parseErr) {
+      console.error('Failed to parse Claude JSON:', parseErr, '\nRaw:', rawText);
+      // ✅ Attempt partial recovery: extract complete objects before the truncation point
+      try {
+        const lastComma = cleaned.lastIndexOf('},');
+        if (lastComma !== -1) {
+          const partial = cleaned.substring(0, lastComma + 1) + ']';
+          const recovered = JSON.parse(partial);
+          console.warn(`Recovered ${recovered.length} festivals from truncated response`);
+          return Array.isArray(recovered) ? recovered : [];
+        }
+      } catch (_) { /* ignore recovery failure */ }
+      return [];
+    }
+  }, []);
+
+  // ── Fetch from Claude AI (2 parallel batches: Jan–Jun + Jul–Dec) ────────────
   const fetchFestivalsFromClaude = useCallback(async () => {
     setClaudeLoading(true);
     setClaudeError(false);
     setClaudeErrorMsg('');
 
-    // ✅ FIX 1: Use VITE_ prefix so Vite exposes this to the browser
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
 
     if (!apiKey) {
@@ -168,56 +214,15 @@ export default function FestivalCalendarPage() {
     }
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // ✅ FIX 2: Correct header key is 'x-api-key' (lowercase), value from VITE_ env var
-          'x-api-key': apiKey,
-          // ✅ FIX 3: Required anthropic-version header
-          'anthropic-version': '2023-06-01',
-          // ✅ FIX 4: Required header to allow direct browser access
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          // ✅ FIX 5: Updated to correct current model string
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 8000,
-          messages: [{ role: 'user', content: CLAUDE_PROMPT }],
-        }),
-      });
+      // ✅ Fire both half-year batches in parallel — each fits comfortably in 5000 tokens
+      const [h1, h2] = await Promise.all([
+        callClaudeAPI(PROMPT_H1, apiKey),
+        callClaudeAPI(PROMPT_H2, apiKey),
+      ]);
 
-      // ✅ FIX 6: Parse response and check for API-level errors before accessing content
-      const data = await response.json();
-
-      if (!response.ok) {
-        const errMsg = data?.error?.message || `HTTP ${response.status}`;
-        console.error('Claude API HTTP error:', response.status, data);
-        throw new Error(errMsg);
-      }
-
-      if (data.error) {
-        console.error('Claude API returned error object:', data.error);
-        throw new Error(data.error.message || 'Unknown API error');
-      }
-
-      // ✅ FIX 7: Safely access content, strip any accidental markdown fences
-      const rawText = data.content?.[0]?.text || '[]';
-      const cleaned = rawText
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
-
-      let festivals = [];
-      try {
-        festivals = JSON.parse(cleaned);
-      } catch (parseErr) {
-        console.error('Failed to parse Claude JSON response:', parseErr, '\nRaw text:', rawText);
-        throw new Error('Claude returned invalid JSON. Check console for details.');
-      }
-
-      setClaudeFestivals(Array.isArray(festivals) ? festivals : []);
+      const combined = [...h1, ...h2];
+      console.log(`Claude returned ${h1.length} H1 + ${h2.length} H2 = ${combined.length} total festivals`);
+      setClaudeFestivals(combined);
     } catch (err) {
       console.error('Claude API fetch error:', err);
       setClaudeError(true);
@@ -226,7 +231,7 @@ export default function FestivalCalendarPage() {
     } finally {
       setClaudeLoading(false);
     }
-  }, []);
+  }, [callClaudeAPI]);
 
   // ── On mount ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -356,7 +361,7 @@ export default function FestivalCalendarPage() {
           {claudeLoading && (
             <div className="claude-status">
               <span className="claude-spinner">✨</span>
-              festivals is loading
+              Claude AI se festivals fetch ho rahe hain…
             </div>
           )}
           {claudeError && !claudeLoading && (
@@ -429,7 +434,7 @@ export default function FestivalCalendarPage() {
         {isAnyLoading && allFestivals.length === 0 ? (
           <div className="fest-loading">
             <div className="fest-loading-spinner">🪔</div>
-            <p>festival loading on cloude</p>
+            <p>Claude AI se festivals load ho rahe hain…</p>
           </div>
         ) : viewMode === 'calendar' ? (
           <>
@@ -483,7 +488,7 @@ export default function FestivalCalendarPage() {
             {claudeLoading && allFestivals.length > 0 && (
               <div className="partial-notice">
                 <span className="claude-spinner" style={{ fontSize:14 }}>✨</span>
-                festivals loading
+                More festivals load ho rahe hain Claude AI se…
               </div>
             )}
 
