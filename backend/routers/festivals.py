@@ -44,17 +44,18 @@ def get_all_festivals(
     limit:    int            = Query(200, ge=1, le=500),
 ):
     with get_db_cursor() as cur:
-        conditions = ["f.temple_id = t.id", "t.status = 'published'"]
+        # ✅ FIX: JOIN conditions (structural) separated from WHERE conditions (filters)
+        where_conditions = ["t.status = 'published'"]
         params = []
 
         if month is not None:
-            conditions.append("f.month = %s")
+            where_conditions.append("f.month = %s")
             params.append(month)
         if is_major is not None:
-            conditions.append("f.is_major = %s")
+            where_conditions.append("f.is_major = %s")
             params.append(is_major)
 
-        where = " AND ".join(conditions)
+        where_clause = " AND ".join(where_conditions)
 
         cur.execute(f"""
             SELECT
@@ -68,7 +69,8 @@ def get_all_festivals(
                 t.city AS temple_city,
                 t.slug AS temple_slug
             FROM festivals f
-            JOIN temples t ON {where}
+            JOIN temples t ON f.temple_id = t.id
+            WHERE {where_clause}
             ORDER BY f.month ASC NULLS LAST, f.is_major DESC, f.name ASC
             LIMIT %s
         """, params + [limit])
@@ -96,8 +98,9 @@ def get_festivals_by_month(month_number: int):
                 t.name AS temple_name,
                 t.slug AS temple_slug
             FROM festivals f
-            JOIN temples t ON f.temple_id = t.id AND t.status = 'published'
+            JOIN temples t ON f.temple_id = t.id
             WHERE f.month = %s
+              AND t.status = 'published'
             ORDER BY f.is_major DESC, f.name ASC
         """, (month_number,))
         rows = cur.fetchall()
@@ -114,6 +117,11 @@ def create_festival(body: FestivalCreate):
     if body.duration_days < 1:
         raise HTTPException(400, "duration_days must be at least 1")
 
+    # ✅ FIX: strip name once and reuse, avoid stripping twice
+    festival_name = body.name.strip()
+    if not festival_name:
+        raise HTTPException(400, "name must not be empty or whitespace")
+
     with get_db_cursor() as cur:
         cur.execute("SELECT id, name, slug FROM temples WHERE id = %s", (body.temple_id,))
         temple = cur.fetchone()
@@ -122,10 +130,10 @@ def create_festival(body: FestivalCreate):
 
         cur.execute(
             "SELECT id FROM festivals WHERE temple_id = %s AND name = %s AND month = %s",
-            (body.temple_id, body.name.strip(), body.month)
+            (body.temple_id, festival_name, body.month)
         )
         if cur.fetchone():
-            raise HTTPException(409, f"'{body.name}' already exists for this temple in that month")
+            raise HTTPException(409, f"'{festival_name}' already exists for this temple in that month")
 
         cur.execute("""
             INSERT INTO festivals (
@@ -137,7 +145,7 @@ def create_festival(body: FestivalCreate):
             ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             RETURNING id
         """, (
-            body.temple_id, body.name.strip(), body.description, body.significance,
+            body.temple_id, festival_name, body.description, body.significance,
             body.month, body.hindu_month, body.typical_date,
             body.duration_days, body.is_major,
             body.source or 'manual', body.ai_generated,
@@ -148,7 +156,7 @@ def create_festival(body: FestivalCreate):
 
     return {
         "success":     True,
-        "message":     f"Festival '{body.name}' added to {temple['name']}",
+        "message":     f"Festival '{festival_name}' added to {temple['name']}",
         "festival_id": festival_id,
         "temple_slug": temple["slug"],
     }

@@ -126,16 +126,17 @@ Rules:
 - Include: Ekadashis, Purnimas, Chaturthi vrats, regional festivals like Pongal/Onam/Bihu/Ugadi/Baisakhi, all Navratris, all major pujas`;
 
 export default function FestivalCalendarPage() {
-  const [selectedMonth, setSelectedMonth]     = useState(new Date().getMonth() + 1);
-  const [viewMode, setViewMode]               = useState('calendar');
-  const [deityFilter, setDeityFilter]         = useState('All');
-  const [typeFilter, setTypeFilter]           = useState('All');
-  const [searchQuery, setSearchQuery]         = useState('');
-  const [apiFestivals, setApiFestivals]       = useState([]);   // from your backend
-  const [claudeFestivals, setClaudeFestivals] = useState([]);   // from Claude AI
-  const [loading, setLoading]                 = useState(true);
-  const [claudeLoading, setClaudeLoading]     = useState(true);
-  const [claudeError, setClaudeError]         = useState(false);
+  const [selectedMonth, setSelectedMonth]       = useState(new Date().getMonth() + 1);
+  const [viewMode, setViewMode]                 = useState('calendar');
+  const [deityFilter, setDeityFilter]           = useState('All');
+  const [typeFilter, setTypeFilter]             = useState('All');
+  const [searchQuery, setSearchQuery]           = useState('');
+  const [apiFestivals, setApiFestivals]         = useState([]);
+  const [claudeFestivals, setClaudeFestivals]   = useState([]);
+  const [loading, setLoading]                   = useState(true);
+  const [claudeLoading, setClaudeLoading]       = useState(true);
+  const [claudeError, setClaudeError]           = useState(false);
+  const [claudeErrorMsg, setClaudeErrorMsg]     = useState('');
   const [selectedFestival, setSelectedFestival] = useState(null);
 
   const currentYear = new Date().getFullYear();
@@ -153,32 +154,74 @@ export default function FestivalCalendarPage() {
   const fetchFestivalsFromClaude = useCallback(async () => {
     setClaudeLoading(true);
     setClaudeError(false);
+    setClaudeErrorMsg('');
+
+    // ✅ FIX 1: Use VITE_ prefix so Vite exposes this to the browser
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+
+    if (!apiKey) {
+      console.error('VITE_ANTHROPIC_API_KEY is not set in your .env file');
+      setClaudeError(true);
+      setClaudeErrorMsg('API key missing. Add VITE_ANTHROPIC_API_KEY to your .env file.');
+      setClaudeLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': import.meta.env.ANTHROPIC_API_KEY,
+          // ✅ FIX 2: Correct header key is 'x-api-key' (lowercase), value from VITE_ env var
+          'x-api-key': apiKey,
+          // ✅ FIX 3: Required anthropic-version header
           'anthropic-version': '2023-06-01',
+          // ✅ FIX 4: Required header to allow direct browser access
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
+          // ✅ FIX 5: Updated to correct current model string
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 8000,
           messages: [{ role: 'user', content: CLAUDE_PROMPT }],
         }),
       });
 
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-
+      // ✅ FIX 6: Parse response and check for API-level errors before accessing content
       const data = await response.json();
-      const text = data.content?.[0]?.text || '[]';
-      const clean = text.replace(/```json|```/g, '').trim();
-      const festivals = JSON.parse(clean);
+
+      if (!response.ok) {
+        const errMsg = data?.error?.message || `HTTP ${response.status}`;
+        console.error('Claude API HTTP error:', response.status, data);
+        throw new Error(errMsg);
+      }
+
+      if (data.error) {
+        console.error('Claude API returned error object:', data.error);
+        throw new Error(data.error.message || 'Unknown API error');
+      }
+
+      // ✅ FIX 7: Safely access content, strip any accidental markdown fences
+      const rawText = data.content?.[0]?.text || '[]';
+      const cleaned = rawText
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+
+      let festivals = [];
+      try {
+        festivals = JSON.parse(cleaned);
+      } catch (parseErr) {
+        console.error('Failed to parse Claude JSON response:', parseErr, '\nRaw text:', rawText);
+        throw new Error('Claude returned invalid JSON. Check console for details.');
+      }
+
       setClaudeFestivals(Array.isArray(festivals) ? festivals : []);
     } catch (err) {
-      console.error('Claude API error:', err);
+      console.error('Claude API fetch error:', err);
       setClaudeError(true);
+      setClaudeErrorMsg(err.message || 'Unknown error');
       setClaudeFestivals([]);
     } finally {
       setClaudeLoading(false);
@@ -202,7 +245,6 @@ export default function FestivalCalendarPage() {
   const allFestivals = useMemo(() => {
     const apiKeys = new Set(apiFestivals.map(festKey));
 
-    // Remove duplicates: drop Claude festivals that already exist in backend
     const claudeFiltered = claudeFestivals.filter(f => !apiKeys.has(festKey(f)));
 
     const enrichedAPI = apiFestivals.map(f => {
@@ -248,7 +290,6 @@ export default function FestivalCalendarPage() {
       const m = Number(f.month);
       if (m >= 1 && m <= 12) map[m].push(f);
     });
-    // Sort: by exact_date first, then major first, then by name
     Object.values(map).forEach(arr =>
       arr.sort((a, b) => {
         if (a.exact_date && b.exact_date) return a.exact_date.localeCompare(b.exact_date);
@@ -259,9 +300,9 @@ export default function FestivalCalendarPage() {
   }, [filtered]);
 
   const currentMonthFestivals = byMonth[selectedMonth] || [];
-  const totalCount  = filtered.length;
-  const apiCount    = apiFestivals.length;
-  const claudeCount = claudeFestivals.length;
+  const totalCount   = filtered.length;
+  const apiCount     = apiFestivals.length;
+  const claudeCount  = claudeFestivals.length;
   const isAnyLoading = loading || claudeLoading;
 
   const goMonth = dir => setSelectedMonth(m => {
@@ -320,8 +361,11 @@ export default function FestivalCalendarPage() {
           )}
           {claudeError && !claudeLoading && (
             <div className="claude-status claude-status-err">
-              ⚠️ Claude API se fetch nahi hua.{' '}
-              <button onClick={fetchFestivalsFromClaude} style={{ background:'none',border:'none',color:'inherit',cursor:'pointer',textDecoration:'underline' }}>
+              ⚠️ {claudeErrorMsg || 'Claude API se fetch nahi hua.'}{' '}
+              <button
+                onClick={fetchFestivalsFromClaude}
+                style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}
+              >
                 Retry karo
               </button>
             </div>
@@ -341,7 +385,10 @@ export default function FestivalCalendarPage() {
               onChange={e => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} style={{ background:'none',border:'none',cursor:'pointer',color:'var(--text-light)',fontSize:16,lineHeight:1,padding:'0 2px' }}>✕</button>
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-light)', fontSize:16, lineHeight:1, padding:'0 2px' }}
+              >✕</button>
             )}
           </div>
 
@@ -674,21 +721,18 @@ function FestivalCard({ festival, compact, onClick }) {
         <div className="fest-card-info">
           <div className="fest-card-name" title={festival.name}>{festival.name}</div>
 
-          {/* Date display */}
           {festival.display_date && (
             <div className="fest-card-date" style={{ color }}>
               📅 {festival.display_date}
             </div>
           )}
 
-          {/* Hindu tithi */}
           {festival.hindu_tithi && (
             <div className="fest-card-sub" title={festival.hindu_tithi}>
               {festival.hindu_tithi}
             </div>
           )}
 
-          {/* Significance if no tithi */}
           {!festival.hindu_tithi && festival.significance && (
             <div className="fest-card-sub" title={festival.significance}>
               {festival.significance}
@@ -756,7 +800,6 @@ function FestivalModal({ festival, onClose }) {
         <div className="fest-modal-body">
           <div className="fest-modal-divider" />
 
-          {/* Temple info */}
           {festival.temple_name && (
             <div className="fest-modal-temple-box">
               <div className="fest-modal-temple-label">🛕 CELEBRATED AT</div>
