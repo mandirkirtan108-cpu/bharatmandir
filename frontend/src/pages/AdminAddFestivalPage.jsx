@@ -386,7 +386,7 @@ export default function AdminAddFestivalPage() {
   // Auto-fill hindu_month when gregorian month changes
   useEffect(() => {
     if (form.month) {
-      setForm(f => ({ ...f, hindu_month: HINDU_MONTHS[(Number(f.month)) % 12] || '' }));
+      setForm(f => ({ ...f, hindu_month: HINDU_MONTHS[(Number(f.month) - 1) % 12] || '' }));
     }
   }, [form.month]);
 
