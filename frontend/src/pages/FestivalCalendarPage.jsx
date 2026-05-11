@@ -429,7 +429,7 @@ export default function FestivalCalendarPage() {
         {isAnyLoading && allFestivals.length === 0 ? (
           <div className="fest-loading">
             <div className="fest-loading-spinner">🪔</div>
-            <p>Claude AI se festivals load ho rahe hain…</p>
+            <p>festival loading on cloude</p>
           </div>
         ) : viewMode === 'calendar' ? (
           <>
@@ -483,7 +483,7 @@ export default function FestivalCalendarPage() {
             {claudeLoading && allFestivals.length > 0 && (
               <div className="partial-notice">
                 <span className="claude-spinner" style={{ fontSize:14 }}>✨</span>
-                More festivals load ho rahe hain Claude AI se…
+                festivals loading
               </div>
             )}
 
