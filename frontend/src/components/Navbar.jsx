@@ -79,6 +79,7 @@ export default function Navbar() {
             </div>
           </Link>
 
+          {/* ── Spacer: pushes nav links away from logo ── */}
           <div style={{ flex: 1 }} />
 
           {/* Desktop nav links */}
@@ -95,21 +96,9 @@ export default function Navbar() {
 
             <div className="nav-divider" />
 
-            {/* ── AI Spiritual Guide button ── */}
-            <Link
-              to="/spiritual-guide"
-              className={`nav-add-btn${isActive('/spiritual-guide') ? ' active' : ''}`}
-              style={{
-                background: isActive('/spiritual-guide')
-                  ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
-                  : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-                color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
-                borderColor: '#FF6B00',
-                fontWeight: 700,
-              }}
-            >
-              <span>🕉️</span>
-              <span>AI Guide</span>
+            <Link to="/admin/add" className="nav-add-btn">
+              <PlusCircle size={15} />
+              <span>Add Temple</span>
             </Link>
 
             <Link
@@ -231,7 +220,6 @@ export default function Navbar() {
             </Link>
           ))}
 
-          {/* ── AI Spiritual Guide in sidebar ── */}
           <Link
             to="/spiritual-guide"
             className={`sidebar-link${isActive('/spiritual-guide') ? ' active' : ''}`}
@@ -294,6 +282,11 @@ export default function Navbar() {
         </nav>
 
         <div className="sidebar-footer">
+          <Link to="/admin/add" className="nav-add-btn sidebar-add-btn" onClick={() => setSidebarOpen(false)}>
+            <PlusCircle size={15} />
+            <span>Add Temple</span>
+          </Link>
+
           <select
             className="nav-lang-select sidebar-lang"
             value={lang}
@@ -307,43 +300,6 @@ export default function Navbar() {
         </div>
 
       </aside>
-
-      {/* ── Floating AI Spiritual Guide button ────────────────────────── */}
-      <Link
-        to="/spiritual-guide"
-        style={{
-          position: 'fixed',
-          bottom: 28,
-          right: 28,
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '12px 20px',
-          borderRadius: 50,
-          fontSize: 14,
-          fontWeight: 700,
-          textDecoration: 'none',
-          whiteSpace: 'nowrap',
-          border: '2px solid #FF6B00',
-          background: isActive('/spiritual-guide')
-            ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
-            : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-          color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
-          boxShadow: '0 4px 20px rgba(255,107,0,0.35)',
-          transition: 'all .2s',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.transform = 'scale(1.07)';
-          e.currentTarget.style.boxShadow = '0 6px 28px rgba(255,107,0,0.50)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(255,107,0,0.35)';
-        }}
-      >
-        🕉️ AI Guide
-      </Link>
     </>
   );
 }
