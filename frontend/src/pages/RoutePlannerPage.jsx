@@ -86,9 +86,9 @@ export default function RoutePlannerPage() {
 
       {/* ══════════════ HERO ══════════════ */}
       <section style={{
-        position: 'relative', overflow: 'hidden', color: 'white',
+        position: 'relative', overflow: 'hidden', color: '#FFD580',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '88px 24px 96px', textAlign: 'center',
+        padding: '88px 24px 120px', textAlign: 'center',
       }}>
         {/* Om watermark */}
         <div style={{
@@ -120,27 +120,28 @@ export default function RoutePlannerPage() {
             fontFamily: 'var(--font-display)', fontWeight: 900,
             fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
             textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#FFD580',
           }}>
             Your Journey,{' '}
             <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
           </h1>
 
-          <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 18, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7 }}>
+          <p style={{ color: '#FFD580', opacity: 0.82, fontSize: 18, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7 }}>
             Tell us where you're headed — we'll find every sacred temple along your spiritual path.
           </p>
         </div>
       </section>
 
       {/* ══════════════ BODY ══════════════ */}
-      <section style={{ background: '#f8f4ef', paddingBottom: 80 }}>
+      <section style={{ background: '#f8f4ef', paddingBottom: 80, paddingTop: 56 }}>
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 20px' }}>
 
           {/* ── PLANNER CARD ── */}
           <div style={{
-            background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(20px)',
+            background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)',
             borderRadius: 28, boxShadow: '0 20px 60px rgba(61,31,0,0.15)',
             border: '1px solid rgba(232,101,10,0.12)', padding: '40px 40px 36px',
-            marginTop: -48, position: 'relative', zIndex: 10,
+            position: 'relative', zIndex: 10,
           }}>
 
             {/* Card title */}
@@ -174,9 +175,7 @@ export default function RoutePlannerPage() {
                     display: 'flex', alignItems: 'center', gap: 10,
                     border: '2px solid #EDE0CC', borderRadius: 16, padding: '14px 16px',
                     background: 'white', transition: 'border-color .2s',
-                  }}
-                    onFocus={() => {}} // handled inline below
-                  >
+                  }}>
                     {f.icon}
                     <input
                       type="text"

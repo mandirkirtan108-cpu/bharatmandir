@@ -140,36 +140,51 @@ export default function PanchangPage() {
       <Navbar />
       <div style={{ background: 'var(--cream)', minHeight: '100vh', paddingBottom: 80 }}>
 
-        {/* ── Hero ── */}
-        <div style={{
-          background: 'linear-gradient(135deg,#1a0a00 0%,#3D1F00 50%,#6B3A10 100%)',
-          padding: '52px 24px 44px', textAlign: 'center', position: 'relative', overflow: 'hidden',
+        {/* ══════════════ HERO ══════════════ */}
+        <section style={{
+          position: 'relative', overflow: 'hidden', color: 'white',
+          background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+          padding: '88px 24px 96px', textAlign: 'center',
         }}>
+          {/* Om watermark */}
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--font-hindi)', fontSize: 280, color: 'rgba(240,192,64,0.04)',
-            pointerEvents: 'none', letterSpacing: 8,
+            fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
+            pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
           }}>ॐ</div>
-          <div style={{ position: 'relative', zIndex: 1 }}>
+          {/* radial glow */}
+          <div style={{
+            position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+            width: 600, height: 300,
+            background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+
+          <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+            {/* badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: 'rgba(240,192,64,0.12)', border: '1px solid rgba(240,192,64,0.3)',
-              borderRadius: 50, padding: '6px 20px', marginBottom: 16,
-              color: '#F0C040', fontFamily: 'var(--font-hindi)', fontSize: 13, letterSpacing: '.1em',
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+              borderRadius: 50, padding: '6px 20px', marginBottom: 20,
+              color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
+              fontWeight: 500, backdropFilter: 'blur(8px)',
             }}>
               <Sun size={13} /> पंचांग एवं मुहूर्त
             </div>
+
             <h1 style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900, color: 'white',
-              fontSize: 'clamp(26px,5vw,50px)', marginBottom: 10,
+              fontFamily: 'var(--font-display)', fontWeight: 900,
+              fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
+              textShadow: '0 4px 40px rgba(0,0,0,0.3)',
             }}>
-              AI <span style={{ color: 'var(--gold-light)' }}>Pandit Ji</span> — Panchang & Muhurat
+              AI <span style={{ color: '#FFD580' }}>Pandit Ji</span> — Panchang & Muhurat
             </h1>
-            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 16, maxWidth: 500, margin: '0 auto' }}>
-              Your personal digital Pandit — auspicious timings for every occasion, powered by Claude AI with deep Vedic knowledge
+
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 18, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7 }}>
+              Your personal digital Pandit — auspicious timings for every occasion, powered by Claude AI with deep Vedic knowledge.
             </p>
           </div>
-        </div>
+        </section>
 
         <div className="container" style={{ maxWidth: 960, paddingTop: 36 }}>
 
@@ -233,7 +248,7 @@ export default function PanchangPage() {
                   </div>
                 </div>
 
-                {/* 5 Angas — RESPONSIVE CLASS ADDED */}
+                {/* 5 Angas */}
                 <div
                   className="panchang-angas"
                   style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 18 }}
@@ -257,7 +272,7 @@ export default function PanchangPage() {
                   ))}
                 </div>
 
-                {/* 3 key timings — RESPONSIVE CLASS ADDED */}
+                {/* 3 key timings */}
                 <div
                   className="panchang-timings"
                   style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}
@@ -297,7 +312,7 @@ export default function PanchangPage() {
                   </div>
                 )}
 
-                {/* Do / Avoid — RESPONSIVE CLASS ADDED */}
+                {/* Do / Avoid */}
                 <div
                   className="panchang-do-avoid"
                   style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
@@ -331,7 +346,7 @@ export default function PanchangPage() {
               Select your occasion — Pandit Ji will find the most auspicious time
             </p>
 
-            {/* Occasion Grid — RESPONSIVE CLASS ADDED */}
+            {/* Occasion Grid */}
             <div style={{ marginBottom: 24 }}>
               <label style={labelStyle}>SELECT YOUR OCCASION</label>
               <div
@@ -355,7 +370,7 @@ export default function PanchangPage() {
               </div>
             </div>
 
-            {/* Personal Details — RESPONSIVE CLASS ADDED */}
+            {/* Personal Details */}
             <div
               className="muhurat-form-grid"
               style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}
@@ -455,7 +470,7 @@ export default function PanchangPage() {
                 </div>
               </div>
 
-              {/* Main + Sidebar — RESPONSIVE CLASS ADDED */}
+              {/* Main + Sidebar */}
               <div
                 className="muhurat-results-grid"
                 style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}
@@ -594,6 +609,25 @@ export default function PanchangPage() {
           )}
         </div>
       </div>
+
+      {/* Global keyframes */}
+      <style>{`
+        @keyframes spin        { to { transform: rotate(360deg); } }
+        @keyframes fadeDown    { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes pulse-om    { 0%,100% { transform: scale(1); opacity: .7; } 50% { transform: scale(1.04); opacity: 1; } }
+        @media (max-width: 720px) {
+          .panchang-angas        { grid-template-columns: repeat(3,1fr) !important; }
+          .panchang-timings      { grid-template-columns: 1fr !important; }
+          .panchang-do-avoid     { grid-template-columns: 1fr !important; }
+          .muhurat-form-grid     { grid-template-columns: 1fr 1fr !important; }
+          .muhurat-results-grid  { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width: 480px) {
+          .panchang-angas        { grid-template-columns: repeat(2,1fr) !important; }
+          .muhurat-form-grid     { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+
       <Footer />
     </>
   );

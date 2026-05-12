@@ -89,7 +89,6 @@ function getEmojiColor(festival) {
   return { emoji: '🛕', color: '#E8650A' };
 }
 
-// ── Unique key for dedup ───────────────────────────────────────────────────────
 function festKey(f) {
   return `${(f.name || '').toLowerCase().trim()}::${f.month}`;
 }
@@ -97,7 +96,6 @@ function festKey(f) {
 const DEITY_FILTERS = ['All','Shiva','Vishnu','Ganesha','Durga','Lakshmi','Krishna','Rama','Saraswati'];
 const TYPE_FILTERS  = ['All','Major','With Temple'];
 
-// ── Claude API prompts (split into 2 batches to avoid max_tokens truncation) ──
 function makePrompt(months) {
   return `List ALL Hindu festivals for 2025 in months: ${months}.
 Return ONLY a valid JSON array. No explanation, no markdown, no backticks, no extra text.
@@ -113,7 +111,6 @@ Rules:
 - Output ONLY the JSON array, nothing else`;
 }
 
-// Batch 1: Jan–Jun  |  Batch 2: Jul–Dec
 const PROMPT_H1 = makePrompt('January, February, March, April, May, June');
 const PROMPT_H2 = makePrompt('July, August, September, October, November, December');
 
@@ -133,7 +130,6 @@ export default function FestivalCalendarPage() {
 
   const currentYear = new Date().getFullYear();
 
-  // ── Fetch from your backend ─────────────────────────────────────────────────
   const fetchFestivals = useCallback(() => {
     setLoading(true);
     axios.get(`${API_BASE}/api/festivals?limit=500`)
@@ -142,7 +138,6 @@ export default function FestivalCalendarPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Single Claude API call helper ──────────────────────────────────────────
   const callClaudeAPI = useCallback(async (prompt, apiKey) => {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -154,7 +149,6 @@ export default function FestivalCalendarPage() {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        // ✅ 5000 tokens per half-year batch is plenty; well under limit
         max_tokens: 5000,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -162,16 +156,10 @@ export default function FestivalCalendarPage() {
 
     const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data?.error?.message || `HTTP ${response.status}`);
-    }
-    if (data.error) {
-      throw new Error(data.error.message || 'Unknown API error');
-    }
+    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+    if (data.error) throw new Error(data.error.message || 'Unknown API error');
 
     const rawText = data.content?.[0]?.text || '[]';
-
-    // Strip markdown fences if present
     const cleaned = rawText
       .replace(/^```json\s*/i, '')
       .replace(/^```\s*/i, '')
@@ -182,22 +170,18 @@ export default function FestivalCalendarPage() {
       const parsed = JSON.parse(cleaned);
       return Array.isArray(parsed) ? parsed : [];
     } catch (parseErr) {
-      console.error('Failed to parse Claude JSON:', parseErr, '\nRaw:', rawText);
-      // ✅ Attempt partial recovery: extract complete objects before the truncation point
       try {
         const lastComma = cleaned.lastIndexOf('},');
         if (lastComma !== -1) {
           const partial = cleaned.substring(0, lastComma + 1) + ']';
           const recovered = JSON.parse(partial);
-          console.warn(`Recovered ${recovered.length} festivals from truncated response`);
           return Array.isArray(recovered) ? recovered : [];
         }
-      } catch (_) { /* ignore recovery failure */ }
+      } catch (_) {}
       return [];
     }
   }, []);
 
-  // ── Fetch from Claude AI (2 parallel batches: Jan–Jun + Jul–Dec) ────────────
   const fetchFestivalsFromClaude = useCallback(async () => {
     setClaudeLoading(true);
     setClaudeError(false);
@@ -206,7 +190,6 @@ export default function FestivalCalendarPage() {
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
 
     if (!apiKey) {
-      console.error('VITE_ANTHROPIC_API_KEY is not set in your .env file');
       setClaudeError(true);
       setClaudeErrorMsg('API key missing. Add VITE_ANTHROPIC_API_KEY to your .env file.');
       setClaudeLoading(false);
@@ -214,17 +197,12 @@ export default function FestivalCalendarPage() {
     }
 
     try {
-      // ✅ Fire both half-year batches in parallel — each fits comfortably in 5000 tokens
       const [h1, h2] = await Promise.all([
         callClaudeAPI(PROMPT_H1, apiKey),
         callClaudeAPI(PROMPT_H2, apiKey),
       ]);
-
-      const combined = [...h1, ...h2];
-      console.log(`Claude returned ${h1.length} H1 + ${h2.length} H2 = ${combined.length} total festivals`);
-      setClaudeFestivals(combined);
+      setClaudeFestivals([...h1, ...h2]);
     } catch (err) {
-      console.error('Claude API fetch error:', err);
       setClaudeError(true);
       setClaudeErrorMsg(err.message || 'Unknown error');
       setClaudeFestivals([]);
@@ -233,39 +211,31 @@ export default function FestivalCalendarPage() {
     }
   }, [callClaudeAPI]);
 
-  // ── On mount ────────────────────────────────────────────────────────────────
   useEffect(() => {
     fetchFestivals();
     fetchFestivalsFromClaude();
   }, [fetchFestivals, fetchFestivalsFromClaude]);
 
-  // ── Listen for admin add event ──────────────────────────────────────────────
   useEffect(() => {
     const handler = () => fetchFestivals();
     window.addEventListener('festival:added', handler);
     return () => window.removeEventListener('festival:added', handler);
   }, [fetchFestivals]);
 
-  // ── Merge Claude + Backend (dedup by name+month) ────────────────────────────
   const allFestivals = useMemo(() => {
     const apiKeys = new Set(apiFestivals.map(festKey));
-
     const claudeFiltered = claudeFestivals.filter(f => !apiKeys.has(festKey(f)));
-
     const enrichedAPI = apiFestivals.map(f => {
       const { emoji, color } = getEmojiColor(f);
       return { ...f, emoji: f.emoji || emoji, color: f.color || color };
     });
-
     const enrichedClaude = claudeFiltered.map(f => {
       const { emoji, color } = getEmojiColor(f);
       return { ...f, _claude: true, emoji: f.emoji || emoji, color: f.color || color };
     });
-
     return [...enrichedClaude, ...enrichedAPI];
   }, [apiFestivals, claudeFestivals]);
 
-  // ── Apply filters ───────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return allFestivals.filter(f => {
       if (searchQuery) {
@@ -287,7 +257,6 @@ export default function FestivalCalendarPage() {
     });
   }, [allFestivals, searchQuery, deityFilter, typeFilter]);
 
-  // ── Group by month ──────────────────────────────────────────────────────────
   const byMonth = useMemo(() => {
     const map = {};
     for (let m = 1; m <= 12; m++) map[m] = [];
@@ -326,51 +295,105 @@ export default function FestivalCalendarPage() {
     <>
       <Navbar />
 
-      {/* ── Hero ── */}
-      <section className="fest-hero">
-        <div className="fest-hero-bg">
-          {['🪔','✨','🌸','🔱','🪁'].map((e, i) => (
-            <div key={i} className={`fest-diya fest-diya-${i + 1}`}>{e}</div>
-          ))}
-        </div>
-        <div className="container fest-hero-inner">
-          <p className="fest-hero-super">🛕 BharatMandir Presents</p>
-          <h1 className="fest-hero-title">Festival Calendar</h1>
-          <p className="fest-hero-sub">पर्व और उत्सव — Celebrating the Sacred Rhythm of Bharat</p>
-          <div className="fest-hero-stats">
-            <span className="fest-stat">{totalCount} Festivals</span>
-            <span className="fest-stat-dot">·</span>
-            <span className="fest-stat">12 Months</span>
-            <span className="fest-stat-dot">·</span>
-            <span className="fest-stat">{currentYear}</span>
-            {claudeCount > 0 && (
-              <>
-                <span className="fest-stat-dot">·</span>
-                <span className="fest-stat" style={{ color: '#c4b5fd' }}>✨ {claudeCount} AI Curated</span>
-              </>
-            )}
-            {apiCount > 0 && (
-              <>
-                <span className="fest-stat-dot">·</span>
-                <span className="fest-stat" style={{ color: '#86efac' }}>🛕 {apiCount} Temple Festivals</span>
-              </>
-            )}
+      {/* ══════════════ HERO — matches RoutePlanner exactly ══════════════ */}
+      <section style={{
+        position: 'relative', overflow: 'hidden', color: '#FFD580',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '88px 24px 120px', textAlign: 'center',
+      }}>
+        {/* Om watermark */}
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
+          pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
+        }}>ॐ</div>
+        {/* radial glow */}
+        <div style={{
+          position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+          width: 600, height: 300,
+          background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        {/* floating diyas */}
+        {['🪔','✨','🌸','🔱','🪁'].map((e, i) => (
+          <div key={i} style={{
+            position: 'absolute', fontSize: 'clamp(20px,3vw,40px)', opacity: 0.18, pointerEvents: 'none',
+            animation: `floatDiya 6s ease-in-out ${[0,1.2,0.6,2,1.8][i]}s infinite`,
+            ...[
+              { top:'15%', left:'7%' }, { top:'60%', left:'15%' },
+              { top:'20%', right:'10%' }, { bottom:'20%', right:'6%' },
+              { top:'45%', left:'3%' },
+            ][i],
+          }}>{e}</div>
+        ))}
+
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+          {/* badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '6px 20px', marginBottom: 20,
+            color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
+            fontWeight: 500, backdropFilter: 'blur(8px)',
+          }}>
+            🛕 BharatMandir Presents
           </div>
 
-          {/* Claude loading/error status */}
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 900,
+            fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)', color: '#FFD580',
+          }}>
+            Festival Calendar
+          </h1>
+
+          <p style={{
+            color: '#FFD580', opacity: 0.82, fontSize: 18,
+            maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7,
+            fontFamily: 'var(--font-hindi)',
+          }}>
+            पर्व और उत्सव — Celebrating the Sacred Rhythm of Bharat
+          </p>
+
+          {/* Stats row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginTop: 28 }}>
+            {[
+              `${totalCount} Festivals`,
+              '12 Months',
+              String(currentYear),
+              ...(claudeCount > 0 ? [`✨ ${claudeCount} AI Curated`] : []),
+              ...(apiCount > 0 ? [`🛕 ${apiCount} Temple Festivals`] : []),
+            ].map((s, i) => (
+              <span key={i} style={{
+                fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.08em',
+                color: '#FFD580', background: 'rgba(255,255,255,0.08)',
+                padding: '5px 14px', borderRadius: 50, border: '1px solid rgba(200,150,12,.3)',
+              }}>{s}</span>
+            ))}
+          </div>
+
+          {/* Claude loading/error */}
           {claudeLoading && (
-            <div className="claude-status">
-              <span className="claude-spinner">✨</span>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
+              fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,213,128,0.7)',
+              background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
+              border: '1px solid rgba(255,255,255,0.12)',
+            }}>
+              <span style={{ animation: 'floatDiya 1.5s ease-in-out infinite', display: 'inline-block' }}>✨</span>
               Claude AI se festivals fetch ho rahe hain…
             </div>
           )}
           {claudeError && !claudeLoading && (
-            <div className="claude-status claude-status-err">
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
+              fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,180,120,.85)',
+              background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
+              border: '1px solid rgba(255,150,50,.2)',
+            }}>
               ⚠️ {claudeErrorMsg || 'Claude API se fetch nahi hua.'}{' '}
-              <button
-                onClick={fetchFestivalsFromClaude}
-                style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}
-              >
+              <button onClick={fetchFestivalsFromClaude}
+                style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}>
                 Retry karo
               </button>
             </div>
@@ -378,163 +401,246 @@ export default function FestivalCalendarPage() {
         </div>
       </section>
 
-      {/* ── Controls ── */}
-      <div className="fest-controls-bar">
-        <div className="container fest-controls-inner">
-          <div className="fest-search-wrap">
-            <Search size={16} />
+      {/* ══════════════ CONTROLS BAR ══════════════ */}
+      <div style={{
+        background: 'white', borderBottom: '2px solid #EDE0CC', padding: '14px 24px',
+        position: 'sticky', top: 70, zIndex: 100, boxShadow: '0 2px 12px rgba(61,31,0,0.06)',
+      }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          {/* Search */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: '#FDF6EC', border: '2px solid #EDE0CC', borderRadius: 50,
+            padding: '7px 16px', flex: '0 0 240px', transition: 'all .2s',
+          }}>
+            <Search size={16} color="#9A7150" />
             <input
-              className="fest-search"
+              style={{ border: 'none', background: 'transparent', fontFamily: 'var(--font-body)', fontSize: 14, color: '#1A0A00', outline: 'none', width: '100%' }}
               placeholder="Search festivals, deity, temples…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-light)', fontSize:16, lineHeight:1, padding:'0 2px' }}
-              >✕</button>
+              <button onClick={() => setSearchQuery('')}
+                style={{ background:'none', border:'none', cursor:'pointer', color:'#9A7150', fontSize:16, lineHeight:1, padding:'0 2px' }}>✕</button>
             )}
           </div>
 
-          <div className="fest-filter-group">
-            <Filter size={14} />
+          {/* Deity chips */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+            <Filter size={14} color="#9A7150" />
             {DEITY_FILTERS.map(d => (
-              <button key={d} className={`fest-chip ${deityFilter === d ? 'active' : ''}`} onClick={() => setDeityFilter(d)}>{d}</button>
+              <button key={d} onClick={() => setDeityFilter(d)} style={{
+                padding: '5px 13px', border: `1.5px solid ${deityFilter === d ? '#E8650A' : '#EDE0CC'}`,
+                borderRadius: 50, fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.04em',
+                cursor: 'pointer', background: deityFilter === d ? '#E8650A' : 'white',
+                color: deityFilter === d ? 'white' : '#5C3D1E', transition: 'all .2s', whiteSpace: 'nowrap',
+              }}>{d}</button>
             ))}
-            <div className="fest-chip-divider" />
+            <div style={{ width: 1, height: 20, background: '#EDE0CC', margin: '0 2px' }} />
             {TYPE_FILTERS.map(t => (
-              <button key={t} className={`fest-chip ${typeFilter === t ? 'active' : ''}`} onClick={() => setTypeFilter(t)}>{t}</button>
+              <button key={t} onClick={() => setTypeFilter(t)} style={{
+                padding: '5px 13px', border: `1.5px solid ${typeFilter === t ? '#E8650A' : '#EDE0CC'}`,
+                borderRadius: 50, fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.04em',
+                cursor: 'pointer', background: typeFilter === t ? '#E8650A' : 'white',
+                color: typeFilter === t ? 'white' : '#5C3D1E', transition: 'all .2s', whiteSpace: 'nowrap',
+              }}>{t}</button>
             ))}
           </div>
 
-          <div className="fest-controls-right">
-            <button
-              className="fest-refresh-btn"
-              onClick={handleRefresh}
-              title="Refresh festivals"
-              disabled={isAnyLoading}
-            >
-              <RefreshCw size={14} className={isAnyLoading ? 'spinning' : ''} />
+          {/* Right controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+            <button onClick={handleRefresh} disabled={isAnyLoading} style={{
+              width: 34, height: 34, borderRadius: '50%', border: '2px solid #EDE0CC',
+              background: 'white', cursor: isAnyLoading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#9A7150', transition: 'all .2s', opacity: isAnyLoading ? 0.5 : 1,
+            }}>
+              <RefreshCw size={14} style={{ animation: isAnyLoading ? 'spin .8s linear infinite' : 'none' }} />
             </button>
-            <div className="fest-view-toggle">
-              <button className={viewMode === 'calendar' ? 'active' : ''} onClick={() => setViewMode('calendar')}>
-                <Calendar size={15} /> Calendar
-              </button>
-              <button className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}>
-                <Star size={15} /> All
-              </button>
+            <div style={{
+              display: 'flex', background: '#FDF6EC', border: '2px solid #EDE0CC',
+              borderRadius: 50, overflow: 'hidden',
+            }}>
+              {[
+                { mode: 'calendar', icon: <Calendar size={14} />, label: 'Calendar' },
+                { mode: 'list',     icon: <Star size={14} />,     label: 'All' },
+              ].map(v => (
+                <button key={v.mode} onClick={() => setViewMode(v.mode)} style={{
+                  display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px',
+                  border: 'none', background: viewMode === v.mode ? '#E8650A' : 'transparent',
+                  fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
+                  color: viewMode === v.mode ? 'white' : '#9A7150', cursor: 'pointer',
+                  borderRadius: 50, transition: 'all .2s',
+                }}>{v.icon} {v.label}</button>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="container fest-body">
+      {/* ══════════════ BODY ══════════════ */}
+      <section style={{ background: '#f8f4ef', paddingBottom: 80, paddingTop: 56 }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
 
-        {isAnyLoading && allFestivals.length === 0 ? (
-          <div className="fest-loading">
-            <div className="fest-loading-spinner">🪔</div>
-            <p>Claude AI se festivals load ho rahe hain…</p>
-          </div>
-        ) : viewMode === 'calendar' ? (
-          <>
-            {/* ── Month strip ── */}
-            <div className="month-strip">
-              <button className="month-nav-btn" onClick={() => goMonth(-1)}><ChevronLeft size={18} /></button>
-              <div className="month-pills">
-                {GREGORIAN_MONTHS.map((m, i) => {
-                  const mNum   = i + 1;
-                  const count  = (byMonth[mNum] || []).length;
-                  const hasAPI = (byMonth[mNum] || []).some(f => f.temple_id);
-                  return (
-                    <button
-                      key={m}
-                      className={`month-pill ${selectedMonth === mNum ? 'active' : ''}`}
-                      onClick={() => setSelectedMonth(mNum)}
-                    >
-                      <span className="month-pill-name">{MONTH_SHORT[i]}</span>
-                      {count > 0 && (
-                        <span className={`month-pill-count ${hasAPI ? 'has-api' : ''}`}>{count}</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              <button className="month-nav-btn" onClick={() => goMonth(1)}><ChevronRight size={18} /></button>
+          {isAnyLoading && allFestivals.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '80px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <div style={{ fontSize: 48, animation: 'floatDiya 2s ease-in-out infinite' }}>🪔</div>
+              <p style={{ fontFamily: 'var(--font-hindi)', color: '#9A7150', fontSize: 16 }}>Claude AI se festivals load ho rahe hain…</p>
             </div>
+          ) : viewMode === 'calendar' ? (
+            <>
+              {/* ══ PREMIUM MONTH NAVIGATOR ══ */}
+              <div style={{
+                background: 'white', borderRadius: 24, boxShadow: '0 4px 24px rgba(61,31,0,0.09)',
+                border: '1px solid rgba(232,101,10,0.12)', padding: '20px 24px', marginBottom: 28,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button onClick={() => goMonth(-1)} style={{
+                    width: 38, height: 38, borderRadius: '50%', border: '2px solid #EDE0CC',
+                    background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .2s',
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor='#E8650A'; e.currentTarget.style.color='#E8650A'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor='#EDE0CC'; e.currentTarget.style.color='#7a3208'; }}
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
 
-            {/* ── Month header ── */}
-            <div className="month-heading">
-              <div>
-                <h2 className="month-heading-name">{GREGORIAN_MONTHS[selectedMonth - 1]} {currentYear}</h2>
-                <p className="month-heading-hindi">
-                  {HINDU_MONTHS[(selectedMonth + 1) % 12]} / {HINDU_MONTHS[selectedMonth % 12]}
-                </p>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-                {currentMonthFestivals.some(f => f.temple_id) && (
-                  <span className="month-api-badge">🛕 Temple Festivals</span>
-                )}
-                {currentMonthFestivals.some(f => f._claude) && (
-                  <span className="month-claude-badge">✨ AI Curated</span>
-                )}
-                <span className="month-fest-count">
-                  {currentMonthFestivals.length} festival{currentMonthFestivals.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-            </div>
-
-            {/* ── Partial load notice ── */}
-            {claudeLoading && allFestivals.length > 0 && (
-              <div className="partial-notice">
-                <span className="claude-spinner" style={{ fontSize:14 }}>✨</span>
-                More festivals load ho rahe hain Claude AI se…
-              </div>
-            )}
-
-            {currentMonthFestivals.length === 0 ? (
-              <div className="fest-empty">
-                <span className="fest-empty-icon">🙏</span>
-                <p>No festivals found for {GREGORIAN_MONTHS[selectedMonth - 1]} with current filters.</p>
-                <button className="btn-outline" onClick={() => { setDeityFilter('All'); setTypeFilter('All'); setSearchQuery(''); }}>
-                  Clear Filters
-                </button>
-              </div>
-            ) : (
-              <div className="fest-grid">
-                {currentMonthFestivals.map((f, i) => (
-                  <FestivalCard key={`${f.id || f.name}-${i}`} festival={f} onClick={() => setSelectedFestival(f)} />
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          /* ── All festivals list view ── */
-          <div className="fest-list-view">
-            {GREGORIAN_MONTHS.map((mName, mi) => {
-              const mNum  = mi + 1;
-              const fests = byMonth[mNum] || [];
-              if (fests.length === 0) return null;
-              return (
-                <div key={mName} className="fest-list-section">
-                  <div className="fest-list-month-header">
-                    <span className="fest-list-month-name">{mName}</span>
-                    <span className="fest-list-month-count">{fests.length}</span>
-                    <span className="fest-list-hindu-month">
-                      {HINDU_MONTHS[(mNum + 1) % 12]}
-                    </span>
+                  <div style={{ display: 'flex', gap: 6, flex: 1, overflowX: 'auto', scrollbarWidth: 'none' }} className="scrollbar-hide">
+                    {GREGORIAN_MONTHS.map((m, i) => {
+                      const mNum  = i + 1;
+                      const count = (byMonth[mNum] || []).length;
+                      const hasAPI = (byMonth[mNum] || []).some(f => f.temple_id);
+                      const isActive = selectedMonth === mNum;
+                      return (
+                        <button key={m} onClick={() => setSelectedMonth(mNum)} style={{
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          padding: '10px 14px', borderRadius: 14, flexShrink: 0,
+                          border: `2px solid ${isActive ? '#E8650A' : '#EDE0CC'}`,
+                          background: isActive ? 'linear-gradient(135deg, #E8650A, #FF8C2A)' : 'white',
+                          cursor: 'pointer', transition: 'all .22s', gap: 3,
+                          boxShadow: isActive ? '0 6px 20px rgba(232,101,10,0.28)' : '0 2px 6px rgba(61,31,0,0.04)',
+                        }}>
+                          <span style={{
+                            fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
+                            fontWeight: 700, color: isActive ? 'white' : '#5C3D1E',
+                          }}>{MONTH_SHORT[i]}</span>
+                          {count > 0 && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, minWidth: 18, textAlign: 'center',
+                              background: isActive ? 'rgba(255,255,255,0.25)' : hasAPI ? 'rgba(16,163,74,0.15)' : 'rgba(232,101,10,0.12)',
+                              color: isActive ? 'white' : hasAPI ? '#16a34a' : '#E8650A',
+                              borderRadius: 50, padding: '1px 6px',
+                            }}>{count}</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="fest-list-grid">
-                    {fests.map((f, i) => (
-                      <FestivalCard key={`${f.id || f.name}-${i}`} festival={f} compact onClick={() => setSelectedFestival(f)} />
-                    ))}
-                  </div>
+
+                  <button onClick={() => goMonth(1)} style={{
+                    width: 38, height: 38, borderRadius: '50%', border: '2px solid #EDE0CC',
+                    background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .2s',
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor='#E8650A'; e.currentTarget.style.color='#E8650A'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor='#EDE0CC'; e.currentTarget.style.color='#7a3208'; }}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </div>
+
+              {/* ══ MONTH HEADER ══ */}
+              <div style={{
+                display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+                marginBottom: 24, paddingBottom: 16,
+                borderBottom: '2px solid #EDE0CC', flexWrap: 'wrap', gap: 10,
+              }}>
+                <div>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 30, fontWeight: 800, color: '#7a3208' }}>
+                    {GREGORIAN_MONTHS[selectedMonth - 1]} {currentYear}
+                  </h2>
+                  <p style={{ fontFamily: 'var(--font-hindi)', fontSize: 14, color: '#9A7150', marginTop: 2 }}>
+                    {HINDU_MONTHS[(selectedMonth + 1) % 12]} / {HINDU_MONTHS[selectedMonth % 12]}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {currentMonthFestivals.some(f => f.temple_id) && (
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.04em', color: '#16a34a', background: 'rgba(16,163,74,0.08)', padding: '4px 12px', borderRadius: 50, border: '1px solid rgba(16,163,74,.2)' }}>
+                      🛕 Temple Festivals
+                    </span>
+                  )}
+                  {currentMonthFestivals.some(f => f._claude) && (
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.04em', color: '#7C3AED', background: 'rgba(124,58,237,0.08)', padding: '4px 12px', borderRadius: 50, border: '1px solid rgba(124,58,237,.2)' }}>
+                      ✨ AI Curated
+                    </span>
+                  )}
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.06em', color: '#E8650A', background: 'rgba(232,101,10,0.08)', padding: '4px 14px', borderRadius: 50, border: '1px solid rgba(232,101,10,.2)' }}>
+                    {currentMonthFestivals.length} festival{currentMonthFestivals.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+
+              {/* Partial load notice */}
+              {claudeLoading && allFestivals.length > 0 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  fontFamily: 'var(--font-display)', fontSize: 12, color: '#9A7150',
+                  background: 'rgba(232,101,10,0.06)', border: '1px solid rgba(232,101,10,0.15)',
+                  borderRadius: 50, padding: '6px 16px', marginBottom: 20, width: 'fit-content',
+                }}>
+                  <span style={{ animation: 'floatDiya 1.5s ease-in-out infinite', display: 'inline-block' }}>✨</span>
+                  More festivals load ho rahe hain Claude AI se…
+                </div>
+              )}
+
+              {currentMonthFestivals.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '72px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+                  <span style={{ fontSize: 52 }}>🙏</span>
+                  <p style={{ color: '#9A7150', fontFamily: 'var(--font-body)', fontSize: 16 }}>
+                    No festivals found for {GREGORIAN_MONTHS[selectedMonth - 1]} with current filters.
+                  </p>
+                  <button
+                    onClick={() => { setDeityFilter('All'); setTypeFilter('All'); setSearchQuery(''); }}
+                    style={{ padding: '8px 20px', border: '2px solid #EDE0CC', borderRadius: 50, background: 'white', fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em', cursor: 'pointer', color: '#5C3D1E' }}
+                  >Clear Filters</button>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
+                  {currentMonthFestivals.map((f, i) => (
+                    <FestivalCard key={`${f.id || f.name}-${i}`} festival={f} onClick={() => setSelectedFestival(f)} />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            /* ══ ALL FESTIVALS LIST VIEW ══ */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
+              {GREGORIAN_MONTHS.map((mName, mi) => {
+                const mNum  = mi + 1;
+                const fests = byMonth[mNum] || [];
+                if (fests.length === 0) return null;
+                return (
+                  <div key={mName}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: '#7a3208' }}>{mName}</span>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'white', background: '#E8650A', padding: '2px 9px', borderRadius: 50 }}>{fests.length}</span>
+                      <span style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: '#9A7150', marginLeft: 4 }}>{HINDU_MONTHS[(mNum + 1) % 12]}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+                      {fests.map((f, i) => (
+                        <FestivalCard key={`${f.id || f.name}-${i}`} festival={f} compact onClick={() => setSelectedFestival(f)} />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
 
       {selectedFestival && (
         <FestivalModal festival={selectedFestival} onClose={() => setSelectedFestival(null)} />
@@ -543,167 +649,19 @@ export default function FestivalCalendarPage() {
       <Footer />
 
       <style>{`
-        /* ── Hero ── */
-        .fest-hero {
-          position:relative;
-          background:linear-gradient(135deg,#1A0A00 0%,#3D1F00 40%,#6B3A10 70%,#B84D00 100%);
-          padding:72px 0 60px; overflow:hidden; text-align:center;
-        }
-        .fest-hero-bg { position:absolute; inset:0; pointer-events:none; }
-        .fest-diya { position:absolute; animation:floatDiya 6s ease-in-out infinite; opacity:.18; font-size:clamp(24px,4vw,48px); }
-        .fest-diya-1{top:15%;left:7%;animation-delay:0s;}
-        .fest-diya-2{top:60%;left:15%;animation-delay:1.2s;}
-        .fest-diya-3{top:20%;right:10%;animation-delay:.6s;}
-        .fest-diya-4{bottom:20%;right:6%;animation-delay:2s;}
-        .fest-diya-5{top:45%;left:3%;animation-delay:1.8s;}
         @keyframes floatDiya {
-          0%,100%{transform:translateY(0) rotate(-5deg);opacity:.18;}
-          50%{transform:translateY(-18px) rotate(5deg);opacity:.32;}
+          0%,100%{ transform:translateY(0) rotate(-5deg); opacity:.18; }
+          50%{ transform:translateY(-18px) rotate(5deg); opacity:.32; }
         }
-        .fest-hero-inner{position:relative;z-index:1;}
-        .fest-hero-super{font-family:var(--font-hindi);font-size:13px;letter-spacing:.18em;color:var(--gold-light);margin-bottom:16px;opacity:.85;}
-        .fest-hero-title{font-family:var(--font-display);font-size:clamp(36px,6vw,68px);font-weight:900;color:white;line-height:1.05;margin-bottom:14px;text-shadow:0 4px 24px rgba(0,0,0,.4);}
-        .fest-hero-sub{font-family:var(--font-hindi);font-size:16px;color:rgba(255,255,255,.7);margin-bottom:28px;}
-        .fest-hero-stats{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;}
-        .fest-stat{font-family:var(--font-display);font-size:13px;letter-spacing:.08em;color:var(--gold-light);background:rgba(255,255,255,.08);padding:5px 14px;border-radius:50px;border:1px solid rgba(200,150,12,.3);}
-        .fest-stat-dot{color:rgba(255,255,255,.3);}
-
-        /* ── Claude status ── */
-        .claude-status{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-family:var(--font-display);font-size:12px;color:rgba(255,255,255,.6);background:rgba(255,255,255,.07);padding:6px 16px;border-radius:50px;border:1px solid rgba(255,255,255,.12);}
-        .claude-status-err{color:rgba(255,180,120,.8);border-color:rgba(255,150,50,.2);}
-        .claude-spinner{animation:floatDiya 1.5s ease-in-out infinite;display:inline-block;}
-        .partial-notice{display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-size:12px;color:var(--text-light);background:rgba(232,101,10,.06);border:1px solid rgba(232,101,10,.15);border-radius:50px;padding:6px 16px;margin-bottom:16px;}
-
-        /* ── Controls ── */
-        .fest-controls-bar{background:white;border-bottom:2px solid var(--cream-dark);padding:14px 0;position:sticky;top:70px;z-index:100;box-shadow:0 2px 12px var(--shadow);}
-        .fest-controls-inner{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
-        .fest-controls-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
-        .fest-search-wrap{display:flex;align-items:center;gap:8px;background:var(--cream);border:2px solid var(--cream-dark);border-radius:50px;padding:7px 16px;flex:0 0 240px;transition:var(--transition);}
-        .fest-search-wrap:focus-within{border-color:var(--saffron);background:white;}
-        .fest-search-wrap svg{color:var(--text-light);flex-shrink:0;}
-        .fest-search{border:none;background:transparent;font-family:var(--font-body);font-size:14px;color:var(--text-dark);outline:none;width:100%;}
-        .fest-filter-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1;}
-        .fest-filter-group svg{color:var(--text-light);flex-shrink:0;}
-        .fest-chip-divider{width:1px;height:20px;background:var(--cream-dark);margin:0 2px;flex-shrink:0;}
-        .fest-chip{padding:5px 13px;border:1.5px solid var(--cream-dark);border-radius:50px;font-family:var(--font-display);font-size:11px;letter-spacing:.04em;cursor:pointer;background:white;color:var(--text-mid);transition:var(--transition);white-space:nowrap;}
-        .fest-chip:hover{border-color:var(--saffron-light);color:var(--saffron);}
-        .fest-chip.active{background:var(--saffron);color:white;border-color:var(--saffron);}
-        .fest-refresh-btn{width:34px;height:34px;border-radius:50%;border:2px solid var(--cream-dark);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-light);transition:var(--transition);}
-        .fest-refresh-btn:hover:not(:disabled){border-color:var(--saffron);color:var(--saffron);}
-        .fest-refresh-btn:disabled{opacity:.5;cursor:not-allowed;}
-        .fest-refresh-btn .spinning{animation:spin .8s linear infinite;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-        .fest-view-toggle{display:flex;background:var(--cream);border:2px solid var(--cream-dark);border-radius:50px;overflow:hidden;}
-        .fest-view-toggle button{display:flex;align-items:center;gap:5px;padding:6px 14px;border:none;background:transparent;font-family:var(--font-display);font-size:12px;letter-spacing:.04em;color:var(--text-light);cursor:pointer;transition:var(--transition);}
-        .fest-view-toggle button.active{background:var(--saffron);color:white;border-radius:50px;}
-
-        /* ── Body ── */
-        .fest-body{padding:32px 0 64px;}
-
-        /* ── Loading ── */
-        .fest-loading{text-align:center;padding:80px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;}
-        .fest-loading-spinner{font-size:48px;animation:floatDiya 2s ease-in-out infinite;}
-        .fest-loading p{font-family:var(--font-hindi);color:var(--text-light);font-size:16px;}
-
-        /* ── Month strip ── */
-        .month-strip{display:flex;align-items:center;gap:8px;margin-bottom:28px;overflow-x:auto;padding-bottom:4px;}
-        .month-nav-btn{width:36px;height:36px;border-radius:50%;border:2px solid var(--cream-dark);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-mid);flex-shrink:0;transition:var(--transition);}
-        .month-nav-btn:hover{border-color:var(--saffron);color:var(--saffron);}
-        .month-pills{display:flex;gap:6px;overflow-x:auto;flex:1;scrollbar-width:none;}
-        .month-pills::-webkit-scrollbar{display:none;}
-        .month-pill{display:flex;flex-direction:column;align-items:center;padding:8px 12px;border-radius:12px;border:2px solid var(--cream-dark);background:white;cursor:pointer;flex-shrink:0;transition:var(--transition);gap:2px;}
-        .month-pill:hover{border-color:var(--saffron-light);}
-        .month-pill.active{background:var(--saffron);border-color:var(--saffron);color:white;}
-        .month-pill-name{font-family:var(--font-display);font-size:12px;letter-spacing:.04em;}
-        .month-pill-count{font-size:10px;font-weight:700;background:rgba(0,0,0,.12);border-radius:50px;padding:0 6px;min-width:18px;text-align:center;}
-        .month-pill.active .month-pill-count{background:rgba(255,255,255,.25);}
-        .month-pill-count.has-api{background:rgba(16,163,74,.25);color:#065F46;}
-        .month-pill.active .month-pill-count.has-api{background:rgba(255,255,255,.4);color:inherit;}
-
-        /* ── Month heading ── */
-        .month-heading{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;padding-bottom:12px;border-bottom:2px solid var(--cream-dark);flex-wrap:wrap;gap:10px;}
-        .month-heading-name{font-family:var(--font-display);font-size:28px;font-weight:700;color:var(--brown);}
-        .month-heading-hindi{font-family:var(--font-hindi);font-size:14px;color:var(--text-light);margin-top:2px;}
-        .month-fest-count{font-family:var(--font-display);font-size:13px;letter-spacing:.06em;color:var(--saffron);background:rgba(232,101,10,.08);padding:4px 14px;border-radius:50px;border:1px solid rgba(232,101,10,.2);}
-        .month-api-badge{font-family:var(--font-display);font-size:11px;letter-spacing:.04em;color:#16a34a;background:rgba(16,163,74,.08);padding:4px 12px;border-radius:50px;border:1px solid rgba(16,163,74,.2);}
-        .month-claude-badge{font-family:var(--font-display);font-size:11px;letter-spacing:.04em;color:#7C3AED;background:rgba(124,58,237,.08);padding:4px 12px;border-radius:50px;border:1px solid rgba(124,58,237,.2);}
-
-        /* ── Festival grid / cards ── */
-        .fest-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;}
-        .fest-card{background:white;border-radius:var(--radius-lg);border:1.5px solid var(--cream-dark);overflow:hidden;transition:var(--transition);cursor:pointer;position:relative;}
-        .fest-card:hover{transform:translateY(-4px);box-shadow:0 12px 32px var(--shadow-deep);border-color:transparent;}
-        .fest-card-top{padding:20px 20px 14px;display:flex;align-items:flex-start;gap:14px;}
-        .fest-card-emoji{font-size:28px;flex-shrink:0;width:54px;height:54px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);background:var(--cream);}
-        .fest-card-info{flex:1;min-width:0;}
-        .fest-card-name{font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--brown);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-        .fest-card-date{font-size:11px;font-weight:600;margin-bottom:2px;}
-        .fest-card-sub{font-family:var(--font-hindi);font-size:12px;color:var(--text-light);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-        .fest-card-badges{display:flex;gap:5px;flex-wrap:wrap;}
-        .fest-badge{font-size:10px;padding:2px 8px;border-radius:50px;font-family:var(--font-display);letter-spacing:.04em;border:1px solid;}
-        .fest-badge-major{color:var(--saffron-dark);background:rgba(232,101,10,.08);border-color:rgba(232,101,10,.25);}
-        .fest-badge-days{color:var(--brown-mid);background:var(--cream);border-color:var(--cream-dark);}
-        .fest-badge-temple{color:#16a34a;background:rgba(16,163,74,.06);border-color:rgba(16,163,74,.25);}
-        .fest-badge-claude{color:#7C3AED;background:rgba(124,58,237,.06);border-color:rgba(124,58,237,.25);}
-        .fest-badge-deity{color:#1D4ED8;background:rgba(29,78,216,.06);border-color:rgba(29,78,216,.2);}
-        .fest-card-temple{font-family:var(--font-hindi);font-size:11px;color:#16a34a;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-        .fest-card-accent{height:4px;}
-        /* Compact */
-        .fest-card-compact .fest-card-top{padding:14px 16px;}
-        .fest-card-compact .fest-card-emoji{width:42px;height:42px;font-size:22px;}
-        .fest-card-compact .fest-card-name{font-size:13px;}
-        .fest-card-compact .fest-card-sub{font-size:11px;}
-        .fest-card-compact .fest-card-accent{height:3px;}
-
-        /* ── Empty ── */
-        .fest-empty{text-align:center;padding:72px 24px;display:flex;flex-direction:column;align-items:center;gap:14px;}
-        .fest-empty-icon{font-size:52px;}
-        .fest-empty p{color:var(--text-light);font-family:var(--font-body);font-size:16px;}
-        .btn-outline{padding:8px 20px;border:2px solid var(--cream-dark);border-radius:50px;background:white;font-family:var(--font-display);font-size:12px;letter-spacing:.05em;cursor:pointer;color:var(--text-mid);transition:var(--transition);}
-        .btn-outline:hover{border-color:var(--saffron);color:var(--saffron);}
-
-        /* ── List view ── */
-        .fest-list-view{display:flex;flex-direction:column;gap:36px;}
-        .fest-list-month-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
-        .fest-list-month-name{font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--brown);}
-        .fest-list-month-count{font-family:var(--font-display);font-size:11px;color:white;background:var(--saffron);padding:2px 9px;border-radius:50px;}
-        .fest-list-hindu-month{font-family:var(--font-hindi);font-size:13px;color:var(--text-light);margin-left:4px;}
-        .fest-list-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
-
-        /* ── Modal ── */
-        .fest-modal-overlay{position:fixed;inset:0;z-index:500;background:rgba(26,10,0,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadeIn .2s ease;}
-        @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
-        .fest-modal{background:var(--cream);border-radius:var(--radius-lg);max-width:560px;width:100%;overflow:hidden;animation:slideUp .25s ease;box-shadow:0 32px 80px rgba(26,10,0,.4);max-height:90vh;overflow-y:auto;}
-        @keyframes slideUp{from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;}}
-        .fest-modal-header{padding:28px 28px 20px;display:flex;align-items:flex-start;gap:16px;}
-        .fest-modal-emoji{font-size:40px;flex-shrink:0;width:70px;height:70px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);background:white;box-shadow:0 4px 16px var(--shadow);}
-        .fest-modal-title{font-family:var(--font-display);font-size:22px;font-weight:700;color:var(--brown);margin-bottom:4px;}
-        .fest-modal-date{font-family:var(--font-display);font-size:13px;color:var(--saffron);font-weight:600;margin-bottom:4px;}
-        .fest-modal-hint{font-family:var(--font-hindi);font-size:13px;color:var(--saffron);}
-        .fest-modal-body{padding:0 28px 28px;}
-        .fest-modal-divider{height:1px;background:var(--cream-dark);margin-bottom:20px;}
-        .fest-modal-text{font-family:var(--font-body);font-size:16px;line-height:1.7;color:var(--text-mid);margin-bottom:16px;}
-        .fest-modal-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;}
-        .fest-meta-item{background:white;border:1px solid var(--cream-dark);border-radius:var(--radius);padding:12px 14px;}
-        .fest-meta-label{font-family:var(--font-display);font-size:10px;letter-spacing:.08em;color:var(--text-light);margin-bottom:4px;}
-        .fest-meta-value{font-family:var(--font-body);font-size:15px;color:var(--text-dark);font-weight:600;}
-        .fest-modal-temple-box{background:rgba(16,163,74,.06);border:1px solid rgba(16,163,74,.2);border-radius:var(--radius);padding:12px 16px;margin-bottom:20px;}
-        .fest-modal-temple-label{font-family:var(--font-display);font-size:10px;letter-spacing:.08em;color:#16a34a;margin-bottom:4px;}
-        .fest-modal-temple-name{font-family:var(--font-body);font-size:15px;font-weight:600;color:var(--text-dark);}
-        .fest-modal-temple-city{font-family:var(--font-hindi);font-size:12px;color:#16a34a;}
-        .fest-modal-actions{display:flex;gap:10px;}
-        .fest-modal-close{flex:1;padding:11px;border:2px solid var(--cream-dark);border-radius:50px;background:white;font-family:var(--font-display);font-size:13px;letter-spacing:.05em;color:var(--text-mid);cursor:pointer;transition:var(--transition);}
-        .fest-modal-close:hover{border-color:var(--saffron);color:var(--saffron);}
-        .fest-modal-cta{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 20px;background:linear-gradient(135deg,var(--saffron),var(--saffron-dark));color:white;border:none;border-radius:50px;font-family:var(--font-display);font-size:13px;letter-spacing:.05em;cursor:pointer;text-decoration:none;transition:var(--transition);}
-        .fest-modal-cta:hover{opacity:.9;transform:translateY(-1px);}
-
-        /* ── Responsive ── */
+        @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes slideUp { from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;} }
+        @keyframes fadeIn { from{opacity:0;}to{opacity:1;} }
+        .scrollbar-hide::-webkit-scrollbar { display:none; }
+        .scrollbar-hide { -ms-overflow-style:none; scrollbar-width:none; }
+        .fest-card { background:white; border-radius:20px; border:1.5px solid #EDE0CC; overflow:hidden; transition:all .22s; cursor:pointer; position:relative; }
+        .fest-card:hover { transform:translateY(-4px); box-shadow:0 12px 32px rgba(61,31,0,0.13); border-color:transparent; }
         @media(max-width:640px){
-          .fest-controls-inner{gap:10px;}
-          .fest-search-wrap{flex:0 0 100%;}
-          .fest-grid{grid-template-columns:1fr;}
-          .fest-modal-meta{grid-template-columns:1fr;}
-          .month-heading-name{font-size:20px;}
-          .fest-controls-right{margin-left:0;}
+          .fest-modal-meta { grid-template-columns:1fr !important; }
         }
       `}</style>
     </>
@@ -712,62 +670,65 @@ export default function FestivalCalendarPage() {
 
 // ── FestivalCard ───────────────────────────────────────────────────────────────
 function FestivalCard({ festival, compact, onClick }) {
-  const { emoji, color } = { emoji: festival.emoji || '🛕', color: festival.color || '#E8650A' };
+  const emoji = festival.emoji || '🛕';
+  const color = festival.color || '#E8650A';
+  const pad   = compact ? '14px 16px' : '20px 20px 14px';
+  const emojiSz = compact ? { width: 42, height: 42, fontSize: 22 } : { width: 54, height: 54, fontSize: 28 };
 
   return (
-    <div
-      className={`fest-card${compact ? ' fest-card-compact' : ''}`}
-      onClick={onClick}
-    >
-      <div className="fest-card-top">
-        <div className="fest-card-emoji" style={{ background: `${color}14` }}>
-          {emoji}
-        </div>
-        <div className="fest-card-info">
-          <div className="fest-card-name" title={festival.name}>{festival.name}</div>
+    <div className="fest-card" onClick={onClick}>
+      <div style={{ padding: pad, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+        <div style={{
+          ...emojiSz, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: 14, background: `${color}14`, flexShrink: 0,
+        }}>{emoji}</div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: compact ? 13 : 15, fontWeight: 700,
+            color: '#3D1F00', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }} title={festival.name}>{festival.name}</div>
 
           {festival.display_date && (
-            <div className="fest-card-date" style={{ color }}>
-              📅 {festival.display_date}
-            </div>
+            <div style={{ fontSize: 11, fontWeight: 600, color, marginBottom: 2 }}>📅 {festival.display_date}</div>
           )}
-
           {festival.hindu_tithi && (
-            <div className="fest-card-sub" title={festival.hindu_tithi}>
+            <div style={{ fontFamily: 'var(--font-hindi)', fontSize: compact ? 11 : 12, color: '#9A7150', marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {festival.hindu_tithi}
             </div>
           )}
-
           {!festival.hindu_tithi && festival.significance && (
-            <div className="fest-card-sub" title={festival.significance}>
+            <div style={{ fontFamily: 'var(--font-hindi)', fontSize: compact ? 11 : 12, color: '#9A7150', marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {festival.significance}
             </div>
           )}
 
-          <div className="fest-card-badges">
-            {festival.is_major && <span className="fest-badge fest-badge-major">⭐ Major</span>}
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {festival.is_major && (
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(232,101,10,.25)', color: '#B84D00', background: 'rgba(232,101,10,.08)' }}>⭐ Major</span>
+            )}
             {festival.duration_days > 1 && (
-              <span className="fest-badge fest-badge-days">{festival.duration_days} days</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid #EDE0CC', color: '#5C3D1E', background: '#FDF6EC' }}>{festival.duration_days} days</span>
             )}
             {festival.deity && festival.deity !== 'Other' && (
-              <span className="fest-badge fest-badge-deity">{festival.deity}</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)' }}>{festival.deity}</span>
             )}
             {festival.temple_id && (
-              <span className="fest-badge fest-badge-temple">🛕 Temple</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)' }}>🛕 Temple</span>
             )}
             {festival._claude && (
-              <span className="fest-badge fest-badge-claude">✨ AI</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)' }}>✨ AI</span>
             )}
           </div>
 
           {festival.temple_name && (
-            <div className="fest-card-temple" title={`${festival.temple_name}, ${festival.temple_city || ''}`}>
+            <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 11, color: '#16a34a', marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               📍 {festival.temple_name}{festival.temple_city ? `, ${festival.temple_city}` : ''}
             </div>
           )}
         </div>
       </div>
-      <div className="fest-card-accent" style={{ background: `linear-gradient(90deg,${color},${color}55)` }} />
+      <div style={{ height: compact ? 3 : 4, background: `linear-gradient(90deg,${color},${color}55)` }} />
     </div>
   );
 }
@@ -776,95 +737,106 @@ function FestivalCard({ festival, compact, onClick }) {
 function FestivalModal({ festival, onClose }) {
   const monthName  = GREGORIAN_MONTHS[(festival.month || 1) - 1] || '';
   const hinduMonth = festival.hindu_month || HINDU_MONTHS[((festival.month || 1) - 1) % 12] || '';
-  const { emoji, color } = { emoji: festival.emoji || '🛕', color: festival.color || '#E8650A' };
+  const emoji = festival.emoji || '🛕';
+  const color = festival.color || '#E8650A';
 
   return (
-    <div className="fest-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="fest-modal">
-        <div className="fest-modal-header" style={{ background: `${color}12` }}>
-          <div className="fest-modal-emoji" style={{ border: `2px solid ${color}30` }}>{emoji}</div>
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(26,10,0,.65)',
+      backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', padding: 24, animation: 'fadeIn .2s ease',
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: '#FDF6EC', borderRadius: 28, maxWidth: 560, width: '100%',
+        overflow: 'hidden', animation: 'slideUp .25s ease',
+        boxShadow: '0 32px 80px rgba(26,10,0,.4)', maxHeight: '90vh', overflowY: 'auto',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '28px 28px 20px', display: 'flex', alignItems: 'flex-start', gap: 16, background: `${color}12` }}>
+          <div style={{
+            fontSize: 40, width: 70, height: 70, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', borderRadius: 18, background: 'white',
+            border: `2px solid ${color}30`, boxShadow: '0 4px 16px rgba(61,31,0,0.1)', flexShrink: 0,
+          }}>{emoji}</div>
           <div>
-            <div className="fest-modal-title">{festival.name}</div>
-            {festival.display_date && (
-              <div className="fest-modal-date">📅 {festival.display_date}</div>
-            )}
-            {festival.hindu_tithi && (
-              <div className="fest-modal-hint">{festival.hindu_tithi}</div>
-            )}
-            <div style={{ display:'flex', gap:6, marginTop:8, flexWrap:'wrap' }}>
-              {festival.is_major && <span className="fest-badge fest-badge-major">⭐ Major</span>}
-              {festival.temple_id && <span className="fest-badge fest-badge-temple">🛕 Temple Festival</span>}
-              {festival._claude && <span className="fest-badge fest-badge-claude">✨ AI Curated</span>}
-              {festival.deity && festival.deity !== 'Other' && (
-                <span className="fest-badge fest-badge-deity">{festival.deity}</span>
-              )}
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: '#3D1F00', marginBottom: 4 }}>{festival.name}</div>
+            {festival.display_date && <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color, fontWeight: 600, marginBottom: 4 }}>📅 {festival.display_date}</div>}
+            {festival.hindu_tithi && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color }}>{festival.hindu_tithi}</div>}
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              {festival.is_major && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(232,101,10,.25)', color: '#B84D00', background: 'rgba(232,101,10,.08)', fontFamily: 'var(--font-display)' }}>⭐ Major</span>}
+              {festival.temple_id && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)', fontFamily: 'var(--font-display)' }}>🛕 Temple Festival</span>}
+              {festival._claude && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)', fontFamily: 'var(--font-display)' }}>✨ AI Curated</span>}
+              {festival.deity && festival.deity !== 'Other' && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)', fontFamily: 'var(--font-display)' }}>{festival.deity}</span>}
             </div>
           </div>
         </div>
 
-        <div className="fest-modal-body">
-          <div className="fest-modal-divider" />
+        {/* Body */}
+        <div style={{ padding: '0 28px 28px' }}>
+          <div style={{ height: 1, background: '#EDE0CC', margin: '0 0 20px' }} />
 
           {festival.temple_name && (
-            <div className="fest-modal-temple-box">
-              <div className="fest-modal-temple-label">🛕 CELEBRATED AT</div>
-              <div className="fest-modal-temple-name">{festival.temple_name}</div>
-              {festival.temple_city && (
-                <div className="fest-modal-temple-city">📍 {festival.temple_city}</div>
-              )}
+            <div style={{ background: 'rgba(16,163,74,0.06)', border: '1px solid rgba(16,163,74,.2)', borderRadius: 14, padding: '12px 16px', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.08em', color: '#16a34a', marginBottom: 4 }}>🛕 CELEBRATED AT</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 600, color: '#3D1F00' }}>{festival.temple_name}</div>
+              {festival.temple_city && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 12, color: '#16a34a' }}>📍 {festival.temple_city}</div>}
             </div>
           )}
 
           {festival.significance && (
-            <p className="fest-modal-text"><strong>Significance:</strong> {festival.significance}</p>
+            <p style={{ fontFamily: 'var(--font-body)', fontSize: 16, lineHeight: 1.7, color: '#5C3D1E', marginBottom: 16 }}>
+              <strong>Significance:</strong> {festival.significance}
+            </p>
           )}
           {festival.description && festival.description !== festival.significance && (
-            <p className="fest-modal-text">{festival.description}</p>
+            <p style={{ fontFamily: 'var(--font-body)', fontSize: 16, lineHeight: 1.7, color: '#5C3D1E', marginBottom: 20 }}>{festival.description}</p>
           )}
 
-          <div className="fest-modal-meta">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }} className="fest-modal-meta">
             {festival.display_date && (
-              <div className="fest-meta-item" style={{ gridColumn:'1 / -1' }}>
-                <div className="fest-meta-label">DATE 2025</div>
-                <div className="fest-meta-value" style={{ color }}>{festival.display_date}</div>
+              <div style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 14, padding: '12px 14px', gridColumn: '1 / -1' }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.08em', color: '#9A7150', marginBottom: 4 }}>DATE</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 600, color }}>{festival.display_date}</div>
               </div>
             )}
-            <div className="fest-meta-item">
-              <div className="fest-meta-label">GREGORIAN MONTH</div>
-              <div className="fest-meta-value">{monthName}</div>
-            </div>
-            <div className="fest-meta-item">
-              <div className="fest-meta-label">HINDU MONTH</div>
-              <div className="fest-meta-value" style={{ fontFamily:'var(--font-hindi)' }}>{hinduMonth}</div>
-            </div>
-            {festival.hindu_tithi && (
-              <div className="fest-meta-item">
-                <div className="fest-meta-label">TITHI</div>
-                <div className="fest-meta-value" style={{ fontSize:13 }}>{festival.hindu_tithi}</div>
+            {[
+              { label: 'GREGORIAN MONTH', value: monthName },
+              { label: 'HINDU MONTH', value: hinduMonth, hindi: true },
+              ...(festival.hindu_tithi ? [{ label: 'TITHI', value: festival.hindu_tithi, small: true }] : []),
+              { label: 'DURATION', value: `${festival.duration_days || 1} ${(festival.duration_days || 1) === 1 ? 'Day' : 'Days'}` },
+              { label: 'SOURCE', value: festival._claude ? '✨ Claude AI' : festival.source || '🛕 Temple Record', small: true },
+            ].map((item, idx) => (
+              <div key={idx} style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 14, padding: '12px 14px' }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.08em', color: '#9A7150', marginBottom: 4 }}>{item.label}</div>
+                <div style={{ fontFamily: item.hindi ? 'var(--font-hindi)' : 'var(--font-body)', fontSize: item.small ? 13 : 15, fontWeight: 600, color: '#1A0A00' }}>{item.value}</div>
               </div>
-            )}
-            <div className="fest-meta-item">
-              <div className="fest-meta-label">DURATION</div>
-              <div className="fest-meta-value">
-                {festival.duration_days || 1} {(festival.duration_days || 1) === 1 ? 'Day' : 'Days'}
-              </div>
-            </div>
-            <div className="fest-meta-item">
-              <div className="fest-meta-label">SOURCE</div>
-              <div className="fest-meta-value" style={{ fontSize:13 }}>
-                {festival._claude ? '✨ Claude AI' : festival.source || '🛕 Temple Record'}
-              </div>
-            </div>
+            ))}
           </div>
 
-          <div className="fest-modal-actions">
-            <button className="fest-modal-close" onClick={onClose}>Close</button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} style={{
+              flex: 1, padding: '11px', border: '2px solid #EDE0CC', borderRadius: 50,
+              background: 'white', fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em',
+              color: '#5C3D1E', cursor: 'pointer',
+            }}>Close</button>
             {festival.temple_slug ? (
-              <Link to={`/temple/${festival.temple_slug}`} className="fest-modal-cta" onClick={onClose}>
+              <Link to={`/temple/${festival.temple_slug}`} onClick={onClose} style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '11px 20px', background: 'linear-gradient(135deg, #E8650A, #B84D00)',
+                color: 'white', border: 'none', borderRadius: 50,
+                fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em',
+                textDecoration: 'none',
+              }}>
                 <MapPin size={14} /> Visit Temple
               </Link>
             ) : (
-              <Link to={`/search?q=${encodeURIComponent(festival.name)}`} className="fest-modal-cta" onClick={onClose}>
+              <Link to={`/search?q=${encodeURIComponent(festival.name)}`} onClick={onClose} style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '11px 20px', background: 'linear-gradient(135deg, #E8650A, #B84D00)',
+                color: 'white', border: 'none', borderRadius: 50,
+                fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em',
+                textDecoration: 'none',
+              }}>
                 <MapPin size={14} /> Find Temples
               </Link>
             )}
