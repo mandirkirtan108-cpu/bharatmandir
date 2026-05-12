@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut } from 'lucide-react';
+import { PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 
 export default function Navbar() {
-  const [query, setQuery] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -15,26 +14,14 @@ export default function Navbar() {
   const sidebarRef = useRef(null);
   const { isAdmin, logout } = useAdminAuth();
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (query.trim()) {
-      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
-      setQuery('');
-      setSidebarOpen(false);
-    }
-  };
-
   const isActive = (path) => location.pathname === path;
 
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [location.pathname]);
+  useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (sidebarOpen && sidebarRef.current && !sidebarRef.current.contains(e.target)) {
+      if (sidebarOpen && sidebarRef.current && !sidebarRef.current.contains(e.target))
         setSidebarOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -45,10 +32,18 @@ export default function Navbar() {
     return () => { document.body.style.overflow = ''; };
   }, [sidebarOpen]);
 
-  const NAV_LINKS = [
+  // ── Public nav links (shown when NOT admin) ──
+  const PUBLIC_NAV_LINKS = [
     { to: '/route-planner', label: t('nav.route'),  icon: <Navigation size={17} /> },
     { to: '/panchang',      label: '🪔 Panchang',   icon: <CalendarDays size={17} /> },
     { to: '/festivals',     label: '🌸 Festivals',  icon: <Sparkles size={17} /> },
+  ];
+
+  // ── Admin nav links (shown when IS admin) ──
+  const ADMIN_NAV_LINKS = [
+    { to: '/admin/add',         label: 'Add Temple',   icon: <PlusCircle size={17} />,    color: 'var(--brown-mid)' },
+    { to: '/admin/add-festival', label: 'Add Festival', icon: <Sparkles size={17} />,      color: '#C8960C' },
+    { to: '/admin/panel',       label: 'Admin Panel',  icon: <LayoutDashboard size={17} />, color: 'var(--brown-mid)' },
   ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
@@ -67,7 +62,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* ── Navbar ─────────────────────────────────────────────────────── */}
+      {/* ── Navbar ── */}
       <nav className="navbar">
         <div className="navbar-inner">
 
@@ -81,47 +76,21 @@ export default function Navbar() {
 
           <div style={{ flex: 1 }} />
 
-          {/* Desktop nav links */}
+          {/* ── Desktop nav ── */}
           <div className="nav-actions nav-actions-desktop">
-            {NAV_LINKS.map((link, index) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={`nav-link nav-link-${index}${isActive(link.to) ? ' active' : ''}`}
-              >
-                {link.label}
-              </Link>
-            ))}
 
-            <div className="nav-divider" />
-
-            {/* ── AI Spiritual Guide button ── */}
-            <Link
-              to="/spiritual-guide"
-              className={`nav-add-btn${isActive('/spiritual-guide') ? ' active' : ''}`}
-              style={{
-                background: isActive('/spiritual-guide')
-                  ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
-                  : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-                color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
-                borderColor: '#FF6B00',
-                fontWeight: 700,
-              }}
-            >
-              <span>🕉️</span>
-              <span>AI Guide</span>
-            </Link>
-
-            {isAdmin && (
+            {isAdmin ? (
+              /* ══ ADMIN MODE: Add Temple, Add Festival, Panel, Logout ══ */
               <>
                 <Link
                   to="/admin/add"
-                  className="nav-add-btn"
+                  className={`nav-add-btn${isActive('/admin/add') ? ' active' : ''}`}
                   style={{
-                    background: 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-                    color: 'var(--brown-mid)',
-                    borderColor: 'var(--brown-mid)',
-                    fontWeight: 700,
+                    background: isActive('/admin/add')
+                      ? 'linear-gradient(135deg, var(--brown-mid), var(--brown))'
+                      : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
+                    color: isActive('/admin/add') ? 'white' : 'var(--brown-mid)',
+                    borderColor: 'var(--brown-mid)', fontWeight: 700,
                   }}
                 >
                   <PlusCircle size={15} />
@@ -130,19 +99,21 @@ export default function Navbar() {
 
                 <Link
                   to="/admin/add-festival"
-                  className="nav-add-btn nav-add-festival-btn"
+                  className={`nav-add-btn${isActive('/admin/add-festival') ? ' active' : ''}`}
+                  style={{
+                    background: isActive('/admin/add-festival')
+                      ? 'linear-gradient(135deg,#C8960C,#a07008)'
+                      : 'linear-gradient(135deg,#fffbea,#fff3c0)',
+                    color: isActive('/admin/add-festival') ? 'white' : '#C8960C',
+                    borderColor: '#C8960C', fontWeight: 700,
+                  }}
                 >
                   <Sparkles size={15} />
-                  <span>Festival</span>
+                  <span>Add Festival</span>
                 </Link>
-              </>
-            )}
 
-            <div className="nav-divider" />
+                <div className="nav-divider" />
 
-            {/* ── Admin Panel link — only shown when authenticated ── */}
-            {isAdmin ? (
-              <>
                 <Link
                   to="/admin/panel"
                   className={`nav-add-btn${isActive('/admin/panel') ? ' active' : ''}`}
@@ -177,18 +148,47 @@ export default function Navbar() {
                 </button>
               </>
             ) : (
-              <Link
-                to="/admin/login"
-                className="nav-add-btn"
-                style={{
-                  color: 'var(--text-light)',
-                  borderColor: 'var(--cream-dark)',
-                }}
-                title="Admin Login"
-              >
-                <LayoutDashboard size={15} />
-                <span>Admin</span>
-              </Link>
+              /* ══ PUBLIC MODE: Route Planner, Panchang, Festivals, AI Guide, Admin Login ══ */
+              <>
+                {PUBLIC_NAV_LINKS.map((link, index) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={`nav-link nav-link-${index}${isActive(link.to) ? ' active' : ''}`}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+
+                <div className="nav-divider" />
+
+                <Link
+                  to="/spiritual-guide"
+                  className={`nav-add-btn${isActive('/spiritual-guide') ? ' active' : ''}`}
+                  style={{
+                    background: isActive('/spiritual-guide')
+                      ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
+                      : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
+                    color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
+                    borderColor: '#FF6B00', fontWeight: 700,
+                  }}
+                >
+                  <span>🕉️</span>
+                  <span>AI Guide</span>
+                </Link>
+
+                <div className="nav-divider" />
+
+                <Link
+                  to="/admin/login"
+                  className="nav-add-btn"
+                  style={{ color: 'var(--text-light)', borderColor: 'var(--cream-dark)' }}
+                  title="Admin Login"
+                >
+                  <LayoutDashboard size={15} />
+                  <span>Admin</span>
+                </Link>
+              </>
             )}
 
             <div className="nav-divider" />
@@ -217,10 +217,10 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* ── Sidebar overlay ────────────────────────────────────────────── */}
+      {/* ── Sidebar overlay ── */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
-      {/* ── Sidebar drawer ─────────────────────────────────────────────── */}
+      {/* ── Sidebar drawer ── */}
       <aside ref={sidebarRef} className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
 
         <div className="sidebar-header">
@@ -237,61 +237,21 @@ export default function Navbar() {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <span className="sidebar-link-icon">{link.icon}</span>
-              {link.label}
-            </Link>
-          ))}
-
-          {/* ── AI Spiritual Guide in sidebar ── */}
-          <Link
-            to="/spiritual-guide"
-            className={`sidebar-link${isActive('/spiritual-guide') ? ' active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-            style={{ color: '#FF6B00', fontWeight: 700 }}
-          >
-            <span className="sidebar-link-icon">🕉️</span>
-            AI Spiritual Guide
-          </Link>
-
-          {/* Admin-only links in sidebar — only when authenticated */}
           {isAdmin ? (
+            /* ══ ADMIN SIDEBAR ══ */
             <>
-              <Link
-                to="/admin/add"
-                className={`sidebar-link${isActive('/admin/add') ? ' active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
-              >
-                <span className="sidebar-link-icon"><PlusCircle size={17} /></span>
-                Add Temple
-              </Link>
-
-              <Link
-                to="/admin/add-festival"
-                className={`sidebar-link${isActive('/admin/add-festival') ? ' active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                style={{ color: '#C8960C', fontWeight: 700 }}
-              >
-                <span className="sidebar-link-icon">🌸</span>
-                Add Festival
-              </Link>
-
-              <Link
-                to="/admin/panel"
-                className={`sidebar-link${isActive('/admin/panel') ? ' active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
-              >
-                <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
-                Admin Panel
-              </Link>
+              {ADMIN_NAV_LINKS.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
+                  onClick={() => setSidebarOpen(false)}
+                  style={{ color: link.color, fontWeight: 700 }}
+                >
+                  <span className="sidebar-link-icon">{link.icon}</span>
+                  {link.label}
+                </Link>
+              ))}
 
               <button
                 onClick={handleLogout}
@@ -305,19 +265,44 @@ export default function Navbar() {
                 }}
               >
                 <span className="sidebar-link-icon"><LogOut size={17} /></span>
-                Admin Logout
+                Logout
               </button>
             </>
           ) : (
-            <Link
-              to="/admin/login"
-              className={`sidebar-link${isActive('/admin/login') ? ' active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-              style={{ color: 'var(--text-light)' }}
-            >
-              <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
-              Admin Login
-            </Link>
+            /* ══ PUBLIC SIDEBAR ══ */
+            <>
+              {PUBLIC_NAV_LINKS.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <span className="sidebar-link-icon">{link.icon}</span>
+                  {link.label}
+                </Link>
+              ))}
+
+              <Link
+                to="/spiritual-guide"
+                className={`sidebar-link${isActive('/spiritual-guide') ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ color: '#FF6B00', fontWeight: 700 }}
+              >
+                <span className="sidebar-link-icon">🕉️</span>
+                AI Spiritual Guide
+              </Link>
+
+              <Link
+                to="/admin/login"
+                className={`sidebar-link${isActive('/admin/login') ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ color: 'var(--text-light)' }}
+              >
+                <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
+                Admin Login
+              </Link>
+            </>
           )}
         </nav>
 
@@ -325,7 +310,7 @@ export default function Navbar() {
           <select
             className="nav-lang-select sidebar-lang"
             value={lang}
-            onChange={(e) => { changeLang(e.target.value); }}
+            onChange={(e) => changeLang(e.target.value)}
           >
             <option value="en">🌐 English</option>
             <option value="hi">🇮🇳 हिंदी</option>
@@ -336,42 +321,32 @@ export default function Navbar() {
 
       </aside>
 
-      {/* ── Floating AI Spiritual Guide button ────────────────────────── */}
-      <Link
-        to="/spiritual-guide"
-        style={{
-          display: sidebarOpen ? 'none' : 'flex',
-          position: 'fixed',
-          bottom: 28,
-          right: 28,
-          zIndex: 9999,
-          alignItems: 'center',
-          gap: 8,
-          padding: '12px 20px',
-          borderRadius: 50,
-          fontSize: 14,
-          fontWeight: 700,
-          textDecoration: 'none',
-          whiteSpace: 'nowrap',
-          border: '2px solid #FF6B00',
-          background: isActive('/spiritual-guide')
-            ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
-            : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-          color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
-          boxShadow: '0 4px 20px rgba(255,107,0,0.35)',
-          transition: 'all .2s',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.transform = 'scale(1.07)';
-          e.currentTarget.style.boxShadow = '0 6px 28px rgba(255,107,0,0.50)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(255,107,0,0.35)';
-        }}
-      >
-        🕉️ AI Guide
-      </Link>
+      {/* ── Floating AI Guide button — only for public users, hidden when sidebar open ── */}
+      {!isAdmin && (
+        <Link
+          to="/spiritual-guide"
+          style={{
+            display: sidebarOpen ? 'none' : 'flex',
+            position: 'fixed',
+            bottom: 28, right: 28, zIndex: 9999,
+            alignItems: 'center', gap: 8,
+            padding: '12px 20px', borderRadius: 50,
+            fontSize: 14, fontWeight: 700,
+            textDecoration: 'none', whiteSpace: 'nowrap',
+            border: '2px solid #FF6B00',
+            background: isActive('/spiritual-guide')
+              ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
+              : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
+            color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
+            boxShadow: '0 4px 20px rgba(255,107,0,0.35)',
+            transition: 'all .2s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.07)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(255,107,0,0.50)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(255,107,0,0.35)'; }}
+        >
+          🕉️ AI Guide
+        </Link>
+      )}
     </>
   );
 }
