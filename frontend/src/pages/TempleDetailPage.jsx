@@ -334,13 +334,7 @@ export default function TempleDetailPage() {
         <div className="hero-grad"/>
 
         <div className="hero-body">
-          {/* Breadcrumb */}
-          <div className="hero-bc">
-            <a href="/">Home</a><sep>/</sep>
-            <span>{T.state}</span><sep>/</sep>
-            <span>{T.city}</span><sep>/</sep>
-            <span>{T.name}</span>
-          </div>
+          
 
           {/* Classification badges */}
           <div className="badges">
