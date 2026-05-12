@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY || '';
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_SECRET_KEY || '';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const GREGORIAN_MONTHS = [
