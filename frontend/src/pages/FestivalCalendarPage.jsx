@@ -361,7 +361,7 @@ export default function FestivalCalendarPage() {
           {claudeLoading && (
             <div className="claude-status">
               <span className="claude-spinner">✨</span>
-              Claude AI se festivals fetch ho rahe hain…
+              Please wait festivals are loading!
             </div>
           )}
           {claudeError && !claudeLoading && (
@@ -488,7 +488,7 @@ export default function FestivalCalendarPage() {
             {claudeLoading && allFestivals.length > 0 && (
               <div className="partial-notice">
                 <span className="claude-spinner" style={{ fontSize:14 }}>✨</span>
-                More festivals load ho rahe hain Claude AI se…
+                More festivals are loading please wait…
               </div>
             )}
 
