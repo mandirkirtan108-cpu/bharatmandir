@@ -1,6 +1,7 @@
 /**
  * AdminPanelPage.jsx — BharatMandir Admin Panel
  * Fixed: JWT Bearer token auth + proper error message parsing
+ * Updated: Added "Add Festival" button + Logout button in controls bar
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,7 +10,8 @@ import {
   CheckCircle2, XCircle, Archive, Eye, RefreshCw,
   Search, Shield, ShieldCheck, ExternalLink, Clock,
   MapPin, User, Star, ChevronLeft, ChevronRight,
-  Loader2, AlertTriangle, LayoutDashboard, PlusCircle
+  Loader2, AlertTriangle, LayoutDashboard, PlusCircle,
+  CalendarPlus, LogOut
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -438,6 +440,14 @@ export default function AdminPanelPage() {
     if (!token) navigate('/admin/login', { replace: true });
   }, []);
 
+  // ── Logout handler ──────────────────────────────────────────────────────────
+  const handleLogout = () => {
+    sessionStorage.removeItem('bm_access_token');
+    sessionStorage.removeItem('bm_refresh_token');
+    sessionStorage.removeItem('bm_admin_user');
+    navigate('/admin/login', { replace: true });
+  };
+
   const loadTemples = useCallback(async (tab = activeTab, pg = page) => {
     setLoading(true);
     setError(null);
@@ -555,7 +565,7 @@ export default function AdminPanelPage() {
 
         <div className="container" style={{ marginTop: 28 }}>
 
-          {/* ── Controls: Search + Add Temple + Refresh ── */}
+          {/* ── Controls: Search + Add Temple + Add Festival + Refresh + Logout ── */}
           <div style={{
             display: 'flex',
             gap: 10,
@@ -605,7 +615,30 @@ export default function AdminPanelPage() {
               onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(200,100,0,.25)'; }}
             >
               <PlusCircle size={15} />
-              <span>Add Temple</span>
+              <span className="btn-label-temple">Add Temple</span>
+            </Link>
+
+            {/* Add Festival button */}
+            <Link
+              to="/admin/add-festival"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '10px 18px',
+                background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                border: '2px solid transparent',
+                borderRadius: 50,
+                fontFamily: 'var(--font-display)', fontSize: 13,
+                letterSpacing: '.04em', fontWeight: 700,
+                color: 'white', textDecoration: 'none',
+                whiteSpace: 'nowrap', flexShrink: 0,
+                boxShadow: '0 2px 12px rgba(124,58,237,.25)',
+                transition: 'all .2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(124,58,237,.4)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(124,58,237,.25)'; }}
+            >
+              <CalendarPlus size={15} />
+              <span className="btn-label-festival">Add Festival</span>
             </Link>
 
             {/* Refresh button */}
@@ -623,8 +656,25 @@ export default function AdminPanelPage() {
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cream-dark)'}
             >
               <RefreshCw size={14} />
-              {/* Hide label on very small screens — show icon only */}
               <span className="refresh-label">Refresh</span>
+            </button>
+
+            {/* Logout button */}
+            <button
+              onClick={handleLogout}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '10px 16px', border: '2px solid #fca5a5',
+                borderRadius: 50, background: '#fef2f2',
+                fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
+                cursor: 'pointer', color: '#b91c1c', whiteSpace: 'nowrap', flexShrink: 0,
+                transition: 'all .2s', fontWeight: 600,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#b91c1c'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#b91c1c'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#b91c1c'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+            >
+              <LogOut size={14} />
+              <span className="logout-label">Logout</span>
             </button>
           </div>
 
@@ -741,9 +791,15 @@ export default function AdminPanelPage() {
         @media (max-width: 640px) {
           .admin-table-header { display: none !important; }
           .refresh-label { display: none; }
+          .logout-label { display: none; }
+          .btn-label-temple { display: none; }
+          .btn-label-festival { display: none; }
         }
         @media (min-width: 641px) {
           .refresh-label { display: inline; }
+          .logout-label { display: inline; }
+          .btn-label-temple { display: inline; }
+          .btn-label-festival { display: inline; }
         }
       `}</style>
     </>
