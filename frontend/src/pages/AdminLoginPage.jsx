@@ -44,38 +44,6 @@ export default function AdminLoginPage() {
         ))}
       </div>
 
-      {/* ── Home button — top-left corner ── */}
-      <Link
-        to="/"
-        style={{
-          position: 'fixed', top: 20, left: 20, zIndex: 10,
-          display: 'inline-flex', alignItems: 'center', gap: 7,
-          padding: '9px 16px',
-          background: 'rgba(255,255,255,0.07)',
-          border: '1px solid rgba(255,153,0,0.25)',
-          borderRadius: 50,
-          color: 'rgba(255,255,255,0.7)',
-          fontSize: 13, fontWeight: 600,
-          fontFamily: "'Cinzel', serif",
-          letterSpacing: '.04em',
-          textDecoration: 'none',
-          backdropFilter: 'blur(10px)',
-          transition: 'all .2s',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.background = 'rgba(255,153,0,0.15)';
-          e.currentTarget.style.borderColor = 'rgba(255,153,0,0.6)';
-          e.currentTarget.style.color = '#ff9900';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
-          e.currentTarget.style.borderColor = 'rgba(255,153,0,0.25)';
-          e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
-        }}
-      >
-        ← Home
-      </Link>
-
       <div style={{
         background: 'rgba(255,255,255,0.04)',
         backdropFilter: 'blur(20px)',
@@ -165,7 +133,7 @@ export default function AdminLoginPage() {
             </div>
           )}
 
-          {/* Submit */}
+          {/* Sign In */}
           <button
             type="submit"
             disabled={loading}
@@ -183,6 +151,37 @@ export default function AdminLoginPage() {
           >
             {loading ? 'Signing in...' : '🔐 Sign In'}
           </button>
+
+          {/* Go to Home */}
+          <Link
+            to="/"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              width: '100%', padding: '13px',
+              marginTop: 12,
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              color: 'rgba(255,255,255,0.6)',
+              fontSize: 14, fontWeight: 600,
+              textDecoration: 'none',
+              letterSpacing: 0.3,
+              transition: 'all 0.2s',
+              boxSizing: 'border-box',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,153,0,0.1)';
+              e.currentTarget.style.borderColor = 'rgba(255,153,0,0.4)';
+              e.currentTarget.style.color = '#ff9900';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+              e.currentTarget.style.color = 'rgba(255,255,255,0.6)';
+            }}
+          >
+            🏠 Go to Home
+          </Link>
         </form>
 
         <p style={{
