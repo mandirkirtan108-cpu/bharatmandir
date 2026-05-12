@@ -112,13 +112,31 @@ export default function Navbar() {
               <span>AI Guide</span>
             </Link>
 
-            <Link
-              to="/admin/add-festival"
-              className="nav-add-btn nav-add-festival-btn"
-            >
-              <Sparkles size={15} />
-              <span>Festival</span>
-            </Link>
+            {isAdmin && (
+              <>
+                <Link
+                  to="/admin/add"
+                  className="nav-add-btn"
+                  style={{
+                    background: 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
+                    color: 'var(--brown-mid)',
+                    borderColor: 'var(--brown-mid)',
+                    fontWeight: 700,
+                  }}
+                >
+                  <PlusCircle size={15} />
+                  <span>Add Temple</span>
+                </Link>
+
+                <Link
+                  to="/admin/add-festival"
+                  className="nav-add-btn nav-add-festival-btn"
+                >
+                  <Sparkles size={15} />
+                  <span>Festival</span>
+                </Link>
+              </>
+            )}
 
             <div className="nav-divider" />
 
@@ -242,19 +260,29 @@ export default function Navbar() {
             AI Spiritual Guide
           </Link>
 
-          <Link
-            to="/admin/add-festival"
-            className={`sidebar-link${isActive('/admin/add-festival') ? ' active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-            style={{ color: '#C8960C', fontWeight: 700 }}
-          >
-            <span className="sidebar-link-icon">🌸</span>
-            Add Festival
-          </Link>
-
-          {/* Admin links in sidebar — only when authenticated */}
+          {/* Admin-only links in sidebar — only when authenticated */}
           {isAdmin ? (
             <>
+              <Link
+                to="/admin/add"
+                className={`sidebar-link${isActive('/admin/add') ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
+              >
+                <span className="sidebar-link-icon"><PlusCircle size={17} /></span>
+                Add Temple
+              </Link>
+
+              <Link
+                to="/admin/add-festival"
+                className={`sidebar-link${isActive('/admin/add-festival') ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ color: '#C8960C', fontWeight: 700 }}
+              >
+                <span className="sidebar-link-icon">🌸</span>
+                Add Festival
+              </Link>
+
               <Link
                 to="/admin/panel"
                 className={`sidebar-link${isActive('/admin/panel') ? ' active' : ''}`}
