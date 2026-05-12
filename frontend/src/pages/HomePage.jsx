@@ -1,307 +1,258 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useSearchParams, Link, useLocation } from 'react-router-dom';
+import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useLang } from '../LangContext';
-import { useAdminAuth } from '../hooks/useAdminAuth';
+import Navbar from '../components/Navbar';
+import TempleCard from '../components/TempleCard';
+import Footer from '../components/Footer';
+import { templeAPI } from '../services/api';
+import { useTranslatedTemples } from '../hooks/useTranslatedData';
 
-export default function Navbar() {
-  const [query, setQuery] = useState('');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { t } = useTranslation();
-  const { lang, changeLang } = useLang();
-  const sidebarRef = useRef(null);
-  const { isAdmin, logout } = useAdminAuth();
+const DEITY_FILTERS = [
+  { labelKey: 'filter.all',        value: '' },
+  { label: '🔱 Shiva',             value: 'Lord Shiva' },
+  { label: '🪷 Vishnu',            value: 'Lord Vishnu' },
+  { label: '🏹 Ram',               value: 'Lord Ram' },
+  { label: '🎵 Krishna',           value: 'Lord Krishna' },
+  { label: '⚔️ Durga/Shakti',      value: 'Goddess' },
+  { label: '🐘 Ganesha',           value: 'Lord Ganesha' },
+  { labelKey: 'filter.jyotirlinga', emoji: '⭐', value: 'jyotirlinga' },
+  { labelKey: 'filter.shaktipeeth', emoji: '🌸', value: 'shaktipeeth' },
+];
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (query.trim()) {
-      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
-      setQuery('');
-      setSidebarOpen(false);
-    }
-  };
+const STATES = [
+  'All States',
+  'Madhya Pradesh', 'Uttar Pradesh', 'Maharashtra',
+  'Tamil Nadu', 'Gujarat', 'Karnataka', 'Rajasthan',
+];
+
+export default function HomePage() {
+  const [searchParams]                    = useSearchParams();
+  const location                          = useLocation();
+  const { t }                             = useTranslation();
+  const [temples,       setTemples]       = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState(null);
+  const [total,         setTotal]         = useState(0);
+  const [activeFilter,  setActiveFilter]  = useState('');
+  const [activeState,   setActiveState]   = useState('All States');
+  const [searchQuery,   setSearchQuery]   = useState(searchParams.get('search') || '');
+  const [totalTemples,  setTotalTemples]  = useState(0);
+
+  const { translated: displayTemples, translating } = useTranslatedTemples(temples);
 
   const isActive = (path) => location.pathname === path;
 
   useEffect(() => {
-    setSidebarOpen(false);
-  }, [location.pathname]);
+    templeAPI.health()
+      .then(res => setTotalTemples(res.data.total_temples || 0))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (sidebarOpen && sidebarRef.current && !sidebarRef.current.contains(e.target)) {
-        setSidebarOpen(false);
+    const fetchTemples = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        let temples, count;
+        if (searchQuery) {
+          const res = await templeAPI.search(searchQuery);
+          temples   = res.data;
+          count     = res.data.length;
+        } else {
+          const params = { per_page: 50 };
+          if (activeFilter === 'jyotirlinga')      params.jyotirlinga = true;
+          else if (activeFilter === 'shaktipeeth') params.shaktipeeth = true;
+          else if (activeFilter)                   params.deity = activeFilter;
+          if (activeState !== 'All States')        params.state = activeState;
+
+          const res = await templeAPI.getAll(params);
+          temples   = res.data.temples;
+          count     = res.data.total;
+        }
+        setTemples(temples || []);
+        setTotal(count || 0);
+      } catch (err) {
+        console.error('Failed to fetch temples:', err);
+        setError(t('error.backend'));
+      } finally {
+        setLoading(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sidebarOpen]);
+    fetchTemples();
+  }, [activeFilter, activeState, searchQuery]);
 
-  useEffect(() => {
-    document.body.style.overflow = sidebarOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [sidebarOpen]);
+  const handleFilterClick = (value) => {
+    setActiveFilter(value);
+    setSearchQuery('');
+  };
 
-  const NAV_LINKS = [
-    { to: '/route-planner', label: t('nav.route'),  icon: <Navigation size={17} /> },
-    { to: '/panchang',      label: '🪔 Panchang',   icon: <CalendarDays size={17} /> },
-    { to: '/festivals',     label: '🌸 Festivals',  icon: <Sparkles size={17} /> },
-  ];
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const q = e.target.elements.search.value.trim();
+    setSearchQuery(q);
+    setActiveFilter('');
+    setActiveState('All States');
+  };
 
-  const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
-
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-    setSidebarOpen(false);
+  const getFilterLabel = (f) => {
+    if (f.labelKey) return (f.emoji ? f.emoji + ' ' : '') + t(f.labelKey);
+    return f.label;
   };
 
   return (
-    <>
-      <div className="ticker-wrap">
-        <div className="ticker-track">
-          <span className="ticker-content">{tickerText}{tickerText}</span>
+    <div>
+      <Navbar />
+
+      {/* ── Hero ── */}
+      <section className="hero">
+        <div className="hero-om">OM</div>
+        <div className="hero-inner">
+          <div className="hero-badge">{t('hero_badge')}</div>
+          <h1 className="hero-title">
+            {t('hero_title')}<br />
+            <span>{t('hero_subtitle')}</span>
+          </h1>
+          <p className="hero-subtitle">
+            {t('hero_desc')}
+          </p>
+          <div className="hero-actions">
+            <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 10 }}>
+              <input
+                id="hero-search"
+                name="search"
+                defaultValue={searchQuery}
+                placeholder={t('hero_search_placeholder')}
+                style={{
+                  padding: '12px 20px', borderRadius: '50px', border: 'none',
+                  width: 300, fontSize: 15, fontFamily: 'var(--font-body)',
+                  outline: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+                }}
+              />
+              <button type="submit" className="btn-primary">
+                <Search size={15} /> {t('search_btn')}
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Stats Bar ── */}
+      <div className="stats-bar">
+        <div className="stats-grid">
+          <div className="stat-item">
+            <span className="stat-number">{totalTemples || '10+'}</span>
+            <span className="stat-label">{t('stats.temples')}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-number">28</span>
+            <span className="stat-label">{t('stats.states')}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-number">12</span>
+            <span className="stat-label">{t('stats.jyotirlinga')}</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-number">51</span>
+            <span className="stat-label">{t('stats.shaktipeeth')}</span>
+          </div>
         </div>
       </div>
 
-      {/* ── Navbar ─────────────────────────────────────────────────────── */}
-      <nav className="navbar">
-        <div className="navbar-inner">
-
-          <Link to="/" className="nav-logo" style={{ marginRight: '60px' }}>
-            <span className="nav-logo-icon">🛕</span>
-            <div>
-              <span className="nav-logo-name">BharatMandir</span>
-              <span className="nav-logo-sub">{t('nav.logo_sub')}</span>
-            </div>
-          </Link>
-
-          {/* ── Spacer: pushes nav links away from logo ── */}
-          <div style={{ flex: 1 }} />
-
-          {/* Desktop nav links */}
-          <div className="nav-actions nav-actions-desktop">
-            {NAV_LINKS.map((link, index) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={`nav-link nav-link-${index}${isActive(link.to) ? ' active' : ''}`}
+      {/* ── Filters ── */}
+      <div className="filters-bar">
+        <div className="container">
+          <div className="filters-inner">
+            {DEITY_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                className={`filter-chip ${activeFilter === f.value && !searchQuery ? 'active' : ''}`}
+                onClick={() => handleFilterClick(f.value)}
               >
-                {link.label}
-              </Link>
+                {getFilterLabel(f)}
+              </button>
             ))}
-
-            <div className="nav-divider" />
-
-            <Link to="/admin/add" className="nav-add-btn">
-              <PlusCircle size={15} />
-              <span>Add Temple</span>
-            </Link>
-
-            <Link
-              to="/admin/add-festival"
-              className="nav-add-btn nav-add-festival-btn"
-            >
-              <Sparkles size={15} />
-              <span>Festival</span>
-            </Link>
-
-            <div className="nav-divider" />
-
-            {/* ── Admin Panel link — only shown when authenticated ── */}
-            {isAdmin ? (
-              <>
-                <Link
-                  to="/admin/panel"
-                  className={`nav-add-btn${isActive('/admin/panel') ? ' active' : ''}`}
-                  style={{
-                    background: isActive('/admin/panel')
-                      ? 'linear-gradient(135deg, var(--brown-mid), var(--brown))'
-                      : 'transparent',
-                    color: isActive('/admin/panel') ? 'white' : 'var(--brown-mid)',
-                    borderColor: 'var(--brown-mid)',
-                  }}
-                  title="Admin Panel"
-                >
-                  <LayoutDashboard size={15} />
-                  <span>Panel</span>
-                </Link>
-
-                <button
-                  onClick={handleLogout}
-                  title="Logout from admin"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '8px 12px', borderRadius: 50,
-                    border: '2px solid var(--cream-dark)', background: 'transparent',
-                    color: 'var(--text-light)', cursor: 'pointer',
-                    fontFamily: 'var(--font-display)', fontSize: 12,
-                    letterSpacing: '.04em', transition: 'all .2s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.color = 'var(--text-light)'; }}
-                >
-                  <LogOut size={14} />
-                </button>
-              </>
-            ) : (
-              <Link
-                to="/admin/login"
-                className="nav-add-btn"
-                style={{
-                  color: 'var(--text-light)',
-                  borderColor: 'var(--cream-dark)',
-                }}
-                title="Admin Login"
+            <div style={{ width: 1, height: 24, background: 'var(--cream-dark)', margin: '0 4px' }} />
+            {STATES.map((s) => (
+              <button
+                key={s}
+                className={`filter-chip ${activeState === s && !searchQuery ? 'active' : ''}`}
+                onClick={() => { setActiveState(s); setSearchQuery(''); }}
               >
-                <LayoutDashboard size={15} />
-                <span>Admin</span>
-              </Link>
+                {s === 'All States' ? t('filter.all_states') : s}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Temple Grid ── */}
+      <section className="temples-section">
+        <div className="container">
+          <div className="section-header">
+            <h2 className="section-title">
+              {searchQuery
+                ? `${t('results_for')} "${searchQuery}"`
+                : activeFilter
+                  ? t('filtered')
+                  : t('all_sacred')}
+            </h2>
+            {!loading && (
+              <span className="section-count">
+                {total} {total !== 1 ? t('temples_count_plural') : t('temples_count_singular')}
+              </span>
             )}
-
-            <div className="nav-divider" />
-
-            <select
-              className="nav-lang-select"
-              value={lang}
-              onChange={(e) => changeLang(e.target.value)}
-            >
-              <option value="en">🌐 English</option>
-              <option value="hi">🇮🇳 हिंदी</option>
-              <option value="mr">🟠 मराठी</option>
-              <option value="ta">🌺 தமிழ்</option>
-            </select>
           </div>
 
-          {/* Mobile: hamburger */}
-          <button
-            className="nav-hamburger"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Open menu"
-          >
-            <Menu size={24} />
-          </button>
-
-        </div>
-      </nav>
-
-      {/* ── Sidebar overlay ────────────────────────────────────────────── */}
-      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-
-      {/* ── Sidebar drawer ─────────────────────────────────────────────── */}
-      <aside ref={sidebarRef} className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
-
-        <div className="sidebar-header">
-          <Link to="/" className="nav-logo sidebar-logo" onClick={() => setSidebarOpen(false)}>
-            <span className="nav-logo-icon">🛕</span>
-            <div>
-              <span className="nav-logo-name">BharatMandir</span>
-              <span className="nav-logo-sub">{t('nav.logo_sub')}</span>
+          {loading && (
+            <div className="loading-wrap">
+              <div className="spinner" />
+              <span className="loading-text">{t('loading')}</span>
             </div>
-          </Link>
-          <button className="sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
-            <X size={22} />
-          </button>
-        </div>
-
-        <nav className="sidebar-nav">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <span className="sidebar-link-icon">{link.icon}</span>
-              {link.label}
-            </Link>
-          ))}
-
-          <Link
-            to="/spiritual-guide"
-            className={`sidebar-link${isActive('/spiritual-guide') ? ' active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-            style={{ color: '#FF6B00', fontWeight: 700 }}
-          >
-            <span className="sidebar-link-icon">🕉️</span>
-            AI Spiritual Guide
-          </Link>
-
-          <Link
-            to="/admin/add-festival"
-            className={`sidebar-link${isActive('/admin/add-festival') ? ' active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-            style={{ color: '#C8960C', fontWeight: 700 }}
-          >
-            <span className="sidebar-link-icon">🌸</span>
-            Add Festival
-          </Link>
-
-          {/* Admin links in sidebar — only when authenticated */}
-          {isAdmin ? (
-            <>
-              <Link
-                to="/admin/panel"
-                className={`sidebar-link${isActive('/admin/panel') ? ' active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
-              >
-                <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
-                Admin Panel
-              </Link>
-
-              <button
-                onClick={handleLogout}
-                className="sidebar-link"
-                style={{
-                  background: 'none', border: 'none', width: '100%',
-                  textAlign: 'left', cursor: 'pointer', color: '#ef4444',
-                  fontFamily: 'var(--font-display)', fontWeight: 700,
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '12px 20px', fontSize: 14,
-                }}
-              >
-                <span className="sidebar-link-icon"><LogOut size={17} /></span>
-                Admin Logout
-              </button>
-            </>
-          ) : (
-            <Link
-              to="/admin/login"
-              className={`sidebar-link${isActive('/admin/login') ? ' active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-              style={{ color: 'var(--text-light)' }}
-            >
-              <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
-              Admin Login
-            </Link>
           )}
-        </nav>
 
-        <div className="sidebar-footer">
-          <Link to="/admin/add" className="nav-add-btn sidebar-add-btn" onClick={() => setSidebarOpen(false)}>
-            <PlusCircle size={15} />
-            <span>Add Temple</span>
-          </Link>
+          {translating && (
+            <div style={{ textAlign: 'center', color: 'var(--saffron)', fontSize: 13, fontFamily: 'var(--font-hindi)', marginBottom: 12 }}>
+              {t('loading')}
+            </div>
+          )}
 
-          <select
-            className="nav-lang-select sidebar-lang"
-            value={lang}
-            onChange={(e) => { changeLang(e.target.value); }}
-          >
-            <option value="en">🌐 English</option>
-            <option value="hi">🇮🇳 हिंदी</option>
-            <option value="mr">🟠 मराठी</option>
-            <option value="ta">🌺 தமிழ்</option>
-          </select>
+          {error && !loading && (
+            <div className="error-wrap">
+              <div className="error-icon">⚠️</div>
+              <div className="error-title">{t('error.title')}</div>
+              <div className="error-msg">{error}</div>
+              <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => window.location.reload()}>
+                {t('try_again')}
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && displayTemples.length === 0 && (
+            <div className="empty-state">
+              <div className="empty-icon">🔍</div>
+              <div className="empty-title">{t('no_temples')}</div>
+              <p className="empty-msg">{t('try_different')}</p>
+            </div>
+          )}
+
+          {!loading && !error && displayTemples.length > 0 && (
+            <div className="temples-grid">
+              {displayTemples.map((temple, i) => (
+                <TempleCard
+                  key={temple.id || i}
+                  temple={temple}
+                  style={{ animationDelay: `${i * 0.05}s` }}
+                />
+              ))}
+            </div>
+          )}
         </div>
+      </section>
 
-      </aside>
+      <Footer />
 
-      {/* ── Floating AI Spiritual Guide button ────────────────────────── */}
+      {/* ── Floating AI Guide Button ── */}
       <Link
         to="/spiritual-guide"
         style={{
@@ -337,6 +288,7 @@ export default function Navbar() {
       >
         🕉️ AI Guide
       </Link>
-    </>
+
+    </div>
   );
 }
