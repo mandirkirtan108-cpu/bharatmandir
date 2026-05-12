@@ -283,31 +283,7 @@ export default function RoutePlannerPage() {
             )}
           </div>
 
-          {/* ── POPULAR ROUTES ── */}
-          <div style={{ marginTop: 40 }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: '#7a3208', marginBottom: 16 }}>
-              Popular Pilgrim Routes
-            </h3>
-            <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 8 }} className="scrollbar-hide">
-              {PRESET_ROUTES.map(p => (
-                <div
-                  key={p.label}
-                  onClick={() => handlePreset(p)}
-                  style={{
-                    minWidth: 220, background: 'white', borderRadius: 20,
-                    border: `2px solid ${form.start === p.from && form.destination === p.to ? '#E8650A' : 'rgba(232,101,10,0.15)'}`,
-                    boxShadow: '0 4px 16px rgba(61,31,0,0.08)', padding: '20px',
-                    cursor: 'pointer', transition: 'all .22s', flexShrink: 0,
-                  }}
-                >
-                  <div style={{ fontSize: 26, marginBottom: 10 }}>{p.icon}</div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, color: '#7a3208', fontSize: 15, marginBottom: 4 }}>{p.label}</div>
-                  <div style={{ fontSize: 12, color: '#9A7150', marginBottom: 3 }}>{p.km}</div>
-                  <div style={{ fontSize: 12, color: '#9A7150' }}>{p.desc}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+        
 
           {/* ── IXIGO TICKET SECTION ── */}
           <div style={{
