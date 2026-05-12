@@ -105,19 +105,57 @@ export default function HomePage() {
       <Navbar />
 
       {/* ── Hero ── */}
-      <section className="hero">
-        <div className="hero-om">OM</div>
-        <div className="hero-inner">
-          <div className="hero-badge">{t('hero_badge')}</div>
-          <h1 className="hero-title">
+      <section style={{
+        position: 'relative', overflow: 'hidden', color: '#FFD580',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '88px 24px 120px', textAlign: 'center',
+      }}>
+        {/* Om watermark */}
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
+          pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
+        }}>ॐ</div>
+
+        {/* Radial glow */}
+        <div style={{
+          position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+          width: 600, height: 300,
+          background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+          {/* Badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '6px 20px', marginBottom: 20,
+            color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
+            fontWeight: 500, backdropFilter: 'blur(8px)',
+          }}>
+            🕉 {t('hero_badge')}
+          </div>
+
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 900,
+            fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#FFD580',
+          }}>
             {t('hero_title')}<br />
-            <span>{t('hero_subtitle')}</span>
+            <span style={{ color: '#FFD580' }}>{t('hero_subtitle')}</span>
           </h1>
-          <p className="hero-subtitle">
+
+          <p style={{
+            color: '#FFD580', opacity: 0.82, fontSize: 18,
+            maxWidth: 540, margin: '0 auto 32px', fontWeight: 300, lineHeight: 1.7,
+          }}>
             {t('hero_desc')}
           </p>
+
           <div className="hero-actions">
-            <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 10 }}>
+            <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <input
                 id="hero-search"
                 name="search"
@@ -288,7 +326,6 @@ export default function HomePage() {
       >
         🕉️ AI Guide
       </Link>
-
     </div>
   );
 }
