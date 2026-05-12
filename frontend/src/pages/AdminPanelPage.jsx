@@ -9,7 +9,7 @@ import {
   CheckCircle2, XCircle, Archive, Eye, RefreshCw,
   Search, Shield, ShieldCheck, ExternalLink, Clock,
   MapPin, User, Star, ChevronLeft, ChevronRight,
-  Loader2, AlertTriangle, LayoutDashboard
+  Loader2, AlertTriangle, LayoutDashboard, PlusCircle
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -72,10 +72,8 @@ async function apiFetch(url, opts = {}) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    // Handle Pydantic validation errors (detail is array), string errors, or fallback
     let detail;
     if (Array.isArray(err.detail)) {
-      // e.g. 422 Unprocessable Entity from FastAPI/Pydantic
       detail = err.detail.map(e => e.msg || JSON.stringify(e)).join(', ');
     } else if (typeof err.detail === 'string') {
       detail = err.detail;
@@ -96,7 +94,6 @@ async function fetchTemples(status, page, search) {
 }
 
 async function fetchTempleDetail(id) {
-  // Admin endpoint use karo — yeh draft/review/published sab return karta hai
   return apiFetch(`/api/admin/temples/${id}`);
 }
 
@@ -436,7 +433,6 @@ export default function AdminPanelPage() {
 
   const PER_PAGE = 15;
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     const token = sessionStorage.getItem('bm_access_token');
     if (!token) navigate('/admin/login', { replace: true });
@@ -450,7 +446,6 @@ export default function AdminPanelPage() {
       setTemples(data.temples || []);
       setTotal(data.total || 0);
     } catch (e) {
-      // If 401, token expired → redirect to login
       if (e.message.includes('401') || e.message.toLowerCase().includes('unauthorized')) {
         sessionStorage.removeItem('bm_access_token');
         sessionStorage.removeItem('bm_refresh_token');
@@ -537,7 +532,7 @@ export default function AdminPanelPage() {
             </p>
 
             {/* Stats */}
-            <div style={{ display: 'flex', gap: 20, marginTop: 20, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
               {[
                 { label: 'Total', value: counts.all || 0, color: '#F5934A' },
                 { label: 'Pending Review', value: (counts.draft || 0) + (counts.review || 0), color: '#60a5fa' },
@@ -560,10 +555,20 @@ export default function AdminPanelPage() {
 
         <div className="container" style={{ marginTop: 28 }}>
 
-          {/* Controls */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-              <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)', pointerEvents: 'none' }} />
+          {/* ── Controls: Search + Add Temple + Refresh ── */}
+          <div style={{
+            display: 'flex',
+            gap: 10,
+            alignItems: 'center',
+            marginBottom: 20,
+            flexWrap: 'wrap',
+          }}>
+            {/* Search — grows to fill space */}
+            <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 0 }}>
+              <Search size={16} style={{
+                position: 'absolute', left: 14, top: '50%',
+                transform: 'translateY(-50%)', color: 'var(--text-light)', pointerEvents: 'none',
+              }} />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
@@ -573,29 +578,61 @@ export default function AdminPanelPage() {
                   border: '2px solid var(--cream-dark)', borderRadius: 50,
                   fontFamily: 'var(--font-body)', fontSize: 14,
                   background: 'white', color: 'var(--text-dark)', outline: 'none',
+                  boxSizing: 'border-box',
                 }}
                 onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
                 onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
               />
             </div>
-            <button onClick={() => { loadTemples(); loadCounts(); }} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '10px 18px', border: '2px solid var(--cream-dark)',
-              borderRadius: 50, background: 'white',
-              fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
-              cursor: 'pointer', color: 'var(--text-mid)',
-            }}
+
+            {/* Add Temple button */}
+            <Link
+              to="/admin/add"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '10px 18px',
+                background: 'linear-gradient(135deg, var(--saffron), var(--saffron-dark))',
+                border: '2px solid transparent',
+                borderRadius: 50,
+                fontFamily: 'var(--font-display)', fontSize: 13,
+                letterSpacing: '.04em', fontWeight: 700,
+                color: 'white', textDecoration: 'none',
+                whiteSpace: 'nowrap', flexShrink: 0,
+                boxShadow: '0 2px 12px rgba(200,100,0,.25)',
+                transition: 'all .2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(200,100,0,.4)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(200,100,0,.25)'; }}
+            >
+              <PlusCircle size={15} />
+              <span>Add Temple</span>
+            </Link>
+
+            {/* Refresh button */}
+            <button
+              onClick={() => { loadTemples(); loadCounts(); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '10px 16px', border: '2px solid var(--cream-dark)',
+                borderRadius: 50, background: 'white',
+                fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
+                cursor: 'pointer', color: 'var(--text-mid)', whiteSpace: 'nowrap', flexShrink: 0,
+                transition: 'all .2s',
+              }}
               onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--saffron)'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cream-dark)'}
             >
-              <RefreshCw size={14} /> Refresh
+              <RefreshCw size={14} />
+              {/* Hide label on very small screens — show icon only */}
+              <span className="refresh-label">Refresh</span>
             </button>
           </div>
 
           {/* Status Tabs */}
           <div style={{
-            display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap',
+            display: 'flex', gap: 0, marginBottom: 20, flexWrap: 'nowrap',
             borderBottom: '2px solid var(--cream-dark)', paddingBottom: 0,
+            overflowX: 'auto',
           }}>
             {ALL_STATUSES.map(s => {
               const active = activeTab === s;
@@ -604,12 +641,13 @@ export default function AdminPanelPage() {
               return (
                 <button key={s} onClick={() => switchTab(s)} style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '9px 16px', border: 'none',
+                  padding: '9px 14px', border: 'none',
                   borderBottom: active ? '3px solid var(--saffron)' : '3px solid transparent',
                   background: 'transparent',
                   fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
                   cursor: 'pointer', color: active ? 'var(--saffron)' : 'var(--text-light)',
                   marginBottom: -2, fontWeight: active ? 700 : 400,
+                  whiteSpace: 'nowrap', flexShrink: 0,
                 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
                   {meta.label}
@@ -635,13 +673,14 @@ export default function AdminPanelPage() {
             </div>
           )}
 
-          {/* Table */}
+          {/* Table — desktop */}
           <div style={{
             background: 'white', borderRadius: 16,
             border: '1.5px solid var(--cream-dark)',
             overflow: 'hidden', boxShadow: '0 4px 20px var(--shadow)',
           }}>
-            <div style={{
+            {/* Desktop header — hidden on mobile via inline media workaround */}
+            <div className="admin-table-header" style={{
               display: 'grid',
               gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 130px',
               padding: '12px 20px',
@@ -667,53 +706,15 @@ export default function AdminPanelPage() {
               </div>
             ) : (
               displayed.map((t, i) => (
-                <div key={t.id} style={{
-                  display: 'grid',
-                  gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 130px',
-                  padding: '14px 20px',
-                  borderBottom: i < displayed.length - 1 ? '1px solid var(--cream-dark)' : 'none',
-                  alignItems: 'center', cursor: 'pointer',
-                }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'white'}
-                  onClick={() => setReviewing(t)}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {t.hero_image_url ? (
-                        <img src={`${API_BASE}${t.hero_image_url}`} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />
-                      ) : (
-                        <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--cream-dark)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏛️</div>
-                      )}
-                      <div>
-                        <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{t.name}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
-                          <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-light)', background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4 }}>{t.mkt_id || `#${t.id}`}</span>
-                          {t.verified && <ShieldCheck size={12} color="#7c3aed" />}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <MapPin size={13} color="var(--text-light)" />
-                    <span style={{ fontSize: 13, color: 'var(--text-mid)' }}>{[t.city, t.state].filter(Boolean).join(', ') || '—'}</span>
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.primary_deity || '—'}</div>
-                  <StatusBadge status={t.status} />
-                  <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{fmtDate(t.submitted_at || t.created_at)}</div>
-                  <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
-                    {t.status !== 'published' && (
-                      <QuickBtn icon={<CheckCircle2 size={14} />} color="#15803d" title="Approve → Published"
-                        loading={actionLoading === `${t.id}-published`} onClick={e => quickAction(t, 'published', e)} />
-                    )}
-                    {t.status !== 'flagged' && (
-                      <QuickBtn icon={<XCircle size={14} />} color="#b91c1c" title="Flag / Reject"
-                        loading={actionLoading === `${t.id}-flagged`} onClick={e => quickAction(t, 'flagged', e)} />
-                    )}
-                    <QuickBtn icon={<Eye size={14} />} color="var(--saffron)" title="Review Details"
-                      onClick={e => { e.stopPropagation(); setReviewing(t); }} />
-                  </div>
-                </div>
+                <TempleRow
+                  key={t.id}
+                  t={t}
+                  i={i}
+                  total={displayed.length}
+                  actionLoading={actionLoading}
+                  onReview={() => setReviewing(t)}
+                  onQuickAction={quickAction}
+                />
               ))
             )}
           </div>
@@ -734,14 +735,153 @@ export default function AdminPanelPage() {
           onStatusChange={handleStatusChange} onVerify={handleVerify} />
       )}
       <Footer />
+
+      {/* Responsive styles */}
+      <style>{`
+        @media (max-width: 640px) {
+          .admin-table-header { display: none !important; }
+          .refresh-label { display: none; }
+        }
+        @media (min-width: 641px) {
+          .refresh-label { display: inline; }
+        }
+      `}</style>
     </>
+  );
+}
+
+// ── Temple Row — auto switches desktop grid ↔ mobile card ────────────────────
+function TempleRow({ t, i, total, actionLoading, onReview, onQuickAction }) {
+  return (
+    <>
+      {/* Desktop row */}
+      <div className="temple-row-desktop" style={{
+        display: 'grid',
+        gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 130px',
+        padding: '14px 20px',
+        borderBottom: i < total - 1 ? '1px solid var(--cream-dark)' : 'none',
+        alignItems: 'center', cursor: 'pointer',
+      }}
+        onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
+        onMouseLeave={e => e.currentTarget.style.background = 'white'}
+        onClick={onReview}
+      >
+        <TempleNameCell t={t} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <MapPin size={13} color="var(--text-light)" />
+          <span style={{ fontSize: 13, color: 'var(--text-mid)' }}>{[t.city, t.state].filter(Boolean).join(', ') || '—'}</span>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.primary_deity || '—'}</div>
+        <StatusBadge status={t.status} />
+        <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{fmtDate(t.submitted_at || t.created_at)}</div>
+        <RowActions t={t} actionLoading={actionLoading} onReview={onReview} onQuickAction={onQuickAction} justify="flex-end" />
+      </div>
+
+      {/* Mobile card */}
+      <div className="temple-row-mobile" style={{
+        padding: '14px 16px',
+        borderBottom: i < total - 1 ? '1px solid var(--cream-dark)' : 'none',
+        cursor: 'pointer',
+      }}
+        onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
+        onMouseLeave={e => e.currentTarget.style.background = 'white'}
+        onClick={onReview}
+      >
+        {/* Top row: image + name + status */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+          <TempleThumb t={t} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'var(--font-display)', fontSize: 14,
+              color: 'var(--brown)', fontWeight: 600,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{t.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+              <span style={{
+                fontFamily: 'monospace', fontSize: 10, color: 'var(--text-light)',
+                background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4,
+              }}>{t.mkt_id || `#${t.id}`}</span>
+              {t.verified && <ShieldCheck size={12} color="#7c3aed" />}
+              <StatusBadge status={t.status} />
+            </div>
+          </div>
+        </div>
+
+        {/* Meta row: location + deity + date */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+          {(t.city || t.state) && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-mid)' }}>
+              <MapPin size={11} color="var(--text-light)" />
+              {[t.city, t.state].filter(Boolean).join(', ')}
+            </span>
+          )}
+          {t.primary_deity && (
+            <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>🙏 {t.primary_deity}</span>
+          )}
+          <span style={{ fontSize: 12, color: 'var(--text-light)' }}>📅 {fmtDate(t.submitted_at || t.created_at)}</span>
+        </div>
+
+        {/* Actions row */}
+        <RowActions t={t} actionLoading={actionLoading} onReview={onReview} onQuickAction={onQuickAction} justify="flex-start" />
+      </div>
+
+      <style>{`
+        .temple-row-desktop { display: grid !important; }
+        .temple-row-mobile  { display: none  !important; }
+        @media (max-width: 640px) {
+          .temple-row-desktop { display: none  !important; }
+          .temple-row-mobile  { display: block !important; }
+        }
+      `}</style>
+    </>
+  );
+}
+
+function TempleThumb({ t }) {
+  return t.hero_image_url ? (
+    <img src={`${API_BASE}${t.hero_image_url}`} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+      onError={e => { e.target.style.display = 'none'; }} />
+  ) : (
+    <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--cream-dark)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🏛️</div>
+  );
+}
+
+function TempleNameCell({ t }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <TempleThumb t={t} />
+      <div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{t.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+          <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-light)', background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4 }}>{t.mkt_id || `#${t.id}`}</span>
+          {t.verified && <ShieldCheck size={12} color="#7c3aed" />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RowActions({ t, actionLoading, onReview, onQuickAction, justify }) {
+  return (
+    <div style={{ display: 'flex', gap: 5, justifyContent: justify }}>
+      {t.status !== 'published' && (
+        <QuickBtn icon={<CheckCircle2 size={14} />} color="#15803d" title="Approve → Published"
+          loading={actionLoading === `${t.id}-published`} onClick={e => onQuickAction(t, 'published', e)} />
+      )}
+      {t.status !== 'flagged' && (
+        <QuickBtn icon={<XCircle size={14} />} color="#b91c1c" title="Flag / Reject"
+          loading={actionLoading === `${t.id}-flagged`} onClick={e => onQuickAction(t, 'flagged', e)} />
+      )}
+      <QuickBtn icon={<Eye size={14} />} color="var(--saffron)" title="Review Details"
+        onClick={e => { e.stopPropagation(); onReview(); }} />
+    </div>
   );
 }
 
 function QuickBtn({ icon, color, title, loading, onClick }) {
   return (
     <button title={title} onClick={onClick} disabled={loading} style={{
-      width: 30, height: 30, borderRadius: 8,
+      width: 32, height: 32, borderRadius: 8,
       border: '1.5px solid var(--cream-dark)',
       background: 'white', color,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
