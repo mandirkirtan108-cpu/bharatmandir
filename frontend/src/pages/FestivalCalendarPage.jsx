@@ -381,7 +381,7 @@ export default function FestivalCalendarPage() {
               border: '1px solid rgba(255,255,255,0.12)',
             }}>
               <span style={{ animation: 'floatDiya 1.5s ease-in-out infinite', display: 'inline-block' }}>✨</span>
-              Claude AI se festivals fetch ho rahe hain…
+              festivals are loaging please wait…
             </div>
           )}
           {claudeError && !claudeLoading && (
@@ -592,7 +592,7 @@ export default function FestivalCalendarPage() {
                   borderRadius: 50, padding: '6px 16px', marginBottom: 20, width: 'fit-content',
                 }}>
                   <span style={{ animation: 'floatDiya 1.5s ease-in-out infinite', display: 'inline-block' }}>✨</span>
-                  More festivals load ho rahe hain Claude AI se…
+                  More festivals are loading please wait…
                 </div>
               )}
 
