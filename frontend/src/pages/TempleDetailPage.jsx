@@ -11,7 +11,12 @@ function proxyImageUrl(url) { return url || null; }
 function formatTime(t) {
   if (!t) return null;
   const p = String(t).split(':');
-  return p.length >= 2 ? `${p[0]}:${p[1]}` : String(t);
+  if (p.length < 2) return String(t);
+  let h = parseInt(p[0], 10);
+  const m = p[1];
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
 }
 function displayFee(fee) {
   if (fee == null || fee === '') return null;
@@ -28,7 +33,7 @@ function parseTags(tags) {
 function v(x) { return x && String(x).trim() !== '' && String(x) !== 'null' && String(x) !== 'false'; }
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Noto+Sans+Devanagari:wght@400;500;600&display=swap');
 
 *{margin:0;padding:0;box-sizing:border-box;}
 html{scroll-behavior:smooth;}
@@ -81,11 +86,34 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .il{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#A07050;margin-bottom:4px;font-weight:600;}
 .iv{font-size:14px;font-weight:500;color:#2C1500;line-height:1.4;}
 
-/* TIMING STRIP */
-.tstrip{display:flex;gap:10px;flex-wrap:wrap;padding:15px;background:linear-gradient(135deg,#F7F0E2,#EDE3CE);border-radius:11px;margin-bottom:17px;}
-.tblock{flex:1;min-width:88px;text-align:center;}
-.tval{font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;font-weight:700;color:#C8520A;}
-.tlbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#A07050;margin-top:2px;font-weight:600;}
+/* ─── TIMING STRIP (fixed) ─── */
+.tstrip{
+  display:flex;gap:0;flex-wrap:wrap;
+  background:#F7F0E2;border-radius:12px;
+  margin-bottom:17px;overflow:hidden;
+  border:1px solid #EDE3CE;
+}
+.tblock{
+  flex:1;min-width:100px;
+  text-align:center;padding:16px 12px;
+  position:relative;
+}
+.tblock+.tblock::before{
+  content:'';position:absolute;
+  left:0;top:18%;height:64%;width:1px;
+  background:#DDD0B8;
+}
+/* Single readable font for all time values */
+.tval{
+  font-family:'DM Sans',system-ui,sans-serif;
+  font-size:16px;font-weight:700;
+  color:#C8520A;letter-spacing:.01em;line-height:1.3;
+}
+.tlbl{
+  font-size:10px;text-transform:uppercase;
+  letter-spacing:.1em;color:#A07050;
+  margin-top:5px;font-weight:600;
+}
 
 /* READ MORE */
 .rm-btn{display:inline-flex;align-items:center;gap:5px;margin-top:14px;padding:7px 20px;border-radius:50px;border:1.5px solid #C8520A;background:transparent;color:#C8520A;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;}
@@ -112,7 +140,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .prow{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #EDE3CE;}
 .prow:last-child{border-bottom:none;}
 .pname{font-size:13.5px;font-weight:500;color:#4A2C10;}
-.ptime{font-size:13.5px;font-weight:700;color:#C8520A;font-family:'Cormorant Garamond',Georgia,serif;}
+.ptime{font-size:14px;font-weight:700;color:#C8520A;font-family:'DM Sans',sans-serif;}
 
 /* FESTIVALS */
 .fest{display:flex;gap:13px;padding:15px 0;border-bottom:1px solid #EDE3CE;}.fest:last-child{border-bottom:none;}
@@ -121,7 +149,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 
 /* SEVAS */
 .seva{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#F7F0E2;border-radius:9px;margin-bottom:8px;border:1px solid #EDE3CE;transition:.18s;}.seva:hover{background:#EDE3CE;border-color:#C8520A;}
-.seva-price{font-family:'Cormorant Garamond',Georgia,serif;font-size:17px;font-weight:700;color:#C8520A;white-space:nowrap;margin-left:11px;}
+.seva-price{font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;color:#C8520A;white-space:nowrap;margin-left:11px;}
 
 /* MANTRAS */
 .mantra{background:linear-gradient(145deg,rgba(44,21,0,.97),rgba(90,40,8,.95));border-radius:14px;padding:22px;margin-bottom:12px;color:#fff;position:relative;overflow:hidden;}
@@ -171,7 +199,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .err{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;}
 
 @media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;}.hero-body{padding-left:20px;padding-right:20px;}}
-@media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}}
+@media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}}
 `;
 
 function HeroImage({ src, alt }) {
@@ -193,7 +221,6 @@ function SLabel({ text }) {
   return <p className="slbl">{text}</p>;
 }
 
-// Read More wrapper — shows children only when expanded
 function ReadMore({ children, label = 'Read More' }) {
   const [open, setOpen] = useState(false);
   return (
@@ -254,14 +281,14 @@ export default function TempleDetailPage() {
   if (error)   return (<><style>{CSS}</style><Navbar/><div className="err"><div style={{fontSize:60}}>🛕</div><h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28}}>Temple Not Found</h2><p style={{color:'#A07050'}}>{error}</p><button style={{marginTop:16,padding:'10px 22px',background:'#C8520A',color:'#fff',border:'none',borderRadius:9,cursor:'pointer',fontSize:14}} onClick={()=>navigate('/')}>← All Temples</button></div></>);
   if (!T) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/></div></>);
 
-  const heroImg  = proxyImageUrl(T.hero_image_url);
-  const openTime = formatTime(T.opening_time);
-  const closeTime= formatTime(T.closing_time);
-  const acStart  = formatTime(T.afternoon_closure_start);
-  const acEnd    = formatTime(T.afternoon_closure_end);
-  const fee      = displayFee(T.entry_fee);
-  const tags     = parseTags(T.category_tags);
-  const mapsUrl  = T.latitude ? `https://www.google.com/maps/search/?api=1&query=${T.latitude},${T.longitude}` : T.google_maps_link || null;
+  const heroImg   = proxyImageUrl(T.hero_image_url);
+  const openTime  = formatTime(T.opening_time);
+  const closeTime = formatTime(T.closing_time);
+  const acStart   = formatTime(T.afternoon_closure_start);
+  const acEnd     = formatTime(T.afternoon_closure_end);
+  const fee       = displayFee(T.entry_fee);
+  const tags      = parseTags(T.category_tags);
+  const mapsUrl   = T.latitude ? `https://www.google.com/maps/search/?api=1&query=${T.latitude},${T.longitude}` : T.google_maps_link || null;
 
   const pujaServices = [
     ['puja_rudrabhishek','Rudrabhishek'],['puja_satyanarayan','Satyanarayan Katha'],
@@ -308,7 +335,6 @@ export default function TempleDetailPage() {
 
   const addressLine = T.address || [T.city, T.state].filter(v).join(', ');
 
-  // First 6 overview facts to preview
   const previewFacts = [
     { label:'Primary Deity', value: T.primary_deity, icon:'🙏' },
     { label:'Sect',          value: T.sect },
@@ -335,19 +361,19 @@ export default function TempleDetailPage() {
             <span>{T.name}</span>
           </div>
           <div className="badges">
-            {T.is_jyotirlinga     && <span className="badge saffron">⚡ Jyotirlinga</span>}
-            {T.is_shaktipeeth     && <span className="badge saffron">🌸 Shaktipeeth</span>}
-            {T.is_char_dham       && <span className="badge saffron">🔱 Char Dham</span>}
-            {T.is_ashtavinayak    && <span className="badge saffron">🐘 Ashtavinayak</span>}
-            {T.is_divya_desam     && <span className="badge saffron">🪷 Divya Desam</span>}
-            {T.is_pancha_bhuta    && <span className="badge saffron">🌊 Pancha Bhuta</span>}
+            {T.is_jyotirlinga      && <span className="badge saffron">⚡ Jyotirlinga</span>}
+            {T.is_shaktipeeth      && <span className="badge saffron">🌸 Shaktipeeth</span>}
+            {T.is_char_dham        && <span className="badge saffron">🔱 Char Dham</span>}
+            {T.is_ashtavinayak     && <span className="badge saffron">🐘 Ashtavinayak</span>}
+            {T.is_divya_desam      && <span className="badge saffron">🪷 Divya Desam</span>}
+            {T.is_pancha_bhuta     && <span className="badge saffron">🌊 Pancha Bhuta</span>}
             {T.is_51_shakti_peeths && <span className="badge saffron">51 Shakti Peeths</span>}
-            {T.is_heritage_site   && <span className="badge blue">🏛️ Heritage</span>}
-            {T.is_unesco_heritage && <span className="badge blue">🌍 UNESCO</span>}
-            {T.is_state_heritage  && <span className="badge blue">⭐ State Heritage</span>}
-            {T.is_asi_protected   && <span className="badge blue">🏺 ASI Protected</span>}
-            {T.verified           && <span className="badge green">✓ Verified</span>}
-            {v(T.sect)            && <span className="badge saffron">{T.sect}</span>}
+            {T.is_heritage_site    && <span className="badge blue">🏛️ Heritage</span>}
+            {T.is_unesco_heritage  && <span className="badge blue">🌍 UNESCO</span>}
+            {T.is_state_heritage   && <span className="badge blue">⭐ State Heritage</span>}
+            {T.is_asi_protected    && <span className="badge blue">🏺 ASI Protected</span>}
+            {T.verified            && <span className="badge green">✓ Verified</span>}
+            {v(T.sect)             && <span className="badge saffron">{T.sect}</span>}
           </div>
           <h1 className="hero-h1">{T.name}</h1>
           {v(T.name_hindi) && <div className="hero-hindi">{T.name_hindi}</div>}
@@ -371,18 +397,42 @@ export default function TempleDetailPage() {
         <div className="sec" id="overview">
           <div className="sec-h"><div className="sec-icon">🛕</div>Temple Information</div>
 
-          {/* Timing strip */}
+          {/* ── Timing strip — clean, readable ── */}
           {(openTime || fee || acStart) && (
             <div className="tstrip">
-              {openTime  && <div className="tblock"><div className="tval">{openTime}</div><div className="tlbl">Opens</div></div>}
-              {closeTime && <div className="tblock"><div className="tval">{closeTime}</div><div className="tlbl">Closes</div></div>}
-              {acStart && acEnd && <div className="tblock"><div className="tval" style={{fontSize:15}}>{acStart}–{acEnd}</div><div className="tlbl">Afternoon Break</div></div>}
-              {fee       && <div className="tblock"><div className="tval" style={{fontSize:18}}>{fee}</div><div className="tlbl">Entry</div></div>}
-              {v(T.prasad_type) && <div className="tblock"><div className="tval" style={{fontFamily:"'DM Sans'",fontSize:13,fontWeight:600}}>{T.prasad_type}</div><div className="tlbl">Prasad</div></div>}
+              {openTime  && (
+                <div className="tblock">
+                  <div className="tval">{openTime}</div>
+                  <div className="tlbl">Opens</div>
+                </div>
+              )}
+              {closeTime && (
+                <div className="tblock">
+                  <div className="tval">{closeTime}</div>
+                  <div className="tlbl">Closes</div>
+                </div>
+              )}
+              {acStart && acEnd && (
+                <div className="tblock">
+                  <div className="tval">{acStart} – {acEnd}</div>
+                  <div className="tlbl">Afternoon Break</div>
+                </div>
+              )}
+              {fee && (
+                <div className="tblock">
+                  <div className="tval">{fee}</div>
+                  <div className="tlbl">Entry</div>
+                </div>
+              )}
+              {v(T.prasad_type) && (
+                <div className="tblock">
+                  <div className="tval">{T.prasad_type}</div>
+                  <div className="tlbl">Prasad</div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Preview: first 6 key facts */}
           <div className="ig">
             {previewFacts.map(i => (
               <div key={i.label} className="ii">
@@ -392,7 +442,6 @@ export default function TempleDetailPage() {
             ))}
           </div>
 
-          {/* Rest behind Read More */}
           <ReadMore label="More Details">
             <div className="ig">
               <II label="Temple Type"        value={T.temple_type}/>
@@ -417,41 +466,15 @@ export default function TempleDetailPage() {
         {(v(T.history)||v(T.significance)||v(T.sthala_purana)||v(T.puranic_stories)||v(T.history_hindi)) && (
           <div className="sec" id="history">
             <div className="sec-h"><div className="sec-icon">📜</div>History & Significance</div>
-
-            {/* 3-line preview */}
             {v(T.history) && (
-              <p className="prose" style={{
-                display:'-webkit-box',
-                WebkitLineClamp:3,
-                WebkitBoxOrient:'vertical',
-                overflow:'hidden',
-                marginBottom:0,
-              }}>{T.history}</p>
+              <p className="prose" style={{display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden',marginBottom:0}}>{T.history}</p>
             )}
-
             <ReadMore label="Read Full History">
-              {v(T.history) && <p className="prose">{T.history}</p>}
-              {v(T.sthala_purana) && (
-                <p className="prose prose-sm" style={{fontStyle:'italic',marginBottom:14}}>{T.sthala_purana}</p>
-              )}
-              {v(T.puranic_stories) && (
-                <div className="puranic">
-                  <div className="puranic-lbl">📖 Puranic Story</div>
-                  <p className="prose-sm" style={{fontStyle:'italic'}}>{T.puranic_stories}</p>
-                </div>
-              )}
-              {v(T.significance) && (
-                <div className="significance">
-                  <div className="sig-lbl">✨ Why Visit</div>
-                  <p style={{fontSize:14,lineHeight:1.8,color:'#7A5538'}}>{T.significance}</p>
-                </div>
-              )}
-              {v(T.history_hindi) && (
-                <div className="hindi-block">
-                  <div className="hindi-lbl">हिंदी में इतिहास</div>
-                  <p style={{fontFamily:"'Noto Sans Devanagari',sans-serif",fontSize:14,lineHeight:1.9,color:'#7A5538'}}>{T.history_hindi}</p>
-                </div>
-              )}
+              {v(T.history)         && <p className="prose">{T.history}</p>}
+              {v(T.sthala_purana)   && <p className="prose prose-sm" style={{fontStyle:'italic',marginBottom:14}}>{T.sthala_purana}</p>}
+              {v(T.puranic_stories) && (<div className="puranic"><div className="puranic-lbl">📖 Puranic Story</div><p className="prose-sm" style={{fontStyle:'italic'}}>{T.puranic_stories}</p></div>)}
+              {v(T.significance)    && (<div className="significance"><div className="sig-lbl">✨ Why Visit</div><p style={{fontSize:14,lineHeight:1.8,color:'#7A5538'}}>{T.significance}</p></div>)}
+              {v(T.history_hindi)   && (<div className="hindi-block"><div className="hindi-lbl">हिंदी में इतिहास</div><p style={{fontFamily:"'Noto Sans Devanagari',sans-serif",fontSize:14,lineHeight:1.9,color:'#7A5538'}}>{T.history_hindi}</p></div>)}
             </ReadMore>
           </div>
         )}
@@ -460,14 +483,12 @@ export default function TempleDetailPage() {
         {(pujaSchedule.length>0 || pujaServices.length>0) && (
           <div className="sec" id="puja">
             <div className="sec-h"><div className="sec-icon">🕉️</div>Puja & Aarti</div>
-
             {pujaSchedule.slice(0,3).map((p,i)=>(
               <div key={i} className="prow">
                 <div><span className="pname">{p.puja_name}</span>{p.puja_type&&<span style={{fontSize:11,color:'#A07050',marginLeft:8}}>{p.puja_type}</span>}</div>
                 <span className="ptime">{formatTime(p.puja_time)}</span>
               </div>
             ))}
-
             {(pujaSchedule.length > 3 || pujaServices.length > 0) && (
               <ReadMore label="View Full Schedule">
                 {pujaSchedule.slice(3).map((p,i)=>(
@@ -476,17 +497,7 @@ export default function TempleDetailPage() {
                     <span className="ptime">{formatTime(p.puja_time)}</span>
                   </div>
                 ))}
-                {pujaServices.length > 0 && (
-                  <>
-                    <div style={{height:14}}/>
-                    <SLabel text="Available Puja Services"/>
-                    <div className="chip-grid">
-                      {pujaServices.map(([,name])=>(
-                        <div key={name} className="chip chip-saffron"><div className="dot"/>{name}</div>
-                      ))}
-                    </div>
-                  </>
-                )}
+                {pujaServices.length > 0 && (<><div style={{height:14}}/><SLabel text="Available Puja Services"/><div className="chip-grid">{pujaServices.map(([,name])=>(<div key={name} className="chip chip-saffron"><div className="dot"/>{name}</div>))}</div></>)}
               </ReadMore>
             )}
           </div>
@@ -500,7 +511,6 @@ export default function TempleDetailPage() {
               <div className="m-title">{mantras[0].title}{mantras[0].mantra_type&&<span style={{opacity:.4,fontWeight:400,marginLeft:8,fontSize:11}}>· {mantras[0].mantra_type}</span>}</div>
               {mantras[0].sanskrit && <div className="m-sk" style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{mantras[0].sanskrit}</div>}
             </div>
-
             {mantras.length > 1 && (
               <ReadMore label="View All Mantras">
                 {mantras.slice(0).map(m=>(
@@ -583,32 +593,11 @@ export default function TempleDetailPage() {
         {(facilities.length>0 || programs.length>0) && (
           <div className="sec" id="facilities">
             <div className="sec-h"><div className="sec-icon">🏗️</div>Facilities & Programs</div>
-
-            {facilities.length > 0 && (
-              <>
-                <SLabel text="Available Facilities"/>
-                <div className="chip-grid">
-                  {facilities.slice(0,4).map(([,name])=><div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}
-                </div>
-              </>
-            )}
-
+            {facilities.length > 0 && (<><SLabel text="Available Facilities"/><div className="chip-grid">{facilities.slice(0,4).map(([,name])=><div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}</div></>)}
             {(facilities.length > 4 || programs.length > 0) && (
               <ReadMore label="View All Facilities & Programs">
-                {facilities.length > 4 && (
-                  <div className="chip-grid" style={{marginBottom:8}}>
-                    {facilities.slice(4).map(([,name])=><div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}
-                  </div>
-                )}
-                {programs.length > 0 && (
-                  <>
-                    <div style={{height:10}}/>
-                    <SLabel text="Community Programs"/>
-                    <div className="chip-grid">
-                      {programs.map(([,name])=><div key={name} className="chip chip-blue">{name}</div>)}
-                    </div>
-                  </>
-                )}
+                {facilities.length > 4 && <div className="chip-grid" style={{marginBottom:8}}>{facilities.slice(4).map(([,name])=><div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}</div>}
+                {programs.length > 0 && (<><div style={{height:10}}/><SLabel text="Community Programs"/><div className="chip-grid">{programs.map(([,name])=><div key={name} className="chip chip-blue">{name}</div>)}</div></>)}
               </ReadMore>
             )}
           </div>
@@ -656,12 +645,7 @@ export default function TempleDetailPage() {
               {T.donation_medical_camps    &&<div className="cause"><div className="cause-i">🏥</div><div className="cause-n">Medical</div></div>}
               {T.donation_general          &&<div className="cause"><div className="cause-i">🙏</div><div className="cause-n">General</div></div>}
             </div>
-            {v(T.upi_id)&&(
-              <>
-                <p style={{fontSize:11,textAlign:'center',color:'#A07050',margin:'8px 0 4px'}}>UPI: <strong>{T.upi_id}</strong></p>
-                <button className="abtn" onClick={()=>window.open(`upi://pay?pa=${T.upi_id}`)}>💳 Donate via UPI</button>
-              </>
-            )}
+            {v(T.upi_id)&&(<><p style={{fontSize:11,textAlign:'center',color:'#A07050',margin:'8px 0 4px'}}>UPI: <strong>{T.upi_id}</strong></p><button className="abtn" onClick={()=>window.open(`upi://pay?pa=${T.upi_id}`)}>💳 Donate via UPI</button></>)}
             {v(T.certificate_80g_no)&&<p style={{fontSize:11,color:'#1A6B3A',marginTop:8,textAlign:'center'}}>80G Exempt: {T.certificate_80g_no}</p>}
           </div>
         )}
