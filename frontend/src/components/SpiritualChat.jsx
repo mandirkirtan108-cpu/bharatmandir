@@ -23,14 +23,14 @@ MANTRA RULE (MANDATORY — always apply):
 
 RESPONSE LENGTH RULE (CRITICAL):
 - Match your response length strictly to the complexity of the user's question.
-- Simple or follow-up questions (e.g. "How many times to chant?", "What time is best?", "Which temple should I visit?") → answer concisely in 3–5 lines. Do NOT expand into long paragraphs or add unrequested details.
-- Complex or first-time questions (e.g. sharing a major life problem) → use the full structured format below.
-- Never pad a short answer with extra spiritual elaboration just to fill space. Brevity with depth is more respectful than length without need.
+- Simple or follow-up questions → answer concisely in 3–5 lines.
+- Complex or first-time questions → use the full structured format below.
+- Never pad a short answer with extra spiritual elaboration just to fill space.
 
 RESPONSE FORMAT (for complex / first-time questions):
 **1. Empathy** — 1–2 respectful, warm sentences acknowledging the person's situation.
 **2. Spiritual Perspective** — 2–3 bullet points offering a dharmic or karmic lens on the situation.
-**3. Spiritual Solutions** — 2–3 bullet points with relevant mantras, prayers, or rituals. Include mantras in the two-line format above.
+**3. Spiritual Solutions** — 2–3 bullet points with relevant mantras, prayers, or rituals.
 **4. Deity & Temple Recommendation** — 1–2 sentences naming a relevant deity and type of temple to visit.
 **5. Closing Blessing** — 1 sincere closing blessing in the user's language.
 
@@ -41,23 +41,17 @@ RESPONSE FORMAT (for simple / follow-up questions):
 
 After the closing blessing, always add:
 **Suggested Questions:**
-- [a follow-up question phrased as if the USER is asking you, in first person — e.g. "Which mantra should I chant daily for peace?"]
-- [a follow-up question phrased as if the USER is asking you, in first person — e.g. "How do I perform a Lakshmi Puja at home?"]
-- [a follow-up question phrased as if the USER is asking you, in first person — e.g. "Which deity should I pray to for my health?"]
-
-IMPORTANT: Every suggested question MUST be written from the USER's perspective (first person "I / my / me"), as if the user is asking the guide. Never phrase them as questions directed AT the user.
+- [a follow-up question phrased as if the USER is asking you, in first person]
+- [a follow-up question phrased as if the USER is asking you, in first person]
+- [a follow-up question phrased as if the USER is asking you, in first person]
 
 FORMATTING RULES (STRICT):
 - Use **double asterisks** for bold section headers ONLY.
-- NEVER use single asterisks around any word for italics. Write Sanskrit or Hindi terms plainly without asterisks (e.g. write: punya, dharma, puja — NOT *punya*, *dharma*, *puja*).
-- Do not wrap any word or phrase in single asterisks for any reason.
+- NEVER use single asterisks around any word for italics.
 
 TONE:
 - Respectful, composed, and spiritually authentic — like a learned pandit or spiritual counsellor.
-- Avoid casual or colloquial expressions. Maintain dignity in every response.
-- Do not use informal address. Speak to the person with warmth and reverence.
-- Never give medical, legal, or financial advice. Stay within spiritual guidance only.
-- Keep responses clear and accessible to any devotee, regardless of their background.`;
+- Never give medical, legal, or financial advice.`;
 
 /* ═══════════════════════════════════════════════════════════
    QUICK PROMPTS
@@ -99,7 +93,7 @@ async function callClaude(messages) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   EXTRACT SUGGESTED QUESTIONS from last bot message
+   EXTRACT SUGGESTED QUESTIONS
    ═══════════════════════════════════════════════════════════ */
 function extractSuggestedQuestions(content) {
   if (!content) return [];
@@ -120,19 +114,14 @@ function extractSuggestedQuestions(content) {
    ═══════════════════════════════════════════════════════════ */
 const isDevanagari = (str) => /[\u0900-\u097F]/.test(str);
 
-/**
- * Renders a line with **bold** markdown.
- * Single asterisks (italic markers) are stripped entirely to avoid stray * characters.
- */
 function RichLine({ text }) {
-  // Strip all single asterisks that aren't part of **bold**
   const cleaned = text.replace(/\*\*([^*]+)\*\*/g, '\u0002$1\u0003').replace(/\*/g, '').replace(/\u0002([^\u0003]*)\u0003/g, '**$1**');
   const parts = cleaned.split(/(\*\*[^*]+\*\*)/g);
   return (
     <>
       {parts.map((part, i) =>
         part.startsWith('**') && part.endsWith('**') ? (
-          <strong key={i} style={{ color: '#8B1A1A', fontWeight: 700 }}>
+          <strong key={i} style={{ color: '#FFD580', fontWeight: 700 }}>
             {part.slice(2, -2)}
           </strong>
         ) : (
@@ -153,13 +142,9 @@ function BotMessage({ content }) {
     <div style={S.botContent}>
       {lines.map((line, i) => {
         const trimmed = line.trim();
-
         if (!trimmed) return <div key={i} style={{ height: 4 }} />;
-
-        // Skip separator lines like --, ---, —— etc.
         if (/^[-—]{2,}$/.test(trimmed)) return null;
 
-        // Devanagari mantra line
         if (isDevanagari(trimmed)) {
           return (
             <div key={i} style={S.mantraBlock}>
@@ -168,7 +153,6 @@ function BotMessage({ content }) {
           );
         }
 
-        // Transliteration: (Om Namah Shivaya — ...)
         if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
           return (
             <div key={i} style={S.translitLine}>
@@ -177,13 +161,8 @@ function BotMessage({ content }) {
           );
         }
 
-        // Follow-up header: **Suggested Questions:**
-        if (/suggested questions/i.test(trimmed)) {
-          // Hide this header — questions are shown as chips above input
-          return null;
-        }
+        if (/suggested questions/i.test(trimmed)) return null;
 
-        // Section header: **1. Empathy** etc.
         if (/^\*\*\d+\./.test(trimmed) || /^\*\*[^*]{2,40}\*\*/.test(trimmed)) {
           return (
             <div key={i} style={S.sectionHeader}>
@@ -192,18 +171,10 @@ function BotMessage({ content }) {
           );
         }
 
-        // Check if we're past the "Suggested Questions:" header
-        const inFollowUp = lines
-          .slice(0, i)
-          .some(l => /suggested questions/i.test(l));
+        const inFollowUp = lines.slice(0, i).some(l => /suggested questions/i.test(l));
 
-        // Bullet line: - or •
         if (/^[-•]/.test(trimmed)) {
-          if (inFollowUp) {
-            // Hide follow-up bullets from message body — shown as chips instead
-            return null;
-          }
-
+          if (inFollowUp) return null;
           return (
             <div key={i} style={S.bulletLine}>
               <span style={S.bulletDot}>›</span>
@@ -212,7 +183,6 @@ function BotMessage({ content }) {
           );
         }
 
-        // Normal line
         return (
           <div key={i} style={S.normalLine}>
             <RichLine text={trimmed} />
@@ -256,7 +226,6 @@ export default function SpiritualChat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Extract suggested questions from the last bot message
   const lastBotMsg = [...messages].reverse().find(m => m.role === 'assistant');
   const suggestedQuestions = extractSuggestedQuestions(lastBotMsg?.content || '');
 
@@ -277,11 +246,7 @@ export default function SpiritualChat() {
     } catch {
       setMessages((prev) => [
         ...prev,
-        {
-          role: 'assistant',
-          content:
-            '⚠️ Could not reach the spiritual guide right now. Please check your API key or try again later.\n\n*ॐ शान्तिः शान्तिः शान्तिः*',
-        },
+        { role: 'assistant', content: '⚠️ Could not reach the spiritual guide right now. Please check your API key or try again later.\n\nॐ शान्तिः शान्तिः शान्तिः' },
       ]);
     } finally {
       setLoading(false);
@@ -289,10 +254,7 @@ export default function SpiritualChat() {
   };
 
   const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
   return (
@@ -322,13 +284,7 @@ export default function SpiritualChat() {
         <div style={S.quickLabel}>Quick Topics:</div>
         <div style={S.quickScroll}>
           {QUICK_PROMPTS.map((p) => (
-            <button
-              key={p.label}
-              style={S.quickBtn}
-              className="bm-quick-btn"
-              onClick={() => sendMessage(p.text)}
-              disabled={loading}
-            >
+            <button key={p.label} style={S.quickBtn} className="bm-quick-btn" onClick={() => sendMessage(p.text)} disabled={loading}>
               {p.label}
             </button>
           ))}
@@ -339,19 +295,14 @@ export default function SpiritualChat() {
       <div style={S.messagesArea}>
         {messages.map((msg, i) => (
           <div key={i} style={msg.role === 'user' ? S.rowUser : S.rowBot}>
-
             {msg.role === 'assistant' && (
               <div style={S.botAvatar}><span style={{ fontSize: 17 }}>🛕</span></div>
             )}
-
             {msg.role === 'user' ? (
               <div style={S.bubbleUser}>{msg.content}</div>
             ) : (
-              <div style={S.bubbleBot}>
-                <BotMessage content={msg.content} />
-              </div>
+              <div style={S.bubbleBot}><BotMessage content={msg.content} /></div>
             )}
-
             {msg.role === 'user' && (
               <div style={S.userAvatar}><span style={{ fontSize: 17 }}>🙏</span></div>
             )}
@@ -361,28 +312,19 @@ export default function SpiritualChat() {
         {loading && (
           <div style={S.rowBot}>
             <div style={S.botAvatar}><span style={{ fontSize: 17 }}>🛕</span></div>
-            <div style={{ ...S.bubbleBot, padding: '14px 18px' }}>
-              <TypingDots />
-            </div>
+            <div style={{ ...S.bubbleBot, padding: '14px 18px' }}><TypingDots /></div>
           </div>
         )}
-
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Suggested Question Chips (above input) ── */}
+      {/* ── Suggested Question Chips ── */}
       {suggestedQuestions.length > 0 && !loading && (
         <div style={S.suggestBar}>
           <div style={S.suggestLabel}>✦ Suggested Questions</div>
           <div style={S.suggestScroll}>
             {suggestedQuestions.map((q, i) => (
-              <button
-                key={i}
-                style={S.suggestChip}
-                className="bm-suggest-chip"
-                onClick={() => sendMessage(q)}
-                disabled={loading}
-              >
+              <button key={i} style={S.suggestChip} className="bm-suggest-chip" onClick={() => sendMessage(q)} disabled={loading}>
                 {q}
               </button>
             ))}
@@ -406,11 +348,7 @@ export default function SpiritualChat() {
           disabled={loading}
         />
         <button
-          style={{
-            ...S.sendBtn,
-            opacity:    loading || !input.trim() ? 0.45 : 1,
-            transform:  loading || !input.trim() ? 'scale(0.97)' : 'scale(1)',
-          }}
+          style={{ ...S.sendBtn, opacity: loading || !input.trim() ? 0.45 : 1 }}
           className="bm-send-btn"
           onClick={() => sendMessage()}
           disabled={loading || !input.trim()}
@@ -429,7 +367,7 @@ export default function SpiritualChat() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   CSS ANIMATIONS & HOVER STATES
+   CSS
    ═══════════════════════════════════════════════════════════ */
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Tiro+Devanagari+Sanskrit:ital@0;1&family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap');
@@ -447,428 +385,299 @@ const CSS = `
     to   { opacity: 1; transform: translateY(0); }
   }
   @keyframes bm-omGlow {
-    0%, 100% { text-shadow: 0 0 6px rgba(255,195,0,0.4); }
-    50%       { text-shadow: 0 0 22px rgba(255,195,0,0.9); }
+    0%, 100% { text-shadow: 0 0 8px rgba(255,213,128,0.5); }
+    50%       { text-shadow: 0 0 24px rgba(255,213,128,1); }
   }
 
   .bm-quick-btn:hover:not(:disabled) {
-    background: #fff3e6 !important;
-    color: #8B1A1A !important;
-    border-left-color: #8B1A1A !important;
-    border-color: #C8922A88 !important;
+    background: rgba(255,213,128,0.15) !important;
+    color: #FFD580 !important;
+    border-color: rgba(255,213,128,0.5) !important;
+    border-left-color: #E8650A !important;
   }
   .bm-send-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #ff8800, #c63a00) !important;
-    box-shadow: 0 6px 20px rgba(255,107,0,0.38) !important;
+    background: linear-gradient(135deg, #ff8800, #7a3208) !important;
+    box-shadow: 0 6px 20px rgba(232,101,10,0.45) !important;
     transform: translateY(-1px) scale(1.02) !important;
   }
   .bm-textarea:focus {
-    border-color: #C8922A !important;
-    box-shadow: 0 0 0 3px rgba(200,146,42,0.15) !important;
+    border-color: rgba(255,213,128,0.6) !important;
+    box-shadow: 0 0 0 3px rgba(255,213,128,0.12) !important;
     outline: none;
   }
   .bm-suggest-chip:hover:not(:disabled) {
-    background: #fff3e0 !important;
-    border-color: #C8922A !important;
-    color: #8B1A1A !important;
+    background: rgba(255,213,128,0.12) !important;
+    border-color: rgba(255,213,128,0.5) !important;
+    color: #FFD580 !important;
     transform: translateY(-1px) !important;
   }
 `;
 
 /* ═══════════════════════════════════════════════════════════
-   DESIGN TOKENS
+   DESIGN TOKENS — Route Planner palette
    ═══════════════════════════════════════════════════════════ */
-const saffron  = '#FF6B00';
-const deepRed  = '#8B1A1A';
-const cream    = '#FDF6EC';
-const gold     = '#C8922A';
-const darkText = '#2A1500';
-const mutedText = '#7A5C2E';
+const brown1   = '#3D1F00';   // deepest brown (Route Planner CTA base)
+const brown2   = '#7a3208';   // mid brown (Route Planner hero mid)
+const brown3   = '#4b1d04';   // darkest (Route Planner hero start)
+const orange   = '#E8650A';   // Route Planner accent orange
+const gold     = '#FFD580';   // Route Planner gold text
+const goldMid  = '#C8960C';   // Route Planner star / tip color
+const cream    = '#f8f4ef';   // Route Planner body bg
+const msgBg    = 'rgba(255,255,255,0.07)'; // subtle bot bubble bg on dark
 
 /* ═══════════════════════════════════════════════════════════
    STYLES OBJECT
    ═══════════════════════════════════════════════════════════ */
 const S = {
-  /* Wrapper */
+  /* Wrapper — dark brown card matching Route Planner card style */
   wrapper: {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
     minHeight: 560,
     maxHeight: 760,
-    background: cream,
-    borderRadius: 22,
+    background: 'white',
+    borderRadius: 28,
     overflow: 'hidden',
-    boxShadow: '0 12px 56px rgba(139,26,26,0.13), 0 2px 8px rgba(0,0,0,0.06)',
-    border: `1.5px solid ${gold}44`,
+    boxShadow: '0 20px 60px rgba(61,31,0,0.15)',
+    border: '1px solid rgba(232,101,10,0.12)',
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
     animation: 'bm-fadeUp 0.35s ease-out',
   },
 
-  /* Header */
+  /* Header — same dark brown gradient as Route Planner hero */
   header: {
     position: 'relative',
-    background: `linear-gradient(135deg, ${saffron} 0%, ${deepRed} 100%)`,
-    padding: '15px 20px',
+    background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+    padding: '18px 22px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    color: 'white',
+    color: gold,
     overflow: 'hidden',
     flexShrink: 0,
   },
   headerGlow: {
     position: 'absolute',
-    inset: 0,
-    backgroundImage: 'radial-gradient(ellipse at 15% 50%, rgba(255,210,60,0.16) 0%, transparent 60%)',
+    top: -60, left: '50%', transform: 'translateX(-50%)',
+    width: 500, height: 200,
+    background: 'radial-gradient(ellipse, rgba(232,101,10,0.25) 0%, transparent 70%)',
     pointerEvents: 'none',
   },
   headerInner: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    position: 'relative',
+    display: 'flex', alignItems: 'center', gap: 12, position: 'relative',
   },
   omCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: '50%',
-    background: 'rgba(255,255,255,0.16)',
-    border: '1.5px solid rgba(255,255,255,0.32)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backdropFilter: 'blur(4px)',
-    flexShrink: 0,
+    width: 46, height: 46, borderRadius: '50%',
+    background: 'rgba(255,213,128,0.12)',
+    border: '1.5px solid rgba(255,213,128,0.35)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    backdropFilter: 'blur(4px)', flexShrink: 0,
   },
   omText: {
-    fontSize: 21,
+    fontSize: 22,
     fontFamily: "'Tiro Devanagari Sanskrit', serif",
-    color: '#FFE57A',
+    color: gold,
     animation: 'bm-omGlow 3s ease-in-out infinite',
     lineHeight: 1,
   },
   headerTitle: {
     fontFamily: "'Crimson Pro', Georgia, serif",
-    fontWeight: 700,
-    fontSize: 17,
-    letterSpacing: '0.01em',
-    lineHeight: 1.25,
+    fontWeight: 700, fontSize: 18,
+    letterSpacing: '0.01em', lineHeight: 1.25,
+    color: gold,
   },
   headerSub: {
-    fontSize: 10.5,
-    opacity: 0.78,
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-    marginTop: 2,
+    fontSize: 10.5, opacity: 0.65,
+    letterSpacing: '0.08em', textTransform: 'uppercase',
+    marginTop: 2, color: gold,
   },
   liveChip: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    background: 'rgba(255,255,255,0.16)',
-    border: '1px solid rgba(255,255,255,0.28)',
-    borderRadius: 20,
-    padding: '4px 11px',
-    fontSize: 11,
-    fontWeight: 600,
-    letterSpacing: '0.03em',
-    position: 'relative',
-    flexShrink: 0,
+    display: 'flex', alignItems: 'center', gap: 6,
+    background: 'rgba(255,213,128,0.1)',
+    border: '1px solid rgba(255,213,128,0.28)',
+    borderRadius: 20, padding: '5px 13px',
+    fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+    color: gold, position: 'relative', flexShrink: 0,
   },
   liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: '50%',
-    background: '#4ade80',
-    display: 'inline-block',
+    width: 7, height: 7, borderRadius: '50%',
+    background: '#4ade80', display: 'inline-block',
     animation: 'bm-pulse 2s infinite',
   },
 
-  /* Quick Prompts */
+  /* Quick Prompts — light brown tint */
   quickBar: {
-    background: '#fff9f2',
-    borderBottom: `1px solid ${gold}22`,
-    padding: '8px 14px',
+    background: '#fdf6ec',
+    borderBottom: '1px solid rgba(232,101,10,0.1)',
+    padding: '9px 16px',
     flexShrink: 0,
   },
   quickLabel: {
-    fontSize: 10,
-    color: mutedText,
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.07em',
-    marginBottom: 6,
+    fontSize: 10, color: '#9A7150', fontWeight: 700,
+    textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7,
   },
   quickScroll: {
-    display: 'flex',
-    gap: 6,
-    overflowX: 'auto',
-    paddingBottom: 2,
+    display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2,
   },
   quickBtn: {
-    flexShrink: 0,
-    padding: '5px 14px',
-    borderRadius: 6,
-    border: `1px solid ${gold}55`,
-    borderLeft: `3px solid ${saffron}`,
-    background: 'white',
-    color: darkText,
-    fontSize: 12,
-    fontWeight: 500,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    transition: 'all 0.18s ease',
-    fontFamily: 'inherit',
-    letterSpacing: '0.01em',
+    flexShrink: 0, padding: '6px 14px', borderRadius: 8,
+    border: '1.5px solid rgba(232,101,10,0.2)',
+    borderLeft: `3px solid ${orange}`,
+    background: 'white', color: brown2,
+    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+    whiteSpace: 'nowrap', transition: 'all 0.18s ease',
+    fontFamily: 'inherit', letterSpacing: '0.01em',
   },
 
   /* Messages */
   messagesArea: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '16px 14px 8px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 13,
+    flex: 1, overflowY: 'auto',
+    padding: '18px 16px 10px',
+    display: 'flex', flexDirection: 'column', gap: 14,
+    background: cream,
   },
   rowUser: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    gap: 8,
+    display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', gap: 8,
     animation: 'bm-fadeUp 0.22s ease-out',
   },
   rowBot: {
-    display: 'flex',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    gap: 8,
+    display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', gap: 8,
     animation: 'bm-fadeUp 0.28s ease-out',
   },
   botAvatar: {
-    width: 33,
-    height: 33,
-    borderRadius: '50%',
-    background: `linear-gradient(135deg, ${saffron}20, ${gold}30)`,
-    border: `1.5px solid ${gold}50`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    width: 34, height: 34, borderRadius: '50%',
+    background: `linear-gradient(135deg, rgba(232,101,10,0.15), rgba(200,150,12,0.2))`,
+    border: `1.5px solid rgba(232,101,10,0.25)`,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   userAvatar: {
-    width: 33,
-    height: 33,
-    borderRadius: '50%',
-    background: `linear-gradient(135deg, ${saffron}, ${deepRed})`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    width: 34, height: 34, borderRadius: '50%',
+    background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 100%)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   bubbleUser: {
-    maxWidth: '70%',
-    padding: '10px 16px',
+    maxWidth: '70%', padding: '11px 16px',
     borderRadius: '18px 18px 4px 18px',
-    background: `linear-gradient(135deg, ${saffron} 0%, #e05500 100%)`,
-    color: 'white',
-    fontSize: 14,
-    lineHeight: 1.6,
-    boxShadow: '0 3px 12px rgba(255,107,0,0.26)',
+    background: 'linear-gradient(135deg, #3D1F00 0%, #B84D00 50%, #E8650A 100%)',
+    color: 'white', fontSize: 14, lineHeight: 1.6,
+    boxShadow: '0 4px 16px rgba(184,77,0,0.3)',
     fontFamily: 'inherit',
   },
   bubbleBot: {
-    maxWidth: '82%',
-    padding: '13px 16px',
+    maxWidth: '82%', padding: '14px 18px',
     borderRadius: '18px 18px 18px 4px',
-    background: 'white',
-    color: darkText,
-    fontSize: 14,
-    lineHeight: 1.72,
-    border: `1px solid ${gold}30`,
-    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+    background: 'white', color: brown1,
+    fontSize: 14, lineHeight: 1.72,
+    border: '1px solid rgba(232,101,10,0.12)',
+    boxShadow: '0 2px 12px rgba(61,31,0,0.07)',
   },
 
   /* Typing */
-  typingWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5,
-  },
+  typingWrap: { display: 'flex', alignItems: 'center', gap: 5 },
   dot: {
-    display: 'inline-block',
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    background: saffron,
+    display: 'inline-block', width: 8, height: 8,
+    borderRadius: '50%', background: orange,
     animation: 'bm-bounce 1.1s infinite',
   },
-  typingLabel: {
-    fontSize: 11,
-    color: mutedText,
-    fontStyle: 'italic',
-    marginLeft: 5,
-  },
+  typingLabel: { fontSize: 11, color: '#9A7150', fontStyle: 'italic', marginLeft: 5 },
 
-  /* ── Suggested Question Chips ── */
+  /* Suggested Chips */
   suggestBar: {
-    background: '#fffaf3',
-    borderTop: `1px solid ${gold}22`,
-    padding: '8px 14px 10px',
-    flexShrink: 0,
+    background: '#fdf6ec',
+    borderTop: '1px solid rgba(232,101,10,0.1)',
+    padding: '9px 16px 11px', flexShrink: 0,
     animation: 'bm-fadeUp 0.3s ease-out',
   },
   suggestLabel: {
-    fontSize: 10,
-    color: gold,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-    marginBottom: 7,
+    fontSize: 10, color: goldMid, fontWeight: 700,
+    textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7,
   },
-  suggestScroll: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 7,
-  },
+  suggestScroll: { display: 'flex', flexWrap: 'wrap', gap: 7 },
   suggestChip: {
-    padding: '6px 14px',
-    borderRadius: 20,
-    border: `1px solid ${gold}55`,
-    background: 'white',
-    color: darkText,
-    fontSize: 12,
-    fontWeight: 400,
-    cursor: 'pointer',
-    whiteSpace: 'normal',
-    textAlign: 'left',
-    lineHeight: 1.45,
-    transition: 'all 0.18s ease',
-    fontFamily: 'inherit',
-    letterSpacing: '0.01em',
-    maxWidth: '100%',
-    boxShadow: `0 1px 4px ${gold}18`,
+    padding: '6px 14px', borderRadius: 20,
+    border: '1.5px solid rgba(232,101,10,0.2)',
+    background: 'white', color: brown2,
+    fontSize: 12, fontWeight: 500, cursor: 'pointer',
+    whiteSpace: 'normal', textAlign: 'left', lineHeight: 1.45,
+    transition: 'all 0.18s ease', fontFamily: 'inherit',
+    letterSpacing: '0.01em', maxWidth: '100%',
+    boxShadow: '0 1px 4px rgba(61,31,0,0.06)',
   },
 
   /* Divider */
   divider: {
     height: 1,
-    background: `linear-gradient(90deg, transparent, ${gold}44, transparent)`,
+    background: 'linear-gradient(90deg, transparent, rgba(232,101,10,0.2), transparent)',
     flexShrink: 0,
   },
 
   /* Input */
   inputArea: {
-    display: 'flex',
-    gap: 8,
-    padding: '11px 13px',
-    background: '#fffdf8',
-    flexShrink: 0,
-    alignItems: 'flex-end',
+    display: 'flex', gap: 10, padding: '12px 14px',
+    background: 'white', flexShrink: 0, alignItems: 'flex-end',
   },
   textarea: {
-    flex: 1,
-    resize: 'none',
-    border: `1.5px solid ${gold}50`,
-    borderRadius: 14,
-    padding: '10px 13px',
-    fontSize: 14,
-    fontFamily: 'inherit',
-    outline: 'none',
-    color: darkText,
-    background: cream,
-    lineHeight: 1.55,
+    flex: 1, resize: 'none',
+    border: '2px solid #EDE0CC',
+    borderRadius: 16, padding: '11px 14px',
+    fontSize: 14, fontFamily: 'inherit',
+    outline: 'none', color: brown1,
+    background: cream, lineHeight: 1.55,
     transition: 'border-color 0.2s, box-shadow 0.2s',
     boxSizing: 'border-box',
   },
   sendBtn: {
-    padding: '11px 17px',
-    borderRadius: 14,
-    border: 'none',
-    background: `linear-gradient(135deg, ${saffron} 0%, #d44a00 100%)`,
-    color: 'white',
-    fontWeight: 700,
-    fontSize: 13,
-    cursor: 'pointer',
-    flexShrink: 0,
+    padding: '12px 18px', borderRadius: 16, border: 'none',
+    background: 'linear-gradient(135deg, #3D1F00 0%, #B84D00 50%, #E8650A 100%)',
+    color: 'white', fontWeight: 700, fontSize: 13,
+    cursor: 'pointer', flexShrink: 0,
     transition: 'all 0.2s cubic-bezier(0.34,1.56,0.64,1)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    boxShadow: '0 3px 12px rgba(255,107,0,0.22)',
-    fontFamily: 'inherit',
-    letterSpacing: '0.02em',
+    display: 'flex', alignItems: 'center', gap: 6,
+    boxShadow: '0 4px 16px rgba(184,77,0,0.3)',
+    fontFamily: 'inherit', letterSpacing: '0.04em',
   },
 
   /* Footer */
   footerNote: {
-    textAlign: 'center',
-    fontSize: 10,
-    color: `${mutedText}aa`,
-    padding: '6px 16px 9px',
-    background: '#fffdf8',
-    letterSpacing: '0.02em',
-    flexShrink: 0,
+    textAlign: 'center', fontSize: 10, color: '#9A7150',
+    padding: '6px 16px 10px', background: 'white',
+    letterSpacing: '0.02em', flexShrink: 0,
+    borderTop: '1px solid rgba(232,101,10,0.08)',
   },
 
-  /* ── Rich message styles ── */
-  botContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-  },
+  /* Rich message styles */
+  botContent: { display: 'flex', flexDirection: 'column', gap: 2 },
   sectionHeader: {
-    fontWeight: 700,
-    fontSize: 13,
-    color: deepRed,
-    marginTop: 12,
-    marginBottom: 3,
-    letterSpacing: '0.01em',
+    fontWeight: 700, fontSize: 13, color: brown2,
+    marginTop: 12, marginBottom: 3, letterSpacing: '0.01em',
   },
   bulletLine: {
-    display: 'flex',
-    gap: 7,
-    alignItems: 'flex-start',
-    paddingLeft: 4,
-    marginBottom: 1,
+    display: 'flex', gap: 7, alignItems: 'flex-start',
+    paddingLeft: 4, marginBottom: 1,
   },
   bulletDot: {
-    color: saffron,
-    fontWeight: 900,
-    flexShrink: 0,
-    fontSize: 17,
-    lineHeight: 1.4,
+    color: orange, fontWeight: 900,
+    flexShrink: 0, fontSize: 17, lineHeight: 1.4,
   },
-  normalLine: {
-    fontSize: 14,
-    color: darkText,
-    lineHeight: 1.7,
-  },
+  normalLine: { fontSize: 14, color: brown1, lineHeight: 1.7 },
   mantraBlock: {
-    background: `linear-gradient(100deg, rgba(200,146,42,0.11), rgba(255,107,0,0.07))`,
-    border: `1px solid ${gold}50`,
-    borderLeft: `3px solid ${gold}`,
+    background: 'linear-gradient(100deg, rgba(200,150,12,0.08), rgba(232,101,10,0.05))',
+    border: '1px solid rgba(200,150,12,0.25)',
+    borderLeft: `3px solid ${goldMid}`,
     borderRadius: '0 10px 10px 0',
-    padding: '9px 14px',
-    marginTop: 10,
-    marginBottom: 2,
+    padding: '10px 16px',
+    marginTop: 10, marginBottom: 2,
   },
   mantraText: {
-    fontSize: 18,
-    fontWeight: 700,
-    color: '#6B0F0F',
-    letterSpacing: '0.05em',
+    fontSize: 18, fontWeight: 700,
+    color: brown2, letterSpacing: '0.05em',
     fontFamily: "'Tiro Devanagari Sanskrit', serif",
-    display: 'block',
-    lineHeight: 1.7,
+    display: 'block', lineHeight: 1.7,
   },
   translitLine: {
-    fontSize: 12,
-    color: mutedText,
-    paddingLeft: 14,
-    marginBottom: 8,
-    fontStyle: 'italic',
-    lineHeight: 1.6,
+    fontSize: 12, color: '#9A7150',
+    paddingLeft: 14, marginBottom: 8,
+    fontStyle: 'italic', lineHeight: 1.6,
   },
 };

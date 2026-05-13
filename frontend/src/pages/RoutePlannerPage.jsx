@@ -87,8 +87,8 @@ export default function RoutePlannerPage() {
       {/* ══════════════ HERO ══════════════ */}
       <section style={{
         position: 'relative', overflow: 'hidden', color: '#FFD580',
-        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '88px 24px 120px', textAlign: 'center',
+       background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+padding: '88px 24px 96px', textAlign: 'center',
       }}>
         {/* Om watermark */}
         <div style={{
