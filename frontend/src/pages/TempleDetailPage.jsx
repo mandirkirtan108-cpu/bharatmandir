@@ -8,7 +8,6 @@ import { useTranslatedTemple } from '../hooks/useTranslatedData';
 const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// No processing — use URL exactly as stored in DB, same as TempleCard on homepage
 function proxyImageUrl(url) {
   return url || null;
 }
@@ -49,26 +48,26 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;transition:opacity .8s;}
 .hero-grad{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,5,0,.08) 0%,rgba(10,5,0,0) 25%,rgba(10,5,0,.55) 60%,rgba(10,5,0,.95) 100%);pointer-events:none;}
 .hero-diya{position:absolute;top:24%;left:50%;transform:translateX(-50%);font-size:52px;animation:diya 3s ease-in-out infinite;z-index:2;}
-.hero-body{position:relative;z-index:3;padding:0 52px 56px;max-width:880px;animation:up .6s ease .1s both;}
+.hero-body{position:relative;z-index:3;padding:0 52px 56px;width:100%;text-align:center;animation:up .6s ease .1s both;}
 
 /* Breadcrumb */
-.hero-bc{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.09em;margin-bottom:12px;flex-wrap:wrap;font-family:'DM Sans',sans-serif;font-weight:500;}
+.hero-bc{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.09em;margin-bottom:12px;flex-wrap:wrap;font-family:'DM Sans',sans-serif;font-weight:500;}
 .hero-bc a{color:inherit;text-decoration:none;transition:color .2s;}.hero-bc a:hover{color:rgba(255,255,255,.75);}
 .hero-bc sep{color:rgba(255,255,255,.2);}
 
 /* Badges */
-.badges{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:13px;}
+.badges{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;justify-content:center;}
 .badge{padding:4px 13px;border-radius:50px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-family:'DM Sans',sans-serif;}
 .badge.saffron{background:rgba(200,82,10,.82);color:rgba(255,225,160,.95);}
 .badge.green{background:rgba(26,107,58,.82);color:rgba(150,240,170,.95);}
 .badge.blue{background:rgba(20,80,160,.82);color:rgba(170,205,255,.95);}
 
 /* Temple name */
-.hero-h1{font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(28px,5.2vw,62px);font-weight:700;color:#fff;line-height:1.06;margin-bottom:6px;letter-spacing:-.01em;}
-.hero-hindi{font-family:'Noto Sans Devanagari',sans-serif;font-size:17px;color:rgba(255,190,100,.7);margin-bottom:17px;}
-.hero-meta{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:22px;}
-.hero-meta-item{font-size:13px;color:rgba(255,255,255,.62);display:flex;align-items:center;gap:5px;font-family:'DM Sans',sans-serif;}
-.hero-acts{display:flex;gap:9px;flex-wrap:wrap;}
+.hero-h1{font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(28px,5.2vw,62px);font-weight:700;color:#fff;line-height:1.1;margin-bottom:10px;letter-spacing:-.01em;}
+.hero-hindi{font-family:'Noto Sans Devanagari',sans-serif;font-size:clamp(28px,5.2vw,62px);font-weight:600;color:rgba(255,190,100,.85);line-height:1.2;margin-bottom:18px;}
+.hero-address{font-size:14px;color:rgba(255,255,255,.65);display:flex;align-items:center;justify-content:center;gap:6px;font-family:'DM Sans',sans-serif;flex-wrap:wrap;}
+
+.hero-acts{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-top:20px;}
 .btn{padding:11px 22px;border-radius:9px;font-size:13.5px;font-weight:500;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:all .2s;border:none;font-family:'DM Sans',sans-serif;}
 .btn-fill{background:#C8520A;color:#fff;box-shadow:0 3px 14px rgba(200,82,10,.38);}.btn-fill:hover{background:#9A3C05;transform:translateY(-1px);}
 .btn-ghost{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.28);}.btn-ghost:hover{background:rgba(255,255,255,.2);}
@@ -189,10 +188,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 
 /* RESPONSIVE */
 @media(max-width:1024px){.wrap{grid-template-columns:1fr;padding:20px 20px 60px;}.stick{position:static;}.snav,.hero-body{padding-left:20px;padding-right:20px;}}
-@media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.ig,.sg,.chip-grid,.dc{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}}
+@media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig,.sg,.chip-grid,.dc{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}}
 `;
 
-// Hero image — same logic as TempleCard on homepage, no processing
 function HeroImage({ src, alt }) {
   if (!src) return null;
   return (
@@ -205,7 +203,6 @@ function HeroImage({ src, alt }) {
   );
 }
 
-// InfoItem — only renders if value exists
 function II({ label, value, full, icon }) {
   if (!v(value)) return null;
   return (
@@ -216,7 +213,6 @@ function II({ label, value, full, icon }) {
   );
 }
 
-// Section label
 function SLabel({ text }) {
   return <p style={{ fontSize:11, color:'var(--kl)', marginBottom:10, textTransform:'uppercase', letterSpacing:'.08em', fontWeight:700 }}>{text}</p>;
 }
@@ -303,17 +299,16 @@ export default function TempleDetailPage() {
     ['prog_bhajan_kirtan','🎵 Bhajan & Kirtan'],['prog_disaster_relief','🆘 Disaster Relief'],
   ].filter(([k]) => T[k]);
 
-  // Build nav dynamically based on what data exists
   const navItems = [
-    { id:'overview',   label:'Overview',  show: true },
-    { id:'history',    label:'History',   show: v(T.history)||v(T.significance)||v(T.puranic_stories) },
-    { id:'puja',       label:'Puja',      show: pujaSchedule.length>0 || pujaServices.length>0 },
-    { id:'mantras',    label:'Mantras',   show: mantras.length>0 },
-    { id:'festivals',  label:'Festivals', show: festivals.length>0 },
-    { id:'sevas',      label:'Sevas',     show: sevas.length>0 },
-    { id:'facilities', label:'Facilities',show: facilities.length>0||programs.length>0 },
-    { id:'priests',    label:'Priests',   show: priests.length>0 },
-    { id:'contact',    label:'Contact',   show: true },
+    { id:'overview',   label:'Overview',   show: true },
+    { id:'history',    label:'History',    show: v(T.history)||v(T.significance)||v(T.puranic_stories) },
+    { id:'puja',       label:'Puja',       show: pujaSchedule.length>0 || pujaServices.length>0 },
+    { id:'mantras',    label:'Mantras',    show: mantras.length>0 },
+    { id:'festivals',  label:'Festivals',  show: festivals.length>0 },
+    { id:'sevas',      label:'Sevas',      show: sevas.length>0 },
+    { id:'facilities', label:'Facilities', show: facilities.length>0||programs.length>0 },
+    { id:'priests',    label:'Priests',    show: priests.length>0 },
+    { id:'contact',    label:'Contact',    show: true },
   ].filter(n => n.show);
 
   const scrollTo = (id) => {
@@ -322,6 +317,10 @@ export default function TempleDetailPage() {
     if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
   };
 
+  // Build address line
+  const addressParts = [T.city, T.state].filter(v);
+  const addressLine = T.address || addressParts.join(', ');
+
   return (
     <>
       <style>{CSS}</style>
@@ -329,47 +328,44 @@ export default function TempleDetailPage() {
 
       {/* ══ HERO ══ */}
       <div className="hero">
-       {heroImg ? (
-        <HeroImage src={heroImg} alt={T.name} />
-        ) : <div className="hero-diya"></div>}
+        {heroImg ? (
+          <HeroImage src={heroImg} alt={T.name} />
+        ) : <div className="hero-diya">🪔</div>}
         <div className="hero-grad"/>
+
         <div className="hero-body">
-          {/* Breadcrumb */}
-          <div className="hero-bc">
-            <a href="/">Home</a><sep>/</sep>
-            <span>{T.state}</span><sep>/</sep>
-            <span>{T.city}</span><sep>/</sep>
-            <span>{T.name}</span>
-          </div>
+          
 
           {/* Classification badges */}
           <div className="badges">
-            {T.is_jyotirlinga    && <span className="badge saffron">⚡ Jyotirlinga</span>}
-            {T.is_shaktipeeth    && <span className="badge saffron">🌸 Shaktipeeth</span>}
-            {T.is_char_dham      && <span className="badge saffron">🔱 Char Dham</span>}
-            {T.is_ashtavinayak   && <span className="badge saffron">🐘 Ashtavinayak</span>}
-            {T.is_divya_desam    && <span className="badge saffron">🪷 Divya Desam</span>}
-            {T.is_pancha_bhuta   && <span className="badge saffron">🌊 Pancha Bhuta</span>}
+            {T.is_jyotirlinga     && <span className="badge saffron">⚡ Jyotirlinga</span>}
+            {T.is_shaktipeeth     && <span className="badge saffron">🌸 Shaktipeeth</span>}
+            {T.is_char_dham       && <span className="badge saffron">🔱 Char Dham</span>}
+            {T.is_ashtavinayak    && <span className="badge saffron">🐘 Ashtavinayak</span>}
+            {T.is_divya_desam     && <span className="badge saffron">🪷 Divya Desam</span>}
+            {T.is_pancha_bhuta    && <span className="badge saffron">🌊 Pancha Bhuta</span>}
             {T.is_51_shakti_peeths && <span className="badge saffron">51 Shakti Peeths</span>}
-            {T.is_heritage_site  && <span className="badge blue">🏛️ Heritage</span>}
-            {T.is_unesco_heritage&& <span className="badge blue">🌍 UNESCO</span>}
-            {T.is_state_heritage && <span className="badge blue">⭐ State Heritage</span>}
-            {T.is_asi_protected  && <span className="badge blue">🏺 ASI Protected</span>}
-            {T.verified          && <span className="badge green">✓ Verified</span>}
-            {v(T.sect)           && <span className="badge saffron">{T.sect}</span>}
+            {T.is_heritage_site   && <span className="badge blue">🏛️ Heritage</span>}
+            {T.is_unesco_heritage && <span className="badge blue">🌍 UNESCO</span>}
+            {T.is_state_heritage  && <span className="badge blue">⭐ State Heritage</span>}
+            {T.is_asi_protected   && <span className="badge blue">🏺 ASI Protected</span>}
+            {T.verified           && <span className="badge green">✓ Verified</span>}
+            {v(T.sect)            && <span className="badge saffron">{T.sect}</span>}
           </div>
 
+          {/* English name */}
           <h1 className="hero-h1">{T.name}</h1>
-          {v(T.name_hindi) && <div className="hero-hindi">{T.name_hindi}</div>}
 
-          <div className="hero-meta">
-            <span className="hero-meta-item">📍 {T.city}, {T.state}</span>
-            {v(T.primary_deity) && <span className="hero-meta-item">🙏 {T.primary_deity}</span>}
-            {openTime && <span className="hero-meta-item">🕐 {openTime} – {closeTime}</span>}
-            {fee && <span className="hero-meta-item">{fee==='Free Entry'?'✅ Free Entry':fee}</span>}
-            {v(T.setting_environment) && <span className="hero-meta-item">🌿 {T.setting_environment}</span>}
+          {/* Hindi name — same font size as English */}
+          {v(T.name_hindi) && (
+            <div className="hero-hindi">{T.name_hindi}</div>
+          )}
+
+          {/* Address — centred, below names */}
+          <div className="hero-address">
+            <span>📍</span>
+            <span>{addressLine}</span>
           </div>
-
         </div>
       </div>
 
@@ -596,9 +592,6 @@ export default function TempleDetailPage() {
             {v(T.website_url)     &&<div className="crow"><div className="clbl">Website</div><a href={T.website_url} target="_blank" rel="noopener noreferrer" className="clink">🌐 Visit Official Website →</a></div>}
             {v(T.best_time_to_call)&&<div className="crow"><div className="clbl">Best Time to Call</div><div className="cval">⏰ {T.best_time_to_call}</div></div>}
             {v(T.trust_registration_no)&&<div className="crow"><div className="clbl">Registration No.</div><div className="cval">{T.trust_registration_no}</div></div>}
-
-
-            
           </div>
         </div>
 
