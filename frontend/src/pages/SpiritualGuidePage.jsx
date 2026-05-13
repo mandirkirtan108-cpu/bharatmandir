@@ -2,149 +2,95 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import SpiritualChat from '../components/SpiritualChat';
 
-const FEATURES = [
-  { icon: '🕉️', title: 'Mantra Guidance',      desc: 'Personalized mantras for your situation' },
-  { icon: '🛕', title: 'Temple Suggestions',    desc: 'Which deity & temple to visit' },
-  { icon: '🪔', title: 'Ritual Practices',      desc: 'Prayers and pujas to bring relief' },
-  { icon: '🌿', title: 'Hindi, English & More', desc: 'Responds in Hindi, English, Hinglish & more' },
-  { icon: '💬', title: 'Follow-up Questions',   desc: 'Suggested questions to deepen your guidance' },
-  { icon: '🔮', title: 'AI-Powered Wisdom',     desc: 'Powered by Claude, attuned to your intent' },
-];
 
 export default function SpiritualGuidePage() {
   return (
     <>
       <Navbar />
 
-      <main style={{ minHeight: '100vh', background: 'var(--cream)', paddingBottom: 60 }}>
+      <main style={{ minHeight: '100vh', background: '#f8f4ef' }}>
 
-        {/* ── Hero Banner ── */}
-        <div style={{
+        {/* ══════════════ HERO — matches Route Planner exactly ══════════════ */}
+        <section style={{
           position: 'relative',
-          background: 'linear-gradient(135deg, #FF6B00 0%, #8B1A1A 100%)',
-          padding: '52px 24px 48px',
-          textAlign: 'center',
-          color: 'white',
           overflow: 'hidden',
+          background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+          padding: '88px 24px 96px',
+          textAlign: 'center',
+          color: '#FFD580',
         }}>
-          {/* Radial glow behind OM */}
+          {/* OM watermark */}
           <div style={{
-            position: 'absolute',
-            top: '50%', left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 480, height: 480,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(255,210,60,0.13) 0%, transparent 68%)',
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 360, color: 'rgba(255,255,255,0.028)',
+            fontFamily: 'var(--font-hindi)',
+            pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
+          }}>ॐ</div>
+
+          {/* Radial glow */}
+          <div style={{
+            position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+            width: 600, height: 300,
+            background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
             pointerEvents: 'none',
           }} />
 
-          {/* Corner diyas */}
-          <div style={{ position: 'absolute', top: 18, left: 22, fontSize: 22, opacity: 0.35 }}>🪔</div>
-          <div style={{ position: 'absolute', top: 18, right: 22, fontSize: 22, opacity: 0.35 }}>🪔</div>
-          <div style={{ position: 'absolute', bottom: 18, left: 22, fontSize: 16, opacity: 0.2 }}>🌸</div>
-          <div style={{ position: 'absolute', bottom: 18, right: 22, fontSize: 16, opacity: 0.2 }}>🌸</div>
+          <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+            {/* Badge — same style as Route Planner */}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+              borderRadius: 50, padding: '6px 20px', marginBottom: 20,
+              color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
+              fontWeight: 500, backdropFilter: 'blur(8px)',
+            }}>
+              ✨ AI Spiritual Guide
+            </div>
 
-          {/* OM */}
-          <div style={{ fontSize: 56, marginBottom: 14, lineHeight: 1, position: 'relative' }}>🕉️</div>
+            <h1 style={{
+              fontFamily: 'var(--font-display)', fontWeight: 900,
+              fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
+              textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+              color: '#FFD580',
+            }}>
+              Your Troubles,{' '}
+              <span style={{ color: '#FFD580' }}>Divine Guidance</span>
+            </h1>
 
-          {/* Title */}
-          <h1 style={{
-            fontSize: 'clamp(26px, 4vw, 40px)',
-            fontFamily: 'var(--font-display)',
-            margin: '0 0 8px',
-            fontWeight: 800,
-            letterSpacing: '-0.01em',
-            position: 'relative',
-          }}>
-            Adhyatmik Margdarshak
-          </h1>
-
-          {/* Subtitle tag */}
-          <p style={{
-            fontSize: 11.5,
-            opacity: 0.72,
-            letterSpacing: '0.18em',
-            textTransform: 'uppercase',
-            marginBottom: 18,
-            fontWeight: 500,
-            position: 'relative',
-          }}>
-            AI Spiritual Guide · BharatMandir
-          </p>
-
-          {/* Description */}
-          <p style={{
-            fontSize: 16,
-            opacity: 0.92,
-            maxWidth: 540,
-            margin: '0 auto 28px',
-            lineHeight: 1.72,
-            position: 'relative',
-          }}>
-            Share your troubles and receive compassionate guidance —
-            mantras, rituals, deity recommendations, and follow-up wisdom,
-            in <strong>Hindi, English, or Hinglish</strong>.
-          </p>
-
-          {/* Feature chips */}
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 9,
-            justifyContent: 'center',
-            position: 'relative',
-          }}>
-            {FEATURES.map(f => (
-              <div
-                key={f.title}
-                title={f.desc}
-                style={{
-                  background: 'rgba(255,255,255,0.13)',
-                  backdropFilter: 'blur(10px)',
-                  borderRadius: 24,
-                  padding: '6px 15px',
-                  fontSize: 12.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  cursor: 'default',
-                  fontWeight: 600,
-                  letterSpacing: '0.01em',
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{f.icon}</span>
-                <span>{f.title}</span>
-              </div>
-            ))}
+            <p style={{
+              color: '#FFD580', opacity: 0.82, fontSize: 18,
+              maxWidth: 540, margin: '0 auto 0',
+              fontWeight: 300, lineHeight: 1.7,
+            }}>
+              Share your concerns and receive compassionate wisdom —
+              mantras, rituals, deity recommendations, in <strong style={{ fontWeight: 600 }}>Hindi, English, or Hinglish</strong>.
+            </p>
           </div>
-        </div>
+        </section>
 
-        {/* ── Chat Card — overlaps hero bottom edge ── */}
-        <div style={{
-          maxWidth: 800,
-          margin: '-26px auto 0',
-          padding: '0 16px',
-          position: 'relative',
-          zIndex: 10,
-        }}>
-          <SpiritualChat />
-        </div>
+        {/* ══════════════ CHAT SECTION — no overlap, same bg as Route Planner body ══════════════ */}
+        <section style={{ background: '#f8f4ef', paddingTop: 56, paddingBottom: 80 }}>
+          <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 20px' }}>
+            <SpiritualChat />
+          </div>
 
-        {/* ── Disclaimer ── */}
-        <p style={{
-          textAlign: 'center',
-          maxWidth: 540,
-          margin: '26px auto 0',
-          fontSize: 12,
-          color: '#a07040',
-          lineHeight: 1.7,
-          padding: '0 16px',
-          opacity: 0.78,
-        }}>
-          🙏 This guide is for spiritual inspiration only. Please consult qualified professionals
-          for medical, legal, or financial decisions.
-        </p>
+          {/* Disclaimer */}
+          <p style={{
+            textAlign: 'center',
+            maxWidth: 540,
+            margin: '26px auto 0',
+            fontSize: 12,
+            color: '#9A7150',
+            lineHeight: 1.7,
+            padding: '0 16px',
+            opacity: 0.85,
+          }}>
+            🙏 This guide is for spiritual inspiration only. Please consult qualified professionals
+            for medical, legal, or financial decisions.
+          </p>
+        </section>
+
       </main>
 
       <Footer />

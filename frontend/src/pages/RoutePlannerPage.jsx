@@ -20,58 +20,25 @@ const PREF_OPTIONS = [
   '🌿 Peaceful & Serene',
 ];
 
-// ─────────────────────────────────────────────
-// Slug helpers
-// ─────────────────────────────────────────────
-
-/** "New Delhi" → "new-delhi"  (for ixigo train URLs) */
 function toHyphen(city) {
   return city.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
-/** "New Delhi" → "new+delhi"  (for redBus query-string) */
-function toPlus(city) {
-  return city.trim().toLowerCase().replace(/\s+/g, '+');
-}
-
-// ─────────────────────────────────────────────
-// Dynamic booking URL builder
-//
-// Verified live URL patterns (May 2026):
-//
-//  Train → ixigo.com/by-train-rail/{from}-to-{to}-by-train
-//    ✅ https://www.ixigo.com/by-train-rail/indore-to-ujjain-by-train
-//    ✅ https://www.ixigo.com/by-train-rail/mumbai-to-ujjain-by-train
-//
-//  Bus → redbus.in/bus-tickets/{from}-to-{to}
-//    ✅ https://www.redbus.in/bus-tickets/indore-to-ujjain
-//    ✅ https://www.redbus.in/bus-tickets/ujjain-to-indore
-//    (ixigo bus URLs are route-specific slugs that 404 for many cities)
-//
-//  Car / Bike → Google Maps directions
-// ─────────────────────────────────────────────
 function buildBookingUrl(travelMode, from, to) {
   const fHyphen = toHyphen(from);
   const tHyphen = toHyphen(to);
-
   switch (travelMode) {
     case 'train':
-      // ixigo trains — verified working pattern
       return `https://www.ixigo.com/by-train-rail/${fHyphen}-to-${tHyphen}-by-train`;
-
     case 'bus':
-      // redBus — reliable, consistent URL pattern for all Indian cities
       return `https://www.redbus.in/bus-tickets/${fHyphen}-to-${tHyphen}`;
-
     case 'car':
     case 'bike':
     default:
-      // Google Maps directions — best for road travel
       return `https://www.google.com/maps/dir/${encodeURIComponent(from.trim())}/${encodeURIComponent(to.trim())}`;
   }
 }
 
-// Card meta per travel mode
 const BOOKING_META = {
   train: { icon: '🚆', label: 'Search Trains on ixigo',  provider: 'ixigo trains', color: '#1565C0' },
   bus:   { icon: '🚌', label: 'Search Buses on redBus',  provider: 'redBus',       color: '#D84315' },
@@ -129,7 +96,6 @@ export default function RoutePlannerPage() {
     }
   };
 
-  // ── Booking button handler ──
   const handleBookingClick = () => {
     if (!form.start.trim() || !form.destination.trim()) {
       alert('Please enter both source and destination.');
@@ -150,15 +116,18 @@ export default function RoutePlannerPage() {
 
       {/* ══════════════ HERO ══════════════ */}
       <section style={{
-        position: 'relative', overflow: 'hidden',
+        position: 'relative', overflow: 'hidden', color: '#FFD580',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '88px 24px 120px', textAlign: 'center',
+        padding: '88px 24px 96px', textAlign: 'center',
       }}>
+        {/* OM watermark */}
         <div style={{
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
           pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
         }}>ॐ</div>
+
+        {/* Radial glow */}
         <div style={{
           position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
           width: 600, height: 300,
@@ -167,6 +136,7 @@ export default function RoutePlannerPage() {
         }} />
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+          {/* Badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
@@ -350,7 +320,6 @@ export default function RoutePlannerPage() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             gap: 24, flexWrap: 'wrap', position: 'relative', overflow: 'hidden',
           }}>
-            {/* Watermark */}
             <div style={{
               position: 'absolute', right: -24, top: '50%', transform: 'translateY(-50%)',
               fontSize: 140, opacity: 0.05, pointerEvents: 'none',
@@ -371,9 +340,7 @@ export default function RoutePlannerPage() {
                 <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: '#7a3208', marginBottom: 6 }}>
                   Already know your route?
                 </h3>
-                <p style={{ color: '#9A7150', fontSize: 14 }}>
-                  {bookingSubtitle}
-                </p>
+                <p style={{ color: '#9A7150', fontSize: 14 }}>{bookingSubtitle}</p>
               </div>
             </div>
 
@@ -389,22 +356,13 @@ export default function RoutePlannerPage() {
                   cursor: 'pointer', transition: 'all .22s',
                   boxShadow: `0 4px 16px ${bookingMeta.color}26`,
                 }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = bookingMeta.color;
-                  e.currentTarget.style.color = 'white';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = bookingMeta.color;
-                }}
+                onMouseEnter={e => { e.currentTarget.style.background = bookingMeta.color; e.currentTarget.style.color = 'white'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = bookingMeta.color; }}
               >
                 {bookingMeta.label} <ExternalLink size={16} />
               </button>
               <p style={{ fontSize: 12, color: '#9A7150', marginTop: 8 }}>
-                Powered by{' '}
-                <span style={{ fontWeight: 700, color: bookingMeta.color }}>
-                  {bookingMeta.provider}
-                </span>
+                Powered by <span style={{ fontWeight: 700, color: bookingMeta.color }}>{bookingMeta.provider}</span>
               </p>
             </div>
           </div>
@@ -482,9 +440,7 @@ export default function RoutePlannerPage() {
                           }}>⭐ MUST VISIT</div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: '#3D1F00' }}>
-                            {t.name}
-                          </h3>
+                          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: '#3D1F00' }}>{t.name}</h3>
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 10, flexWrap: 'wrap' }}>
                             <span style={{ background: '#FDF6EC', borderRadius: 50, padding: '3px 10px', fontSize: 11, color: '#5C3D1E', fontWeight: 500 }}>
                               📍 {t.distance_from_route_km}

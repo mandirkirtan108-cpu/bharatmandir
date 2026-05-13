@@ -381,7 +381,7 @@ export default function FestivalCalendarPage() {
               border: '1px solid rgba(255,255,255,0.12)',
             }}>
               <span style={{ animation: 'floatDiya 1.5s ease-in-out infinite', display: 'inline-block' }}>✨</span>
-              festivals are loading please wait…
+              festivals are loaging please wait…
             </div>
           )}
           {claudeError && !claudeLoading && (
@@ -486,7 +486,7 @@ export default function FestivalCalendarPage() {
           {isAnyLoading && allFestivals.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
               <div style={{ fontSize: 48, animation: 'floatDiya 2s ease-in-out infinite' }}>🪔</div>
-              <p style={{ fontFamily: 'var(--font-hindi)', color: '#9A7150', fontSize: 16 }}>festivals are loading please wait..</p>
+              <p style={{ fontFamily: 'var(--font-hindi)', color: '#9A7150', fontSize: 16 }}>Claude AI se festivals load ho rahe hain…</p>
             </div>
           ) : viewMode === 'calendar' ? (
             <>
