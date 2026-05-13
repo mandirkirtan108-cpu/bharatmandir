@@ -173,12 +173,13 @@ export default function PanchangPage() {
             </div>
 
             <h1 style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900,
-              fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
-              textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-            }}>
-              AI <span style={{ color: '#FFD580' }}>Pandit Ji</span> — Panchang & Muhurat
-            </h1>
+  fontFamily: 'var(--font-display)', fontWeight: 900,
+  fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
+  textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+  color: '#FFD580',
+}}>
+  AI <span style={{ color: '#FFD580' }}>Pandit Ji</span> — Panchang & Muhurat
+</h1>
 
             <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 18, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7 }}>
               Your personal digital Pandit — auspicious timings for every occasion, powered by Claude AI with deep Vedic knowledge.
