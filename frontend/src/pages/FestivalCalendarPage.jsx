@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Star, Search, ChevronLeft, ChevronRight, MapPin, Filter, RefreshCw } from 'lucide-react';
+import { Calendar, Star, Search, ChevronLeft, ChevronRight, MapPin, Filter, RefreshCw, Database } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_SECRET_KEY || 'change-me-now';
 
 // ── Static Data ────────────────────────────────────────────────────────────────
 const HINDU_MONTHS = [
@@ -50,7 +51,6 @@ const FESTIVAL_NAME_MAP = {
   'hanuman jayanti':   { emoji: '🐒', color: '#E8650A' },
   'akshaya tritiya':   { emoji: '✨', color: '#C8960C' },
   'buddha purnima':    { emoji: '☸️',  color: '#D97706' },
-  'nirjala ekadashi':  { emoji: '💧', color: '#1D4ED8' },
   'rath yatra':        { emoji: '🛕', color: '#E85C2A' },
   'guru purnima':      { emoji: '📿', color: '#8B5CF6' },
   'naga panchami':     { emoji: '🐍', color: '#065F46' },
@@ -72,12 +72,10 @@ const FESTIVAL_NAME_MAP = {
   'pongal':            { emoji: '🌾', color: '#E8650A' },
   'onam':              { emoji: '🌺', color: '#16a34a' },
   'bihu':              { emoji: '🌾', color: '#D97706' },
-  'sakat chauth':      { emoji: '🌙', color: '#5B4FDB' },
-  'shattila ekadashi': { emoji: '📿', color: '#8B5CF6' },
-  'bhishma ashtami':   { emoji: '⚔️', color: '#DC2626' },
 };
 
 function getEmojiColor(festival) {
+  if (festival.emoji && festival.color) return { emoji: festival.emoji, color: festival.color };
   const nameLower = (festival.name || '').toLowerCase();
   for (const [key, val] of Object.entries(FESTIVAL_NAME_MAP)) {
     if (nameLower.includes(key)) return val;
@@ -89,132 +87,97 @@ function getEmojiColor(festival) {
   return { emoji: '🛕', color: '#E8650A' };
 }
 
-function festKey(f) {
-  return `${(f.name || '').toLowerCase().trim()}::${f.month}`;
-}
-
 const DEITY_FILTERS = ['All','Shiva','Vishnu','Ganesha','Durga','Lakshmi','Krishna','Rama','Saraswati'];
 const TYPE_FILTERS  = ['All','Major','With Temple'];
-
-function makePrompt(months) {
-  return `List ALL Hindu festivals for 2025 in months: ${months}.
-Return ONLY a valid JSON array. No explanation, no markdown, no backticks, no extra text.
-Each object must have EXACTLY these fields:
-{"name":"string","month":1,"exact_date":"2025-01-14","display_date":"14 January 2025","hindu_tithi":"string","hindu_month":"string","significance":"one sentence","description":"2-3 sentences max","is_major":true,"duration_days":1,"deity":"Surya","emoji":"🪁","color":"#E8650A"}
-Rules:
-- Cover every festival, vrat, Ekadashi, Purnima, Chaturthi in those months
-- Include regional festivals (Pongal, Onam, Bihu, Ugadi, Baisakhi etc.) where applicable
-- is_major=true only for nationally celebrated festivals
-- deity: Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other
-- description max 2-3 sentences (keep short to avoid truncation)
-- Sort by exact_date ascending
-- Output ONLY the JSON array, nothing else`;
-}
-
-const PROMPT_H1 = makePrompt('January, February, March, April, May, June');
-const PROMPT_H2 = makePrompt('July, August, September, October, November, December');
 
 export default function FestivalCalendarPage() {
   const [selectedMonth, setSelectedMonth]       = useState(new Date().getMonth() + 1);
   const [viewMode, setViewMode]                 = useState('calendar');
   const [deityFilter, setDeityFilter]           = useState('All');
   const [typeFilter, setTypeFilter]             = useState('All');
-  const [searchQuery, setSearchQuery]           = useState('');
-  const [apiFestivals, setApiFestivals]         = useState([]);
-  const [claudeFestivals, setClaudeFestivals]   = useState([]);
+  const [searchQuery, setSearchQuery]           = useState('')
+  const [festivals, setFestivals]               = useState([]);
   const [loading, setLoading]                   = useState(true);
-  const [claudeLoading, setClaudeLoading]       = useState(true);
-  const [claudeError, setClaudeError]           = useState(false);
-  const [claudeErrorMsg, setClaudeErrorMsg]     = useState('');
   const [selectedFestival, setSelectedFestival] = useState(null);
+
+  // Seeding state
+  const [seedStatus, setSeedStatus]             = useState(null);  // null | 'checking' | 'seeding' | 'done' | 'error'
+  const [seedMsg, setSeedMsg]                   = useState('');
+  const [aiCount, setAiCount]                   = useState(0);
 
   const currentYear = new Date().getFullYear();
 
+  // ── 1. Load all festivals from DB ──────────────────────────────────────────
   const fetchFestivals = useCallback(() => {
     setLoading(true);
     axios.get(`${API_BASE}/api/festivals?limit=500`)
-      .then(r => setApiFestivals(Array.isArray(r.data) ? r.data : []))
-      .catch(() => setApiFestivals([]))
+      .then(r => setFestivals(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setFestivals([]))
       .finally(() => setLoading(false));
   }, []);
 
-  const callClaudeAPI = useCallback(async (prompt, apiKey) => {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 5000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
-    if (data.error) throw new Error(data.error.message || 'Unknown API error');
-
-    const rawText = data.content?.[0]?.text || '[]';
-    const cleaned = rawText
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim();
-
+  // ── 2. Check if AI seed is needed ──────────────────────────────────────────
+  const checkAndSeed = useCallback(async () => {
+    setSeedStatus('checking');
     try {
-      const parsed = JSON.parse(cleaned);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (parseErr) {
-      try {
-        const lastComma = cleaned.lastIndexOf('},');
-        if (lastComma !== -1) {
-          const partial = cleaned.substring(0, lastComma + 1) + ']';
-          const recovered = JSON.parse(partial);
-          return Array.isArray(recovered) ? recovered : [];
-        }
-      } catch (_) {}
-      return [];
-    }
-  }, []);
+      const { data } = await axios.get(`${API_BASE}/api/festivals/status`);
+      setAiCount(data.ai_count || 0);
 
-  const fetchFestivalsFromClaude = useCallback(async () => {
-    setClaudeLoading(true);
-    setClaudeError(false);
-    setClaudeErrorMsg('');
+      if (data.seeded) {
+        // Already seeded — just load from DB
+        setSeedStatus('done');
+        fetchFestivals();
+        return;
+      }
 
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+      // Not seeded yet — call seed endpoint ONCE
+      setSeedStatus('seeding');
+      setSeedMsg('Pehli baar Claude se festivals fetch ho rahe hain, DB mein save ho rahe hain…');
 
-    if (!apiKey) {
-      setClaudeError(true);
-      setClaudeErrorMsg('API key missing. Add VITE_ANTHROPIC_API_KEY to your .env file.');
-      setClaudeLoading(false);
-      return;
-    }
+      const result = await axios.post(
+        `${API_BASE}/api/admin/festivals/seed-ai`,
+        {},
+        { headers: { 'x-admin-key': ADMIN_KEY } }
+      );
 
-    try {
-      const [h1, h2] = await Promise.all([
-        callClaudeAPI(PROMPT_H1, apiKey),
-        callClaudeAPI(PROMPT_H2, apiKey),
-      ]);
-      setClaudeFestivals([...h1, ...h2]);
+      setAiCount(result.data.saved || 0);
+      setSeedMsg(`${result.data.saved} festivals DB mein save ho gaye!`);
+      setSeedStatus('done');
+
+      // Now load fresh data from DB
+      fetchFestivals();
+
     } catch (err) {
-      setClaudeError(true);
-      setClaudeErrorMsg(err.message || 'Unknown error');
-      setClaudeFestivals([]);
-    } finally {
-      setClaudeLoading(false);
+      setSeedStatus('error');
+      setSeedMsg(err?.response?.data?.detail || err.message || 'Seed failed');
+      // Still try to load whatever is in DB
+      fetchFestivals();
     }
-  }, [callClaudeAPI]);
+  }, [fetchFestivals]);
+
+  // ── 3. Manual reseed (admin use) ───────────────────────────────────────────
+  const handleReseed = async () => {
+    setSeedStatus('seeding');
+    setSeedMsg('Re-seeding Claude se…');
+    try {
+      const result = await axios.post(
+        `${API_BASE}/api/admin/festivals/seed-ai`,
+        {},
+        { headers: { 'x-admin-key': ADMIN_KEY } }
+      );
+      setAiCount(prev => prev + (result.data.saved || 0));
+      setSeedMsg(`${result.data.saved} naye festivals save hue!`);
+      setSeedStatus('done');
+      fetchFestivals();
+    } catch (err) {
+      setSeedStatus('error');
+      setSeedMsg(err?.response?.data?.detail || err.message || 'Reseed failed');
+    }
+  };
 
   useEffect(() => {
-    fetchFestivals();
-    fetchFestivalsFromClaude();
-  }, [fetchFestivals, fetchFestivalsFromClaude]);
+    checkAndSeed();
+  }, [checkAndSeed]);
 
   useEffect(() => {
     const handler = () => fetchFestivals();
@@ -222,41 +185,34 @@ export default function FestivalCalendarPage() {
     return () => window.removeEventListener('festival:added', handler);
   }, [fetchFestivals]);
 
-  const allFestivals = useMemo(() => {
-    const apiKeys = new Set(apiFestivals.map(festKey));
-    const claudeFiltered = claudeFestivals.filter(f => !apiKeys.has(festKey(f)));
-    const enrichedAPI = apiFestivals.map(f => {
-      const { emoji, color } = getEmojiColor(f);
-      return { ...f, emoji: f.emoji || emoji, color: f.color || color };
-    });
-    const enrichedClaude = claudeFiltered.map(f => {
-      const { emoji, color } = getEmojiColor(f);
-      return { ...f, _claude: true, emoji: f.emoji || emoji, color: f.color || color };
-    });
-    return [...enrichedClaude, ...enrichedAPI];
-  }, [apiFestivals, claudeFestivals]);
+  // ── Enrich festivals with emoji/color ──────────────────────────────────────
+  const enriched = useMemo(() => festivals.map(f => {
+    const { emoji, color } = getEmojiColor(f);
+    return { ...f, emoji: f.emoji || emoji, color: f.color || color };
+  }), [festivals]);
 
-  const filtered = useMemo(() => {
-    return allFestivals.filter(f => {
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const inName   = (f.name || '').toLowerCase().includes(q);
-        const inSig    = (f.significance || '').toLowerCase().includes(q);
-        const inDesc   = (f.description || '').toLowerCase().includes(q);
-        const inTemple = (f.temple_name || '').toLowerCase().includes(q);
-        const inDeity  = (f.deity || '').toLowerCase().includes(q);
-        if (!inName && !inSig && !inDesc && !inTemple && !inDeity) return false;
-      }
-      if (deityFilter !== 'All') {
-        const text = `${f.name} ${f.significance || ''} ${f.description || ''} ${f.deity || ''}`.toLowerCase();
-        if (!text.includes(deityFilter.toLowerCase())) return false;
-      }
-      if (typeFilter === 'Major' && !f.is_major) return false;
-      if (typeFilter === 'With Temple' && !f.temple_id) return false;
-      return true;
-    });
-  }, [allFestivals, searchQuery, deityFilter, typeFilter]);
+  // ── Filter ─────────────────────────────────────────────────────────────────
+  const filtered = useMemo(() => enriched.filter(f => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !(f.name || '').toLowerCase().includes(q) &&
+        !(f.significance || '').toLowerCase().includes(q) &&
+        !(f.description || '').toLowerCase().includes(q) &&
+        !(f.temple_name || '').toLowerCase().includes(q) &&
+        !(f.deity || '').toLowerCase().includes(q)
+      ) return false;
+    }
+    if (deityFilter !== 'All') {
+      const text = `${f.name} ${f.significance || ''} ${f.description || ''} ${f.deity || ''}`.toLowerCase();
+      if (!text.includes(deityFilter.toLowerCase())) return false;
+    }
+    if (typeFilter === 'Major' && !f.is_major) return false;
+    if (typeFilter === 'With Temple' && !f.temple_id) return false;
+    return true;
+  }), [enriched, searchQuery, deityFilter, typeFilter]);
 
+  // ── Group by month ─────────────────────────────────────────────────────────
   const byMonth = useMemo(() => {
     const map = {};
     for (let m = 1; m <= 12; m++) map[m] = [];
@@ -275,9 +231,9 @@ export default function FestivalCalendarPage() {
 
   const currentMonthFestivals = byMonth[selectedMonth] || [];
   const totalCount   = filtered.length;
-  const apiCount     = apiFestivals.length;
-  const claudeCount  = claudeFestivals.length;
-  const isAnyLoading = loading || claudeLoading;
+  const aiTotal      = enriched.filter(f => f.ai_generated).length;
+  const templeTotal  = enriched.filter(f => f.temple_id).length;
+  const isSeeding    = seedStatus === 'seeding' || seedStatus === 'checking';
 
   const goMonth = dir => setSelectedMonth(m => {
     let next = m + dir;
@@ -286,35 +242,27 @@ export default function FestivalCalendarPage() {
     return next;
   });
 
-  const handleRefresh = () => {
-    fetchFestivals();
-    fetchFestivalsFromClaude();
-  };
-
   return (
     <>
       <Navbar />
 
-      {/* ══════════════ HERO — matches RoutePlanner exactly ══════════════ */}
+      {/* ══ HERO ══ */}
       <section style={{
         position: 'relative', overflow: 'hidden', color: '#FFD580',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
         padding: '88px 24px 120px', textAlign: 'center',
       }}>
-        {/* Om watermark */}
         <div style={{
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
           pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
         }}>ॐ</div>
-        {/* radial glow */}
         <div style={{
           position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
           width: 600, height: 300,
           background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
-        {/* floating diyas */}
         {['🪔','✨','🌸','🔱','🪁'].map((e, i) => (
           <div key={i} style={{
             position: 'absolute', fontSize: 'clamp(20px,3vw,40px)', opacity: 0.18, pointerEvents: 'none',
@@ -328,7 +276,6 @@ export default function FestivalCalendarPage() {
         ))}
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
-          {/* badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
@@ -355,14 +302,14 @@ export default function FestivalCalendarPage() {
             पर्व और उत्सव — Celebrating the Sacred Rhythm of Bharat
           </p>
 
-          {/* Stats row */}
+          {/* Stats */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginTop: 28 }}>
             {[
               `${totalCount} Festivals`,
               '12 Months',
               String(currentYear),
-              ...(claudeCount > 0 ? [`✨ ${claudeCount} AI Curated`] : []),
-              ...(apiCount > 0 ? [`🛕 ${apiCount} Temple Festivals`] : []),
+              ...(aiTotal > 0    ? [`✨ ${aiTotal} AI Curated`]       : []),
+              ...(templeTotal > 0 ? [`🛕 ${templeTotal} Temple Events`] : []),
             ].map((s, i) => (
               <span key={i} style={{
                 fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.08em',
@@ -372,36 +319,42 @@ export default function FestivalCalendarPage() {
             ))}
           </div>
 
-          {/* Claude loading/error */}
-          {claudeLoading && (
+          {/* Seed status banner */}
+          {isSeeding && (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
-              fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,213,128,0.7)',
+              fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,213,128,0.85)',
               background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
               border: '1px solid rgba(255,255,255,0.12)',
             }}>
               <span style={{ animation: 'floatDiya 1.5s ease-in-out infinite', display: 'inline-block' }}>✨</span>
-              festivals are loaging please wait…
+              {seedMsg || 'Festivals load ho rahe hain…'}
             </div>
           )}
-          {claudeError && !claudeLoading && (
+          {seedStatus === 'error' && (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
               fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,180,120,.85)',
               background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
               border: '1px solid rgba(255,150,50,.2)',
             }}>
-              ⚠️ {claudeErrorMsg || 'Claude API se fetch nahi hua.'}{' '}
-              <button onClick={fetchFestivalsFromClaude}
-                style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}>
-                Retry karo
-              </button>
+              ⚠️ {seedMsg}
+            </div>
+          )}
+          {seedStatus === 'done' && seedMsg && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
+              fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(180,255,180,.85)',
+              background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
+              border: '1px solid rgba(100,255,100,.2)',
+            }}>
+              ✅ {seedMsg}
             </div>
           )}
         </div>
       </section>
 
-      {/* ══════════════ CONTROLS BAR ══════════════ */}
+      {/* ══ CONTROLS BAR ══ */}
       <div style={{
         background: 'white', borderBottom: '2px solid #EDE0CC', padding: '14px 24px',
         position: 'sticky', top: 70, zIndex: 100, boxShadow: '0 2px 12px rgba(61,31,0,0.06)',
@@ -411,7 +364,7 @@ export default function FestivalCalendarPage() {
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
             background: '#FDF6EC', border: '2px solid #EDE0CC', borderRadius: 50,
-            padding: '7px 16px', flex: '0 0 240px', transition: 'all .2s',
+            padding: '7px 16px', flex: '0 0 240px',
           }}>
             <Search size={16} color="#9A7150" />
             <input
@@ -422,11 +375,11 @@ export default function FestivalCalendarPage() {
             />
             {searchQuery && (
               <button onClick={() => setSearchQuery('')}
-                style={{ background:'none', border:'none', cursor:'pointer', color:'#9A7150', fontSize:16, lineHeight:1, padding:'0 2px' }}>✕</button>
+                style={{ background:'none', border:'none', cursor:'pointer', color:'#9A7150', fontSize:16, lineHeight:1 }}>✕</button>
             )}
           </div>
 
-          {/* Deity chips */}
+          {/* Filters */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
             <Filter size={14} color="#9A7150" />
             {DEITY_FILTERS.map(d => (
@@ -450,14 +403,28 @@ export default function FestivalCalendarPage() {
 
           {/* Right controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-            <button onClick={handleRefresh} disabled={isAnyLoading} style={{
+            {/* Refresh from DB */}
+            <button onClick={fetchFestivals} disabled={loading} title="DB se refresh karo" style={{
               width: 34, height: 34, borderRadius: '50%', border: '2px solid #EDE0CC',
-              background: 'white', cursor: isAnyLoading ? 'not-allowed' : 'pointer',
+              background: 'white', cursor: loading ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#9A7150', transition: 'all .2s', opacity: isAnyLoading ? 0.5 : 1,
+              color: '#9A7150', transition: 'all .2s', opacity: loading ? 0.5 : 1,
             }}>
-              <RefreshCw size={14} style={{ animation: isAnyLoading ? 'spin .8s linear infinite' : 'none' }} />
+              <RefreshCw size={14} style={{ animation: loading ? 'spin .8s linear infinite' : 'none' }} />
             </button>
+
+            {/* Re-seed from Claude (admin) */}
+            <button onClick={handleReseed} disabled={isSeeding} title="Claude se naye festivals fetch karo (admin only)" style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '6px 14px', borderRadius: 50, border: '1.5px solid #EDE0CC',
+              background: 'white', cursor: isSeeding ? 'not-allowed' : 'pointer',
+              fontFamily: 'var(--font-display)', fontSize: 11, color: '#7C3AED',
+              opacity: isSeeding ? 0.5 : 1, whiteSpace: 'nowrap',
+            }}>
+              <Database size={12} /> {isSeeding ? 'Seeding…' : 'Re-seed AI'}
+            </button>
+
+            {/* View toggle */}
             <div style={{
               display: 'flex', background: '#FDF6EC', border: '2px solid #EDE0CC',
               borderRadius: 50, overflow: 'hidden',
@@ -479,18 +446,20 @@ export default function FestivalCalendarPage() {
         </div>
       </div>
 
-      {/* ══════════════ BODY ══════════════ */}
+      {/* ══ BODY ══ */}
       <section style={{ background: '#f8f4ef', paddingBottom: 80, paddingTop: 56 }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
 
-          {isAnyLoading && allFestivals.length === 0 ? (
+          {loading && festivals.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
               <div style={{ fontSize: 48, animation: 'floatDiya 2s ease-in-out infinite' }}>🪔</div>
-              <p style={{ fontFamily: 'var(--font-hindi)', color: '#9A7150', fontSize: 16 }}>Claude AI se festivals load ho rahe hain…</p>
+              <p style={{ fontFamily: 'var(--font-hindi)', color: '#9A7150', fontSize: 16 }}>
+                {isSeeding ? 'Pehli baar DB mein save ho rahe hain…' : 'Festivals load ho rahe hain…'}
+              </p>
             </div>
           ) : viewMode === 'calendar' ? (
             <>
-              {/* ══ PREMIUM MONTH NAVIGATOR ══ */}
+              {/* Month Navigator */}
               <div style={{
                 background: 'white', borderRadius: 24, boxShadow: '0 4px 24px rgba(61,31,0,0.09)',
                 border: '1px solid rgba(232,101,10,0.12)', padding: '20px 24px', marginBottom: 28,
@@ -499,19 +468,16 @@ export default function FestivalCalendarPage() {
                   <button onClick={() => goMonth(-1)} style={{
                     width: 38, height: 38, borderRadius: '50%', border: '2px solid #EDE0CC',
                     background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .2s',
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor='#E8650A'; e.currentTarget.style.color='#E8650A'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor='#EDE0CC'; e.currentTarget.style.color='#7a3208'; }}
-                  >
+                    justifyContent: 'center', color: '#7a3208', flexShrink: 0,
+                  }}>
                     <ChevronLeft size={18} />
                   </button>
 
-                  <div style={{ display: 'flex', gap: 6, flex: 1, overflowX: 'auto', scrollbarWidth: 'none' }} className="scrollbar-hide">
+                  <div style={{ display: 'flex', gap: 6, flex: 1, overflowX: 'auto', scrollbarWidth: 'none' }}>
                     {GREGORIAN_MONTHS.map((m, i) => {
-                      const mNum  = i + 1;
-                      const count = (byMonth[mNum] || []).length;
-                      const hasAPI = (byMonth[mNum] || []).some(f => f.temple_id);
+                      const mNum    = i + 1;
+                      const count   = (byMonth[mNum] || []).length;
+                      const hasTemp = (byMonth[mNum] || []).some(f => f.temple_id);
                       const isActive = selectedMonth === mNum;
                       return (
                         <button key={m} onClick={() => setSelectedMonth(mNum)} style={{
@@ -523,14 +489,14 @@ export default function FestivalCalendarPage() {
                           boxShadow: isActive ? '0 6px 20px rgba(232,101,10,0.28)' : '0 2px 6px rgba(61,31,0,0.04)',
                         }}>
                           <span style={{
-                            fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
-                            fontWeight: 700, color: isActive ? 'white' : '#5C3D1E',
+                            fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
+                            color: isActive ? 'white' : '#5C3D1E',
                           }}>{MONTH_SHORT[i]}</span>
                           {count > 0 && (
                             <span style={{
                               fontSize: 10, fontWeight: 700, minWidth: 18, textAlign: 'center',
-                              background: isActive ? 'rgba(255,255,255,0.25)' : hasAPI ? 'rgba(16,163,74,0.15)' : 'rgba(232,101,10,0.12)',
-                              color: isActive ? 'white' : hasAPI ? '#16a34a' : '#E8650A',
+                              background: isActive ? 'rgba(255,255,255,0.25)' : hasTemp ? 'rgba(16,163,74,0.15)' : 'rgba(232,101,10,0.12)',
+                              color: isActive ? 'white' : hasTemp ? '#16a34a' : '#E8650A',
                               borderRadius: 50, padding: '1px 6px',
                             }}>{count}</span>
                           )}
@@ -542,17 +508,14 @@ export default function FestivalCalendarPage() {
                   <button onClick={() => goMonth(1)} style={{
                     width: 38, height: 38, borderRadius: '50%', border: '2px solid #EDE0CC',
                     background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .2s',
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor='#E8650A'; e.currentTarget.style.color='#E8650A'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor='#EDE0CC'; e.currentTarget.style.color='#7a3208'; }}
-                  >
+                    justifyContent: 'center', color: '#7a3208', flexShrink: 0,
+                  }}>
                     <ChevronRight size={18} />
                   </button>
                 </div>
               </div>
 
-              {/* ══ MONTH HEADER ══ */}
+              {/* Month header */}
               <div style={{
                 display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
                 marginBottom: 24, paddingBottom: 16,
@@ -568,55 +531,42 @@ export default function FestivalCalendarPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {currentMonthFestivals.some(f => f.temple_id) && (
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.04em', color: '#16a34a', background: 'rgba(16,163,74,0.08)', padding: '4px 12px', borderRadius: 50, border: '1px solid rgba(16,163,74,.2)' }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#16a34a', background: 'rgba(16,163,74,0.08)', padding: '4px 12px', borderRadius: 50, border: '1px solid rgba(16,163,74,.2)' }}>
                       🛕 Temple Festivals
                     </span>
                   )}
-                  {currentMonthFestivals.some(f => f._claude) && (
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.04em', color: '#7C3AED', background: 'rgba(124,58,237,0.08)', padding: '4px 12px', borderRadius: 50, border: '1px solid rgba(124,58,237,.2)' }}>
+                  {currentMonthFestivals.some(f => f.ai_generated) && (
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#7C3AED', background: 'rgba(124,58,237,0.08)', padding: '4px 12px', borderRadius: 50, border: '1px solid rgba(124,58,237,.2)' }}>
                       ✨ AI Curated
                     </span>
                   )}
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.06em', color: '#E8650A', background: 'rgba(232,101,10,0.08)', padding: '4px 14px', borderRadius: 50, border: '1px solid rgba(232,101,10,.2)' }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: '#E8650A', background: 'rgba(232,101,10,0.08)', padding: '4px 14px', borderRadius: 50, border: '1px solid rgba(232,101,10,.2)' }}>
                     {currentMonthFestivals.length} festival{currentMonthFestivals.length !== 1 ? 's' : ''}
                   </span>
                 </div>
               </div>
 
-              {/* Partial load notice */}
-              {claudeLoading && allFestivals.length > 0 && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  fontFamily: 'var(--font-display)', fontSize: 12, color: '#9A7150',
-                  background: 'rgba(232,101,10,0.06)', border: '1px solid rgba(232,101,10,0.15)',
-                  borderRadius: 50, padding: '6px 16px', marginBottom: 20, width: 'fit-content',
-                }}>
-                  <span style={{ animation: 'floatDiya 1.5s ease-in-out infinite', display: 'inline-block' }}>✨</span>
-                  More festivals are loading please wait…
-                </div>
-              )}
-
               {currentMonthFestivals.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '72px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
                   <span style={{ fontSize: 52 }}>🙏</span>
                   <p style={{ color: '#9A7150', fontFamily: 'var(--font-body)', fontSize: 16 }}>
-                    No festivals found for {GREGORIAN_MONTHS[selectedMonth - 1]} with current filters.
+                    No festivals found for {GREGORIAN_MONTHS[selectedMonth - 1]}.
                   </p>
                   <button
                     onClick={() => { setDeityFilter('All'); setTypeFilter('All'); setSearchQuery(''); }}
-                    style={{ padding: '8px 20px', border: '2px solid #EDE0CC', borderRadius: 50, background: 'white', fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em', cursor: 'pointer', color: '#5C3D1E' }}
+                    style={{ padding: '8px 20px', border: '2px solid #EDE0CC', borderRadius: 50, background: 'white', fontFamily: 'var(--font-display)', fontSize: 12, cursor: 'pointer', color: '#5C3D1E' }}
                   >Clear Filters</button>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
                   {currentMonthFestivals.map((f, i) => (
-                    <FestivalCard key={`${f.id || f.name}-${i}`} festival={f} onClick={() => setSelectedFestival(f)} />
+                    <FestivalCard key={`${f.id}-${i}`} festival={f} onClick={() => setSelectedFestival(f)} />
                   ))}
                 </div>
               )}
             </>
           ) : (
-            /* ══ ALL FESTIVALS LIST VIEW ══ */
+            /* All Festivals List View */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
               {GREGORIAN_MONTHS.map((mName, mi) => {
                 const mNum  = mi + 1;
@@ -631,7 +581,7 @@ export default function FestivalCalendarPage() {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
                       {fests.map((f, i) => (
-                        <FestivalCard key={`${f.id || f.name}-${i}`} festival={f} compact onClick={() => setSelectedFestival(f)} />
+                        <FestivalCard key={`${f.id}-${i}`} festival={f} compact onClick={() => setSelectedFestival(f)} />
                       ))}
                     </div>
                   </div>
@@ -656,13 +606,8 @@ export default function FestivalCalendarPage() {
         @keyframes spin { to { transform:rotate(360deg); } }
         @keyframes slideUp { from{transform:translateY(24px);opacity:0;}to{transform:translateY(0);opacity:1;} }
         @keyframes fadeIn { from{opacity:0;}to{opacity:1;} }
-        .scrollbar-hide::-webkit-scrollbar { display:none; }
-        .scrollbar-hide { -ms-overflow-style:none; scrollbar-width:none; }
         .fest-card { background:white; border-radius:20px; border:1.5px solid #EDE0CC; overflow:hidden; transition:all .22s; cursor:pointer; position:relative; }
         .fest-card:hover { transform:translateY(-4px); box-shadow:0 12px 32px rgba(61,31,0,0.13); border-color:transparent; }
-        @media(max-width:640px){
-          .fest-modal-meta { grid-template-columns:1fr !important; }
-        }
       `}</style>
     </>
   );
@@ -705,19 +650,19 @@ function FestivalCard({ festival, compact, onClick }) {
 
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {festival.is_major && (
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(232,101,10,.25)', color: '#B84D00', background: 'rgba(232,101,10,.08)' }}>⭐ Major</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', border: '1px solid rgba(232,101,10,.25)', color: '#B84D00', background: 'rgba(232,101,10,.08)' }}>⭐ Major</span>
             )}
             {festival.duration_days > 1 && (
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid #EDE0CC', color: '#5C3D1E', background: '#FDF6EC' }}>{festival.duration_days} days</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', border: '1px solid #EDE0CC', color: '#5C3D1E', background: '#FDF6EC' }}>{festival.duration_days} days</span>
             )}
             {festival.deity && festival.deity !== 'Other' && (
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)' }}>{festival.deity}</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)' }}>{festival.deity}</span>
             )}
             {festival.temple_id && (
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)' }}>🛕 Temple</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)' }}>🛕 Temple</span>
             )}
-            {festival._claude && (
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)' }}>✨ AI</span>
+            {festival.ai_generated && !festival.temple_id && (
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)' }}>✨ AI</span>
             )}
           </div>
 
@@ -751,7 +696,6 @@ function FestivalModal({ festival, onClose }) {
         overflow: 'hidden', animation: 'slideUp .25s ease',
         boxShadow: '0 32px 80px rgba(26,10,0,.4)', maxHeight: '90vh', overflowY: 'auto',
       }}>
-        {/* Header */}
         <div style={{ padding: '28px 28px 20px', display: 'flex', alignItems: 'flex-start', gap: 16, background: `${color}12` }}>
           <div style={{
             fontSize: 40, width: 70, height: 70, display: 'flex', alignItems: 'center',
@@ -761,17 +705,16 @@ function FestivalModal({ festival, onClose }) {
           <div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: '#3D1F00', marginBottom: 4 }}>{festival.name}</div>
             {festival.display_date && <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color, fontWeight: 600, marginBottom: 4 }}>📅 {festival.display_date}</div>}
-            {festival.hindu_tithi && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color }}>{festival.hindu_tithi}</div>}
+            {festival.hindu_tithi  && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color }}>{festival.hindu_tithi}</div>}
             <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-              {festival.is_major && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(232,101,10,.25)', color: '#B84D00', background: 'rgba(232,101,10,.08)', fontFamily: 'var(--font-display)' }}>⭐ Major</span>}
-              {festival.temple_id && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)', fontFamily: 'var(--font-display)' }}>🛕 Temple Festival</span>}
-              {festival._claude && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)', fontFamily: 'var(--font-display)' }}>✨ AI Curated</span>}
+              {festival.is_major    && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(232,101,10,.25)', color: '#B84D00', background: 'rgba(232,101,10,.08)', fontFamily: 'var(--font-display)' }}>⭐ Major</span>}
+              {festival.temple_id   && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)', fontFamily: 'var(--font-display)' }}>🛕 Temple Festival</span>}
+              {festival.ai_generated && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)', fontFamily: 'var(--font-display)' }}>✨ AI Curated</span>}
               {festival.deity && festival.deity !== 'Other' && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)', fontFamily: 'var(--font-display)' }}>{festival.deity}</span>}
             </div>
           </div>
         </div>
 
-        {/* Body */}
         <div style={{ padding: '0 28px 28px' }}>
           <div style={{ height: 1, background: '#EDE0CC', margin: '0 0 20px' }} />
 
@@ -792,7 +735,7 @@ function FestivalModal({ festival, onClose }) {
             <p style={{ fontFamily: 'var(--font-body)', fontSize: 16, lineHeight: 1.7, color: '#5C3D1E', marginBottom: 20 }}>{festival.description}</p>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }} className="fest-modal-meta">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
             {festival.display_date && (
               <div style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 14, padding: '12px 14px', gridColumn: '1 / -1' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.08em', color: '#9A7150', marginBottom: 4 }}>DATE</div>
@@ -804,7 +747,7 @@ function FestivalModal({ festival, onClose }) {
               { label: 'HINDU MONTH', value: hinduMonth, hindi: true },
               ...(festival.hindu_tithi ? [{ label: 'TITHI', value: festival.hindu_tithi, small: true }] : []),
               { label: 'DURATION', value: `${festival.duration_days || 1} ${(festival.duration_days || 1) === 1 ? 'Day' : 'Days'}` },
-              { label: 'SOURCE', value: festival._claude ? '✨ Claude AI' : festival.source || '🛕 Temple Record', small: true },
+              { label: 'SOURCE', value: festival.ai_generated ? '✨ Claude AI' : festival.source || '🛕 Temple Record', small: true },
             ].map((item, idx) => (
               <div key={idx} style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 14, padding: '12px 14px' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.08em', color: '#9A7150', marginBottom: 4 }}>{item.label}</div>
@@ -816,7 +759,7 @@ function FestivalModal({ festival, onClose }) {
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={{
               flex: 1, padding: '11px', border: '2px solid #EDE0CC', borderRadius: 50,
-              background: 'white', fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em',
+              background: 'white', fontFamily: 'var(--font-display)', fontSize: 13,
               color: '#5C3D1E', cursor: 'pointer',
             }}>Close</button>
             {festival.temple_slug ? (
@@ -824,8 +767,7 @@ function FestivalModal({ festival, onClose }) {
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 padding: '11px 20px', background: 'linear-gradient(135deg, #E8650A, #B84D00)',
                 color: 'white', border: 'none', borderRadius: 50,
-                fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em',
-                textDecoration: 'none',
+                fontFamily: 'var(--font-display)', fontSize: 13, textDecoration: 'none',
               }}>
                 <MapPin size={14} /> Visit Temple
               </Link>
@@ -834,8 +776,7 @@ function FestivalModal({ festival, onClose }) {
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 padding: '11px 20px', background: 'linear-gradient(135deg, #E8650A, #B84D00)',
                 color: 'white', border: 'none', borderRadius: 50,
-                fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em',
-                textDecoration: 'none',
+                fontFamily: 'var(--font-display)', fontSize: 13, textDecoration: 'none',
               }}>
                 <MapPin size={14} /> Find Temples
               </Link>
