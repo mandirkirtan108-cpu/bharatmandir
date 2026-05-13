@@ -1,7 +1,17 @@
-from fastapi import APIRouter, Query, HTTPException, Header, Depends, BackgroundTasks
+"""
+festivals.py — BharatMandir Festival Router
+Fixed:
+  1. DB inserts run in a thread (sync psycopg2 can't be awaited)
+  2. Each festival inserted in its own transaction — one failure won't rollback all
+  3. Full error logging so failures are visible in terminal
+  4. /seed endpoint returns inserted count synchronously (no silent background task)
+  5. Schema-exact columns only (no deity/emoji/festival_type — not in DB)
+"""
+
+from fastapi import APIRouter, Query, HTTPException, Header, Depends
 from pydantic import BaseModel
 from typing import Optional
-import sys, os, httpx, json, asyncio, logging
+import sys, os, httpx, json, logging
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.connection import get_db_cursor
@@ -10,98 +20,170 @@ router = APIRouter(tags=["Festivals"])
 logger = logging.getLogger(__name__)
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
-_ADMIN_SECRET    = os.getenv("ADMIN_SECRET_KEY", "change-me-now")
-_ANTHROPIC_KEY   = os.getenv("ANTHROPIC_API_KEY", "")
+_ADMIN_SECRET  = os.getenv("ADMIN_SECRET_KEY", "change-me-now")
+_ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 def require_admin(x_admin_key: str = Header(...)):
     if x_admin_key != _ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden: invalid admin key")
+        raise HTTPException(403, "Forbidden: invalid admin key")
 
 
-# ── Schemas ────────────────────────────────────────────────────────────────────
+# ── Pydantic Models ────────────────────────────────────────────────────────────
 
 class FestivalCreate(BaseModel):
-    """
-    Matches festivals table exactly:
-      id, uuid, temple_id, name, description, significance,
-      month, hindu_month, typical_date, duration_days,
-      is_major, source (data_source enum), ai_generated, created_at
-    NOTE: deity / festival_type / emoji are NOT in the DB — they are
-          derived at query time from the festivals + temples join.
-    """
+    """Schema-exact: matches every column in the festivals table."""
     temple_id:    int
     name:         str
     description:  Optional[str] = None
     significance: Optional[str] = None
-    month:        int
+    month:        int                    # 1-12 (Gregorian)
     hindu_month:  Optional[str] = None
-    typical_date: Optional[str] = None   # e.g. "14 January"
+    typical_date: Optional[str] = None  # free text e.g. "14 January"
     duration_days: int = 1
     is_major:     bool = False
-    # source must be one of the data_source enum values
-    source:       Optional[str] = "manual"   # 'manual' | 'ai_enriched' | etc.
+    source:       Optional[str] = "manual"  # must be valid data_source enum
     ai_generated: bool = False
 
 
 class SeedFestivalsRequest(BaseModel):
-    """Body for POST /api/admin/festivals/seed"""
-    temple_id: int          # which temple to seed festivals for
-    force:     bool = False  # re-seed even if festivals already exist
+    temple_id: int
+    force:     bool = False   # if True, re-seed even if AI festivals already exist
 
 
-# ── Helper: call Claude API (server-side, key stays secret) ───────────────────
+# ── Claude prompt ──────────────────────────────────────────────────────────────
 
 CLAUDE_MODEL   = "claude-sonnet-4-20250514"
 CLAUDE_MAX_TOK = 4000
 
-def _build_prompt(temple_name: str, temple_deity: str, temple_city: str) -> str:
-    return f"""List all major Hindu festivals celebrated at or closely associated with the temple:
-Temple: {temple_name}
-Primary deity: {temple_deity}
-Location: {temple_city}
+def _build_prompt(temple_name: str, deity: str, city: str) -> str:
+    return f"""You are a Hindu festival data expert.
+List 10-15 festivals celebrated at this temple or strongly associated with its deity.
 
-Return ONLY a valid JSON array. No markdown, no explanation, no backticks.
-Each object must have EXACTLY these fields (matching the database schema):
-{{
-  "name": "string",
-  "description": "2-3 sentence description",
-  "significance": "one sentence significance",
-  "month": 1,
-  "hindu_month": "Pausha",
-  "typical_date": "14 January",
-  "duration_days": 1,
-  "is_major": true
-}}
+Temple : {temple_name}
+Deity  : {deity}
+City   : {city}
+
+Return ONLY a valid JSON array — no markdown, no explanation, no code fences.
+Every object must have EXACTLY these keys:
+
+[
+  {{
+    "name": "Maha Shivaratri",
+    "description": "2-3 sentence description of the festival.",
+    "significance": "One sentence: why this festival matters.",
+    "month": 2,
+    "hindu_month": "Phalguna",
+    "typical_date": "Late February",
+    "duration_days": 1,
+    "is_major": true
+  }}
+]
 
 Rules:
-- Include 8-15 festivals relevant to this deity/temple
-- month: integer 1-12 (Gregorian)
-- is_major: true only for nationally celebrated festivals
+- month is an integer 1-12 (Gregorian calendar month)
+- is_major = true only for nationally celebrated festivals
+- Keep description under 60 words to avoid token truncation
 - Sort by month ascending
-- Output ONLY the JSON array"""
+- Output ONLY the JSON array, nothing else"""
 
 
-async def _fetch_claude_festivals(
-    temple_id: int,
-    temple_name: str,
-    temple_deity: str,
-    temple_city: str,
-) -> list[dict]:
-    """Call Claude, parse response, insert into DB."""
+# ── DB insert helper (pure sync — safe to call from thread) ───────────────────
+
+def _insert_festivals_sync(temple_id: int, festivals: list) -> list:
+    """
+    Insert each festival in its own transaction.
+    Returns list of inserted names.
+    Skips duplicates silently.
+    Logs and skips any festival that fails validation or DB insert.
+    """
+    inserted = []
+
+    for f in festivals:
+        name  = (f.get("name") or "").strip()
+        month = f.get("month")
+
+        # ── Validate ──
+        if not name:
+            logger.warning("Skipping festival with empty name: %s", f)
+            continue
+        if not isinstance(month, int) or not (1 <= month <= 12):
+            logger.warning("Skipping '%s' — invalid month: %s", name, month)
+            continue
+
+        duration = int(f.get("duration_days") or 1)
+        if duration < 1:
+            duration = 1
+
+        description  = (f.get("description") or "").strip() or None
+        significance = (f.get("significance") or "").strip() or None
+        hindu_month  = (f.get("hindu_month") or "").strip() or None
+        typical_date = (f.get("typical_date") or "").strip() or None
+        is_major     = bool(f.get("is_major", False))
+
+        try:
+            # Each festival gets its own with-block = its own transaction + commit
+            with get_db_cursor() as cur:
+                # Duplicate check
+                cur.execute(
+                    "SELECT id FROM festivals WHERE temple_id=%s AND name=%s AND month=%s",
+                    (temple_id, name, month),
+                )
+                if cur.fetchone():
+                    logger.info("Duplicate skipped: '%s' month=%d", name, month)
+                    continue
+
+                cur.execute(
+                    """
+                    INSERT INTO festivals
+                      (temple_id, name, description, significance,
+                       month, hindu_month, typical_date,
+                       duration_days, is_major, source, ai_generated)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'ai_enriched', true)
+                    RETURNING id
+                    """,
+                    (
+                        temple_id, name, description, significance,
+                        month, hindu_month, typical_date,
+                        duration, is_major,
+                    ),
+                )
+                row = cur.fetchone()
+                if row:
+                    inserted.append(name)
+                    logger.info("Inserted festival '%s' (id=%s)", name, row["id"])
+
+        except Exception as exc:
+            # Log the exact error but keep going for remaining festivals
+            logger.error("Failed to insert '%s': %s", name, exc)
+
+    return inserted
+
+
+# ── Claude API call + DB insert (runs in thread pool) ─────────────────────────
+
+async def _seed_via_claude(temple_id: int, temple_name: str, deity: str, city: str) -> dict:
+    """
+    1. Call Claude API (async httpx)
+    2. Parse JSON response
+    3. Run DB inserts in a thread (sync psycopg2 must not be awaited directly)
+    Returns {"inserted": [...], "skipped": int, "error": str|None}
+    """
     if not _ANTHROPIC_KEY:
-        logger.warning("ANTHROPIC_API_KEY not set — skipping Claude seed")
-        return []
+        msg = "ANTHROPIC_API_KEY is not set in .env — cannot call Claude"
+        logger.error(msg)
+        return {"inserted": [], "skipped": 0, "error": msg}
 
-    prompt = _build_prompt(temple_name, temple_deity or "Various deities", temple_city or "India")
+    prompt = _build_prompt(temple_name, deity or "Various Hindu deities", city or "India")
 
+    # ── Step 1: Call Claude ────────────────────────────────────────────────────
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=90) as client:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
-                    "x-api-key":          _ANTHROPIC_KEY,
-                    "anthropic-version":  "2023-06-01",
-                    "Content-Type":       "application/json",
+                    "x-api-key":         _ANTHROPIC_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type":      "application/json",
                 },
                 json={
                     "model":      CLAUDE_MODEL,
@@ -109,75 +191,85 @@ async def _fetch_claude_festivals(
                     "messages":   [{"role": "user", "content": prompt}],
                 },
             )
-            resp.raise_for_status()
-            data = resp.json()
+    except httpx.TimeoutException:
+        msg = "Claude API timed out after 90s"
+        logger.error(msg)
+        return {"inserted": [], "skipped": 0, "error": msg}
     except Exception as exc:
-        logger.error("Claude API error: %s", exc)
-        return []
+        msg = f"Claude API network error: {exc}"
+        logger.error(msg)
+        return {"inserted": [], "skipped": 0, "error": msg}
 
-    raw = data.get("content", [{}])[0].get("text", "[]")
-    cleaned = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+    if resp.status_code != 200:
+        msg = f"Claude API HTTP {resp.status_code}: {resp.text[:300]}"
+        logger.error(msg)
+        return {"inserted": [], "skipped": 0, "error": msg}
+
+    # ── Step 2: Parse response ─────────────────────────────────────────────────
+    try:
+        api_data = resp.json()
+    except Exception as exc:
+        msg = f"Failed to parse Claude response as JSON: {exc}"
+        logger.error(msg)
+        return {"inserted": [], "skipped": 0, "error": msg}
+
+    raw_text = ""
+    for block in api_data.get("content", []):
+        if block.get("type") == "text":
+            raw_text = block.get("text", "")
+            break
+
+    if not raw_text:
+        msg = f"Claude returned empty content. Full response: {api_data}"
+        logger.error(msg)
+        return {"inserted": [], "skipped": 0, "error": msg}
+
+    logger.info("Claude raw (first 500 chars): %s", raw_text[:500])
+
+    # Strip markdown code fences
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3].strip()
 
     try:
         festivals = json.loads(cleaned)
-    except json.JSONDecodeError:
-        # partial-parse recovery
-        last_comma = cleaned.rfind("},")
-        if last_comma != -1:
+    except json.JSONDecodeError as exc:
+        logger.warning("Full JSON parse failed (%s), trying partial recovery…", exc)
+        last = cleaned.rfind("},")
+        if last != -1:
             try:
-                festivals = json.loads(cleaned[: last_comma + 1] + "]")
+                festivals = json.loads(cleaned[: last + 1] + "]")
+                logger.info("Partial recovery: got %d festivals", len(festivals))
             except Exception:
-                return []
+                msg = f"JSON parse failed. Raw text: {cleaned[:400]}"
+                logger.error(msg)
+                return {"inserted": [], "skipped": 0, "error": msg}
         else:
-            return []
+            msg = f"Claude did not return valid JSON. Raw: {cleaned[:400]}"
+            logger.error(msg)
+            return {"inserted": [], "skipped": 0, "error": msg}
 
     if not isinstance(festivals, list):
-        return []
+        msg = f"Expected JSON array, got {type(festivals).__name__}"
+        logger.error(msg)
+        return {"inserted": [], "skipped": 0, "error": msg}
 
-    inserted = []
-    with get_db_cursor() as cur:
-        for f in festivals:
-            name = (f.get("name") or "").strip()
-            month = f.get("month")
-            if not name or not isinstance(month, int) or not (1 <= month <= 12):
-                continue
+    logger.info("Claude returned %d festival objects for temple_id=%d", len(festivals), temple_id)
 
-            # skip duplicates
-            cur.execute(
-                "SELECT id FROM festivals WHERE temple_id=%s AND name=%s AND month=%s",
-                (temple_id, name, month),
-            )
-            if cur.fetchone():
-                continue
+    # ── Step 3: Insert in thread (sync psycopg2 inside async endpoint) ────────
+    import asyncio
+    loop = asyncio.get_event_loop()
+    inserted = await loop.run_in_executor(None, _insert_festivals_sync, temple_id, festivals)
 
-            cur.execute(
-                """
-                INSERT INTO festivals
-                  (temple_id, name, description, significance,
-                   month, hindu_month, typical_date,
-                   duration_days, is_major, source, ai_generated)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'ai_enriched',true)
-                RETURNING id
-                """,
-                (
-                    temple_id,
-                    name,
-                    (f.get("description") or "").strip() or None,
-                    (f.get("significance") or "").strip() or None,
-                    month,
-                    (f.get("hindu_month") or "").strip() or None,
-                    (f.get("typical_date") or "").strip() or None,
-                    int(f.get("duration_days") or 1),
-                    bool(f.get("is_major", False)),
-                ),
-            )
-            row = cur.fetchone()
-            if row:
-                inserted.append(row["id"])
+    skipped = len(festivals) - len(inserted)
+    return {"inserted": inserted, "skipped": skipped, "error": None}
 
-    logger.info("Seeded %d festivals for temple_id=%d", len(inserted), temple_id)
-    return inserted
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
 
 # ── GET /api/festivals ─────────────────────────────────────────────────────────
 
@@ -187,11 +279,7 @@ def get_all_festivals(
     is_major: Optional[bool] = Query(None),
     limit:    int            = Query(200, ge=1, le=500),
 ):
-    """
-    Returns festivals joined with temple info.
-    All data comes from the database — always fresh for every user.
-    """
-    where = ["t.status = 'published'"]
+    where  = ["t.status = 'published'"]
     params: list = []
 
     if month is not None:
@@ -219,10 +307,10 @@ def get_all_festivals(
                 f.source,
                 f.ai_generated,
                 f.created_at,
-                t.id   AS temple_id,
-                t.name AS temple_name,
-                t.city AS temple_city,
-                t.slug AS temple_slug,
+                t.id            AS temple_id,
+                t.name          AS temple_name,
+                t.city          AS temple_city,
+                t.slug          AS temple_slug,
                 t.primary_deity AS deity
             FROM festivals f
             JOIN temples t ON f.temple_id = t.id
@@ -251,9 +339,9 @@ def get_festivals_by_month(month_number: int):
                 f.id, f.name, f.description, f.significance,
                 f.month, f.hindu_month, f.typical_date,
                 f.duration_days, f.is_major, f.ai_generated,
-                t.id   AS temple_id,
-                t.name AS temple_name,
-                t.slug AS temple_slug,
+                t.id            AS temple_id,
+                t.name          AS temple_name,
+                t.slug          AS temple_slug,
                 t.primary_deity AS deity
             FROM festivals f
             JOIN temples t ON f.temple_id = t.id
@@ -274,20 +362,19 @@ def create_festival(body: FestivalCreate):
     if not 1 <= body.month <= 12:
         raise HTTPException(400, "month must be 1–12")
     if body.duration_days < 1:
-        raise HTTPException(400, "duration_days must be ≥ 1")
+        raise HTTPException(400, "duration_days must be >= 1")
 
     name = body.name.strip()
     if not name:
         raise HTTPException(400, "name must not be empty")
 
-    # validate source enum
     valid_sources = {
         "wikidata","wikipedia","google_places","openstreetmap",
         "government","ai_enriched","manual","partnership","csv_import",
     }
-    src = body.source or "manual"
+    src = (body.source or "manual").strip()
     if src not in valid_sources:
-        raise HTTPException(400, f"source must be one of: {', '.join(sorted(valid_sources))}")
+        raise HTTPException(400, f"source must be one of: {sorted(valid_sources)}")
 
     with get_db_cursor() as cur:
         cur.execute("SELECT id, name, slug FROM temples WHERE id = %s", (body.temple_id,))
@@ -331,16 +418,11 @@ def create_festival(body: FestivalCreate):
 
 # ── POST /api/admin/festivals/seed ── Claude-powered seed ─────────────────────
 
-@router.post(
-    "/api/admin/festivals/seed",
-    status_code=202,
-    dependencies=[Depends(require_admin)],
-)
-async def seed_festivals_from_claude(body: SeedFestivalsRequest, background_tasks: BackgroundTasks):
+@router.post("/api/admin/festivals/seed", dependencies=[Depends(require_admin)])
+async def seed_festivals_from_claude(body: SeedFestivalsRequest):
     """
-    Calls Claude API (server-side) to generate festivals for a temple,
-    saves them to the DB with source='ai_enriched', ai_generated=true.
-    Returns immediately; seeding runs in background.
+    Synchronously calls Claude + saves to DB. Returns full result.
+    No background tasks — you see exactly what was inserted or what failed.
     """
     with get_db_cursor() as cur:
         cur.execute(
@@ -353,50 +435,60 @@ async def seed_festivals_from_claude(body: SeedFestivalsRequest, background_task
 
         if not body.force:
             cur.execute(
-                "SELECT COUNT(*) AS cnt FROM festivals WHERE temple_id = %s AND ai_generated = true",
+                "SELECT COUNT(*) AS cnt FROM festivals WHERE temple_id=%s AND ai_generated=true",
                 (body.temple_id,),
             )
             existing = cur.fetchone()["cnt"]
             if existing > 0:
                 return {
-                    "status":  "skipped",
-                    "message": f"Temple already has {existing} AI-generated festivals. Use force=true to re-seed.",
-                    "count":   existing,
+                    "status":         "skipped",
+                    "message":        f"Already has {existing} AI festivals. Use force=true to re-seed.",
+                    "inserted_count": 0,
+                    "inserted_names": [],
+                    "skipped":        existing,
+                    "error":          None,
                 }
 
-    background_tasks.add_task(
-        _fetch_claude_festivals,
-        body.temple_id,
-        temple["name"],
-        temple["primary_deity"] or "",
-        temple["city"] or "",
+    result = await _seed_via_claude(
+        temple_id   = body.temple_id,
+        temple_name = temple["name"],
+        deity       = temple["primary_deity"] or "",
+        city        = temple["city"] or "",
     )
 
+    if result["error"]:
+        return {
+            "status":         "error",
+            "message":        result["error"],
+            "inserted_count": 0,
+            "inserted_names": [],
+            "skipped":        0,
+            "error":          result["error"],
+        }
+
     return {
-        "status":  "seeding",
-        "message": f"Claude is generating festivals for '{temple['name']}' in background. Check /api/festivals in ~10s.",
-        "temple_id": body.temple_id,
+        "status":         "success",
+        "message":        f"Seeded {len(result['inserted'])} festivals for '{temple['name']}'",
+        "inserted_count": len(result["inserted"]),
+        "inserted_names": result["inserted"],
+        "skipped":        result["skipped"],
+        "error":          None,
     }
 
 
 # ── GET /api/admin/festivals/seed/status/{temple_id} ──────────────────────────
 
-@router.get(
-    "/api/admin/festivals/seed/status/{temple_id}",
-    dependencies=[Depends(require_admin)],
-)
+@router.get("/api/admin/festivals/seed/status/{temple_id}", dependencies=[Depends(require_admin)])
 def seed_status(temple_id: int):
-    """Check how many festivals exist for a temple (manual + AI)."""
     with get_db_cursor() as cur:
         cur.execute(
             """
             SELECT
-                COUNT(*)                                           AS total,
-                COUNT(*) FILTER (WHERE ai_generated = true)       AS ai_count,
-                COUNT(*) FILTER (WHERE ai_generated = false)      AS manual_count
+                COUNT(*)                                       AS total,
+                COUNT(*) FILTER (WHERE ai_generated = true)   AS ai_count,
+                COUNT(*) FILTER (WHERE ai_generated = false)  AS manual_count
             FROM festivals WHERE temple_id = %s
             """,
             (temple_id,),
         )
-        row = cur.fetchone()
-    return dict(row)
+        return dict(cur.fetchone())

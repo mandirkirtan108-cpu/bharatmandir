@@ -312,7 +312,7 @@ export default function AdminAddFestivalPage() {
     }
   };
 
-  // ── seed via Claude (server-side) ──
+  // ── seed via Claude (server-side, waits for result) ──
   const handleSeed = async () => {
     if (!form.temple_id) { setErrors({ temple_id: 'Select a temple first' }); return; }
     setSeeding(true); setSeedMsg(''); setSeedError('');
@@ -324,9 +324,24 @@ export default function AdminAddFestivalPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Seed error');
-      setSeedMsg(data.message || 'Seeding started! Check festival calendar in ~10 seconds.');
+
+      if (data.status === 'error') {
+        setSeedError(`Claude error: ${data.error}`);
+      } else if (data.status === 'skipped') {
+        setSeedMsg(data.message);
+      } else {
+        // success
+        const names = (data.inserted_names || []).slice(0, 5).join(', ');
+        const more  = (data.inserted_names || []).length > 5
+          ? ` …and ${data.inserted_names.length - 5} more` : '';
+        setSeedMsg(
+          `✅ ${data.inserted_count} festivals saved to DB!` +
+          (names ? ` (${names}${more})` : '') +
+          ` Skipped duplicates: ${data.skipped}`
+        );
+      }
     } catch (err) {
-      setSeedError(err.message || 'Seed failed');
+      setSeedError(err.message || 'Seed failed — check backend terminal for details');
     } finally {
       setSeeding(false);
     }
