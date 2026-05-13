@@ -3,8 +3,10 @@ Admin API Routes for BharatMandir.
 
 POST   /api/admin/temples                        → Create temple (all v2 fields)
 GET    /api/admin/temples                        → List all temples (admin view)
+PATCH  /api/admin/temples/{id}                   → Update temple fields
 PATCH  /api/admin/temples/{id}/status            → Status workflow transition
 PATCH  /api/admin/temples/{id}/verify            → Mark temple verified
+DELETE /api/admin/temples/{id}                   → Permanently delete temple
 POST   /api/admin/temples/{id}/media             → Upload image or video
 GET    /api/admin/temples/{id}/media             → List media for temple
 DELETE /api/admin/media/{id}                     → Delete a media item (disk + DB)
@@ -260,7 +262,7 @@ async def create_temple(
 
     # ── Step 6: Media ─────────────────────────
     hero_image:            Optional[UploadFile] = File(None),
-    hero_image_url:        Optional[str]  = Form(None),   # URL string fallback
+    hero_image_url:        Optional[str]  = Form(None),
     video_aarti_url:       Optional[str]  = Form(None),
     video_intro_url:       Optional[str]  = Form(None),
     video_360_url:         Optional[str]  = Form(None),
@@ -328,7 +330,7 @@ async def create_temple(
             raise HTTPException(400, "Hero image too large — max 10 MB")
         hero_url = save_upload(data, hero_image.filename, prefix=f"{base_slug}-hero-")
     elif hero_image_url:
-        hero_url = hero_image_url  # URL string directly use karo
+        hero_url = hero_image_url
 
     sec_d = [d.strip() for d in secondary_deities.split(",")] if secondary_deities else []
     tags  = [t.strip() for t in category_tags.split(",")]      if category_tags      else []
@@ -578,8 +580,10 @@ def get_temple_admin(
             WHERE id = %s
         """, (temple_id,))
         temple = cur.fetchone()
+
     if not temple:
         raise HTTPException(status_code=404, detail="Temple not found")
+
     d = dict(temple)
     for f in ['opening_time', 'closing_time', 'afternoon_closure_start', 'afternoon_closure_end']:
         if d.get(f):
@@ -615,7 +619,12 @@ def update_temple_fields(
         )
         row = cur.fetchone()
 
-    return {"success": True, "id": row["id"], "name": row["name"], "updated_fields": list(updates.keys())}
+    return {
+        "success": True,
+        "id": row["id"],
+        "name": row["name"],
+        "updated_fields": list(updates.keys()),
+    }
 
 
 # ─────────────────────────────────────────────
@@ -667,6 +676,80 @@ def verify_temple(
     if not row:
         raise HTTPException(404, "Temple not found")
     return {"success": True, "temple_id": temple_id, "verified": True}
+
+
+# ─────────────────────────────────────────────
+# DELETE /api/admin/temples/{id}  — permanent delete
+# ─────────────────────────────────────────────
+
+@router.delete("/temples/{temple_id}", status_code=200)
+def delete_temple(
+    temple_id: int,
+    admin: dict = Depends(get_current_admin),
+):
+    """
+    Permanently delete a temple and its associated media files from disk.
+    Related table rows (temple_media, puja_schedule, priests, committee,
+    registrations) are removed automatically via ON DELETE CASCADE.
+    """
+    with get_db_cursor() as cur:
+
+        # 1. Confirm temple exists and grab hero image path
+        cur.execute(
+            "SELECT id, name, slug, hero_image_url FROM temples WHERE id = %s",
+            (temple_id,)
+        )
+        temple = cur.fetchone()
+        if not temple:
+            raise HTTPException(status_code=404, detail="Temple not found")
+
+        # 2. Collect media file paths before deletion
+        try:
+            cur.execute(
+                "SELECT file_url FROM temple_media WHERE temple_id = %s",
+                (temple_id,)
+            )
+            media_rows = cur.fetchall()
+        except Exception:
+            media_rows = []  # table may not exist yet — safe to ignore
+
+        # 3. Delete hero image file from disk
+        if temple["hero_image_url"]:
+            hero_path = os.path.join(
+                UPLOAD_DIR,
+                temple["hero_image_url"].replace("/uploads/", "", 1)
+            )
+            if os.path.exists(hero_path):
+                try:
+                    os.remove(hero_path)
+                except Exception:
+                    pass  # never block the delete over a missing file
+
+        # 4. Delete all media files from disk
+        for m in media_rows:
+            if m.get("file_url"):
+                fpath = os.path.join(
+                    UPLOAD_DIR,
+                    m["file_url"].replace("/uploads/", "", 1)
+                )
+                if os.path.exists(fpath):
+                    try:
+                        os.remove(fpath)
+                    except Exception:
+                        pass
+
+        # 5. Delete from DB — CASCADE handles all child tables
+        cur.execute(
+            "DELETE FROM temples WHERE id = %s RETURNING id, name",
+            (temple_id,)
+        )
+        deleted = cur.fetchone()
+
+    return {
+        "success":   True,
+        "message":   f"Temple '{deleted['name']}' (ID: {deleted['id']}) permanently deleted",
+        "temple_id": temple_id,
+    }
 
 
 # ─────────────────────────────────────────────

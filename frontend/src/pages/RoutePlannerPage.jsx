@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MapPin, Navigation, Route, Star, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
+import { MapPin, Navigation, Star, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -20,12 +20,31 @@ const PREF_OPTIONS = [
   '🌿 Peaceful & Serene',
 ];
 
-const PRESET_ROUTES = [
-  { from: 'Indore',   to: 'Ujjain',      icon: '🔱', label: 'Indore → Ujjain',      km: '~55 km',  desc: 'Mahakaleshwar Jyotirlinga' },
-  { from: 'Varanasi', to: 'Prayagraj',   icon: '🪔', label: 'Varanasi → Prayagraj', km: '~125 km', desc: 'Kashi Vishwanath + Triveni Sangam' },
-  { from: 'Mumbai',   to: 'Shirdi',      icon: '🙏', label: 'Mumbai → Shirdi',      km: '~240 km', desc: 'Sai Baba Mandir' },
-  { from: 'Delhi',    to: 'Mathura',     icon: '🎵', label: 'Delhi → Mathura',      km: '~160 km', desc: 'Krishna Janmabhoomi' },
-];
+function toHyphen(city) {
+  return city.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
+function buildBookingUrl(travelMode, from, to) {
+  const fHyphen = toHyphen(from);
+  const tHyphen = toHyphen(to);
+  switch (travelMode) {
+    case 'train':
+      return `https://www.ixigo.com/by-train-rail/${fHyphen}-to-${tHyphen}-by-train`;
+    case 'bus':
+      return `https://www.redbus.in/bus-tickets/${fHyphen}-to-${tHyphen}`;
+    case 'car':
+    case 'bike':
+    default:
+      return `https://www.google.com/maps/dir/${encodeURIComponent(from.trim())}/${encodeURIComponent(to.trim())}`;
+  }
+}
+
+const BOOKING_META = {
+  train: { icon: '🚆', label: 'Search Trains on ixigo',  provider: 'ixigo trains', color: '#1565C0' },
+  bus:   { icon: '🚌', label: 'Search Buses on redBus',  provider: 'redBus',       color: '#D84315' },
+  car:   { icon: '🗺️', label: 'Open in Google Maps',    provider: 'Google Maps',  color: '#E8650A' },
+  bike:  { icon: '🗺️', label: 'Open in Google Maps',    provider: 'Google Maps',  color: '#E8650A' },
+};
 
 export default function RoutePlannerPage() {
   const [form, setForm] = useState({
@@ -43,9 +62,6 @@ export default function RoutePlannerPage() {
         ? f.preferences.filter(x => x !== p)
         : [...f.preferences, p],
     }));
-
-  const handlePreset = (preset) =>
-    setForm(f => ({ ...f, start: preset.from, destination: preset.to }));
 
   const handleSubmit = async () => {
     if (!form.start.trim() || !form.destination.trim()) {
@@ -80,6 +96,20 @@ export default function RoutePlannerPage() {
     }
   };
 
+  const handleBookingClick = () => {
+    if (!form.start.trim() || !form.destination.trim()) {
+      alert('Please enter both source and destination.');
+      return;
+    }
+    const url = buildBookingUrl(form.travel_mode, form.start, form.destination);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const bookingMeta     = BOOKING_META[form.travel_mode] || BOOKING_META.car;
+  const bookingSubtitle = form.start.trim() && form.destination.trim()
+    ? `${form.start} → ${form.destination} via ${form.travel_mode}`
+    : 'Enter your route above to get a direct booking link.';
+
   return (
     <>
       <Navbar />
@@ -87,16 +117,17 @@ export default function RoutePlannerPage() {
       {/* ══════════════ HERO ══════════════ */}
       <section style={{
         position: 'relative', overflow: 'hidden', color: '#FFD580',
-       background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-padding: '88px 24px 96px', textAlign: 'center',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '88px 24px 96px', textAlign: 'center',
       }}>
-        {/* Om watermark */}
+        {/* OM watermark */}
         <div style={{
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
           pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
         }}>ॐ</div>
-        {/* radial glow */}
+
+        {/* Radial glow */}
         <div style={{
           position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
           width: 600, height: 300,
@@ -105,7 +136,7 @@ padding: '88px 24px 96px', textAlign: 'center',
         }} />
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
-          {/* badge */}
+          {/* Badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
@@ -119,8 +150,7 @@ padding: '88px 24px 96px', textAlign: 'center',
           <h1 style={{
             fontFamily: 'var(--font-display)', fontWeight: 900,
             fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
-            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-            color: '#FFD580',
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)', color: '#FFD580',
           }}>
             Your Journey,{' '}
             <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
@@ -143,7 +173,6 @@ padding: '88px 24px 96px', textAlign: 'center',
             border: '1px solid rgba(232,101,10,0.12)', padding: '40px 40px 36px',
             position: 'relative', zIndex: 10,
           }}>
-
             {/* Card title */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 32 }}>
               <div style={{
@@ -164,7 +193,7 @@ padding: '88px 24px 96px', textAlign: 'center',
             {/* FROM / TO */}
             <div className="route-form-inner" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
               {[
-                { label: 'From', icon: <MapPin size={16} color="#E8650A" style={{ flexShrink: 0 }} />, key: 'start', ph: 'e.g. Indore' },
+                { label: 'From', icon: <MapPin size={16} color="#E8650A" style={{ flexShrink: 0 }} />, key: 'start',       ph: 'e.g. Indore' },
                 { label: 'To',   icon: <Navigation size={16} color="#6B3A1F" style={{ flexShrink: 0 }} />, key: 'destination', ph: 'e.g. Ujjain' },
               ].map(f => (
                 <div key={f.key}>
@@ -282,9 +311,7 @@ padding: '88px 24px 96px', textAlign: 'center',
             )}
           </div>
 
-        
-
-          {/* ── IXIGO TICKET SECTION ── */}
+          {/* ── DYNAMIC BOOKING CARD ── */}
           <div style={{
             marginTop: 32, background: 'white', borderRadius: 28,
             border: '1px solid rgba(232,101,10,0.15)',
@@ -293,41 +320,49 @@ padding: '88px 24px 96px', textAlign: 'center',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             gap: 24, flexWrap: 'wrap', position: 'relative', overflow: 'hidden',
           }}>
-            <div style={{ position: 'absolute', right: -24, top: '50%', transform: 'translateY(-50%)', fontSize: 140, opacity: 0.05, pointerEvents: 'none' }}>🎫</div>
+            <div style={{
+              position: 'absolute', right: -24, top: '50%', transform: 'translateY(-50%)',
+              fontSize: 140, opacity: 0.05, pointerEvents: 'none',
+            }}>
+              {bookingMeta.icon}
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18 }}>
               <div style={{
-                width: 60, height: 60, borderRadius: 18, background: 'rgba(232,101,10,0.1)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0,
-              }}>🎫</div>
+                width: 60, height: 60, borderRadius: 18,
+                background: `${bookingMeta.color}18`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 28, flexShrink: 0,
+              }}>
+                {bookingMeta.icon}
+              </div>
               <div>
                 <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: '#7a3208', marginBottom: 6 }}>
                   Already know your route?
                 </h3>
-                <p style={{ color: '#9A7150', fontSize: 14 }}>
-                  Book your tickets easily with our trusted travel partner.
-                </p>
+                <p style={{ color: '#9A7150', fontSize: 14 }}>{bookingSubtitle}</p>
               </div>
             </div>
+
             <div style={{ textAlign: 'center', flexShrink: 0 }}>
-              <a
-                href="https://www.ixigo.com/"
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={handleBookingClick}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8,
                   padding: '14px 28px', borderRadius: 16,
-                  border: '2px solid #E8650A', color: '#E8650A',
+                  border: `2px solid ${bookingMeta.color}`,
+                  color: bookingMeta.color, background: 'transparent',
                   fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700,
-                  textDecoration: 'none', transition: 'all .22s',
-                  boxShadow: '0 4px 16px rgba(232,101,10,0.15)',
+                  cursor: 'pointer', transition: 'all .22s',
+                  boxShadow: `0 4px 16px ${bookingMeta.color}26`,
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#E8650A'; e.currentTarget.style.color = 'white'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#E8650A'; }}
+                onMouseEnter={e => { e.currentTarget.style.background = bookingMeta.color; e.currentTarget.style.color = 'white'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = bookingMeta.color; }}
               >
-                Book Your Ticket – Click Here <ExternalLink size={16} />
-              </a>
+                {bookingMeta.label} <ExternalLink size={16} />
+              </button>
               <p style={{ fontSize: 12, color: '#9A7150', marginTop: 8 }}>
-                Powered by <span style={{ fontWeight: 700, color: '#E8650A' }}>ixigo</span>
+                Powered by <span style={{ fontWeight: 700, color: bookingMeta.color }}>{bookingMeta.provider}</span>
               </p>
             </div>
           </div>
@@ -405,9 +440,7 @@ padding: '88px 24px 96px', textAlign: 'center',
                           }}>⭐ MUST VISIT</div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: '#3D1F00' }}>
-                            {t.name}
-                          </h3>
+                          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: '#3D1F00' }}>{t.name}</h3>
                           <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 10, flexWrap: 'wrap' }}>
                             <span style={{ background: '#FDF6EC', borderRadius: 50, padding: '3px 10px', fontSize: 11, color: '#5C3D1E', fontWeight: 500 }}>
                               📍 {t.distance_from_route_km}
@@ -475,7 +508,7 @@ padding: '88px 24px 96px', textAlign: 'center',
                     </div>
                   )}
 
-                  {/* Copy */}
+                  {/* Copy Route */}
                   <button
                     onClick={() => {
                       const text =
@@ -501,7 +534,6 @@ padding: '88px 24px 96px', textAlign: 'center',
         </div>
       </section>
 
-      {/* Global keyframes */}
       <style>{`
         @keyframes spin     { to { transform: rotate(360deg); } }
         @keyframes float    { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }

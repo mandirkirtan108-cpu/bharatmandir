@@ -1,7 +1,9 @@
 /**
  * AdminPanelPage.jsx — BharatMandir Admin Panel
- * Fixed: JWT Bearer token auth + proper error message parsing
- * Updated: Added "Add Festival" button + Logout button in controls bar
+ * Updated:
+ *   - Edit button (pencil) → inline Edit Modal with field update
+ *   - Delete button (trash) → confirmation dialog → DELETE API call
+ *   - Review Modal → full details: facilities, puja flags, donation flags, programs
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -11,7 +13,7 @@ import {
   Search, Shield, ShieldCheck, ExternalLink, Clock,
   MapPin, User, Star, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, LayoutDashboard, PlusCircle,
-  CalendarPlus, LogOut
+  CalendarPlus, LogOut, Pencil, Trash2, Save, X,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -19,7 +21,6 @@ import Footer from '../components/Footer';
 // ── Config ────────────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// ── JWT auth helper — reads token from sessionStorage ────────────────────────
 function getAuthHeaders() {
   const token = sessionStorage.getItem('bm_access_token');
   return {
@@ -63,27 +64,19 @@ function StatusBadge({ status }) {
   );
 }
 
-// ── API calls — always fresh JWT headers ──────────────────────────────────────
+// ── API calls ─────────────────────────────────────────────────────────────────
 async function apiFetch(url, opts = {}) {
   const res = await fetch(`${API_BASE}${url}`, {
     ...opts,
-    headers: {
-      ...getAuthHeaders(),
-      ...(opts.headers || {}),
-    },
+    headers: { ...getAuthHeaders(), ...(opts.headers || {}) },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     let detail;
-    if (Array.isArray(err.detail)) {
-      detail = err.detail.map(e => e.msg || JSON.stringify(e)).join(', ');
-    } else if (typeof err.detail === 'string') {
-      detail = err.detail;
-    } else if (err.detail) {
-      detail = JSON.stringify(err.detail);
-    } else {
-      detail = `HTTP ${res.status}`;
-    }
+    if (Array.isArray(err.detail)) detail = err.detail.map(e => e.msg || JSON.stringify(e)).join(', ');
+    else if (typeof err.detail === 'string') detail = err.detail;
+    else if (err.detail) detail = JSON.stringify(err.detail);
+    else detail = `HTTP ${res.status}`;
     throw new Error(detail);
   }
   return res.json();
@@ -110,6 +103,36 @@ async function patchVerify(id) {
   return apiFetch(`/api/admin/temples/${id}/verify`, { method: 'PATCH' });
 }
 
+async function patchTempleFields(id, fields) {
+  return apiFetch(`/api/admin/temples/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(fields),
+  });
+}
+
+async function deleteTemple(id) {
+  return apiFetch(`/api/admin/temples/${id}`, { method: 'DELETE' });
+}
+
+// ── Flag section helper ───────────────────────────────────────────────────────
+function FlagGrid({ items }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {items.map(([label, val]) => (
+        <span key={label} style={{
+          padding: '3px 10px', borderRadius: 50, fontSize: 12,
+          fontFamily: 'var(--font-display)', letterSpacing: '.03em',
+          background: val ? '#fef3c7' : '#f3f4f6',
+          color: val ? '#92400e' : '#9ca3af',
+          fontWeight: val ? 700 : 400,
+        }}>
+          {val ? '✓' : '·'} {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ── Review Modal ──────────────────────────────────────────────────────────────
 function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
   const [detail, setDetail] = useState(null);
@@ -118,7 +141,7 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    fetchTempleDetail(temple.slug || temple.id)
+    fetchTempleDetail(temple.id)
       .then(d => { setDetail(d); setLoading(false); })
       .catch(() => { setDetail(temple); setLoading(false); });
   }, [temple.id]);
@@ -134,11 +157,8 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
       await patchStatus(temple.id, status);
       showToast(`Temple moved to "${status}"`);
       onStatusChange(temple.id, status);
-    } catch (e) {
-      showToast(e.message, false);
-    } finally {
-      setActionLoading(null);
-    }
+    } catch (e) { showToast(e.message, false); }
+    finally { setActionLoading(null); }
   };
 
   const doVerify = async () => {
@@ -147,11 +167,8 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
       await patchVerify(temple.id);
       showToast('Temple verified ✓');
       onVerify(temple.id);
-    } catch (e) {
-      showToast(e.message, false);
-    } finally {
-      setActionLoading(null);
-    }
+    } catch (e) { showToast(e.message, false); }
+    finally { setActionLoading(null); }
   };
 
   const t = detail || temple;
@@ -161,12 +178,11 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       background: 'rgba(29,15,0,.55)', backdropFilter: 'blur(4px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '20px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
     }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{
         background: 'var(--cream)', borderRadius: 20,
-        width: '100%', maxWidth: 760, maxHeight: '90vh',
+        width: '100%', maxWidth: 820, maxHeight: '92vh',
         overflow: 'hidden', display: 'flex', flexDirection: 'column',
         boxShadow: '0 24px 80px rgba(61,31,0,.35)',
       }}>
@@ -190,28 +206,21 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
                 </span>
               )}
             </div>
-            <h2 style={{
-              fontFamily: 'var(--font-display)', color: 'white',
-              fontSize: 22, fontWeight: 700, margin: 0,
-            }}>{t.name}</h2>
+            <h2 style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: 22, fontWeight: 700, margin: 0 }}>{t.name}</h2>
             {t.name_hindi && (
-              <p style={{ fontFamily: 'var(--font-hindi)', color: 'rgba(255,255,255,.75)', margin: '2px 0 0', fontSize: 14 }}>
-                {t.name_hindi}
-              </p>
+              <p style={{ fontFamily: 'var(--font-hindi)', color: 'rgba(255,255,255,.75)', margin: '2px 0 0', fontSize: 14 }}>{t.name_hindi}</p>
             )}
           </div>
           <button onClick={onClose} style={{
             background: 'rgba(255,255,255,.15)', border: 'none', color: 'white',
             borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0,
           }}
             onMouseEnter={e => e.target.style.background = 'rgba(255,255,255,.3)'}
             onMouseLeave={e => e.target.style.background = 'rgba(255,255,255,.15)'}
           >×</button>
         </div>
 
-        {/* Toast */}
         {toast && (
           <div style={{
             background: toast.ok ? '#f0fdf4' : '#fef2f2',
@@ -230,8 +239,9 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
               <Loader2 size={32} color="var(--saffron)" style={{ animation: 'spin .8s linear infinite' }} />
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
+              {/* Identity */}
               <InfoSection title="🏛️ Identity">
                 <Row label="MKT ID" value={t.mkt_id} mono />
                 <Row label="Slug" value={t.slug} mono />
@@ -240,84 +250,160 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
                 <Row label="Type" value={t.temple_type} />
                 <Row label="Architecture" value={t.architecture_style} />
                 <Row label="Est. Year" value={t.estimated_year_built} />
+                <Row label="Founded By" value={t.founded_by} />
+                <Row label="Last Renovation" value={t.last_renovation_year} />
+                <Row label="Condition" value={t.building_condition} />
               </InfoSection>
 
+              {/* Location */}
               <InfoSection title="📍 Location">
+                <Row label="Address" value={t.address} />
                 <Row label="City" value={t.city} />
                 <Row label="District" value={t.district} />
                 <Row label="State" value={t.state} />
                 <Row label="Pincode" value={t.pincode} />
+                <Row label="Setting" value={t.setting_environment} />
                 <Row label="Lat/Lng" value={t.latitude ? `${t.latitude}, ${t.longitude}` : null} />
+                <Row label="Landmark" value={t.local_landmark} />
+                <Row label="Nearest Bus" value={t.nearest_bus_stand} />
                 <Row label="Nearest Rail" value={t.nearest_railway} />
                 <Row label="Nearest Airport" value={t.nearest_airport} />
+                <Row label="Google Maps" value={t.google_maps_link} />
               </InfoSection>
 
+              {/* Heritage Designations */}
               <InfoSection title="⭐ Heritage Designations" fullWidth>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {[
-                    ['Jyotirlinga', t.is_jyotirlinga], ['Shaktipeeth', t.is_shaktipeeth],
-                    ['Divya Desam', t.is_divya_desam], ['Ashtavinayak', t.is_ashtavinayak],
-                    ['Char Dham', t.is_char_dham], ['Heritage Site', t.is_heritage_site],
-                    ['ASI Protected', t.is_asi_protected], ['Pancha Bhuta', t.is_pancha_bhuta],
-                    ['51 Shakti Peeths', t.is_51_shakti_peeths], ['UNESCO', t.is_unesco_heritage],
-                    ['State Heritage', t.is_state_heritage],
-                  ].map(([label, val]) => (
-                    <span key={label} style={{
-                      padding: '3px 10px', borderRadius: 50, fontSize: 12,
-                      fontFamily: 'var(--font-display)', letterSpacing: '.03em',
-                      background: val ? '#fef3c7' : '#f3f4f6',
-                      color: val ? '#92400e' : '#9ca3af',
-                      fontWeight: val ? 700 : 400,
-                    }}>
-                      {val ? '✓' : '·'} {label}
-                    </span>
-                  ))}
-                </div>
+                <FlagGrid items={[
+                  ['Jyotirlinga', t.is_jyotirlinga], ['Shaktipeeth', t.is_shaktipeeth],
+                  ['Divya Desam', t.is_divya_desam], ['Ashtavinayak', t.is_ashtavinayak],
+                  ['Char Dham', t.is_char_dham], ['Heritage Site', t.is_heritage_site],
+                  ['ASI Protected', t.is_asi_protected], ['Pancha Bhuta', t.is_pancha_bhuta],
+                  ['51 Shakti Peeths', t.is_51_shakti_peeths], ['UNESCO', t.is_unesco_heritage],
+                  ['State Heritage', t.is_state_heritage],
+                ]} />
               </InfoSection>
 
+              {/* History */}
               {t.history && (
                 <InfoSection title="📖 History" fullWidth>
-                  <p style={{ color: 'var(--text-mid)', fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-                    {t.history.slice(0, 400)}{t.history.length > 400 ? '…' : ''}
+                  <p style={{ color: 'var(--text-mid)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
+                    {t.history.slice(0, 600)}{t.history.length > 600 ? '…' : ''}
                   </p>
                 </InfoSection>
               )}
 
-              <InfoSection title="🕐 Timings">
+              {/* Significance */}
+              {t.significance && (
+                <InfoSection title="✨ Significance" fullWidth>
+                  <p style={{ color: 'var(--text-mid)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
+                    {t.significance.slice(0, 400)}{t.significance.length > 400 ? '…' : ''}
+                  </p>
+                </InfoSection>
+              )}
+
+              {/* Timings */}
+              <InfoSection title="🕐 Timings & Services">
                 <Row label="Opens" value={t.opening_time} />
                 <Row label="Closes" value={t.closing_time} />
                 <Row label="Afternoon Break" value={t.afternoon_closure_start ? `${t.afternoon_closure_start} – ${t.afternoon_closure_end}` : null} />
                 <Row label="Special Day" value={t.weekly_special_day} />
                 <Row label="Online Puja" value={t.online_puja_available} />
                 <Row label="Live Darshan" value={t.live_darshan_available} />
+                <Row label="Live Stream URL" value={t.live_stream_url} />
+                <Row label="Prasad Type" value={t.prasad_type} />
+                <Row label="Entry Fee" value={t.entry_fee != null ? `₹${t.entry_fee}` : null} />
+                <Row label="Dress Code" value={t.dress_code} />
+                <Row label="Best Time" value={t.best_time_to_visit} />
               </InfoSection>
 
+              {/* Submission Meta */}
               <InfoSection title="📋 Submission Meta">
                 <Row label="Submitted" value={fmtDate(t.submitted_at)} />
                 <Row label="Created" value={fmtDate(t.created_at)} />
                 <Row label="Published" value={fmtDate(t.published_at)} />
                 <Row label="Source" value={t.source} />
+                <Row label="Avg Rating" value={t.average_rating ? `${t.average_rating} ★` : null} />
+                <Row label="Total Ratings" value={t.total_ratings} />
                 <Row label="Managing Auth." value={t.managing_authority} />
                 <Row label="Trust Name" value={t.trust_name} />
                 <Row label="Trust Reg No." value={t.trust_registration_no} />
               </InfoSection>
 
+              {/* Puja Services */}
+              <InfoSection title="🙏 Puja Services Available" fullWidth>
+                <FlagGrid items={[
+                  ['Rudrabhishek', t.puja_rudrabhishek], ['Satyanarayan Katha', t.puja_satyanarayan],
+                  ['Havan / Homa', t.puja_havan_homa], ['Laghu Rudra', t.puja_laghu_rudra],
+                  ['Mahamrityunjaya', t.puja_mahamrityunjaya], ['Griha Pravesh', t.puja_griha_pravesh],
+                  ['Naamkaran', t.puja_naamkaran], ['Vivah', t.puja_vivah],
+                  ['Annaprashan', t.puja_annaprashan], ['Mundan', t.puja_mundan],
+                  ['Pitru Tarpan', t.puja_pitru_tarpan], ['Sahasranamarchana', t.puja_sahasranamarchana],
+                ]} />
+              </InfoSection>
+
+              {/* Facilities */}
+              <InfoSection title="🏗️ Facilities" fullWidth>
+                <FlagGrid items={[
+                  ['Electricity', t.facility_electricity], ['Water Supply', t.facility_water_supply],
+                  ['Clean Toilets', t.facility_clean_toilets], ['Wheelchair Access', t.facility_wheelchair],
+                  ['Dharamshala', t.facility_dharamshala], ['Prasad Dining', t.facility_prasad_dining],
+                  ['Parking', t.facility_parking], ['Security', t.facility_security],
+                  ['CCTV', t.facility_cctv], ['PA System', t.facility_pa_system],
+                  ['WiFi', t.facility_internet_wifi], ['Library / Pathshala', t.facility_library_pathshala],
+                  ['Gaushaala', t.facility_gaushaala], ['Medical Support', t.facility_medical_support],
+                ]} />
+              </InfoSection>
+
+              {/* Community Programs */}
+              <InfoSection title="🤝 Community Programs" fullWidth>
+                <FlagGrid items={[
+                  ['Free Food / Langar', t.prog_free_food], ['Medical Camps', t.prog_medical_camps],
+                  ['Scholarship & Education', t.prog_scholarship_edu], ['Women Self-Help', t.prog_womens_selfhelp],
+                  ['Bhajan / Kirtan', t.prog_bhajan_kirtan], ['Disaster Relief', t.prog_disaster_relief],
+                ]} />
+              </InfoSection>
+
+              {/* Donations & Finance */}
               <InfoSection title="💳 Donations & Finance">
+                <Row label="Online Donations" value={t.accept_online_donations ? 'Yes' : 'No'} />
                 <Row label="UPI ID" value={t.upi_id} mono />
                 <Row label="Bank Name/Branch" value={t.bank_name_branch} />
                 <Row label="IFSC" value={t.bank_ifsc} mono />
                 <Row label="80G Certificate" value={t.certificate_80g_no} />
-                <Row label="Online Donations" value={t.accept_online_donations ? 'Yes' : 'No'} />
               </InfoSection>
 
-              <InfoSection title="📞 Contact">
-                <Row label="Phone" value={t.phone} />
-                <Row label="WhatsApp" value={t.whatsapp_number} />
-                <Row label="Email" value={t.official_email} />
-                <Row label="Website" value={t.website_url} />
-                <Row label="Instagram" value={t.instagram_handle} />
-                <Row label="YouTube" value={t.youtube_channel} />
+              {/* Donation Causes */}
+              <InfoSection title="🎁 Donation Causes">
+                <FlagGrid items={[
+                  ['Temple Renovation', t.donation_temple_renovation], ['Annadanam', t.donation_annadanam],
+                  ['Priest Salary', t.donation_priest_salary], ['Vedic Education', t.donation_vedic_education],
+                  ['Festival', t.donation_festival], ['Medical Camps', t.donation_medical_camps],
+                  ['General', t.donation_general],
+                ]} />
               </InfoSection>
+
+              {/* Contact */}
+              <InfoSection title="📞 Contact & Social" fullWidth>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+                  <Row label="Phone" value={t.phone} />
+                  <Row label="WhatsApp" value={t.whatsapp_number} />
+                  <Row label="Email" value={t.official_email} />
+                  <Row label="Best Time to Call" value={t.best_time_to_call} />
+                  <Row label="Website" value={t.website_url} />
+                  <Row label="Facebook" value={t.facebook_page} />
+                  <Row label="Instagram" value={t.instagram_handle} />
+                  <Row label="YouTube" value={t.youtube_channel} />
+                </div>
+              </InfoSection>
+
+              {/* Media */}
+              {(t.video_aarti_url || t.video_intro_url || t.video_360_url) && (
+                <InfoSection title="🎥 Media Links" fullWidth>
+                  <Row label="Aarti Video" value={t.video_aarti_url} />
+                  <Row label="Intro Video" value={t.video_intro_url} />
+                  <Row label="360° Video" value={t.video_360_url} />
+                </InfoSection>
+              )}
 
             </div>
           )}
@@ -372,6 +458,292 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
   );
 }
 
+// ── Edit Modal ────────────────────────────────────────────────────────────────
+function EditModal({ temple, onClose, onSaved }) {
+  const EDITABLE_FIELDS = [
+    { key: 'name',               label: 'Temple Name',        type: 'text' },
+    { key: 'name_hindi',         label: 'Name (Hindi)',        type: 'text' },
+    { key: 'primary_deity',      label: 'Primary Deity',       type: 'text' },
+    { key: 'sect',               label: 'Sect',                type: 'text' },
+    { key: 'temple_type',        label: 'Temple Type',         type: 'text' },
+    { key: 'architecture_style', label: 'Architecture Style',  type: 'text' },
+    { key: 'estimated_year_built', label: 'Est. Year Built',   type: 'text' },
+    { key: 'city',               label: 'City',                type: 'text' },
+    { key: 'state',              label: 'State',               type: 'text' },
+    { key: 'address',            label: 'Address',             type: 'text' },
+    { key: 'opening_time',       label: 'Opening Time',        type: 'text' },
+    { key: 'closing_time',       label: 'Closing Time',        type: 'text' },
+    { key: 'entry_fee',          label: 'Entry Fee (₹)',       type: 'number' },
+    { key: 'dress_code',         label: 'Dress Code',          type: 'text' },
+    { key: 'best_time_to_visit', label: 'Best Time to Visit',  type: 'text' },
+    { key: 'nearest_railway',    label: 'Nearest Railway',     type: 'text' },
+    { key: 'nearest_airport',    label: 'Nearest Airport',     type: 'text' },
+    { key: 'website_url',        label: 'Website URL',         type: 'text' },
+    { key: 'history',            label: 'History',             type: 'textarea' },
+    { key: 'significance',       label: 'Significance',        type: 'textarea' },
+  ];
+
+  const [form, setForm] = useState(() => {
+    const init = {};
+    EDITABLE_FIELDS.forEach(f => { init[f.key] = temple[f.key] ?? ''; });
+    return init;
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      // Only send non-empty changed fields
+      const payload = {};
+      EDITABLE_FIELDS.forEach(f => {
+        const val = form[f.key];
+        if (val !== '' && val !== null && val !== undefined) {
+          payload[f.key] = f.type === 'number' ? Number(val) : val;
+        }
+      });
+      await patchTempleFields(temple.id, payload);
+      onSaved({ ...temple, ...payload });
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10000,
+      background: 'rgba(29,15,0,.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: 'var(--cream)', borderRadius: 20,
+        width: '100%', maxWidth: 680, maxHeight: '92vh',
+        overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 80px rgba(61,31,0,.35)',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+          padding: '18px 24px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Pencil size={18} color="white" />
+            <h2 style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>
+              Edit Temple
+            </h2>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'rgba(255,255,255,.15)', border: 'none', color: 'white',
+            borderRadius: '50%', width: 34, height: 34, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+          }}>×</button>
+        </div>
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', borderBottom: '1px solid #fca5a5',
+            padding: '10px 20px', color: '#b91c1c',
+            fontFamily: 'var(--font-display)', fontSize: 13, display: 'flex', gap: 8, alignItems: 'center',
+          }}>
+            <AlertTriangle size={15} /> {error}
+          </div>
+        )}
+
+        {/* Form Body */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
+          <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'var(--text-light)', letterSpacing: '.06em', marginBottom: 16 }}>
+            TEMPLE ID: {temple.id} · {temple.mkt_id || temple.slug}
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 20px' }}>
+            {EDITABLE_FIELDS.map(f => (
+              <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
+                <label style={{
+                  display: 'block', marginBottom: 5,
+                  fontFamily: 'var(--font-display)', fontSize: 11,
+                  letterSpacing: '.06em', color: 'var(--text-light)', textTransform: 'uppercase',
+                }}>{f.label}</label>
+                {f.type === 'textarea' ? (
+                  <textarea
+                    value={form[f.key]}
+                    onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    rows={4}
+                    style={{
+                      width: '100%', padding: '9px 12px',
+                      border: '2px solid var(--cream-dark)', borderRadius: 10,
+                      fontFamily: 'var(--font-body)', fontSize: 13,
+                      color: 'var(--text-dark)', background: 'white',
+                      resize: 'vertical', outline: 'none', boxSizing: 'border-box',
+                    }}
+                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+                  />
+                ) : (
+                  <input
+                    type={f.type}
+                    value={form[f.key]}
+                    onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '9px 12px',
+                      border: '2px solid var(--cream-dark)', borderRadius: 10,
+                      fontFamily: 'var(--font-body)', fontSize: 13,
+                      color: 'var(--text-dark)', background: 'white',
+                      outline: 'none', boxSizing: 'border-box',
+                    }}
+                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          borderTop: '2px solid var(--cream-dark)',
+          padding: '14px 24px', background: 'white',
+          display: 'flex', justifyContent: 'flex-end', gap: 10,
+        }}>
+          <button onClick={onClose} style={{
+            padding: '9px 18px', borderRadius: 50,
+            border: '2px solid var(--cream-dark)', background: 'white',
+            fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
+            cursor: 'pointer', color: 'var(--text-mid)', display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <X size={14} /> Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving} style={{
+            padding: '9px 20px', borderRadius: 50,
+            border: '2px solid #3b82f6',
+            background: saving ? '#93c5fd' : '#3b82f6',
+            fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
+            cursor: saving ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700,
+            display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s',
+          }}>
+            {saving
+              ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Saving…</>
+              : <><Save size={14} /> Save Changes</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Delete Confirm Modal ──────────────────────────────────────────────────────
+function DeleteConfirmModal({ temple, onClose, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteTemple(temple.id);
+      onDeleted(temple.id);
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10001,
+      background: 'rgba(29,15,0,.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: 'white', borderRadius: 20,
+        width: '100%', maxWidth: 440,
+        padding: '32px', boxShadow: '0 24px 80px rgba(61,31,0,.35)',
+      }}>
+        {/* Icon */}
+        <div style={{
+          width: 56, height: 56, borderRadius: '50%',
+          background: '#fef2f2', border: '2px solid #fca5a5',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 20px',
+        }}>
+          <Trash2 size={24} color="#b91c1c" />
+        </div>
+
+        <h2 style={{
+          fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700,
+          color: 'var(--brown)', textAlign: 'center', margin: '0 0 10px',
+        }}>Delete Temple?</h2>
+
+        <p style={{
+          fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-mid)',
+          textAlign: 'center', lineHeight: 1.6, margin: '0 0 8px',
+        }}>
+          You are about to permanently delete:
+        </p>
+        <p style={{
+          fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700,
+          color: '#b91c1c', textAlign: 'center', margin: '0 0 6px',
+        }}>{temple.name}</p>
+        <p style={{
+          fontFamily: 'monospace', fontSize: 12, color: 'var(--text-light)',
+          textAlign: 'center', margin: '0 0 24px',
+        }}>{temple.mkt_id || `#${temple.id}`} · {temple.city}, {temple.state}</p>
+
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5',
+          borderRadius: 10, padding: '10px 14px', marginBottom: 24,
+          fontFamily: 'var(--font-display)', fontSize: 12, color: '#b91c1c',
+          letterSpacing: '.03em',
+        }}>
+          ⚠ This action cannot be undone. All temple data, media references, and associated records will be permanently removed.
+        </div>
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', border: '1px solid #fca5a5',
+            borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+            fontFamily: 'var(--font-display)', fontSize: 12, color: '#b91c1c',
+          }}>
+            Error: {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '11px 0', borderRadius: 50,
+            border: '2px solid var(--cream-dark)', background: 'white',
+            fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em',
+            cursor: 'pointer', color: 'var(--text-mid)', fontWeight: 600,
+          }}>
+            Cancel
+          </button>
+          <button onClick={handleDelete} disabled={deleting} style={{
+            flex: 1, padding: '11px 0', borderRadius: 50,
+            border: '2px solid #b91c1c',
+            background: deleting ? '#fca5a5' : '#b91c1c',
+            fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em',
+            cursor: deleting ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            transition: 'all .2s',
+          }}>
+            {deleting
+              ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Deleting…</>
+              : <><Trash2 size={14} /> Delete Permanently</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Shared sub-components ─────────────────────────────────────────────────────
 function InfoSection({ title, children, fullWidth }) {
   return (
     <div style={{
@@ -393,7 +765,7 @@ function Row({ label, value, mono }) {
   if (!value && value !== 0 && value !== false) return null;
   return (
     <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
-      <span style={{ color: 'var(--text-light)', fontSize: 12, minWidth: 100, flexShrink: 0, fontFamily: 'var(--font-display)', letterSpacing: '.03em' }}>
+      <span style={{ color: 'var(--text-light)', fontSize: 12, minWidth: 110, flexShrink: 0, fontFamily: 'var(--font-display)', letterSpacing: '.03em' }}>
         {label}
       </span>
       <span style={{ color: 'var(--text-dark)', fontSize: 13, lineHeight: 1.4, fontFamily: mono ? 'monospace' : 'var(--font-body)', wordBreak: 'break-all' }}>
@@ -431,6 +803,8 @@ export default function AdminPanelPage() {
   const [error, setError]                 = useState(null);
   const [search, setSearch]               = useState('');
   const [reviewing, setReviewing]         = useState(null);
+  const [editing, setEditing]             = useState(null);
+  const [deleting, setDeleting]           = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
 
   const PER_PAGE = 15;
@@ -440,7 +814,6 @@ export default function AdminPanelPage() {
     if (!token) navigate('/admin/login', { replace: true });
   }, []);
 
-  // ── Logout handler ──────────────────────────────────────────────────────────
   const handleLogout = () => {
     sessionStorage.removeItem('bm_access_token');
     sessionStorage.removeItem('bm_refresh_token');
@@ -458,8 +831,6 @@ export default function AdminPanelPage() {
     } catch (e) {
       if (e.message.includes('401') || e.message.toLowerCase().includes('unauthorized')) {
         sessionStorage.removeItem('bm_access_token');
-        sessionStorage.removeItem('bm_refresh_token');
-        sessionStorage.removeItem('bm_admin_user');
         navigate('/admin/login', { replace: true });
         return;
       }
@@ -495,6 +866,15 @@ export default function AdminPanelPage() {
   const handleVerify = (id) => {
     setTemples(prev => prev.map(t => t.id === id ? { ...t, verified: true } : t));
     if (reviewing?.id === id) setReviewing(prev => ({ ...prev, verified: true }));
+  };
+
+  const handleSaved = (updated) => {
+    setTemples(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
+  };
+
+  const handleDeleted = (id) => {
+    setTemples(prev => prev.filter(t => t.id !== id));
+    loadCounts();
   };
 
   const quickAction = async (temple, status, e) => {
@@ -541,7 +921,6 @@ export default function AdminPanelPage() {
               Temple Onboarding & Verification Dashboard
             </p>
 
-            {/* Stats */}
             <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
               {[
                 { label: 'Total', value: counts.all || 0, color: '#F5934A' },
@@ -565,15 +944,8 @@ export default function AdminPanelPage() {
 
         <div className="container" style={{ marginTop: 28 }}>
 
-          {/* ── Controls: Search + Add Temple + Add Festival + Refresh + Logout ── */}
-          <div style={{
-            display: 'flex',
-            gap: 10,
-            alignItems: 'center',
-            marginBottom: 20,
-            flexWrap: 'wrap',
-          }}>
-            {/* Search — grows to fill space */}
+          {/* Controls */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 0 }}>
               <Search size={16} style={{
                 position: 'absolute', left: 14, top: '50%',
@@ -587,30 +959,22 @@ export default function AdminPanelPage() {
                   width: '100%', padding: '10px 14px 10px 40px',
                   border: '2px solid var(--cream-dark)', borderRadius: 50,
                   fontFamily: 'var(--font-body)', fontSize: 14,
-                  background: 'white', color: 'var(--text-dark)', outline: 'none',
-                  boxSizing: 'border-box',
+                  background: 'white', color: 'var(--text-dark)', outline: 'none', boxSizing: 'border-box',
                 }}
                 onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
                 onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
               />
             </div>
 
-            {/* Add Temple button */}
-            <Link
-              to="/admin/add"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '10px 18px',
-                background: 'linear-gradient(135deg, var(--saffron), var(--saffron-dark))',
-                border: '2px solid transparent',
-                borderRadius: 50,
-                fontFamily: 'var(--font-display)', fontSize: 13,
-                letterSpacing: '.04em', fontWeight: 700,
-                color: 'white', textDecoration: 'none',
-                whiteSpace: 'nowrap', flexShrink: 0,
-                boxShadow: '0 2px 12px rgba(200,100,0,.25)',
-                transition: 'all .2s',
-              }}
+            <Link to="/admin/add" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              padding: '10px 18px',
+              background: 'linear-gradient(135deg, var(--saffron), var(--saffron-dark))',
+              border: '2px solid transparent', borderRadius: 50,
+              fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
+              color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+              boxShadow: '0 2px 12px rgba(200,100,0,.25)', transition: 'all .2s',
+            }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(200,100,0,.4)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(200,100,0,.25)'; }}
             >
@@ -618,22 +982,15 @@ export default function AdminPanelPage() {
               <span className="btn-label-temple">Add Temple</span>
             </Link>
 
-            {/* Add Festival button */}
-            <Link
-              to="/admin/add-festival"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '10px 18px',
-                background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-                border: '2px solid transparent',
-                borderRadius: 50,
-                fontFamily: 'var(--font-display)', fontSize: 13,
-                letterSpacing: '.04em', fontWeight: 700,
-                color: 'white', textDecoration: 'none',
-                whiteSpace: 'nowrap', flexShrink: 0,
-                boxShadow: '0 2px 12px rgba(124,58,237,.25)',
-                transition: 'all .2s',
-              }}
+            <Link to="/admin/add-festival" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              padding: '10px 18px',
+              background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+              border: '2px solid transparent', borderRadius: 50,
+              fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
+              color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+              boxShadow: '0 2px 12px rgba(124,58,237,.25)', transition: 'all .2s',
+            }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(124,58,237,.4)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(124,58,237,.25)'; }}
             >
@@ -641,17 +998,13 @@ export default function AdminPanelPage() {
               <span className="btn-label-festival">Add Festival</span>
             </Link>
 
-            {/* Refresh button */}
-            <button
-              onClick={() => { loadTemples(); loadCounts(); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '10px 16px', border: '2px solid var(--cream-dark)',
-                borderRadius: 50, background: 'white',
-                fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
-                cursor: 'pointer', color: 'var(--text-mid)', whiteSpace: 'nowrap', flexShrink: 0,
-                transition: 'all .2s',
-              }}
+            <button onClick={() => { loadTemples(); loadCounts(); }} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '10px 16px', border: '2px solid var(--cream-dark)',
+              borderRadius: 50, background: 'white',
+              fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
+              cursor: 'pointer', color: 'var(--text-mid)', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
+            }}
               onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--saffron)'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cream-dark)'}
             >
@@ -659,17 +1012,13 @@ export default function AdminPanelPage() {
               <span className="refresh-label">Refresh</span>
             </button>
 
-            {/* Logout button */}
-            <button
-              onClick={handleLogout}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '10px 16px', border: '2px solid #fca5a5',
-                borderRadius: 50, background: '#fef2f2',
-                fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
-                cursor: 'pointer', color: '#b91c1c', whiteSpace: 'nowrap', flexShrink: 0,
-                transition: 'all .2s', fontWeight: 600,
-              }}
+            <button onClick={handleLogout} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '10px 16px', border: '2px solid #fca5a5',
+              borderRadius: 50, background: '#fef2f2',
+              fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
+              cursor: 'pointer', color: '#b91c1c', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s', fontWeight: 600,
+            }}
               onMouseEnter={e => { e.currentTarget.style.background = '#b91c1c'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#b91c1c'; }}
               onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#b91c1c'; e.currentTarget.style.borderColor = '#fca5a5'; }}
             >
@@ -681,8 +1030,7 @@ export default function AdminPanelPage() {
           {/* Status Tabs */}
           <div style={{
             display: 'flex', gap: 0, marginBottom: 20, flexWrap: 'nowrap',
-            borderBottom: '2px solid var(--cream-dark)', paddingBottom: 0,
-            overflowX: 'auto',
+            borderBottom: '2px solid var(--cream-dark)', paddingBottom: 0, overflowX: 'auto',
           }}>
             {ALL_STATUSES.map(s => {
               const active = activeTab === s;
@@ -696,8 +1044,7 @@ export default function AdminPanelPage() {
                   background: 'transparent',
                   fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
                   cursor: 'pointer', color: active ? 'var(--saffron)' : 'var(--text-light)',
-                  marginBottom: -2, fontWeight: active ? 700 : 400,
-                  whiteSpace: 'nowrap', flexShrink: 0,
+                  marginBottom: -2, fontWeight: active ? 700 : 400, whiteSpace: 'nowrap', flexShrink: 0,
                 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
                   {meta.label}
@@ -711,7 +1058,6 @@ export default function AdminPanelPage() {
             })}
           </div>
 
-          {/* Error */}
           {error && (
             <div style={{
               background: '#fef2f2', border: '1.5px solid #fca5a5',
@@ -723,16 +1069,15 @@ export default function AdminPanelPage() {
             </div>
           )}
 
-          {/* Table — desktop */}
+          {/* Table */}
           <div style={{
             background: 'white', borderRadius: 16,
             border: '1.5px solid var(--cream-dark)',
             overflow: 'hidden', boxShadow: '0 4px 20px var(--shadow)',
           }}>
-            {/* Desktop header — hidden on mobile via inline media workaround */}
             <div className="admin-table-header" style={{
               display: 'grid',
-              gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 130px',
+              gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 160px',
               padding: '12px 20px',
               background: 'var(--cream)', borderBottom: '2px solid var(--cream-dark)',
               fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.08em',
@@ -763,6 +1108,8 @@ export default function AdminPanelPage() {
                   total={displayed.length}
                   actionLoading={actionLoading}
                   onReview={() => setReviewing(t)}
+                  onEdit={e => { e.stopPropagation(); setEditing(t); }}
+                  onDelete={e => { e.stopPropagation(); setDeleting(t); }}
                   onQuickAction={quickAction}
                 />
               ))
@@ -780,42 +1127,43 @@ export default function AdminPanelPage() {
         </div>
       </div>
 
+      {/* Modals */}
       {reviewing && (
         <ReviewModal temple={reviewing} onClose={() => setReviewing(null)}
           onStatusChange={handleStatusChange} onVerify={handleVerify} />
       )}
+      {editing && (
+        <EditModal temple={editing} onClose={() => setEditing(null)} onSaved={handleSaved} />
+      )}
+      {deleting && (
+        <DeleteConfirmModal temple={deleting} onClose={() => setDeleting(null)} onDeleted={handleDeleted} />
+      )}
+
       <Footer />
 
-      {/* Responsive styles */}
       <style>{`
         @media (max-width: 640px) {
           .admin-table-header { display: none !important; }
-          .refresh-label { display: none; }
-          .logout-label { display: none; }
-          .btn-label-temple { display: none; }
-          .btn-label-festival { display: none; }
+          .refresh-label, .logout-label, .btn-label-temple, .btn-label-festival { display: none; }
         }
         @media (min-width: 641px) {
-          .refresh-label { display: inline; }
-          .logout-label { display: inline; }
-          .btn-label-temple { display: inline; }
-          .btn-label-festival { display: inline; }
+          .refresh-label, .logout-label, .btn-label-temple, .btn-label-festival { display: inline; }
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </>
   );
 }
 
-// ── Temple Row — auto switches desktop grid ↔ mobile card ────────────────────
-function TempleRow({ t, i, total, actionLoading, onReview, onQuickAction }) {
+// ── Temple Row ─────────────────────────────────────────────────────────────────
+function TempleRow({ t, i, total, actionLoading, onReview, onEdit, onDelete, onQuickAction }) {
   return (
     <>
-      {/* Desktop row */}
+      {/* Desktop */}
       <div className="temple-row-desktop" style={{
         display: 'grid',
-        gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 130px',
-        padding: '14px 20px',
-        borderBottom: i < total - 1 ? '1px solid var(--cream-dark)' : 'none',
+        gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 160px',
+        padding: '14px 20px', borderBottom: i < total - 1 ? '1px solid var(--cream-dark)' : 'none',
         alignItems: 'center', cursor: 'pointer',
       }}
         onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
@@ -830,40 +1178,28 @@ function TempleRow({ t, i, total, actionLoading, onReview, onQuickAction }) {
         <div style={{ fontSize: 13, color: 'var(--text-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.primary_deity || '—'}</div>
         <StatusBadge status={t.status} />
         <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{fmtDate(t.submitted_at || t.created_at)}</div>
-        <RowActions t={t} actionLoading={actionLoading} onReview={onReview} onQuickAction={onQuickAction} justify="flex-end" />
+        <RowActions t={t} actionLoading={actionLoading} onReview={onReview} onEdit={onEdit} onDelete={onDelete} onQuickAction={onQuickAction} justify="flex-end" />
       </div>
 
       {/* Mobile card */}
       <div className="temple-row-mobile" style={{
-        padding: '14px 16px',
-        borderBottom: i < total - 1 ? '1px solid var(--cream-dark)' : 'none',
-        cursor: 'pointer',
+        padding: '14px 16px', borderBottom: i < total - 1 ? '1px solid var(--cream-dark)' : 'none', cursor: 'pointer',
       }}
         onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
         onMouseLeave={e => e.currentTarget.style.background = 'white'}
         onClick={onReview}
       >
-        {/* Top row: image + name + status */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
           <TempleThumb t={t} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontFamily: 'var(--font-display)', fontSize: 14,
-              color: 'var(--brown)', fontWeight: 600,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>{t.name}</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-              <span style={{
-                fontFamily: 'monospace', fontSize: 10, color: 'var(--text-light)',
-                background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4,
-              }}>{t.mkt_id || `#${t.id}`}</span>
+              <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-light)', background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4 }}>{t.mkt_id || `#${t.id}`}</span>
               {t.verified && <ShieldCheck size={12} color="#7c3aed" />}
               <StatusBadge status={t.status} />
             </div>
           </div>
         </div>
-
-        {/* Meta row: location + deity + date */}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
           {(t.city || t.state) && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-mid)' }}>
@@ -871,14 +1207,10 @@ function TempleRow({ t, i, total, actionLoading, onReview, onQuickAction }) {
               {[t.city, t.state].filter(Boolean).join(', ')}
             </span>
           )}
-          {t.primary_deity && (
-            <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>🙏 {t.primary_deity}</span>
-          )}
+          {t.primary_deity && <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>🙏 {t.primary_deity}</span>}
           <span style={{ fontSize: 12, color: 'var(--text-light)' }}>📅 {fmtDate(t.submitted_at || t.created_at)}</span>
         </div>
-
-        {/* Actions row */}
-        <RowActions t={t} actionLoading={actionLoading} onReview={onReview} onQuickAction={onQuickAction} justify="flex-start" />
+        <RowActions t={t} actionLoading={actionLoading} onReview={onReview} onEdit={onEdit} onDelete={onDelete} onQuickAction={onQuickAction} justify="flex-start" />
       </div>
 
       <style>{`
@@ -917,7 +1249,8 @@ function TempleNameCell({ t }) {
   );
 }
 
-function RowActions({ t, actionLoading, onReview, onQuickAction, justify }) {
+// ── Row Actions — now includes Edit + Delete ───────────────────────────────────
+function RowActions({ t, actionLoading, onReview, onEdit, onDelete, onQuickAction, justify }) {
   return (
     <div style={{ display: 'flex', gap: 5, justifyContent: justify }}>
       {t.status !== 'published' && (
@@ -928,13 +1261,22 @@ function RowActions({ t, actionLoading, onReview, onQuickAction, justify }) {
         <QuickBtn icon={<XCircle size={14} />} color="#b91c1c" title="Flag / Reject"
           loading={actionLoading === `${t.id}-flagged`} onClick={e => onQuickAction(t, 'flagged', e)} />
       )}
-      <QuickBtn icon={<Eye size={14} />} color="var(--saffron)" title="Review Details"
+      {/* Eye — Review Details */}
+      <QuickBtn icon={<Eye size={14} />} color="var(--saffron)" title="View Full Details"
         onClick={e => { e.stopPropagation(); onReview(); }} />
+      {/* Pencil — Edit */}
+      <QuickBtn icon={<Pencil size={14} />} color="#1d4ed8" title="Edit Temple"
+        onClick={onEdit} />
+      {/* Trash — Delete */}
+      <QuickBtn icon={<Trash2 size={14} />} color="#b91c1c" title="Delete Temple"
+        onClick={onDelete}
+        hoverBg="#fef2f2"
+      />
     </div>
   );
 }
 
-function QuickBtn({ icon, color, title, loading, onClick }) {
+function QuickBtn({ icon, color, title, loading, onClick, hoverBg }) {
   return (
     <button title={title} onClick={onClick} disabled={loading} style={{
       width: 32, height: 32, borderRadius: 8,
@@ -944,8 +1286,8 @@ function QuickBtn({ icon, color, title, loading, onClick }) {
       cursor: loading ? 'not-allowed' : 'pointer',
       opacity: loading ? .5 : 1, transition: 'all .15s',
     }}
-      onMouseEnter={e => { e.currentTarget.style.background = color; e.currentTarget.style.color = 'white'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = color; }}
+      onMouseEnter={e => { e.currentTarget.style.background = hoverBg || color; e.currentTarget.style.color = hoverBg ? color : 'white'; e.currentTarget.style.borderColor = color; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = color; e.currentTarget.style.borderColor = 'var(--cream-dark)'; }}
     >
       {loading ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : icon}
     </button>
