@@ -200,30 +200,32 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .err{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;}
 
 /* UPI MODAL */
-.upi-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s ease;}
-.upi-modal{background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
-.upi-modal-h{font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;font-weight:700;color:#2C1500;margin-bottom:6px;}
-.upi-modal-sub{font-size:13px;color:#A07050;margin-bottom:20px;}
-.upi-amounts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
-.upi-amt-btn{padding:10px 6px;border-radius:9px;border:1.5px solid #EDE3CE;background:#F7F0E2;font-size:14px;font-weight:600;color:#4A2C10;cursor:pointer;transition:.15s;font-family:'DM Sans',sans-serif;}
+.upi-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:20px;animation:fadeIn .2s ease;overflow-y:auto;}
+.upi-modal{background:#fff;border-radius:20px;padding:24px 22px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.upi-modal-h{font-family:'Cormorant Garamond',Georgia,serif;font-size:21px;font-weight:700;color:#2C1500;margin-bottom:4px;}
+.upi-modal-sub{font-size:12px;color:#A07050;margin-bottom:16px;}
+.upi-amounts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:13px;}
+.upi-amt-btn{padding:9px 4px;border-radius:9px;border:1.5px solid #EDE3CE;background:#F7F0E2;font-size:13px;font-weight:600;color:#4A2C10;cursor:pointer;transition:.15s;font-family:'DM Sans',sans-serif;}
 .upi-amt-btn:hover,.upi-amt-btn.sel{border-color:#C8520A;background:#FFF4EB;color:#C8520A;}
-.upi-input-wrap{position:relative;margin-bottom:16px;}
+.upi-input-wrap{position:relative;margin-bottom:13px;}
 .upi-input-pre{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:16px;font-weight:700;color:#C8520A;}
-.upi-input{width:100%;padding:12px 14px 12px 28px;border:1.5px solid #EDE3CE;border-radius:9px;font-size:16px;font-weight:600;color:#2C1500;font-family:'DM Sans',sans-serif;outline:none;transition:.15s;}
+.upi-input{width:100%;padding:11px 14px 11px 28px;border:1.5px solid #EDE3CE;border-radius:9px;font-size:16px;font-weight:600;color:#2C1500;font-family:'DM Sans',sans-serif;outline:none;transition:.15s;-moz-appearance:textfield;}
 .upi-input:focus{border-color:#C8520A;}
-.upi-apps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px;}
-.upi-app-btn{padding:10px 6px;border-radius:9px;border:1.5px solid #EDE3CE;background:#F7F0E2;font-size:12px;font-weight:600;color:#4A2C10;cursor:pointer;transition:.15s;font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;gap:4px;}
-.upi-app-btn:hover{border-color:#C8520A;background:#FFF4EB;color:#C8520A;}
-.upi-app-icon{font-size:20px;}
-.upi-modal-actions{display:flex;gap:10px;}
-.upi-cancel{flex:1;padding:11px;border-radius:9px;border:1.5px solid #EDE3CE;background:#fff;font-size:13px;font-weight:600;color:#7A5538;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;}
-.upi-cancel:hover{background:#F7F0E2;}
-.upi-pay{flex:2;padding:11px;border-radius:9px;border:none;background:#C8520A;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;}
-.upi-pay:hover{background:#9A3C05;}
-.upi-id-copy{display:flex;align-items:center;justify-content:space-between;background:#F7F0E2;border-radius:9px;padding:10px 13px;margin-bottom:16px;border:1px solid #EDE3CE;}
-.upi-id-text{font-size:13px;font-weight:600;color:#2C1500;}
+.upi-input::-webkit-outer-spin-button,.upi-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+/* QR BOX */
+.upi-qr-box{background:linear-gradient(135deg,#FFF8F0,#FFF4EB);border:2px solid #EDE3CE;border-radius:14px;padding:18px 16px;margin-bottom:13px;text-align:center;}
+.upi-qr-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#A07050;font-weight:700;margin-bottom:10px;}
+.upi-qr-img{width:180px;height:180px;border-radius:10px;border:3px solid #fff;box-shadow:0 4px 20px rgba(200,82,10,.15);display:block;margin:0 auto 10px;}
+.upi-qr-hint{font-size:11px;color:#A07050;line-height:1.5;}
+.upi-qr-hint strong{color:#C8520A;}
+.upi-qr-placeholder{width:180px;height:180px;border-radius:10px;background:#F7F0E2;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:13px;color:#A07050;border:2px dashed #EDE3CE;}
+/* ID COPY */
+.upi-id-copy{display:flex;align-items:center;justify-content:space-between;background:#F7F0E2;border-radius:9px;padding:9px 12px;margin-bottom:13px;border:1px solid #EDE3CE;}
+.upi-id-text{font-size:12.5px;font-weight:600;color:#2C1500;}
 .upi-copy-btn{font-size:11px;font-weight:700;color:#C8520A;cursor:pointer;background:none;border:none;font-family:'DM Sans',sans-serif;padding:4px 8px;border-radius:5px;transition:.15s;}
 .upi-copy-btn:hover{background:#FFF4EB;}
+.upi-cancel{width:100%;padding:11px;border-radius:9px;border:1.5px solid #EDE3CE;background:#fff;font-size:13px;font-weight:600;color:#7A5538;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;}
+.upi-cancel:hover{background:#F7F0E2;}
 
 @media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;}.hero-body{padding-left:20px;padding-right:20px;}}
 @media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}}
@@ -260,46 +262,29 @@ function ReadMore({ children, label = 'Read More' }) {
   );
 }
 
-/* ── UPI DONATION MODAL ── */
+/* ── UPI DONATION MODAL (QR Code based — no browser security rejection) ── */
 const PRESET_AMOUNTS = [51, 101, 251, 501, 1001, 5001];
-const UPI_APPS = [
-  { label: 'GPay',    icon: '🟢', scheme: 'gpay'    },
-  { label: 'PhonePe', icon: '💜', scheme: 'phonepe' },
-  { label: 'Paytm',   icon: '🔵', scheme: 'paytm'   },
-];
 
 function UpiModal({ upiId, payeeName, onClose }) {
   const [amount, setAmount] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const buildUpiUrl = (appScheme) => {
+  // Build the UPI string that goes INTO the QR code
+  // When user scans this QR with GPay/PhonePe/Paytm, it opens directly inside the app
+  // — no browser security rejection because the app itself reads the QR
+  const buildUpiString = () => {
     const amt = parseFloat(amount) || 0;
-    if (amt <= 0) { alert('Please enter a valid donation amount.'); return null; }
     const pn  = encodeURIComponent(payeeName || 'Temple Trust');
     const tn  = encodeURIComponent('Donation to ' + (payeeName || 'Temple'));
-    // Standard UPI deep link — works with all UPI apps
-    return `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`;
+    if (amt > 0) {
+      return `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`;
+    }
+    // No amount yet — QR just has UPI ID so user can enter amount in their app
+    return `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&cu=INR&tn=${tn}`;
   };
 
-  const handlePay = () => {
-    const url = buildUpiUrl('upi');
-    if (!url) return;
-    window.location.href = url;
-  };
-
-  const handleAppPay = (scheme) => {
-    const amt = parseFloat(amount) || 0;
-    if (amt <= 0) { alert('Please enter a valid donation amount.'); return; }
-    const pn = encodeURIComponent(payeeName || 'Temple Trust');
-    const tn = encodeURIComponent('Donation to ' + (payeeName || 'Temple'));
-    // App-specific intent URLs for Android; fallback to standard UPI
-    const urls = {
-      gpay:    `gpay://upi/pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`,
-      phonepe: `phonepe://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`,
-      paytm:   `paytmmp://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`,
-    };
-    window.location.href = urls[scheme] || `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`;
-  };
+  // Free QR API — no key needed, works forever
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(buildUpiString())}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(upiId).then(() => {
@@ -312,9 +297,9 @@ function UpiModal({ upiId, payeeName, onClose }) {
     <div className="upi-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="upi-modal">
         <div className="upi-modal-h">🙏 Donate via UPI</div>
-        <div className="upi-modal-sub">Choose an amount and your preferred UPI app</div>
+        <div className="upi-modal-sub">Select amount → scan QR with any UPI app</div>
 
-        {/* Preset amounts */}
+        {/* Step 1 — pick amount */}
         <div className="upi-amounts">
           {PRESET_AMOUNTS.map(a => (
             <button
@@ -332,34 +317,40 @@ function UpiModal({ upiId, payeeName, onClose }) {
             className="upi-input"
             type="number"
             min="1"
-            placeholder="Enter amount"
+            placeholder="Or enter custom amount"
             value={amount}
             onChange={e => setAmount(e.target.value)}
           />
         </div>
 
-        {/* UPI ID copy row */}
+        {/* Step 2 — QR code (updates live as amount changes) */}
+        <div className="upi-qr-box">
+          <div className="upi-qr-label">
+            📱 Scan with GPay · PhonePe · Paytm · Any UPI App
+          </div>
+          <img
+            key={qrUrl}
+            src={qrUrl}
+            alt="UPI Payment QR Code"
+            className="upi-qr-img"
+          />
+          <div className="upi-qr-hint">
+            {amount
+              ? <>QR includes <strong>₹{amount}</strong> — amount is pre-filled in your UPI app</>
+              : <>No amount selected — you can enter it in your UPI app after scanning</>
+            }
+          </div>
+        </div>
+
+        {/* Manual fallback — copy UPI ID */}
         <div className="upi-id-copy">
-          <span className="upi-id-text">UPI: {upiId}</span>
+          <span className="upi-id-text">📋 UPI ID: {upiId}</span>
           <button className="upi-copy-btn" onClick={handleCopy}>
-            {copied ? '✅ Copied' : '📋 Copy'}
+            {copied ? '✅ Copied!' : 'Copy'}
           </button>
         </div>
 
-        {/* App shortcuts */}
-        <div className="upi-apps">
-          {UPI_APPS.map(app => (
-            <button key={app.scheme} className="upi-app-btn" onClick={() => handleAppPay(app.scheme)}>
-              <span className="upi-app-icon">{app.icon}</span>
-              {app.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="upi-modal-actions">
-          <button className="upi-cancel" onClick={onClose}>Cancel</button>
-          <button className="upi-pay" onClick={handlePay}>💳 Pay ₹{amount || '–'}</button>
-        </div>
+        <button className="upi-cancel" onClick={onClose}>Close</button>
       </div>
     </div>
   );
