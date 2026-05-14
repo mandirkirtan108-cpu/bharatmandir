@@ -42,6 +42,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 @keyframes diya{0%,100%{filter:drop-shadow(0 0 14px rgba(255,140,40,.45))}50%{filter:drop-shadow(0 0 28px rgba(255,190,70,.85))}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 /* HERO */
 .hero{position:relative;height:72vh;min-height:460px;max-height:640px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;background:#0D0500;transform:translateZ(0);isolation:isolate;}
@@ -198,6 +199,32 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .spinner{width:42px;height:42px;border:3px solid #EDE3CE;border-top-color:#C8520A;border-radius:50%;animation:spin .75s linear infinite;}
 .err{min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;}
 
+/* UPI MODAL */
+.upi-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s ease;}
+.upi-modal{background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.upi-modal-h{font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;font-weight:700;color:#2C1500;margin-bottom:6px;}
+.upi-modal-sub{font-size:13px;color:#A07050;margin-bottom:20px;}
+.upi-amounts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+.upi-amt-btn{padding:10px 6px;border-radius:9px;border:1.5px solid #EDE3CE;background:#F7F0E2;font-size:14px;font-weight:600;color:#4A2C10;cursor:pointer;transition:.15s;font-family:'DM Sans',sans-serif;}
+.upi-amt-btn:hover,.upi-amt-btn.sel{border-color:#C8520A;background:#FFF4EB;color:#C8520A;}
+.upi-input-wrap{position:relative;margin-bottom:16px;}
+.upi-input-pre{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:16px;font-weight:700;color:#C8520A;}
+.upi-input{width:100%;padding:12px 14px 12px 28px;border:1.5px solid #EDE3CE;border-radius:9px;font-size:16px;font-weight:600;color:#2C1500;font-family:'DM Sans',sans-serif;outline:none;transition:.15s;}
+.upi-input:focus{border-color:#C8520A;}
+.upi-apps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px;}
+.upi-app-btn{padding:10px 6px;border-radius:9px;border:1.5px solid #EDE3CE;background:#F7F0E2;font-size:12px;font-weight:600;color:#4A2C10;cursor:pointer;transition:.15s;font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.upi-app-btn:hover{border-color:#C8520A;background:#FFF4EB;color:#C8520A;}
+.upi-app-icon{font-size:20px;}
+.upi-modal-actions{display:flex;gap:10px;}
+.upi-cancel{flex:1;padding:11px;border-radius:9px;border:1.5px solid #EDE3CE;background:#fff;font-size:13px;font-weight:600;color:#7A5538;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;}
+.upi-cancel:hover{background:#F7F0E2;}
+.upi-pay{flex:2;padding:11px;border-radius:9px;border:none;background:#C8520A;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;}
+.upi-pay:hover{background:#9A3C05;}
+.upi-id-copy{display:flex;align-items:center;justify-content:space-between;background:#F7F0E2;border-radius:9px;padding:10px 13px;margin-bottom:16px;border:1px solid #EDE3CE;}
+.upi-id-text{font-size:13px;font-weight:600;color:#2C1500;}
+.upi-copy-btn{font-size:11px;font-weight:700;color:#C8520A;cursor:pointer;background:none;border:none;font-family:'DM Sans',sans-serif;padding:4px 8px;border-radius:5px;transition:.15s;}
+.upi-copy-btn:hover{background:#FFF4EB;}
+
 @media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;}.hero-body{padding-left:20px;padding-right:20px;}}
 @media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}}
 `;
@@ -233,6 +260,111 @@ function ReadMore({ children, label = 'Read More' }) {
   );
 }
 
+/* ── UPI DONATION MODAL ── */
+const PRESET_AMOUNTS = [51, 101, 251, 501, 1001, 5001];
+const UPI_APPS = [
+  { label: 'GPay',    icon: '🟢', scheme: 'gpay'    },
+  { label: 'PhonePe', icon: '💜', scheme: 'phonepe' },
+  { label: 'Paytm',   icon: '🔵', scheme: 'paytm'   },
+];
+
+function UpiModal({ upiId, payeeName, onClose }) {
+  const [amount, setAmount] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const buildUpiUrl = (appScheme) => {
+    const amt = parseFloat(amount) || 0;
+    if (amt <= 0) { alert('Please enter a valid donation amount.'); return null; }
+    const pn  = encodeURIComponent(payeeName || 'Temple Trust');
+    const tn  = encodeURIComponent('Donation to ' + (payeeName || 'Temple'));
+    // Standard UPI deep link — works with all UPI apps
+    return `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`;
+  };
+
+  const handlePay = () => {
+    const url = buildUpiUrl('upi');
+    if (!url) return;
+    window.location.href = url;
+  };
+
+  const handleAppPay = (scheme) => {
+    const amt = parseFloat(amount) || 0;
+    if (amt <= 0) { alert('Please enter a valid donation amount.'); return; }
+    const pn = encodeURIComponent(payeeName || 'Temple Trust');
+    const tn = encodeURIComponent('Donation to ' + (payeeName || 'Temple'));
+    // App-specific intent URLs for Android; fallback to standard UPI
+    const urls = {
+      gpay:    `gpay://upi/pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`,
+      phonepe: `phonepe://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`,
+      paytm:   `paytmmp://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`,
+    };
+    window.location.href = urls[scheme] || `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`;
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(upiId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="upi-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="upi-modal">
+        <div className="upi-modal-h">🙏 Donate via UPI</div>
+        <div className="upi-modal-sub">Choose an amount and your preferred UPI app</div>
+
+        {/* Preset amounts */}
+        <div className="upi-amounts">
+          {PRESET_AMOUNTS.map(a => (
+            <button
+              key={a}
+              className={`upi-amt-btn${String(amount) === String(a) ? ' sel' : ''}`}
+              onClick={() => setAmount(String(a))}
+            >₹{a}</button>
+          ))}
+        </div>
+
+        {/* Custom amount */}
+        <div className="upi-input-wrap">
+          <span className="upi-input-pre">₹</span>
+          <input
+            className="upi-input"
+            type="number"
+            min="1"
+            placeholder="Enter amount"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+          />
+        </div>
+
+        {/* UPI ID copy row */}
+        <div className="upi-id-copy">
+          <span className="upi-id-text">UPI: {upiId}</span>
+          <button className="upi-copy-btn" onClick={handleCopy}>
+            {copied ? '✅ Copied' : '📋 Copy'}
+          </button>
+        </div>
+
+        {/* App shortcuts */}
+        <div className="upi-apps">
+          {UPI_APPS.map(app => (
+            <button key={app.scheme} className="upi-app-btn" onClick={() => handleAppPay(app.scheme)}>
+              <span className="upi-app-icon">{app.icon}</span>
+              {app.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="upi-modal-actions">
+          <button className="upi-cancel" onClick={onClose}>Cancel</button>
+          <button className="upi-pay" onClick={handlePay}>💳 Pay ₹{amount || '–'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TempleDetailPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -246,6 +378,7 @@ export default function TempleDetailPage() {
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
   const [activeNav,    setActiveNav]    = useState('overview');
+  const [showUpiModal, setShowUpiModal] = useState(false);   // ← new
 
   const { translated: T } = useTranslatedTemple(temple);
 
@@ -348,6 +481,15 @@ export default function TempleDetailPage() {
     <>
       <style>{CSS}</style>
       <Navbar />
+
+      {/* UPI MODAL */}
+      {showUpiModal && (
+        <UpiModal
+          upiId={T.upi_id}
+          payeeName={T.name}
+          onClose={() => setShowUpiModal(false)}
+        />
+      )}
 
       {/* ══ HERO ══ */}
       <div className="hero">
@@ -645,7 +787,17 @@ export default function TempleDetailPage() {
               {T.donation_medical_camps    &&<div className="cause"><div className="cause-i">🏥</div><div className="cause-n">Medical</div></div>}
               {T.donation_general          &&<div className="cause"><div className="cause-i">🙏</div><div className="cause-n">General</div></div>}
             </div>
-            {v(T.upi_id)&&(<><p style={{fontSize:11,textAlign:'center',color:'#A07050',margin:'8px 0 4px'}}>UPI: <strong>{T.upi_id}</strong></p><button className="abtn" onClick={()=>window.open(`upi://pay?pa=${T.upi_id}`)}>💳 Donate via UPI</button></>)}
+            {v(T.upi_id) && (
+              <>
+                <p style={{fontSize:11,textAlign:'center',color:'#A07050',margin:'8px 0 4px'}}>
+                  UPI: <strong>{T.upi_id}</strong>
+                </p>
+                {/* ── FIXED: opens modal instead of bare upi:// link ── */}
+                <button className="abtn" onClick={() => setShowUpiModal(true)}>
+                  💳 Donate via UPI
+                </button>
+              </>
+            )}
             {v(T.certificate_80g_no)&&<p style={{fontSize:11,color:'#1A6B3A',marginTop:8,textAlign:'center'}}>80G Exempt: {T.certificate_80g_no}</p>}
           </div>
         )}
