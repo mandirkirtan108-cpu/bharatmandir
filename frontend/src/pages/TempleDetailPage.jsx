@@ -19,10 +19,10 @@ function formatTime(t) {
   h = h % 12 || 12;
   return `${h}:${m} ${ampm}`;
 }
-function displayFee(fee) {
+function displayFee(fee, freeLabel) {
   if (fee == null || fee === '') return null;
   const n = Number(fee);
-  return isNaN(n) ? null : n === 0 ? 'Free Entry' : `₹${n}`;
+  return isNaN(n) ? null : n === 0 ? freeLabel : `₹${n}`;
 }
 function parseTags(tags) {
   if (!tags) return [];
@@ -88,34 +88,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .il{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#A07050;margin-bottom:4px;font-weight:600;}
 .iv{font-size:14px;font-weight:500;color:#2C1500;line-height:1.4;}
 
-/* ─── TIMING STRIP (fixed) ─── */
-.tstrip{
-  display:flex;gap:0;flex-wrap:wrap;
-  background:#F7F0E2;border-radius:12px;
-  margin-bottom:17px;overflow:hidden;
-  border:1px solid #EDE3CE;
-}
-.tblock{
-  flex:1;min-width:100px;
-  text-align:center;padding:16px 12px;
-  position:relative;
-}
-.tblock+.tblock::before{
-  content:'';position:absolute;
-  left:0;top:18%;height:64%;width:1px;
-  background:#DDD0B8;
-}
-/* Single readable font for all time values */
-.tval{
-  font-family:'DM Sans',system-ui,sans-serif;
-  font-size:16px;font-weight:700;
-  color:#C8520A;letter-spacing:.01em;line-height:1.3;
-}
-.tlbl{
-  font-size:10px;text-transform:uppercase;
-  letter-spacing:.1em;color:#A07050;
-  margin-top:5px;font-weight:600;
-}
+/* TIMING STRIP */
+.tstrip{display:flex;gap:0;flex-wrap:wrap;background:#F7F0E2;border-radius:12px;margin-bottom:17px;overflow:hidden;border:1px solid #EDE3CE;}
+.tblock{flex:1;min-width:100px;text-align:center;padding:16px 12px;position:relative;}
+.tblock+.tblock::before{content:'';position:absolute;left:0;top:18%;height:64%;width:1px;background:#DDD0B8;}
+.tval{font-family:'DM Sans',system-ui,sans-serif;font-size:16px;font-weight:700;color:#C8520A;letter-spacing:.01em;line-height:1.3;}
+.tlbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#A07050;margin-top:5px;font-weight:600;}
 
 /* READ MORE */
 .rm-btn{display:inline-flex;align-items:center;gap:5px;margin-top:14px;padding:7px 20px;border-radius:50px;border:1.5px solid #C8520A;background:transparent;color:#C8520A;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;}
@@ -213,14 +191,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .upi-input{width:100%;padding:11px 14px 11px 28px;border:1.5px solid #EDE3CE;border-radius:9px;font-size:16px;font-weight:600;color:#2C1500;font-family:'DM Sans',sans-serif;outline:none;transition:.15s;-moz-appearance:textfield;}
 .upi-input:focus{border-color:#C8520A;}
 .upi-input::-webkit-outer-spin-button,.upi-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
-/* QR BOX */
 .upi-qr-box{background:linear-gradient(135deg,#FFF8F0,#FFF4EB);border:2px solid #EDE3CE;border-radius:14px;padding:18px 16px;margin-bottom:13px;text-align:center;}
 .upi-qr-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#A07050;font-weight:700;margin-bottom:10px;}
 .upi-qr-img{width:180px;height:180px;border-radius:10px;border:3px solid #fff;box-shadow:0 4px 20px rgba(200,82,10,.15);display:block;margin:0 auto 10px;}
 .upi-qr-hint{font-size:11px;color:#A07050;line-height:1.5;}
 .upi-qr-hint strong{color:#C8520A;}
-.upi-qr-placeholder{width:180px;height:180px;border-radius:10px;background:#F7F0E2;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:13px;color:#A07050;border:2px dashed #EDE3CE;}
-/* ID COPY */
 .upi-id-copy{display:flex;align-items:center;justify-content:space-between;background:#F7F0E2;border-radius:9px;padding:9px 12px;margin-bottom:13px;border:1px solid #EDE3CE;}
 .upi-id-text{font-size:12.5px;font-weight:600;color:#2C1500;}
 .upi-copy-btn{font-size:11px;font-weight:700;color:#C8520A;cursor:pointer;background:none;border:none;font-family:'DM Sans',sans-serif;padding:4px 8px;border-radius:5px;transition:.15s;}
@@ -251,28 +226,24 @@ function SLabel({ text }) {
   return <p className="slbl">{text}</p>;
 }
 
-function ReadMore({ children, label = 'Read More' }) {
+function ReadMore({ children, label, showLessLabel }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
       {open && <div style={{marginTop:14}}>{children}</div>}
       <button className="rm-btn" onClick={() => setOpen(o => !o)}>
-        {open ? '▲ Show Less' : `▼ ${label}`}
+        {open ? `▲ ${showLessLabel}` : `▼ ${label}`}
       </button>
     </div>
   );
 }
 
-/* ── UPI DONATION MODAL (QR Code based — no browser security rejection) ── */
 const PRESET_AMOUNTS = [51, 101, 251, 501, 1001, 5001];
 
-function UpiModal({ upiId, payeeName, onClose }) {
+function UpiModal({ upiId, payeeName, onClose, tFn }) {
   const [amount, setAmount] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Build the UPI string that goes INTO the QR code
-  // When user scans this QR with GPay/PhonePe/Paytm, it opens directly inside the app
-  // — no browser security rejection because the app itself reads the QR
   const buildUpiString = () => {
     const amt = parseFloat(amount) || 0;
     const pn  = encodeURIComponent(payeeName || 'Temple Trust');
@@ -280,11 +251,9 @@ function UpiModal({ upiId, payeeName, onClose }) {
     if (amt > 0) {
       return `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&am=${amt.toFixed(2)}&cu=INR&tn=${tn}`;
     }
-    // No amount yet — QR just has UPI ID so user can enter amount in their app
     return `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${pn}&cu=INR&tn=${tn}`;
   };
 
-  // Free QR API — no key needed, works forever
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(buildUpiString())}`;
 
   const handleCopy = () => {
@@ -297,10 +266,8 @@ function UpiModal({ upiId, payeeName, onClose }) {
   return (
     <div className="upi-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="upi-modal">
-        <div className="upi-modal-h">🙏 Donate via UPI</div>
-        <div className="upi-modal-sub">Select amount → scan QR with any UPI app</div>
-
-        {/* Step 1 — pick amount */}
+        <div className="upi-modal-h">{tFn('upi.title')}</div>
+        <div className="upi-modal-sub">{tFn('upi.subtitle')}</div>
         <div className="upi-amounts">
           {PRESET_AMOUNTS.map(a => (
             <button
@@ -310,48 +277,34 @@ function UpiModal({ upiId, payeeName, onClose }) {
             >₹{a}</button>
           ))}
         </div>
-
-        {/* Custom amount */}
         <div className="upi-input-wrap">
           <span className="upi-input-pre">₹</span>
           <input
             className="upi-input"
             type="number"
             min="1"
-            placeholder="Or enter custom amount"
+            placeholder={tFn('upi.custom_placeholder')}
             value={amount}
             onChange={e => setAmount(e.target.value)}
           />
         </div>
-
-        {/* Step 2 — QR code (updates live as amount changes) */}
         <div className="upi-qr-box">
-          <div className="upi-qr-label">
-            📱 Scan with GPay · PhonePe · Paytm · Any UPI App
-          </div>
-          <img
-            key={qrUrl}
-            src={qrUrl}
-            alt="UPI Payment QR Code"
-            className="upi-qr-img"
-          />
+          <div className="upi-qr-label">{tFn('upi.scan_label')}</div>
+          <img key={qrUrl} src={qrUrl} alt="UPI Payment QR Code" className="upi-qr-img" />
           <div className="upi-qr-hint">
             {amount
-              ? <>QR includes <strong>₹{amount}</strong> — amount is pre-filled in your UPI app</>
-              : <>No amount selected — you can enter it in your UPI app after scanning</>
+              ? <>{tFn('upi.amount_prefilled', { amount })}</>
+              : <>{tFn('upi.no_amount')}</>
             }
           </div>
         </div>
-
-        {/* Manual fallback — copy UPI ID */}
         <div className="upi-id-copy">
-          <span className="upi-id-text">📋 UPI ID: {upiId}</span>
+          <span className="upi-id-text">{tFn('upi.upi_id_label')}: {upiId}</span>
           <button className="upi-copy-btn" onClick={handleCopy}>
-            {copied ? '✅ Copied!' : 'Copy'}
+            {copied ? tFn('upi.copied') : tFn('upi.copy')}
           </button>
         </div>
-
-        <button className="upi-cancel" onClick={onClose}>Close</button>
+        <button className="upi-cancel" onClick={onClose}>{tFn('upi.close')}</button>
       </div>
     </div>
   );
@@ -370,7 +323,7 @@ export default function TempleDetailPage() {
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
   const [activeNav,    setActiveNav]    = useState('overview');
-  const [showUpiModal, setShowUpiModal] = useState(false);   // ← new
+  const [showUpiModal, setShowUpiModal] = useState(false);
 
   const { translated: T } = useTranslatedTemple(temple);
   const { t } = useTranslation();
@@ -396,15 +349,15 @@ export default function TempleDetailPage() {
         if (ps.status === 'fulfilled') setPujaSchedule(ps.value.data || []);
         if (pr.status === 'fulfilled') setPriests(pr.value.data      || []);
       } catch (err) {
-        setError(err?.response?.status === 404 ? 'Temple not found.' : 'Failed to load temple.');
+        setError(err?.response?.status === 404 ? t('detail.not_found') : t('detail.load_error'));
       } finally { setLoading(false); }
     };
     load();
     window.scrollTo(0, 0);
   }, [slug, navigate]);
 
-  if (loading) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/><span style={{color:'#A07050',fontSize:14}}>Loading temple…</span></div></>);
-  if (error)   return (<><style>{CSS}</style><Navbar/><div className="err"><div style={{fontSize:60}}>🛕</div><h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28}}>Temple Not Found</h2><p style={{color:'#A07050'}}>{error}</p><button style={{marginTop:16,padding:'10px 22px',background:'#C8520A',color:'#fff',border:'none',borderRadius:9,cursor:'pointer',fontSize:14}} onClick={()=>navigate('/')}>← All Temples</button></div></>);
+  if (loading) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/><span style={{color:'#A07050',fontSize:14}}>{t('detail.loading_temple')}</span></div></>);
+  if (error)   return (<><style>{CSS}</style><Navbar/><div className="err"><div style={{fontSize:60}}>🛕</div><h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28}}>{t('detail.temple_not_found')}</h2><p style={{color:'#A07050'}}>{error}</p><button style={{marginTop:16,padding:'10px 22px',background:'#C8520A',color:'#fff',border:'none',borderRadius:9,cursor:'pointer',fontSize:14}} onClick={()=>navigate('/')}>{t('detail.back_home')}</button></div></>);
   if (!T) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/></div></>);
 
   const heroImg   = proxyImageUrl(T.hero_image_url);
@@ -412,7 +365,7 @@ export default function TempleDetailPage() {
   const closeTime = formatTime(T.closing_time);
   const acStart   = formatTime(T.afternoon_closure_start);
   const acEnd     = formatTime(T.afternoon_closure_end);
-  const fee       = displayFee(T.entry_fee);
+  const fee       = displayFee(T.entry_fee, t('detail.free_entry'));
   const tags      = parseTags(T.category_tags);
   const mapsUrl   = T.latitude ? `https://www.google.com/maps/search/?api=1&query=${T.latitude},${T.longitude}` : T.google_maps_link || null;
 
@@ -426,31 +379,41 @@ export default function TempleDetailPage() {
   ].filter(([k]) => T[k]);
 
   const facilities = [
-    ['facility_electricity','⚡ Electricity'],['facility_water_supply','💧 Water'],
-    ['facility_clean_toilets','🚻 Toilets'],['facility_wheelchair','♿ Wheelchair Access'],
-    ['facility_dharamshala','🏠 Dharamshala'],['facility_prasad_dining','🍱 Prasad Dining'],
-    ['facility_parking','🅿️ Parking'],['facility_security','🔒 Security'],
-    ['facility_cctv','📹 CCTV'],['facility_pa_system','🔊 PA System'],
-    ['facility_internet_wifi','📶 WiFi'],['facility_library_pathshala','📚 Library'],
-    ['facility_gaushaala','🐄 Gaushaala'],['facility_medical_support','🏥 Medical Support'],
+    ['facility_electricity',    `⚡ ${t('detail.fac_electricity', { defaultValue: 'Electricity' })}`],
+    ['facility_water_supply',   `💧 ${t('detail.fac_water',       { defaultValue: 'Water' })}`],
+    ['facility_clean_toilets',  `🚻 ${t('detail.fac_toilets',     { defaultValue: 'Toilets' })}`],
+    ['facility_wheelchair',     `♿ ${t('detail.fac_wheelchair',  { defaultValue: 'Wheelchair Access' })}`],
+    ['facility_dharamshala',    `🏠 ${t('detail.fac_dharamshala',{ defaultValue: 'Dharamshala' })}`],
+    ['facility_prasad_dining',  `🍱 ${t('detail.fac_prasad',     { defaultValue: 'Prasad Dining' })}`],
+    ['facility_parking',        `🅿️ ${t('detail.fac_parking',    { defaultValue: 'Parking' })}`],
+    ['facility_security',       `🔒 ${t('detail.fac_security',   { defaultValue: 'Security' })}`],
+    ['facility_cctv',           `📹 ${t('detail.fac_cctv',       { defaultValue: 'CCTV' })}`],
+    ['facility_pa_system',      `🔊 ${t('detail.fac_pa',         { defaultValue: 'PA System' })}`],
+    ['facility_internet_wifi',  `📶 ${t('detail.fac_wifi',       { defaultValue: 'WiFi' })}`],
+    ['facility_library_pathshala',`📚 ${t('detail.fac_library',  { defaultValue: 'Library' })}`],
+    ['facility_gaushaala',      `🐄 ${t('detail.fac_gaushaala',  { defaultValue: 'Gaushaala' })}`],
+    ['facility_medical_support',`🏥 ${t('detail.fac_medical',    { defaultValue: 'Medical Support' })}`],
   ].filter(([k]) => T[k]);
 
   const programs = [
-    ['prog_free_food','🍱 Free Food (Annadanam)'],['prog_medical_camps','🏥 Medical Camps'],
-    ['prog_scholarship_edu','📚 Scholarship & Education'],['prog_womens_selfhelp','👩 Women Self-Help'],
-    ['prog_bhajan_kirtan','🎵 Bhajan & Kirtan'],['prog_disaster_relief','🆘 Disaster Relief'],
+    ['prog_free_food',       `🍱 ${t('detail.prog_annadanam',   { defaultValue: 'Free Food (Annadanam)' })}`],
+    ['prog_medical_camps',   `🏥 ${t('detail.prog_medical',     { defaultValue: 'Medical Camps' })}`],
+    ['prog_scholarship_edu', `📚 ${t('detail.prog_scholarship', { defaultValue: 'Scholarship & Education' })}`],
+    ['prog_womens_selfhelp', `👩 ${t('detail.prog_womens',      { defaultValue: "Women Self-Help" })}`],
+    ['prog_bhajan_kirtan',   `🎵 ${t('detail.prog_bhajan',      { defaultValue: 'Bhajan & Kirtan' })}`],
+    ['prog_disaster_relief', `🆘 ${t('detail.prog_disaster',    { defaultValue: 'Disaster Relief' })}`],
   ].filter(([k]) => T[k]);
 
   const navItems = [
-    { id:'overview',   label: t('detail.info_title'),       show: true },
-    { id:'history',    label: t('detail.history_title'),    show: v(T.history)||v(T.significance)||v(T.puranic_stories) },
-    { id:'puja',       label: 'Puja',                       show: pujaSchedule.length>0 || pujaServices.length>0 },
-    { id:'mantras',    label: t('detail.mantras_title'),    show: mantras.length>0 },
-    { id:'festivals',  label: t('detail.festivals_title'),  show: festivals.length>0 },
-    { id:'sevas',      label: t('detail.sevas_title'),      show: sevas.length>0 },
-    { id:'facilities', label: 'Facilities',                 show: facilities.length>0||programs.length>0 },
-    { id:'priests',    label: 'Priests',                    show: priests.length>0 },
-    { id:'contact',    label: 'Contact',                    show: true },
+    { id:'overview',   label: t('detail.info_title'),         show: true },
+    { id:'history',    label: t('detail.history_title'),      show: v(T.history)||v(T.significance)||v(T.puranic_stories) },
+    { id:'puja',       label: t('detail.puja_nav'),           show: pujaSchedule.length>0 || pujaServices.length>0 },
+    { id:'mantras',    label: t('detail.mantras_title'),      show: mantras.length>0 },
+    { id:'festivals',  label: t('detail.festivals_title'),    show: festivals.length>0 },
+    { id:'sevas',      label: t('detail.sevas_title'),        show: sevas.length>0 },
+    { id:'facilities', label: t('detail.facilities_nav'),     show: facilities.length>0||programs.length>0 },
+    { id:'priests',    label: t('detail.priests_nav'),        show: priests.length>0 },
+    { id:'contact',    label: t('detail.contact_nav'),        show: true },
   ].filter(n => n.show);
 
   const scrollTo = (id) => {
@@ -470,17 +433,19 @@ export default function TempleDetailPage() {
     { label: t('detail.dress_code'),    value: T.dress_code, icon:'👗' },
   ].filter(i => v(i.value)).slice(0, 6);
 
+  const showLess = t('detail.show_less');
+
   return (
     <>
       <style>{CSS}</style>
       <Navbar />
 
-      {/* UPI MODAL */}
       {showUpiModal && (
         <UpiModal
           upiId={T.upi_id}
           payeeName={T.name}
           onClose={() => setShowUpiModal(false)}
+          tFn={t}
         />
       )}
 
@@ -490,24 +455,24 @@ export default function TempleDetailPage() {
         <div className="hero-grad"/>
         <div className="hero-body">
           <div className="hero-bc">
-            <a href="/">Home</a><sep>/</sep>
+            <a href="/">{t('breadcrumb.home')}</a><sep>/</sep>
             <span>{T.state}</span><sep>/</sep>
             <span>{T.city}</span><sep>/</sep>
             <span>{T.name}</span>
           </div>
           <div className="badges">
-            {T.is_jyotirlinga      && <span className="badge saffron">⚡ Jyotirlinga</span>}
-            {T.is_shaktipeeth      && <span className="badge saffron">🌸 Shaktipeeth</span>}
+            {T.is_jyotirlinga      && <span className="badge saffron">⚡ {t('badge.jyotirlinga')}</span>}
+            {T.is_shaktipeeth      && <span className="badge saffron">🌸 {t('badge.shaktipeeth')}</span>}
             {T.is_char_dham        && <span className="badge saffron">🔱 Char Dham</span>}
             {T.is_ashtavinayak     && <span className="badge saffron">🐘 Ashtavinayak</span>}
             {T.is_divya_desam      && <span className="badge saffron">🪷 Divya Desam</span>}
             {T.is_pancha_bhuta     && <span className="badge saffron">🌊 Pancha Bhuta</span>}
             {T.is_51_shakti_peeths && <span className="badge saffron">51 Shakti Peeths</span>}
-            {T.is_heritage_site    && <span className="badge blue">🏛️ Heritage</span>}
+            {T.is_heritage_site    && <span className="badge blue">🏛️ {t('badge.heritage')}</span>}
             {T.is_unesco_heritage  && <span className="badge blue">🌍 UNESCO</span>}
             {T.is_state_heritage   && <span className="badge blue">⭐ State Heritage</span>}
             {T.is_asi_protected    && <span className="badge blue">🏺 ASI Protected</span>}
-            {T.verified            && <span className="badge green">✓ Verified</span>}
+            {T.verified            && <span className="badge green">✓ {t('badge.verified')}</span>}
             {v(T.sect)             && <span className="badge saffron">{T.sect}</span>}
           </div>
           <h1 className="hero-h1">{T.name}</h1>
@@ -525,14 +490,13 @@ export default function TempleDetailPage() {
 
       <div className="wrap">
         {tags.length > 0 && (
-          <div className="tags">{tags.map(t=><span key={t} className="tag">#{t}</span>)}</div>
+          <div className="tags">{tags.map(tg=><span key={tg} className="tag">#{tg}</span>)}</div>
         )}
 
         {/* ── OVERVIEW ── */}
         <div className="sec" id="overview">
           <div className="sec-h"><div className="sec-icon">🛕</div>{t('detail.info_title')}</div>
 
-          {/* ── Timing strip — clean, readable ── */}
           {(openTime || fee || acStart) && (
             <div className="tstrip">
               {openTime  && (
@@ -562,7 +526,7 @@ export default function TempleDetailPage() {
               {v(T.prasad_type) && (
                 <div className="tblock">
                   <div className="tval">{T.prasad_type}</div>
-                  <div className="tlbl">Prasad</div>
+                  <div className="tlbl">{t('detail.prasad')}</div>
                 </div>
               )}
             </div>
@@ -577,7 +541,7 @@ export default function TempleDetailPage() {
             ))}
           </div>
 
-          <ReadMore label={t('detail.more_details')}>
+          <ReadMore label={t('detail.more_details')} showLessLabel={showLess}>
             <div className="ig">
               <II label={t('detail.temple_type')}        value={T.temple_type}/>
               <II label={t('detail.founded_by')}         value={T.founded_by}/>
@@ -604,12 +568,12 @@ export default function TempleDetailPage() {
             {v(T.history) && (
               <p className="prose" style={{display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden',marginBottom:0}}>{T.history}</p>
             )}
-            <ReadMore label={t('detail.read_full_history')}>
+            <ReadMore label={t('detail.read_full_history')} showLessLabel={showLess}>
               {v(T.history)         && <p className="prose">{T.history}</p>}
               {v(T.sthala_purana)   && <p className="prose prose-sm" style={{fontStyle:'italic',marginBottom:14}}>{T.sthala_purana}</p>}
-              {v(T.puranic_stories) && (<div className="puranic"><div className="puranic-lbl">📖 Puranic Story</div><p className="prose-sm" style={{fontStyle:'italic'}}>{T.puranic_stories}</p></div>)}
+              {v(T.puranic_stories) && (<div className="puranic"><div className="puranic-lbl">{t('detail.puranic_story')}</div><p className="prose-sm" style={{fontStyle:'italic'}}>{T.puranic_stories}</p></div>)}
               {v(T.significance)    && (<div className="significance"><div className="sig-lbl">✨ {t('detail.why_visit')}</div><p style={{fontSize:14,lineHeight:1.8,color:'#7A5538'}}>{T.significance}</p></div>)}
-              {v(T.history_hindi)   && (<div className="hindi-block"><div className="hindi-lbl">हिंदी में इतिहास</div><p style={{fontFamily:"'Noto Sans Devanagari',sans-serif",fontSize:14,lineHeight:1.9,color:'#7A5538'}}>{T.history_hindi}</p></div>)}
+              {v(T.history_hindi)   && (<div className="hindi-block"><div className="hindi-lbl">{t('detail.hindi_history_label')}</div><p style={{fontFamily:"'Noto Sans Devanagari',sans-serif",fontSize:14,lineHeight:1.9,color:'#7A5538'}}>{T.history_hindi}</p></div>)}
             </ReadMore>
           </div>
         )}
@@ -625,14 +589,16 @@ export default function TempleDetailPage() {
               </div>
             ))}
             {(pujaSchedule.length > 3 || pujaServices.length > 0) && (
-              <ReadMore label={t('detail.view_full_schedule')}>
+              <ReadMore label={t('detail.view_full_schedule')} showLessLabel={showLess}>
                 {pujaSchedule.slice(3).map((p,i)=>(
                   <div key={i} className="prow">
                     <span className="pname">{p.puja_name}</span>
                     <span className="ptime">{formatTime(p.puja_time)}</span>
                   </div>
                 ))}
-                {pujaServices.length > 0 && (<><div style={{height:14}}/><SLabel text="Available Puja Services"/><div className="chip-grid">{pujaServices.map(([,name])=>(<div key={name} className="chip chip-saffron"><div className="dot"/>{name}</div>))}</div></>)}
+                {pujaServices.length > 0 && (
+                  <><div style={{height:14}}/><SLabel text={t('detail.available_puja_services')}/><div className="chip-grid">{pujaServices.map(([,name])=>(<div key={name} className="chip chip-saffron"><div className="dot"/>{name}</div>))}</div></>
+                )}
               </ReadMore>
             )}
           </div>
@@ -647,7 +613,7 @@ export default function TempleDetailPage() {
               {mantras[0].sanskrit && <div className="m-sk" style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{mantras[0].sanskrit}</div>}
             </div>
             {mantras.length > 1 && (
-              <ReadMore label="View All Mantras">
+              <ReadMore label={t('detail.view_all_mantras')} showLessLabel={showLess}>
                 {mantras.slice(0).map(m=>(
                   <div key={m.id} className="mantra">
                     <div className="m-title">{m.title}{m.mantra_type&&<span style={{opacity:.4,fontWeight:400,marginLeft:8,fontSize:11}}>· {m.mantra_type}</span>}</div>
@@ -664,25 +630,25 @@ export default function TempleDetailPage() {
         {/* ── FESTIVALS ── */}
         {festivals.length > 0 && (
           <div className="sec" id="festivals">
-            <div className="sec-h"><div className="sec-icon">🎉</div>Annual Festivals</div>
+            <div className="sec-h"><div className="sec-icon">🎉</div>{t('detail.annual_festivals')}</div>
             {festivals.slice(0,2).map((f,i)=>(
               <div key={i} className="fest">
                 <div className="fest-mo">{f.month?MONTHS[f.month]:'—'}</div>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:15,fontWeight:700,color:'#2C1500'}}>{f.name}{f.is_major&&<span className="major">★ Major</span>}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:'#2C1500'}}>{f.name}{f.is_major&&<span className="major">{t('detail.major_star')}</span>}</div>
                   {f.description&&<p style={{fontSize:13,color:'#A07050',lineHeight:1.6,marginTop:4}}>{f.description}</p>}
                 </div>
               </div>
             ))}
             {festivals.length > 2 && (
-              <ReadMore label={`View All ${festivals.length} Festivals`}>
+              <ReadMore label={t('detail.view_all_festivals', { count: festivals.length })} showLessLabel={showLess}>
                 {festivals.slice(2).map((f,i)=>(
                   <div key={i} className="fest">
                     <div className="fest-mo">{f.month?MONTHS[f.month]:'—'}</div>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:15,fontWeight:700,color:'#2C1500'}}>{f.name}{f.is_major&&<span className="major">★ Major</span>}</div>
-                      {f.hindu_month&&<div style={{fontSize:11,color:'#C8520A',marginTop:2}}>{f.hindu_month} Month</div>}
-                      {f.duration_days&&<div style={{fontSize:11,color:'#A07050',marginTop:2}}>{f.duration_days} day{f.duration_days>1?'s':''}</div>}
+                      <div style={{fontSize:15,fontWeight:700,color:'#2C1500'}}>{f.name}{f.is_major&&<span className="major">{t('detail.major_star')}</span>}</div>
+                      {f.hindu_month&&<div style={{fontSize:11,color:'#C8520A',marginTop:2}}>{f.hindu_month} {t('detail.month_label')}</div>}
+                      {f.duration_days&&<div style={{fontSize:11,color:'#A07050',marginTop:2}}>{f.duration_days} {f.duration_days>1? t('festival.days') : t('festival.day')}</div>}
                       {f.description&&<p style={{fontSize:13,color:'#A07050',lineHeight:1.6,marginTop:6}}>{f.description}</p>}
                       {f.significance&&<p style={{fontSize:12,color:'#A07050',lineHeight:1.5,marginTop:4,fontStyle:'italic'}}>{f.significance}</p>}
                     </div>
@@ -696,27 +662,27 @@ export default function TempleDetailPage() {
         {/* ── SEVAS ── */}
         {sevas.length > 0 && (
           <div className="sec" id="sevas">
-            <div className="sec-h"><div className="sec-icon">🙏</div>Sevas & Offerings</div>
+            <div className="sec-h"><div className="sec-icon">🙏</div>{t('detail.sevas_offerings')}</div>
             {sevas.slice(0,3).map(s=>(
               <div key={s.id} className="seva">
                 <div>
                   <div style={{fontSize:14,fontWeight:500,color:'#2C1500'}}>{s.name}</div>
                   {s.description&&<div style={{fontSize:12,color:'#A07050',marginTop:2}}>{s.description}</div>}
                 </div>
-                <div className="seva-price">{s.is_free?'✅ Free':s.price?`₹${s.price}`:'—'}</div>
+                <div className="seva-price">{s.is_free? t('detail.free_label') :s.price?`₹${s.price}`:'—'}</div>
               </div>
             ))}
             {sevas.length > 3 && (
-              <ReadMore label={`View All ${sevas.length} Sevas`}>
+              <ReadMore label={t('detail.view_all_sevas', { count: sevas.length })} showLessLabel={showLess}>
                 {sevas.slice(3).map(s=>(
                   <div key={s.id} className="seva">
                     <div>
                       <div style={{fontSize:14,fontWeight:500,color:'#2C1500'}}>{s.name}</div>
                       {s.description&&<div style={{fontSize:12,color:'#A07050',marginTop:2}}>{s.description}</div>}
                       {s.timing&&<div style={{fontSize:11,color:'#A07050',marginTop:3}}>⏰ {s.timing}</div>}
-                      {s.advance_booking&&<div style={{fontSize:11,color:'#C8520A',marginTop:3,fontWeight:600}}>📅 Advance booking required</div>}
+                      {s.advance_booking&&<div style={{fontSize:11,color:'#C8520A',marginTop:3,fontWeight:600}}>📅 {t('detail.advance_booking')}</div>}
                     </div>
-                    <div className="seva-price">{s.is_free?'✅ Free':s.price?`₹${s.price}`:'—'}</div>
+                    <div className="seva-price">{s.is_free? t('detail.free_label') :s.price?`₹${s.price}`:'—'}</div>
                   </div>
                 ))}
               </ReadMore>
@@ -727,12 +693,16 @@ export default function TempleDetailPage() {
         {/* ── FACILITIES & PROGRAMS ── */}
         {(facilities.length>0 || programs.length>0) && (
           <div className="sec" id="facilities">
-            <div className="sec-h"><div className="sec-icon">🏗️</div>Facilities & Programs</div>
-            {facilities.length > 0 && (<><SLabel text="Available Facilities"/><div className="chip-grid">{facilities.slice(0,4).map(([,name])=><div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}</div></>)}
+            <div className="sec-h"><div className="sec-icon">🏗️</div>{t('detail.facilities_programs')}</div>
+            {facilities.length > 0 && (
+              <><SLabel text={t('detail.available_facilities')}/><div className="chip-grid">{facilities.slice(0,4).map(([,name])=><div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}</div></>
+            )}
             {(facilities.length > 4 || programs.length > 0) && (
-              <ReadMore label="View All Facilities & Programs">
+              <ReadMore label={t('detail.view_all_facilities_btn')} showLessLabel={showLess}>
                 {facilities.length > 4 && <div className="chip-grid" style={{marginBottom:8}}>{facilities.slice(4).map(([,name])=><div key={name} className="chip chip-green"><span>✓</span>{name}</div>)}</div>}
-                {programs.length > 0 && (<><div style={{height:10}}/><SLabel text="Community Programs"/><div className="chip-grid">{programs.map(([,name])=><div key={name} className="chip chip-blue">{name}</div>)}</div></>)}
+                {programs.length > 0 && (
+                  <><div style={{height:10}}/><SLabel text={t('detail.community_programs')}/><div className="chip-grid">{programs.map(([,name])=><div key={name} className="chip chip-blue">{name}</div>)}</div></>
+                )}
               </ReadMore>
             )}
           </div>
@@ -741,23 +711,23 @@ export default function TempleDetailPage() {
         {/* ── PRIESTS ── */}
         {priests.length > 0 && (
           <div className="sec" id="priests">
-            <div className="sec-h"><div className="sec-icon">🧘</div>Head Priests & Staff</div>
+            <div className="sec-h"><div className="sec-icon">🧘</div>{t('detail.head_priests')}</div>
             {priests.slice(0,2).map(p=>(
               <div key={p.id} className="priest">
-                <div className="priest-name">{p.full_name}{p.is_head_priest&&<span className="priest-head">Head Priest</span>}</div>
+                <div className="priest-name">{p.full_name}{p.is_head_priest&&<span className="priest-head">{t('detail.head_priest_badge')}</span>}</div>
                 {p.title_designation&&<div className="priest-d">🪷 {p.title_designation}</div>}
-                {p.years_of_service&&<div className="priest-d">⏳ Serving {p.years_of_service} years</div>}
+                {p.years_of_service&&<div className="priest-d">⏳ {t('detail.serving_years', { years: p.years_of_service })}</div>}
               </div>
             ))}
             {priests.length > 2 && (
-              <ReadMore label="View All Priests">
+              <ReadMore label={t('detail.view_all_priests')} showLessLabel={showLess}>
                 {priests.slice(2).map(p=>(
                   <div key={p.id} className="priest">
-                    <div className="priest-name">{p.full_name}{p.is_head_priest&&<span className="priest-head">Head Priest</span>}</div>
+                    <div className="priest-name">{p.full_name}{p.is_head_priest&&<span className="priest-head">{t('detail.head_priest_badge')}</span>}</div>
                     {p.title_designation&&<div className="priest-d">🪷 {p.title_designation}</div>}
-                    {p.sampradaya      &&<div className="priest-d">📿 Sampradaya: {p.sampradaya}</div>}
-                    {p.years_of_service&&<div className="priest-d">⏳ Serving {p.years_of_service} years</div>}
-                    {p.languages_known &&<div className="priest-d">🗣️ Languages: {p.languages_known}</div>}
+                    {p.sampradaya      &&<div className="priest-d">📿 {t('detail.sampradaya')}: {p.sampradaya}</div>}
+                    {p.years_of_service&&<div className="priest-d">⏳ {t('detail.serving_years', { years: p.years_of_service })}</div>}
+                    {p.languages_known &&<div className="priest-d">🗣️ {t('detail.languages')}: {p.languages_known}</div>}
                     {p.qualification   &&<div className="priest-d">🎓 {p.qualification}</div>}
                   </div>
                 ))}
@@ -769,54 +739,53 @@ export default function TempleDetailPage() {
         {/* ── DONATIONS ── */}
         {T.accept_online_donations && (
           <div className="card">
-            <div className="card-h">💰 Support This Temple</div>
-            <p style={{fontSize:12,color:'#A07050',marginBottom:10}}>Your donation maintains this sacred space</p>
+            <div className="card-h">{t('detail.support_temple')}</div>
+            <p style={{fontSize:12,color:'#A07050',marginBottom:10}}>{t('detail.donation_subtitle')}</p>
             <div className="dc">
-              {T.donation_temple_renovation&&<div className="cause"><div className="cause-i">🛕</div><div className="cause-n">Renovation</div></div>}
-              {T.donation_annadanam        &&<div className="cause"><div className="cause-i">🍱</div><div className="cause-n">Annadanam</div></div>}
-              {T.donation_priest_salary    &&<div className="cause"><div className="cause-i">🧘</div><div className="cause-n">Priest Salary</div></div>}
-              {T.donation_vedic_education  &&<div className="cause"><div className="cause-i">📚</div><div className="cause-n">Vedic Edu</div></div>}
-              {T.donation_festival         &&<div className="cause"><div className="cause-i">🎉</div><div className="cause-n">Festivals</div></div>}
-              {T.donation_medical_camps    &&<div className="cause"><div className="cause-i">🏥</div><div className="cause-n">Medical</div></div>}
-              {T.donation_general          &&<div className="cause"><div className="cause-i">🙏</div><div className="cause-n">General</div></div>}
+              {T.donation_temple_renovation&&<div className="cause"><div className="cause-i">🛕</div><div className="cause-n">{t('detail.cause_renovation')}</div></div>}
+              {T.donation_annadanam        &&<div className="cause"><div className="cause-i">🍱</div><div className="cause-n">{t('detail.cause_annadanam')}</div></div>}
+              {T.donation_priest_salary    &&<div className="cause"><div className="cause-i">🧘</div><div className="cause-n">{t('detail.cause_priest')}</div></div>}
+              {T.donation_vedic_education  &&<div className="cause"><div className="cause-i">📚</div><div className="cause-n">{t('detail.cause_vedic')}</div></div>}
+              {T.donation_festival         &&<div className="cause"><div className="cause-i">🎉</div><div className="cause-n">{t('detail.cause_festival')}</div></div>}
+              {T.donation_medical_camps    &&<div className="cause"><div className="cause-i">🏥</div><div className="cause-n">{t('detail.cause_medical')}</div></div>}
+              {T.donation_general          &&<div className="cause"><div className="cause-i">🙏</div><div className="cause-n">{t('detail.cause_general')}</div></div>}
             </div>
             {v(T.upi_id) && (
               <>
                 <p style={{fontSize:11,textAlign:'center',color:'#A07050',margin:'8px 0 4px'}}>
-                  UPI: <strong>{T.upi_id}</strong>
+                  {t('detail.upi_id_label')}: <strong>{T.upi_id}</strong>
                 </p>
-                {/* ── FIXED: opens modal instead of bare upi:// link ── */}
                 <button className="abtn" onClick={() => setShowUpiModal(true)}>
-                  💳 Donate via UPI
+                  {t('detail.donate_upi')}
                 </button>
               </>
             )}
-            {v(T.certificate_80g_no)&&<p style={{fontSize:11,color:'#1A6B3A',marginTop:8,textAlign:'center'}}>80G Exempt: {T.certificate_80g_no}</p>}
+            {v(T.certificate_80g_no)&&<p style={{fontSize:11,color:'#1A6B3A',marginTop:8,textAlign:'center'}}>{t('detail.exempt_80g')}: {T.certificate_80g_no}</p>}
           </div>
         )}
 
         {/* ── HOW TO REACH ── */}
         <div className="card">
-          <div className="card-h">📍 How to Reach</div>
+          <div className="card-h">{t('detail.how_to_reach')}</div>
           <div className="map-ph">🛕</div>
           {v(T.nearest_railway)  &&<div className="map-row"><span>🚂</span>{T.nearest_railway}</div>}
           {v(T.nearest_airport)  &&<div className="map-row"><span>✈️</span>{T.nearest_airport}</div>}
           {v(T.nearest_bus_stand)&&<div className="map-row"><span>🚌</span>{T.nearest_bus_stand}</div>}
-          {v(T.local_landmark)   &&<div className="map-row"><span>🏛️</span>Near: {T.local_landmark}</div>}
+          {v(T.local_landmark)   &&<div className="map-row"><span>🏛️</span>{t('detail.near')}: {T.local_landmark}</div>}
           {v(T.address)          &&<div className="map-row"><span>📌</span>{T.address}</div>}
-          {v(T.pincode)          &&<div className="map-row"><span>📮</span>PIN: {T.pincode}</div>}
-          {mapsUrl&&<a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="abtn">🗺️ Open in Google Maps</a>}
+          {v(T.pincode)          &&<div className="map-row"><span>📮</span>{t('detail.pin')}: {T.pincode}</div>}
+          {mapsUrl&&<a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="abtn">{t('detail.open_maps')}</a>}
         </div>
 
         {/* ── CONTACT ── */}
         <div className="sec" id="contact">
-          <div className="sec-h"><div className="sec-icon">📞</div>Contact & Connect</div>
-          {v(T.phone)            &&<div className="crow"><div className="clbl">Phone</div><a href={`tel:${T.phone}`} className="clink">📞 {T.phone}</a></div>}
-          {v(T.whatsapp_number)  &&<div className="crow"><div className="clbl">WhatsApp</div><a href={`https://wa.me/${T.whatsapp_number.replace(/\D/g,'')}`} className="clink" target="_blank" rel="noopener noreferrer">💬 Chat on WhatsApp →</a></div>}
-          {v(T.official_email)   &&<div className="crow"><div className="clbl">Email</div><a href={`mailto:${T.official_email}`} className="clink">✉️ {T.official_email}</a></div>}
-          {v(T.website_url)      &&<div className="crow"><div className="clbl">Website</div><a href={T.website_url} target="_blank" rel="noopener noreferrer" className="clink">🌐 Visit Official Website →</a></div>}
-          {v(T.best_time_to_call)&&<div className="crow"><div className="clbl">Best Time to Call</div><div className="cval">⏰ {T.best_time_to_call}</div></div>}
-          {v(T.trust_registration_no)&&<div className="crow"><div className="clbl">Registration No.</div><div className="cval">{T.trust_registration_no}</div></div>}
+          <div className="sec-h"><div className="sec-icon">📞</div>{t('detail.contact_connect')}</div>
+          {v(T.phone)            &&<div className="crow"><div className="clbl">{t('detail.phone')}</div><a href={`tel:${T.phone}`} className="clink">📞 {T.phone}</a></div>}
+          {v(T.whatsapp_number)  &&<div className="crow"><div className="clbl">{t('detail.whatsapp')}</div><a href={`https://wa.me/${T.whatsapp_number.replace(/\D/g,'')}`} className="clink" target="_blank" rel="noopener noreferrer">{t('detail.whatsapp_chat')}</a></div>}
+          {v(T.official_email)   &&<div className="crow"><div className="clbl">{t('detail.email')}</div><a href={`mailto:${T.official_email}`} className="clink">✉️ {T.official_email}</a></div>}
+          {v(T.website_url)      &&<div className="crow"><div className="clbl">{t('detail.website')}</div><a href={T.website_url} target="_blank" rel="noopener noreferrer" className="clink">{t('detail.visit_website')}</a></div>}
+          {v(T.best_time_to_call)&&<div className="crow"><div className="clbl">{t('detail.best_time_to_call')}</div><div className="cval">⏰ {T.best_time_to_call}</div></div>}
+          {v(T.trust_registration_no)&&<div className="crow"><div className="clbl">{t('detail.registration_no')}</div><div className="cval">{T.trust_registration_no}</div></div>}
         </div>
 
         {/* ── VERIFIED ── */}
@@ -824,9 +793,9 @@ export default function TempleDetailPage() {
           <div className="verified">
             <span style={{fontSize:24}}>✅</span>
             <div>
-              <div className="vtext">Verified on BharatMandir</div>
+              <div className="vtext">{t('detail.verified_on')}</div>
               <div style={{fontSize:10,color:'#1A6B3A',opacity:.7,marginTop:2}}>
-                {v(T.mkt_id)?`ID: ${T.mkt_id}`:'Details reviewed & approved'}
+                {v(T.mkt_id)?`ID: ${T.mkt_id}`: t('detail.details_reviewed')}
               </div>
             </div>
           </div>
