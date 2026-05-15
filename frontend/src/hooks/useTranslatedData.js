@@ -13,7 +13,7 @@ export function useTranslatedTemples(temples) {
     setTranslating(true);
     translateTemples(temples, lang)
       .then(setTranslated)
-      .catch(() => setTranslated(temples))   // FIX: always fallback, never leave null
+      .catch(() => setTranslated(temples))
       .finally(() => setTranslating(false));
   }, [temples, lang]);
 
@@ -23,23 +23,27 @@ export function useTranslatedTemples(temples) {
 export function useTranslatedTemple(temple) {
   const { lang } = useLang();
 
-  // FIX: Initialize with temple directly — never null when data exists
+  // Initialize with temple directly so English data is always shown immediately
   const [translated,  setTranslated]  = useState(temple);
   const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
     if (!temple) { setTranslated(null); return; }
 
-    // Always show data immediately in English first
+    // Always show English data immediately — never leave screen blank
     setTranslated(temple);
 
-    if (lang === 'en') return;  // English — done, no API call needed
+    if (lang === 'en') return;
 
-    // Other languages — translate in background
+    // Translate in background; on any error fall back to English
     setTranslating(true);
     translateTemple(temple, lang)
-      .then(setTranslated)
-      .catch(() => setTranslated(temple))   // FIX: fallback to English on error
+      .then(result => {
+        // Extra safety: if translation somehow returned something falsy,
+        // keep the original English temple object
+        setTranslated(result || temple);
+      })
+      .catch(() => setTranslated(temple))
       .finally(() => setTranslating(false));
   }, [temple, lang]);
 
