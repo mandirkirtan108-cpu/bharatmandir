@@ -11,3 +11,4 @@ bcrypt
 passlib[bcrypt]
 python-jose[cryptography]
 pytz
+openai
