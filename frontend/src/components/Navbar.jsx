@@ -46,9 +46,9 @@ export default function Navbar() {
   }, [sidebarOpen]);
 
   const NAV_LINKS = [
-    { to: '/route-planner', label: t('nav.route'),  icon: <Navigation size={17} /> },
-    { to: '/panchang',      label: '🪔 Panchang',   icon: <CalendarDays size={17} /> },
-    { to: '/festivals',     label: '🌸 Festivals',  icon: <Sparkles size={17} /> },
+    { to: '/route-planner', label: t('nav.route'),     icon: <Navigation size={17} /> },
+    { to: '/panchang',      label: t('nav.panchang'),  icon: <CalendarDays size={17} /> },
+    { to: '/festivals',     label: t('nav.festivals'), icon: <Sparkles size={17} /> },
   ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
@@ -109,7 +109,7 @@ export default function Navbar() {
               }}
             >
               <span>🕉️</span>
-              <span>AI Guide</span>
+              <span>{t('nav.ai_guide')}</span>
             </Link>
 
             {isAdmin && (
@@ -125,7 +125,7 @@ export default function Navbar() {
                   }}
                 >
                   <PlusCircle size={15} />
-                  <span>Add Temple</span>
+                  <span>{t('nav.add_temple')}</span>
                 </Link>
 
                 <Link
@@ -133,7 +133,7 @@ export default function Navbar() {
                   className="nav-add-btn nav-add-festival-btn"
                 >
                   <Sparkles size={15} />
-                  <span>Festival</span>
+                  <span>{t('nav.add_festival')}</span>
                 </Link>
               </>
             )}
@@ -153,15 +153,15 @@ export default function Navbar() {
                     color: isActive('/admin/panel') ? 'white' : 'var(--brown-mid)',
                     borderColor: 'var(--brown-mid)',
                   }}
-                  title="Admin Panel"
+                  title={t('nav.admin_panel')}
                 >
                   <LayoutDashboard size={15} />
-                  <span>Panel</span>
+                  <span>{t('nav.admin_panel')}</span>
                 </Link>
 
                 <button
                   onClick={handleLogout}
-                  title="Logout from admin"
+                  title={t('nav.admin_logout')}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                     padding: '8px 12px', borderRadius: 50,
@@ -184,10 +184,10 @@ export default function Navbar() {
                   color: 'var(--text-light)',
                   borderColor: 'var(--cream-dark)',
                 }}
-                title="Admin Login"
+                title={t('nav.admin_login')}
               >
                 <LayoutDashboard size={15} />
-                <span>Admin</span>
+                <span>{t('nav.admin')}</span>
               </Link>
             )}
 
@@ -257,7 +257,7 @@ export default function Navbar() {
             style={{ color: '#FF6B00', fontWeight: 700 }}
           >
             <span className="sidebar-link-icon">🕉️</span>
-            AI Spiritual Guide
+            {t('nav.ai_spiritual')}
           </Link>
 
           {/* Admin-only links in sidebar — only when authenticated */}
@@ -270,7 +270,7 @@ export default function Navbar() {
                 style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
               >
                 <span className="sidebar-link-icon"><PlusCircle size={17} /></span>
-                Add Temple
+                {t('nav.add_temple')}
               </Link>
 
               <Link
@@ -280,7 +280,7 @@ export default function Navbar() {
                 style={{ color: '#C8960C', fontWeight: 700 }}
               >
                 <span className="sidebar-link-icon">🌸</span>
-                Add Festival
+                {t('nav.add_festival')}
               </Link>
 
               <Link
@@ -290,7 +290,7 @@ export default function Navbar() {
                 style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
               >
                 <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
-                Admin Panel
+                {t('nav.admin_panel')}
               </Link>
 
               <button
@@ -305,7 +305,7 @@ export default function Navbar() {
                 }}
               >
                 <span className="sidebar-link-icon"><LogOut size={17} /></span>
-                Admin Logout
+                {t('nav.admin_logout')}
               </button>
             </>
           ) : (
@@ -316,7 +316,7 @@ export default function Navbar() {
               style={{ color: 'var(--text-light)' }}
             >
               <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
-              Admin Login
+              {t('nav.admin_login')}
             </Link>
           )}
         </nav>
@@ -370,7 +370,7 @@ export default function Navbar() {
           e.currentTarget.style.boxShadow = '0 4px 20px rgba(255,107,0,0.35)';
         }}
       >
-        🕉️ AI Guide
+        {t('nav.floating_ai')}
       </Link>
     </>
   );
