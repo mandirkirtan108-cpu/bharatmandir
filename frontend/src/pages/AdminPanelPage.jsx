@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2, XCircle, Archive, Eye, RefreshCw,
   Search, Shield, ShieldCheck, ExternalLink, Clock,

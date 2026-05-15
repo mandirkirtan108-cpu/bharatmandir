@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import SpiritualChat from '../components/SpiritualChat';

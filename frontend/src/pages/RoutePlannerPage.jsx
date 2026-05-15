@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MapPin, Navigation, Star, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
