@@ -108,7 +108,6 @@ export default function Navbar() {
                 fontWeight: 700,
               }}
             >
-              <span>🕉️</span>
               <span>{t('nav.ai_guide')}</span>
             </Link>
 
