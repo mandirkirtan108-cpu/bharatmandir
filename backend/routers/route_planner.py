@@ -2,7 +2,7 @@
 Route Planner API for BharatMandir.
 POST /api/route/plan — AI-powered temple route suggestion
 
-Uses server-side ANTHROPIC_API_KEY (Claude) — no user key needed.
+Uses server-side OPENAI_API_KEY (GPT) — no user key needed.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 import os
 import json
-import anthropic
+from openai import OpenAI
+import openai as openai_lib
 
 router = APIRouter(
     prefix="/api/route",
@@ -28,7 +29,6 @@ class RoutePlanRequest(BaseModel):
     travel_mode:    str         = "car"   # car / bike / train
     time_available: int         = 6       # hours
     preferences:    Optional[List[str]] = []
-    # openai_api_key removed — backend uses server key now
 
 
 class TempleStop(BaseModel):
@@ -110,14 +110,14 @@ def get_temples_in_region(start: str, destination: str) -> str:
 @router.post("/plan", response_model=RoutePlanResponse)
 async def plan_route(req: RoutePlanRequest):
     """
-    AI-powered temple route planner using Claude (server-side key).
+    AI-powered temple route planner using OpenAI GPT (server-side key).
     No user API key required.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         raise HTTPException(
             status_code=500,
-            detail="ANTHROPIC_API_KEY not configured on server."
+            detail="OPENAI_API_KEY not configured on server."
         )
 
     db_context = get_temples_in_region(req.start, req.destination)
@@ -176,21 +176,30 @@ OUTPUT (strict JSON, no markdown):
 }}"""
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model="claude-haiku-4-5",
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a spiritual travel planner for India. Always respond with valid JSON only, matching the exact schema provided by the user."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
         )
-        raw = response.content[0].text
-        raw = raw.replace("```json", "").replace("```", "").strip()
+        raw = response.choices[0].message.content
         parsed = json.loads(raw)
         return RoutePlanResponse(**parsed)
 
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {e}")
-    except anthropic.APIError as e:
-        raise HTTPException(status_code=502, detail=f"Claude API error: {str(e)}")
+    except openai_lib.APIError as e:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
