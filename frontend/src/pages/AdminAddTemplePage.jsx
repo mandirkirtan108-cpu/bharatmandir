@@ -5,8 +5,18 @@ import { adminAPI } from '../services/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SECTS = ['','Shaiva','Vaishnava','Shakta','Smartha','Jain','Buddhist','Sikh','Other'];
-const TYPES = ['','Temple','Mandir','Devasthan','Peeth','Mutt','Shrine','Other'];
-const MANAGING_AUTHORITIES = ['','Private / Family Trust','Community / Village Trust','State Govt Endowment Board','Archaeological Survey of India (ASI)'];
+const TYPES = ['','Mandir','Devasthan','Peeth','Mutt','Shrine','Other'];
+
+// Managing Authority now includes a "Custom" sentinel
+const MANAGING_AUTHORITIES = [
+  '',
+  'Private / Family Trust',
+  'Community / Village Trust',
+  'State Govt Endowment Board',
+  'Archaeological Survey of India (ASI)',
+  '__custom__',   // sentinel — renders as "Other / Custom…"
+];
+
 const STATES_IN = [
   'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi',
   'Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand',
@@ -15,17 +25,32 @@ const STATES_IN = [
   'Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal',
 ];
 const SETTINGS = ['','Riverbank / Ghats','Hilltop / Mountain','Forest / Jungle','Urban / City','Cave / Underground','Island','Roadside / Highway','Village common'];
+
+// Architecture styles — multi-select now
 const ARCH_STYLES = ['Nagara (North Indian)','Dravidian (South Indian)','Vesara (Mixed)','Kalinga (Odisha)','Hemadpanthi','Modern / Other'];
+
 const BUILDING_CONDITIONS = ['','Excellent — well maintained','Good — minor maintenance needed','Fair — needs renovation','Poor — urgent repair needed'];
 const WEEKDAYS = ['None / All days equal','Monday (Shiva)','Tuesday (Hanuman / Devi)','Wednesday (Ganesha)','Thursday (Vishnu / Guru)','Friday (Lakshmi / Devi)','Saturday (Saturn / Hanuman)','Sunday (Surya)'];
 const SAMPRADAYAS = ['','Shaiva','Vaishnava','Shakta','Smarta','Ramanandi','Madhva','ISKCON / Vaishnava','Other'];
 const APPT_TYPES = ['','Hereditary family priest','Trust-appointed','Government / Endowment Board appointed','Community elected'];
-const ELECTION_CYCLES = ['','Annual','Every 2 years','Every 3 years','Permanent / No election','Government appointed'];
+
+// Election cycles — includes custom sentinel
+const ELECTION_CYCLES = [
+  '',
+  'Annual',
+  'Every 2 years',
+  'Every 3 years',
+  'Permanent / No election',
+  'Government appointed',
+  '__custom__',   // sentinel
+];
+
 const STATUS_OPTS = ['draft','review','published','flagged','archived'];
 const SOURCE_OPTS = ['manual','wikidata','wikipedia','google_places','openstreetmap','government','ai_enriched','csv_import'];
 const ROLES = ['admin','temple_representative','volunteer','data_entry'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+// Special designations — includes a custom slot
 const DESIGNATIONS = [
   { key:'is_jyotirlinga',     label:'⚡ Jyotirlinga' },
   { key:'is_shaktipeeth',     label:'🌸 Shaktipeeth' },
@@ -96,11 +121,76 @@ const STEP_LABELS = [
   'Digital & Seva','Priests & Schedule','Media','Donations','Review & Submit',
 ];
 
-// ── Helper: initial form state ────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Convert "HH:MM" (24h) → "H:MM AM/PM" */
+function to12h(val) {
+  if (!val) return '';
+  const [hStr, mStr] = val.split(':');
+  let h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
+}
+
+/** Convert "H:MM AM/PM" → "HH:MM" (24h) for <input type="time"> */
+function to24h(val) {
+  if (!val) return '';
+  const match = val.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return val;
+  let h = parseInt(match[1], 10);
+  const m = match[2];
+  const ampm = match[3].toUpperCase();
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${m}`;
+}
+
+/** AM/PM time input component */
+function TimeInput({ value, onChange, placeholder = '9:00 AM' }) {
+  const [raw, setRaw] = useState(value ? to12h(value) : '');
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    setRaw(v);
+    // Try to parse on every keystroke
+    const match = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match) onChange(to24h(v));
+  };
+
+  const handleBlur = () => {
+    // Auto-format on blur: "9:00" → "9:00 AM" if no AM/PM typed
+    let v = raw.trim();
+    if (v && !/AM|PM/i.test(v)) {
+      const parts = v.split(':');
+      const h = parseInt(parts[0], 10);
+      const m = parts[1] ? parts[1].padStart(2,'0') : '00';
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = (h % 12) || 12;
+      v = `${h12}:${m} ${ampm}`;
+    }
+    setRaw(v);
+    const match = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match) onChange(to24h(v));
+  };
+
+  return (
+    <input
+      type="text"
+      value={raw}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+    />
+  );
+}
+
 function initialForm() {
   const bools = [...DESIGNATIONS.map(d=>d.key), ...PUJAS.map(p=>p.key), ...FACILITIES.map(f=>f.key), ...PROGRAMS.map(p=>p.key), ...DONATION_CATS.map(d=>d.key)];
   const base = {
     name:'', name_hindi:'', name_local:'', temple_type:'', sect:'', managing_authority:'',
+    managing_authority_custom:'',
     trust_name:'', trust_registration_no:'', primary_deity:'', secondary_deities:'',
     category_tags:'', google_place_id:'', wikidata_id:'', osm_id:'', wikipedia_url:'',
     status:'draft', source:'manual',
@@ -108,7 +198,7 @@ function initialForm() {
     latitude:'', longitude:'', google_maps_link:'', nearest_railway:'', nearest_airport:'',
     nearest_bus_stand:'', local_landmark:'',
     history:'', history_hindi:'', sthala_purana:'', significance:'', puranic_stories:'',
-    architecture_style:'', estimated_year_built:'', founded_by:'', last_renovation_year:'',
+    estimated_year_built:'', founded_by:'', last_renovation_year:'',
     building_condition:'',
     opening_time:'', closing_time:'', afternoon_closure_start:'', afternoon_closure_end:'',
     entry_fee:'', weekly_special_day:'None / All days equal', prasad_type:'', dress_code:'',
@@ -117,9 +207,12 @@ function initialForm() {
     online_puja_available:'no', live_darshan_available:'no', live_stream_url:'',
     video_aarti_url:'', video_intro_url:'', video_360_url:'',
     chairman_name:'', chairman_contact:'', committee_count:'', election_cycle:'',
+    election_cycle_custom:'',
     accept_online_donations:false, upi_id:'', certificate_80g_no:'',
     bank_account_name:'', bank_name_branch:'', bank_account_number:'', bank_ifsc:'',
     submitter_name:'', submitter_role:'admin', submitter_phone:'',
+    custom_designation:'',      // for custom special designation text
+    custom_facility:'',         // for custom facility text
   };
   bools.forEach(k => base[k] = false);
   return base;
@@ -128,12 +221,19 @@ function initialForm() {
 function initPriest() {
   return { name:'', title:'', phone:'', sampradaya:'', appt_type:'', years:'', is_head:false, id: Math.random().toString(36).slice(2) };
 }
+
 function initSched() {
   return { name:'', time:'', type:'Aarti', id: Math.random().toString(36).slice(2) };
 }
+
+function initPujaOffering() {
+  return { name:'', timing:'', id: Math.random().toString(36).slice(2) };
+}
+
 function initMantra() {
   return { title:'', deity:'', sanskrit:'', transliteration:'', meaning:'', audio:'', id: Math.random().toString(36).slice(2) };
 }
+
 function initFestival() {
   return { name:'', hmonth:'', month:'', desc:'', days:'', major:false, id: Math.random().toString(36).slice(2) };
 }
@@ -161,7 +261,6 @@ const css = `
 html{scroll-behavior:smooth;}
 body{font-family:var(--ff-u);background:var(--cream);color:var(--ink);-webkit-font-smoothing:antialiased;}
 
-/* HERO */
 .hero{position:relative;background:linear-gradient(160deg,#1A0A00 0%,#3D1F00 35%,#6B3A10 65%,#B84D00 100%);padding:56px 24px 72px;text-align:center;overflow:hidden;}
 .hero-bg{position:absolute;inset:0;pointer-events:none;}
 .hero-float{position:absolute;font-size:clamp(20px,3.5vw,44px);opacity:.12;animation:floatUp 7s ease-in-out infinite;}
@@ -177,7 +276,6 @@ body{font-family:var(--ff-u);background:var(--cream);color:var(--ink);-webkit-fo
 .hero h1 span{color:#F0C040;}
 .hero p{font-family:var(--ff-hi);font-size:15px;color:rgba(255,255,255,.7);}
 
-/* PROGRESS */
 .progress-wrap{background:var(--white);border-bottom:2px solid var(--bd2);position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(100,50,10,.07);}
 .progress{max-width:1000px;margin:0 auto;padding:0 24px;display:flex;align-items:center;overflow-x:auto;gap:0;}
 .step{display:flex;align-items:center;flex-shrink:0;}
@@ -190,17 +288,14 @@ body{font-family:var(--ff-u);background:var(--cream);color:var(--ink);-webkit-fo
 .step-btn.done .step-num{background:var(--green);color:#fff;}
 .step-div{width:1px;height:18px;background:var(--bd2);flex-shrink:0;}
 
-/* LAYOUT */
 .page{max-width:900px;margin:0 auto;padding:36px 24px 80px;}
 
-/* SECTION CARD */
 .fsec{background:var(--white);border:1px solid var(--bd2);border-radius:16px;padding:26px 30px;margin-bottom:18px;box-shadow:var(--sh1);}
 .fsec-hdr{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--bd3);}
 .fsec-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:var(--sl);}
 .fsec-title{font-family:var(--ff-h);font-size:16px;font-weight:700;color:var(--ink);}
 .fsec-sub{font-size:11.5px;color:var(--inkl);margin-top:2px;}
 
-/* FORM FIELDS */
 .fg{margin-bottom:14px;}
 .fg-2{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px;}
 .fg-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px;margin-bottom:14px;}
@@ -228,10 +323,10 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .chip:hover{border-color:var(--s3);color:var(--s2);}
 .chip.on{border-color:var(--s2);background:var(--sl);color:var(--s1);font-weight:500;}
 
-/* PUJA / FACILITY GRID */
+/* PUJA / FACILITY GRID — whole box clickable */
 .puja-grid,.fac-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px;}
 .fac-grid{grid-template-columns:repeat(auto-fill,minmax(185px,1fr));}
-.puja-item,.fac-item{border:1.5px solid var(--bd2);border-radius:9px;padding:9px 12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:8px;}
+.puja-item,.fac-item{border:1.5px solid var(--bd2);border-radius:9px;padding:9px 12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:8px;user-select:none;}
 .puja-item:hover,.fac-item:hover{border-color:var(--s2);background:var(--sl);}
 .puja-item.on,.fac-item.on{border-color:var(--s2);background:var(--sl);}
 .puja-name,.fac-name{font-size:12.5px;color:var(--inkm);}
@@ -330,12 +425,33 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .radio-opt.selected{border-color:var(--s2);background:var(--sl);color:var(--s2);}
 .radio-opt input{accent-color:var(--s2);width:13px;height:13px;flex-shrink:0;}
 
+/* MULTI-SELECT chips for arch style */
+.arch-chip{padding:7px 14px;border-radius:50px;border:1.5px solid var(--bd2);background:var(--white);font-family:var(--ff-u);font-size:12.5px;color:var(--inkm);cursor:pointer;transition:all .15s;user-select:none;}
+.arch-chip:hover{border-color:var(--s3);color:var(--s2);}
+.arch-chip.on{border-color:var(--s2);background:var(--sl);color:var(--s1);font-weight:500;}
+
+/* PUJA OFFERING BUILDER */
+.offering-builder{border:1px solid var(--bd2);border-radius:10px;overflow:hidden;margin-top:8px;}
+.offering-hdr{background:var(--parch);padding:9px 14px;font-size:10.5px;font-weight:500;color:var(--inkl);text-transform:uppercase;letter-spacing:.06em;display:grid;grid-template-columns:1fr 130px 34px;gap:10px;}
+.offering-row{display:grid;grid-template-columns:1fr 130px 34px;gap:10px;padding:8px 14px;border-top:1px solid var(--bd3);align-items:center;}
+.offering-row input{padding:6px 10px;border-radius:7px;font-size:12px;}
+
 /* BANNERS */
 .info-banner{background:var(--bluel);border:1px solid #93C5FD;border-radius:9px;padding:11px 15px;font-size:12.5px;color:#1e40af;display:flex;align-items:flex-start;gap:9px;margin-bottom:14px;}
 .warn-banner{background:#FEF9C3;border:1px solid #FDE047;border-radius:9px;padding:11px 15px;font-size:12.5px;color:#713f12;display:flex;align-items:flex-start;gap:9px;margin-bottom:14px;}
 
 /* MANTRA / FESTIVAL CARDS */
 .sub-card{border:1.5px solid var(--bd2);border-radius:10px;padding:14px 16px;margin-bottom:10px;position:relative;}
+
+/* Festival major — whole row clickable */
+.festival-major-row{display:flex;align-items:center;gap:10px;padding:9px 13px;border:1.5px solid var(--bd2);border-radius:9px;cursor:pointer;transition:all .15s;user-select:none;margin-top:8px;}
+.festival-major-row:hover{border-color:var(--s2);background:var(--sl);}
+.festival-major-row.on{border-color:var(--s2);background:var(--sl);}
+.festival-major-row input{accent-color:var(--s2);width:14px;height:14px;flex-shrink:0;}
+
+/* Custom input row */
+.custom-input-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+.custom-input-row input{flex:1;}
 
 @keyframes fadein{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 .form-section{animation:fadein .32s ease;}
@@ -346,6 +462,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   .fsec{padding:18px 16px;}
   .summary-grid{grid-template-columns:1fr 1fr;}
   .sched-hdr,.sched-row{grid-template-columns:1fr 90px 80px 32px;font-size:11px;}
+  .offering-hdr,.offering-row{grid-template-columns:1fr 110px 32px;font-size:11px;}
   .form-nav{gap:8px;}
 }
 `;
@@ -395,14 +512,19 @@ function SecLabel({ children }) {
   return <div className="sec-label">{children}</div>;
 }
 
+// Whole-box-clickable check grid
 function CheckGrid({ items, form, toggle, className = 'puja-grid', itemClass = 'puja-item', nameClass = 'puja-name' }) {
   return (
     <div className={className}>
       {items.map(({ key, label }) => (
-        <label key={key} className={`${itemClass}${form[key] ? ' on' : ''}`} onClick={() => toggle(key)}>
+        <div
+          key={key}
+          className={`${itemClass}${form[key] ? ' on' : ''}`}
+          onClick={() => toggle(key)}
+        >
           <input type="checkbox" checked={form[key]} onChange={() => {}} style={{ accentColor: 'var(--s2)', flexShrink: 0 }} />
           <span className={nameClass}>{label}</span>
-        </label>
+        </div>
       ))}
     </div>
   );
@@ -415,17 +537,35 @@ export default function AdminAddTemplePage() {
   const [errors, setErrors] = useState({});
   const [priests, setPriests]   = useState([initPriest()]);
   const [scheds, setScheds]     = useState([initSched(), initSched()]);
+  const [pujaOfferings, setPujaOfferings] = useState([]);   // custom puja timings
   const [mantras, setMantras]   = useState([initMantra()]);
   const [festivals, setFestivs] = useState([initFestival()]);
   const [photos, setPhotos]     = useState(Array(6).fill(null));
   const [consents, setConsents] = useState([false,false,false,false,false]);
-  const [archStyle, setArchStyle] = useState('');
+  const [archStyles, setArchStyles] = useState([]);   // multi-select array
   const [submitted, setSubmitted] = useState(false);
   const [qrId, setQrId]         = useState('');
+  const [customDesignationText, setCustomDesignationText] = useState('');
+  const [showCustomDesignation, setShowCustomDesignation] = useState(false);
+  const [customFacilityText, setCustomFacilityText] = useState('');
+  const [showCustomFacility, setShowCustomFacility] = useState(false);
   const progressRef = useRef(null);
 
   const set    = (k, v) => { setForm(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: undefined })); };
   const toggle = k       => setForm(p => ({ ...p, [k]: !p[k] }));
+
+  // Architecture style multi-select
+  const toggleArchStyle = (s) => {
+    setArchStyles(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  };
+
+  // Managing authority helpers
+  const isCustomAuthority = form.managing_authority === '__custom__';
+  const effectiveAuthority = isCustomAuthority ? form.managing_authority_custom : form.managing_authority;
+
+  // Election cycle helpers
+  const isCustomCycle = form.election_cycle === '__custom__';
+  const effectiveCycle = isCustomCycle ? form.election_cycle_custom : form.election_cycle;
 
   function validate(s) {
     const e = {};
@@ -471,6 +611,11 @@ export default function AdminAddTemplePage() {
   const delSched    = id => setScheds(p => p.length > 1 ? p.filter(x=>x.id!==id) : p);
   const setSched    = (id,k,v) => setScheds(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
 
+  // Custom puja offerings
+  const addOffering    = () => setPujaOfferings(p => [...p, initPujaOffering()]);
+  const delOffering    = id => setPujaOfferings(p => p.filter(x=>x.id!==id));
+  const setOffering    = (id,k,v) => setPujaOfferings(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+
   // Mantras
   const addMantra    = () => setMantras(p => [...p, initMantra()]);
   const removeMantra = id => setMantras(p => p.filter(x=>x.id!==id));
@@ -481,64 +626,62 @@ export default function AdminAddTemplePage() {
   const removeFest = id => setFestivs(p => p.filter(x=>x.id!==id));
   const setFest    = (id,k,v) => setFestivs(p => p.map(x=>x.id===id ? {...x,[k]:v} : x));
 
-  // ── CONSENTS (must be defined BEFORE submitForm uses it) ──────────────────
   const allConsents = consents.every(Boolean);
   const toggleConsent = i => setConsents(c => { const a=[...c]; a[i]=!a[i]; return a; });
 
-async function submitForm() {
-  if (!consents.every(Boolean)) return;
+  async function submitForm() {
+    if (!consents.every(Boolean)) return;
+    const fd = new FormData();
+    fd.append('name', form.name);
+    fd.append('city', form.city);
+    fd.append('state', form.state);
+    fd.append('status', form.status || 'draft');
+    fd.append('source', form.source || 'admin_form');
+    if (effectiveAuthority) fd.append('managing_authority', effectiveAuthority);
+    if (effectiveCycle)     fd.append('election_cycle', effectiveCycle);
+    if (archStyles.length)  fd.append('architecture_style', archStyles.join(', '));
+    if (customDesignationText) fd.append('custom_designation', customDesignationText);
+    if (customFacilityText)    fd.append('custom_facility', customFacilityText);
 
-  const fd = new FormData();
+    const strFields = [
+      'name_hindi','name_local','temple_type','sect',
+      'trust_name','trust_registration_no','primary_deity','secondary_deities',
+      'address','district','pincode','setting_environment','google_maps_link',
+      'nearest_railway','nearest_airport','nearest_bus_stand','local_landmark',
+      'history','history_hindi','sthala_purana','significance','puranic_stories',
+      'estimated_year_built','founded_by','last_renovation_year','building_condition',
+      'opening_time','closing_time','afternoon_closure_start','afternoon_closure_end',
+      'weekly_special_day','online_puja_available','live_darshan_available',
+      'live_stream_url','prasad_type','dress_code','best_time_to_visit',
+      'phone','whatsapp_number','official_email','website_url','facebook_page',
+      'youtube_channel','instagram_handle','best_time_to_call',
+      'video_aarti_url','video_intro_url','video_360_url',
+      'upi_id','certificate_80g_no','bank_account_name','bank_name_branch',
+      'bank_account_number','bank_ifsc','hero_image_url',
+    ];
+    strFields.forEach(k => { if (form[k]) fd.append(k, form[k]); });
+    if (form.latitude)  fd.append('latitude',  form.latitude);
+    if (form.longitude) fd.append('longitude', form.longitude);
+    if (form.entry_fee) fd.append('entry_fee', form.entry_fee);
 
-  fd.append('name', form.name);
-  fd.append('city', form.city);
-  fd.append('state', form.state);
-  fd.append('status', form.status || 'draft');
-  fd.append('source', form.source || 'admin_form');
+    const boolFields = [
+      ...DESIGNATIONS.map(d => d.key), ...PUJAS.map(p => p.key),
+      ...FACILITIES.map(f => f.key),   ...PROGRAMS.map(p => p.key),
+      ...DONATION_CATS.map(d => d.key), 'accept_online_donations',
+    ];
+    boolFields.forEach(k => fd.append(k, form[k] ? 'true' : 'false'));
 
-  const strFields = [
-    'name_hindi','name_local','temple_type','sect','managing_authority',
-    'trust_name','trust_registration_no','primary_deity','secondary_deities',
-    'address','district','pincode','setting_environment','google_maps_link',
-    'nearest_railway','nearest_airport','nearest_bus_stand','local_landmark',
-    'history','history_hindi','sthala_purana','significance','puranic_stories',
-    'estimated_year_built','founded_by','last_renovation_year','building_condition',
-    'opening_time','closing_time','afternoon_closure_start','afternoon_closure_end',
-    'weekly_special_day','online_puja_available','live_darshan_available',
-    'live_stream_url','prasad_type','dress_code','best_time_to_visit',
-    'phone','whatsapp_number','official_email','website_url','facebook_page',
-    'youtube_channel','instagram_handle','best_time_to_call',
-    'video_aarti_url','video_intro_url','video_360_url',
-    'upi_id','certificate_80g_no','bank_account_name','bank_name_branch',
-    'bank_account_number','bank_ifsc','hero_image_url',
-  ];
-  strFields.forEach(k => { if (form[k]) fd.append(k, form[k]); });
-
-  if (form.latitude)  fd.append('latitude',  form.latitude);
-  if (form.longitude) fd.append('longitude', form.longitude);
-  if (form.entry_fee) fd.append('entry_fee', form.entry_fee);
-  if (archStyle)      fd.append('architecture_style', archStyle);
-
-  const boolFields = [
-    ...DESIGNATIONS.map(d => d.key), ...PUJAS.map(p => p.key),
-    ...FACILITIES.map(f => f.key),   ...PROGRAMS.map(p => p.key),
-    ...DONATION_CATS.map(d => d.key), 'accept_online_donations',
-  ];
-  boolFields.forEach(k => fd.append(k, form[k] ? 'true' : 'false'));
-
-  try {
-    // Use adminApi — token automatically attached via interceptor
-    const res = await adminAPI.createTemple(fd);
-    setQrId(res.data.mkt_id);
-    setSubmitted(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  } catch (err) {
-    const msg = err.response?.data?.detail || err.message || 'Failed to save temple';
-    alert('Error saving temple: ' + msg);
+    try {
+      const res = await adminAPI.createTemple(fd);
+      setQrId(res.data.mkt_id);
+      setSubmitted(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || 'Failed to save temple';
+      alert('Error saving temple: ' + msg);
+    }
   }
-}
 
-  // ── SUMMARY DATA ──────────────────────────────────────────────────────────
   const summaryItems = [
     ['Temple Name',    form.name || '—'],
     ['Name (Hindi)',   form.name_hindi || '—'],
@@ -547,14 +690,14 @@ async function submitForm() {
     ['Primary Deity', form.primary_deity || '—'],
     ['Temple Type',   form.temple_type || '—'],
     ['Sect',          form.sect || '—'],
-    ['Managing Auth', form.managing_authority || '—'],
-    ['Architecture',  archStyle || '—'],
+    ['Managing Auth', effectiveAuthority || '—'],
+    ['Architecture',  archStyles.join(', ') || '—'],
     ['GPS',           form.latitude ? `${form.latitude}, ${form.longitude}` : '—'],
     ['Status',        form.status || '—'],
     ['Online Puja',   form.online_puja_available],
     ['Live Darshan',  form.live_darshan_available],
     ['Weekly Special',form.weekly_special_day || '—'],
-    ['Opening Time',  form.opening_time || '—'],
+    ['Opening Time',  form.opening_time ? to12h(form.opening_time) : '—'],
     ['Entry Fee',     form.entry_fee ? `₹${form.entry_fee}` : '—'],
     ['Donations',     form.accept_online_donations ? 'Yes' : 'No'],
     ['Source',        form.source || '—'],
@@ -564,10 +707,8 @@ async function submitForm() {
   return (
     <>
       <style>{css}</style>
-
       <Navbar />
 
-      {/* HERO */}
       <div className="hero">
         <div className="hero-bg">
           {['🛕','🪔','✨','🔱','🌸'].map((e, i) => (
@@ -581,7 +722,6 @@ async function submitForm() {
         </div>
       </div>
 
-      {/* PROGRESS */}
       <div className="progress-wrap" ref={progressRef}>
         <div className="progress">
           {STEP_LABELS.map((label, i) => {
@@ -602,11 +742,8 @@ async function submitForm() {
         </div>
       </div>
 
-      {/* PAGE */}
       <div className="page">
-
         {submitted ? (
-          /* SUCCESS */
           <div className="success-page">
             <div className="success-icon">🕉️</div>
             <div className="success-title">Jai Shri Ram! Temple Added!</div>
@@ -625,7 +762,6 @@ async function submitForm() {
               <button className="btn-home" onClick={() => { setSubmitted(false); setForm(initialForm()); setStep(1); }}>+ Add Another Temple</button>
             </div>
           </div>
-
         ) : (
           <>
             {/* ══ STEP 1: TEMPLE IDENTITY ══ */}
@@ -652,8 +788,31 @@ async function submitForm() {
                     <Field label="Sect / Tradition">
                       <Sel id="sect" value={form.sect} onChange={v=>set('sect',v)} options={SECTS} />
                     </Field>
+
+                    {/* ── Managing Authority with Custom option ── */}
                     <Field label="Managing Authority">
-                      <Sel id="managing_authority" value={form.managing_authority} onChange={v=>set('managing_authority',v)} options={MANAGING_AUTHORITIES} />
+                      <Sel
+                        id="managing_authority"
+                        value={form.managing_authority}
+                        onChange={v => set('managing_authority', v)}
+                      >
+                        <option value="">Select</option>
+                        <option value="Private / Family Trust">Private / Family Trust</option>
+                        <option value="Community / Village Trust">Community / Village Trust</option>
+                        <option value="State Govt Endowment Board">State Govt Endowment Board</option>
+                        <option value="Archaeological Survey of India (ASI)">Archaeological Survey of India (ASI)</option>
+                        <option value="__custom__">✏️ Other / Custom…</option>
+                      </Sel>
+                      {isCustomAuthority && (
+                        <div className="custom-input-row">
+                          <Inp
+                            type="text"
+                            value={form.managing_authority_custom}
+                            onChange={v => set('managing_authority_custom', v)}
+                            placeholder="Enter custom managing authority…"
+                          />
+                        </div>
+                      )}
                     </Field>
                   </div>
                   <div className="fg-2">
@@ -677,12 +836,30 @@ async function submitForm() {
                   </div>
                 </SectionCard>
 
+                {/* ── Special Designations with Custom ── */}
                 <SectionCard icon="⭐" title="Special Designations" sub="Sacred classifications this temple belongs to">
                   <div className="chip-group">
                     {DESIGNATIONS.map(({ key, label }) => (
                       <span key={key} className={`chip${form[key] ? ' on' : ''}`} onClick={() => toggle(key)}>{label}</span>
                     ))}
+                    {/* Custom designation chip */}
+                    <span
+                      className={`chip${showCustomDesignation ? ' on' : ''}`}
+                      onClick={() => setShowCustomDesignation(p => !p)}
+                    >
+                      ✏️ Custom…
+                    </span>
                   </div>
+                  {showCustomDesignation && (
+                    <div className="custom-input-row" style={{ marginTop: 12 }}>
+                      <Inp
+                        type="text"
+                        value={customDesignationText}
+                        onChange={setCustomDesignationText}
+                        placeholder="Enter custom designation (e.g. Pancha Dravida Peeth)…"
+                      />
+                    </div>
+                  )}
                 </SectionCard>
 
                 <SectionCard icon="🏷️" title="Category Tags & External IDs" sub="For discovery and data linking">
@@ -802,16 +979,28 @@ async function submitForm() {
                   <Field label="Puranic Stories" opt>
                     <Txt id="puranic_stories" value={form.puranic_stories} onChange={v=>set('puranic_stories',v)} rows={3} placeholder="Relevant stories from the Puranas or scriptures…" />
                   </Field>
+
+                  {/* ── Architecture Style — MULTI SELECT ── */}
                   <SecLabel>Architecture & Construction</SecLabel>
-                  <Field label="Architecture Style">
-                    <div className="radio-group">
+                  <Field label="Architecture Style" hint="Select all that apply — multiple styles can be chosen">
+                    <div className="chip-group" style={{ marginTop: 4 }}>
                       {ARCH_STYLES.map(s => (
-                        <label key={s} className={`radio-opt${archStyle===s?' selected':''}`} onClick={() => setArchStyle(s)}>
-                          <input type="radio" name="arch" value={s} checked={archStyle===s} onChange={()=>setArchStyle(s)} />{s}
-                        </label>
+                        <span
+                          key={s}
+                          className={`arch-chip${archStyles.includes(s) ? ' on' : ''}`}
+                          onClick={() => toggleArchStyle(s)}
+                        >
+                          {archStyles.includes(s) ? '✓ ' : ''}{s}
+                        </span>
                       ))}
                     </div>
+                    {archStyles.length > 0 && (
+                      <div className="field-hint" style={{ marginTop: 8 }}>
+                        Selected: {archStyles.join(' · ')}
+                      </div>
+                    )}
                   </Field>
+
                   <div className="fg-3" style={{ marginTop:14 }}>
                     <Field label="Estimated Year Built">
                       <Inp type="text" value={form.estimated_year_built} onChange={v=>set('estimated_year_built',v)} placeholder="e.g. 7th century, 1234 AD" />
@@ -839,11 +1028,38 @@ async function submitForm() {
             {step === 4 && (
               <div className="form-section">
                 <SectionCard icon="🕐" title="Timings & Entry" sub="When and how pilgrims can visit">
-                  <div className="fg-4">
-                    <Field label="Opening Time"><Inp type="time" value={form.opening_time} onChange={v=>set('opening_time',v)} /></Field>
-                    <Field label="Closing Time"><Inp type="time" value={form.closing_time} onChange={v=>set('closing_time',v)} /></Field>
-                    <Field label="Afternoon Closure Start"><Inp type="time" value={form.afternoon_closure_start} onChange={v=>set('afternoon_closure_start',v)} /></Field>
-                    <Field label="Afternoon Closure End"><Inp type="time" value={form.afternoon_closure_end} onChange={v=>set('afternoon_closure_end',v)} /></Field>
+                  {/* ── AM/PM time inputs ── */}
+                  <div className="fg-2" style={{ marginBottom: 14 }}>
+                    <Field label="Opening Time" hint="e.g. 5:30 AM">
+                      <TimeInput
+                        value={form.opening_time}
+                        onChange={v => set('opening_time', v)}
+                        placeholder="5:30 AM"
+                      />
+                    </Field>
+                    <Field label="Closing Time" hint="e.g. 9:00 PM">
+                      <TimeInput
+                        value={form.closing_time}
+                        onChange={v => set('closing_time', v)}
+                        placeholder="9:00 PM"
+                      />
+                    </Field>
+                  </div>
+                  <div className="fg-2" style={{ marginBottom: 14 }}>
+                    <Field label="Afternoon Closure Start" hint="e.g. 12:00 PM" opt>
+                      <TimeInput
+                        value={form.afternoon_closure_start}
+                        onChange={v => set('afternoon_closure_start', v)}
+                        placeholder="12:00 PM"
+                      />
+                    </Field>
+                    <Field label="Afternoon Closure End" hint="e.g. 4:00 PM" opt>
+                      <TimeInput
+                        value={form.afternoon_closure_end}
+                        onChange={v => set('afternoon_closure_end', v)}
+                        placeholder="4:00 PM"
+                      />
+                    </Field>
                   </div>
                   <div className="fg-3">
                     <Field label="Entry Fee (₹)">
@@ -884,13 +1100,75 @@ async function submitForm() {
                   </div>
                 </SectionCard>
 
-                <SectionCard icon="🙏" title="Puja Offerings Available" sub="Select all puja types offered at this temple">
+                {/* ── Puja Offerings — checkbox grid + custom timing builder ── */}
+                <SectionCard icon="🙏" title="Puja Offerings Available" sub="Select all puja types offered, and optionally set custom timings">
                   <CheckGrid items={PUJAS} form={form} toggle={toggle} className="puja-grid" itemClass="puja-item" nameClass="puja-name" />
+
+                  <div style={{ marginTop: 20 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <div style={{ fontFamily: 'var(--ff-h)', fontSize: 13, color: 'var(--inkm)', fontWeight: 600 }}>
+                        Custom Puja Timings <span style={{ fontFamily: 'var(--ff-u)', fontWeight: 400, fontSize: 11, color: 'var(--inkll)' }}>(optional — add timings for specific pujas)</span>
+                      </div>
+                      <button className="add-btn" style={{ margin: 0 }} onClick={addOffering}>+ Add Puja Timing</button>
+                    </div>
+
+                    {pujaOfferings.length > 0 && (
+                      <div className="offering-builder">
+                        <div className="offering-hdr">
+                          <span>Puja Name</span>
+                          <span>Timing (AM/PM)</span>
+                          <span></span>
+                        </div>
+                        {pujaOfferings.map(o => (
+                          <div className="offering-row" key={o.id}>
+                            <input
+                              type="text"
+                              value={o.name}
+                              onChange={e => setOffering(o.id, 'name', e.target.value)}
+                              placeholder="e.g. Rudrabhishek"
+                            />
+                            <input
+                              type="text"
+                              value={o.timing}
+                              onChange={e => setOffering(o.id, 'timing', e.target.value)}
+                              placeholder="e.g. 6:00 AM"
+                            />
+                            <button className="sched-del" onClick={() => delOffering(o.id)}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </SectionCard>
 
+                {/* ── Facilities — whole box clickable + custom option ── */}
                 <SectionCard icon="✅" title="Facilities Available" sub="Infrastructure and amenities at the temple">
                   <CheckGrid items={FACILITIES} form={form} toggle={toggle} className="fac-grid" itemClass="fac-item" nameClass="fac-name" />
-                  <div style={{ marginTop:18 }}>
+
+                  {/* Custom facility */}
+                  <div style={{ marginTop: 12 }}>
+                    <div
+                      className={`fac-item${showCustomFacility ? ' on' : ''}`}
+                      style={{ display: 'inline-flex', cursor: 'pointer', minWidth: 185 }}
+                      onClick={() => setShowCustomFacility(p => !p)}
+                    >
+                      <input type="checkbox" checked={showCustomFacility} onChange={() => {}} style={{ accentColor: 'var(--s2)', flexShrink: 0 }} />
+                      <span className="fac-name">✏️ Other / Custom</span>
+                    </div>
+                    {showCustomFacility && (
+                      <div className="custom-input-row">
+                        <Inp
+                          type="text"
+                          value={customFacilityText}
+                          onChange={setCustomFacilityText}
+                          placeholder="Describe the custom facility…"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Community Programs — whole box clickable */}
+                  <div style={{ marginTop: 22 }}>
                     <SecLabel>Community Programs</SecLabel>
                     <CheckGrid items={PROGRAMS} form={form} toggle={toggle} className="fac-grid" itemClass="fac-item" nameClass="fac-name" />
                   </div>
@@ -978,24 +1256,54 @@ async function submitForm() {
                             {APPT_TYPES.map(a=><option key={a} value={a}>{a||'Select'}</option>)}
                           </select>
                         </Field>
-                        <Field label="Years Serving"><Inp type="number" min={0} value={p.years} onChange={v=>setPriest(p.id,'years',v)} placeholder="e.g. 15" /></Field>
+                        {/* ── Years Serving — min 0, max 100 ── */}
+                        <Field label="Years Serving" hint="0 – 100 years">
+                          <Inp
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={p.years}
+                            onChange={v => {
+                              const n = parseInt(v, 10);
+                              if (v === '') { setPriest(p.id, 'years', ''); return; }
+                              if (!isNaN(n) && n >= 0 && n <= 100) setPriest(p.id, 'years', String(n));
+                            }}
+                            placeholder="e.g. 15"
+                          />
+                        </Field>
                       </div>
-                      <label className="chip" style={{ display:'inline-flex', width:'auto' }} onClick={() => setPriest(p.id,'is_head',!p.is_head)}>
+                      <div
+                        className={`fac-item${p.is_head ? ' on' : ''}`}
+                        style={{ display:'inline-flex', cursor:'pointer', minWidth:180 }}
+                        onClick={() => setPriest(p.id,'is_head',!p.is_head)}
+                      >
                         <input type="checkbox" checked={p.is_head} onChange={()=>{}} style={{ accentColor:'var(--s2)', marginRight:6 }} />
                         Head / Chief Priest
-                      </label>
+                      </div>
                     </div>
                   ))}
                   <button className="add-btn" onClick={addPriest}>+ Add Another Priest</button>
                 </SectionCard>
 
-                <SectionCard icon="⏰" title="Daily Puja Schedule" sub="Timings of regular pujas and aartis">
+                {/* ── Daily Puja Schedule — AM/PM time ── */}
+                <SectionCard icon="⏰" title="Daily Puja Schedule" sub="Timings of regular pujas and aartis (AM / PM format)">
                   <div className="sched-builder">
-                    <div className="sched-hdr"><span>Puja Name</span><span>Time</span><span>Type</span><span></span></div>
+                    <div className="sched-hdr"><span>Puja Name</span><span>Time (AM/PM)</span><span>Type</span><span></span></div>
                     {scheds.map(s => (
                       <div className="sched-row" key={s.id}>
-                        <input type="text" value={s.name} onChange={e=>setSched(s.id,'name',e.target.value)} placeholder="e.g. Mangal Aarti" />
-                        <input type="time" value={s.time} onChange={e=>setSched(s.id,'time',e.target.value)} />
+                        <input
+                          type="text"
+                          value={s.name}
+                          onChange={e => setSched(s.id,'name',e.target.value)}
+                          placeholder="e.g. Mangal Aarti"
+                        />
+                        {/* AM/PM time for schedule — inline text input */}
+                        <input
+                          type="text"
+                          value={s.time}
+                          onChange={e => setSched(s.id,'time',e.target.value)}
+                          placeholder="5:30 AM"
+                        />
                         <select value={s.type} onChange={e=>setSched(s.id,'type',e.target.value)}>
                           {['Aarti','Puja','Abhishek','Bhog','Other'].map(t=><option key={t}>{t}</option>)}
                         </select>
@@ -1013,8 +1321,28 @@ async function submitForm() {
                   </div>
                   <div className="fg-2">
                     <Field label="Committee Member Count" opt><Inp type="number" min={1} value={form.committee_count} onChange={v=>set('committee_count',v)} placeholder="e.g. 11" /></Field>
+
+                    {/* ── Election Cycle with Custom ── */}
                     <Field label="Election Cycle">
-                      <Sel value={form.election_cycle} onChange={v=>set('election_cycle',v)} options={ELECTION_CYCLES} />
+                      <Sel value={form.election_cycle} onChange={v=>set('election_cycle',v)}>
+                        <option value="">Select</option>
+                        <option value="Annual">Annual</option>
+                        <option value="Every 2 years">Every 2 years</option>
+                        <option value="Every 3 years">Every 3 years</option>
+                        <option value="Permanent / No election">Permanent / No election</option>
+                        <option value="Government appointed">Government appointed</option>
+                        <option value="__custom__">✏️ Custom…</option>
+                      </Sel>
+                      {isCustomCycle && (
+                        <div className="custom-input-row">
+                          <Inp
+                            type="text"
+                            value={form.election_cycle_custom}
+                            onChange={v => set('election_cycle_custom', v)}
+                            placeholder="Enter custom election cycle…"
+                          />
+                        </div>
+                      )}
                     </Field>
                   </div>
                 </SectionCard>
@@ -1074,10 +1402,13 @@ async function submitForm() {
                   <button className="add-btn" onClick={addMantra}>+ Add Another Mantra</button>
                 </SectionCard>
 
+                {/* ── Festivals — Major Festival whole-row clickable ── */}
                 <SectionCard icon="🎊" title="Festivals" sub="Major festivals celebrated at this temple">
                   {festivals.map((f, idx) => (
                     <div className="sub-card" key={f.id}>
-                      {idx > 0 && <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={() => removeFest(f.id)}>× Remove</button>}
+                      {idx > 0 && (
+                        <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={() => removeFest(f.id)}>× Remove</button>
+                      )}
                       <div className="fg-3">
                         <Field label="Festival Name" req><Inp type="text" value={f.name} onChange={v=>setFest(f.id,'name',v)} placeholder="e.g. Mahashivratri" /></Field>
                         <Field label="Hindu Month"><Inp type="text" value={f.hmonth} onChange={v=>setFest(f.id,'hmonth',v)} placeholder="e.g. Phalguna" /></Field>
@@ -1089,14 +1420,32 @@ async function submitForm() {
                         </Field>
                       </div>
                       <div className="fg-2">
-                        <Field label="Description"><Txt value={f.desc} onChange={v=>setFest(f.id,'desc',v)} rows={2} placeholder="How is this festival celebrated here?" /></Field>
-                        <Field label="Duration (days)">
-                          <Inp type="number" min={1} value={f.days} onChange={v=>setFest(f.id,'days',v)} placeholder="e.g. 3" />
-                          <label className="fac-item" style={{ marginTop:8 }} onClick={() => setFest(f.id,'major',!f.major)}>
-                            <input type="checkbox" checked={f.major} onChange={()=>{}} style={{ accentColor:'var(--s2)' }} />
-                            <span className="fac-name">Major Festival</span>
-                          </label>
+                        <Field label="Description">
+                          <Txt value={f.desc} onChange={v=>setFest(f.id,'desc',v)} rows={2} placeholder="How is this festival celebrated here?" />
                         </Field>
+                        <div>
+                          <Field label="Duration (days)">
+                            <Inp type="number" min={1} value={f.days} onChange={v=>setFest(f.id,'days',v)} placeholder="e.g. 3" />
+                          </Field>
+                          {/* ── Major Festival — whole row clickable ── */}
+                          <div
+                            className={`festival-major-row${f.major ? ' on' : ''}`}
+                            onClick={() => setFest(f.id,'major',!f.major)}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={f.major}
+                              onChange={() => {}}
+                              style={{ accentColor:'var(--s2)' }}
+                            />
+                            <span style={{ fontSize:13, color:'var(--inkm)', fontWeight: f.major ? 600 : 400 }}>
+                              ⭐ Major Festival
+                            </span>
+                            {f.major && (
+                              <span style={{ marginLeft:'auto', fontSize:11, color:'var(--s2)', fontWeight:600 }}>MARKED</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1119,10 +1468,14 @@ async function submitForm() {
                     <span>⚠️</span>
                     <span><strong>Security Notice:</strong> Bank account number will be encrypted in production. Ensure HTTPS is enabled before collecting banking data.</span>
                   </div>
-                  <label className="chip" style={{ display:'inline-flex', width:'auto' }} onClick={() => set('accept_online_donations', !form.accept_online_donations)}>
+                  <div
+                    className={`fac-item${form.accept_online_donations ? ' on' : ''}`}
+                    style={{ display:'inline-flex', cursor:'pointer', minWidth:280 }}
+                    onClick={() => set('accept_online_donations', !form.accept_online_donations)}
+                  >
                     <input type="checkbox" checked={form.accept_online_donations} onChange={()=>{}} style={{ accentColor:'var(--s2)', marginRight:6 }} />
                     ✅ &nbsp; This temple accepts online donations
-                  </label>
+                  </div>
 
                   {form.accept_online_donations && (
                     <div style={{ marginTop:16 }}>
