@@ -1,14 +1,13 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { MapPin, Navigation, Star, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
 const TRAVEL_MODES = [
-  { value: 'car',   icon: '🚗', labelKey: 'route.mode_car' },
-  { value: 'bike',  icon: '🏍️', labelKey: 'route.mode_bike' },
-  { value: 'train', icon: '🚆', labelKey: 'route.mode_train' },
-  { value: 'bus',   icon: '🚌', labelKey: 'route.mode_bus' },
+  { value: 'car',   icon: '🚗', label: 'Car' },
+  { value: 'bike',  icon: '🏍️', label: 'Bike' },
+  { value: 'train', icon: '🚆', label: 'Train' },
+  { value: 'bus',   icon: '🚌', label: 'Bus' },
 ];
 
 const PREF_OPTIONS = [
@@ -48,7 +47,6 @@ const BOOKING_META = {
 };
 
 export default function RoutePlannerPage() {
-  const { t } = useTranslation();
   const [form, setForm] = useState({
     start: '', destination: '', travel_mode: 'car',
     time_available: '6', preferences: [],
@@ -67,7 +65,7 @@ export default function RoutePlannerPage() {
 
   const handleSubmit = async () => {
     if (!form.start.trim() || !form.destination.trim()) {
-      setError(t('route.error_fields'));
+      setError('Please enter both start and destination.');
       return;
     }
     setLoading(true);
@@ -100,7 +98,7 @@ export default function RoutePlannerPage() {
 
   const handleBookingClick = () => {
     if (!form.start.trim() || !form.destination.trim()) {
-      alert(t('route.error_fields'));
+      alert('Please enter both source and destination.');
       return;
     }
     const url = buildBookingUrl(form.travel_mode, form.start, form.destination);
@@ -146,7 +144,7 @@ export default function RoutePlannerPage() {
             color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
             fontWeight: 500, backdropFilter: 'blur(8px)',
           }}>
-            {t('route.badge')}
+            ✨ AI Route Planner
           </div>
 
           <h1 style={{
@@ -154,12 +152,12 @@ export default function RoutePlannerPage() {
             fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
             textShadow: '0 4px 40px rgba(0,0,0,0.3)', color: '#FFD580',
           }}>
-            {t('route.hero_title')}{' '}
-            <span style={{ color: '#FFD580' }}>{t('route.hero_title_span')}</span>
+            Your Journey,{' '}
+            <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
           </h1>
 
           <p style={{ color: '#FFD580', opacity: 0.82, fontSize: 18, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7 }}>
-            {t('route.hero_sub')}
+            Tell us where you're headed — we'll find every sacred temple along your spiritual path.
           </p>
         </div>
       </section>
@@ -184,10 +182,10 @@ export default function RoutePlannerPage() {
               }}>📍</div>
               <div>
                 <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: '#7a3208', marginBottom: 3 }}>
-                  {t('route.plan_title')}
+                  Plan Your Spiritual Route
                 </h2>
                 <p style={{ color: '#9A7150', fontSize: 14, fontWeight: 400 }}>
-                  {t('route.plan_sub')}
+                  Discover temples and divine stops on your journey.
                 </p>
               </div>
             </div>
@@ -195,8 +193,8 @@ export default function RoutePlannerPage() {
             {/* FROM / TO */}
             <div className="route-form-inner" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
               {[
-                { label: t('route.from'), icon: <MapPin size={16} color="#E8650A" style={{ flexShrink: 0 }} />, key: 'start',       ph: 'e.g. Indore' },
-                { label: t('route.to'),   icon: <Navigation size={16} color="#6B3A1F" style={{ flexShrink: 0 }} />, key: 'destination', ph: 'e.g. Ujjain' },
+                { label: 'From', icon: <MapPin size={16} color="#E8650A" style={{ flexShrink: 0 }} />, key: 'start',       ph: 'e.g. Indore' },
+                { label: 'To',   icon: <Navigation size={16} color="#6B3A1F" style={{ flexShrink: 0 }} />, key: 'destination', ph: 'e.g. Ujjain' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 8 }}>
@@ -225,7 +223,7 @@ export default function RoutePlannerPage() {
             {/* TRAVEL MODE */}
             <div style={{ marginBottom: 28 }}>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: '#7a3208', marginBottom: 12 }}>
-                {t('route.travel_mode')}
+                Travel Mode
               </h3>
               <div className="mode-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
                 {TRAVEL_MODES.map(m => (
@@ -246,7 +244,7 @@ export default function RoutePlannerPage() {
                     }}
                   >
                     <div style={{ fontSize: 24, marginBottom: 6 }}>{m.icon}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{t(m.labelKey)}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{m.label}</div>
                   </button>
                 ))}
               </div>
@@ -255,7 +253,7 @@ export default function RoutePlannerPage() {
             {/* TEMPLE PREFERENCES */}
             <div style={{ marginBottom: 32 }}>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: '#7a3208', marginBottom: 12 }}>
-{t('route.preferences')}{' '}
+                Temple Preferences{' '}
                 <span style={{ fontSize: 12, fontWeight: 400, color: '#9A7150' }}>(Optional)</span>
               </h3>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -296,8 +294,8 @@ export default function RoutePlannerPage() {
               }}
             >
               {loading
-                ? <><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /> {t('route.finding')}</>
-                : <>✨ {t('route.plan_btn')}</>}
+                ? <><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /> Finding Sacred Stops…</>
+                : <>✨ Plan My Spiritual Route</>}
             </button>
 
             {/* Error */}
@@ -340,7 +338,7 @@ export default function RoutePlannerPage() {
               </div>
               <div>
                 <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800, color: '#7a3208', marginBottom: 6 }}>
-                  {t('route.booking_title') || 'Already know your route?'}
+                  Already know your route?
                 </h3>
                 <p style={{ color: '#9A7150', fontSize: 14 }}>{bookingSubtitle}</p>
               </div>
@@ -374,10 +372,10 @@ export default function RoutePlannerPage() {
             <div style={{ textAlign: 'center', padding: '60px 20px' }}>
               <div style={{ fontSize: 56, marginBottom: 16, animation: 'float 2.5s ease-in-out infinite' }}>🛕</div>
               <p style={{ fontFamily: 'var(--font-display)', color: '#9A7150', fontSize: 18, fontWeight: 600 }}>
-                {t('route.loading_text')}
+                Consulting the divine route map…
               </p>
               <p style={{ color: '#9A7150', fontSize: 13, marginTop: 6, fontWeight: 300 }}>
-                {t('route.loading_sub')}
+                AI is mapping sacred temples along your journey
               </p>
             </div>
           )}
@@ -395,7 +393,7 @@ export default function RoutePlannerPage() {
                 <div className="route-summary-inner" style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'center' }}>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', marginBottom: 6, fontWeight: 600 }}>
-                      {t('route.your_route')}
+                      Your Route
                     </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700 }}>
                       {result.route_summary.start}
@@ -424,7 +422,7 @@ export default function RoutePlannerPage() {
                 {/* Temple Cards */}
                 <div>
                   <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 800, color: '#7a3208', marginBottom: 16 }}>
-                    {t('route.temples_along')}
+                    🛕 Temples Along Your Route
                   </h2>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     {(result.recommended_temples || []).map((t, i) => (
@@ -439,7 +437,7 @@ export default function RoutePlannerPage() {
                             position: 'absolute', top: 0, right: 0, background: '#E8650A', color: 'white',
                             fontSize: 9, fontWeight: 700, letterSpacing: '.08em',
                             padding: '4px 12px', borderBottomLeftRadius: 12,
-                          }}>{t('route.must_visit').toUpperCase()}</div>
+                          }}>⭐ MUST VISIT</div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: '#3D1F00' }}>{t.name}</h3>
@@ -467,7 +465,7 @@ export default function RoutePlannerPage() {
                   {/* Optimized Itinerary */}
                   <div style={{ background: 'white', borderRadius: 20, border: '1px solid #EDE0CC', padding: '22px', boxShadow: '0 2px 12px rgba(61,31,0,0.07)' }}>
                     <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: '#3D1F00', marginBottom: 16 }}>
-                      {t('route.optimized_itinerary')}
+                      🗺️ Optimized Itinerary
                     </h3>
                     {(result.optimized_plan || []).map((stop, i) => (
                       <div key={i} style={{ display: 'flex', gap: 12, position: 'relative' }}>
@@ -499,7 +497,7 @@ export default function RoutePlannerPage() {
                       borderRadius: 20, border: '1px solid rgba(200,150,12,0.2)', padding: '22px',
                     }}>
                       <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, color: '#3D1F00', marginBottom: 14 }}>
-                        {t('route.pandits_tips')}
+                        💡 Pandit's Tips
                       </h3>
                       {result.insights.map((tip, i) => (
                         <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 10 }}>
@@ -527,7 +525,7 @@ export default function RoutePlannerPage() {
                       fontFamily: 'var(--font-body)',
                     }}
                   >
-                    {t('route.copy_route')}
+                    📋 Copy Route Summary
                   </button>
                 </div>
               </div>
