@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { templeAPI } from '../services/api';
@@ -372,6 +373,7 @@ export default function TempleDetailPage() {
   const [showUpiModal, setShowUpiModal] = useState(false);   // ← new
 
   const { translated: T } = useTranslatedTemple(temple);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!slug || slug === 'undefined') { navigate('/'); return; }
@@ -440,15 +442,15 @@ export default function TempleDetailPage() {
   ].filter(([k]) => T[k]);
 
   const navItems = [
-    { id:'overview',   label:'Overview',   show: true },
-    { id:'history',    label:'History',    show: v(T.history)||v(T.significance)||v(T.puranic_stories) },
-    { id:'puja',       label:'Puja',       show: pujaSchedule.length>0 || pujaServices.length>0 },
-    { id:'mantras',    label:'Mantras',    show: mantras.length>0 },
-    { id:'festivals',  label:'Festivals',  show: festivals.length>0 },
-    { id:'sevas',      label:'Sevas',      show: sevas.length>0 },
-    { id:'facilities', label:'Facilities', show: facilities.length>0||programs.length>0 },
-    { id:'priests',    label:'Priests',    show: priests.length>0 },
-    { id:'contact',    label:'Contact',    show: true },
+    { id:'overview',   label: t('detail.info_title'),       show: true },
+    { id:'history',    label: t('detail.history_title'),    show: v(T.history)||v(T.significance)||v(T.puranic_stories) },
+    { id:'puja',       label: 'Puja',                       show: pujaSchedule.length>0 || pujaServices.length>0 },
+    { id:'mantras',    label: t('detail.mantras_title'),    show: mantras.length>0 },
+    { id:'festivals',  label: t('detail.festivals_title'),  show: festivals.length>0 },
+    { id:'sevas',      label: t('detail.sevas_title'),      show: sevas.length>0 },
+    { id:'facilities', label: 'Facilities',                 show: facilities.length>0||programs.length>0 },
+    { id:'priests',    label: 'Priests',                    show: priests.length>0 },
+    { id:'contact',    label: 'Contact',                    show: true },
   ].filter(n => n.show);
 
   const scrollTo = (id) => {
@@ -460,12 +462,12 @@ export default function TempleDetailPage() {
   const addressLine = T.address || [T.city, T.state].filter(v).join(', ');
 
   const previewFacts = [
-    { label:'Primary Deity', value: T.primary_deity, icon:'🙏' },
-    { label:'Sect',          value: T.sect },
-    { label:'Architecture',  value: T.architecture_style },
-    { label:'Est. Built',    value: T.estimated_year_built },
-    { label:'Setting',       value: T.setting_environment, icon:'🌿' },
-    { label:'Dress Code',    value: T.dress_code, icon:'👗' },
+    { label: t('detail.primary_deity'), value: T.primary_deity, icon:'🙏' },
+    { label: t('detail.sect'),          value: T.sect },
+    { label: t('detail.architecture'),  value: T.architecture_style },
+    { label: t('detail.established'),   value: T.estimated_year_built },
+    { label: t('detail.best_time'),     value: T.setting_environment, icon:'🌿' },
+    { label: t('detail.dress_code'),    value: T.dress_code, icon:'👗' },
   ].filter(i => v(i.value)).slice(0, 6);
 
   return (
@@ -528,7 +530,7 @@ export default function TempleDetailPage() {
 
         {/* ── OVERVIEW ── */}
         <div className="sec" id="overview">
-          <div className="sec-h"><div className="sec-icon">🛕</div>Temple Information</div>
+          <div className="sec-h"><div className="sec-icon">🛕</div>{t('detail.info_title')}</div>
 
           {/* ── Timing strip — clean, readable ── */}
           {(openTime || fee || acStart) && (
@@ -536,25 +538,25 @@ export default function TempleDetailPage() {
               {openTime  && (
                 <div className="tblock">
                   <div className="tval">{openTime}</div>
-                  <div className="tlbl">Opens</div>
+                  <div className="tlbl">{t('detail.opens')}</div>
                 </div>
               )}
               {closeTime && (
                 <div className="tblock">
                   <div className="tval">{closeTime}</div>
-                  <div className="tlbl">Closes</div>
+                  <div className="tlbl">{t('detail.closes')}</div>
                 </div>
               )}
               {acStart && acEnd && (
                 <div className="tblock">
                   <div className="tval">{acStart} – {acEnd}</div>
-                  <div className="tlbl">Afternoon Break</div>
+                  <div className="tlbl">{t('detail.best_time')}</div>
                 </div>
               )}
               {fee && (
                 <div className="tblock">
                   <div className="tval">{fee}</div>
-                  <div className="tlbl">Entry</div>
+                  <div className="tlbl">{t('detail.entry')}</div>
                 </div>
               )}
               {v(T.prasad_type) && (
@@ -575,22 +577,22 @@ export default function TempleDetailPage() {
             ))}
           </div>
 
-          <ReadMore label="More Details">
+          <ReadMore label={t('detail.more_details')}>
             <div className="ig">
-              <II label="Temple Type"        value={T.temple_type}/>
-              <II label="Founded By"         value={T.founded_by}/>
-              <II label="Last Renovation"    value={T.last_renovation_year}/>
-              <II label="Building Condition" value={T.building_condition}/>
-              <II label="Managing Authority" value={T.managing_authority}/>
-              <II label="Trust Name"         value={T.trust_name}/>
-              <II label="Local Landmark"     value={T.local_landmark} icon="🏛️"/>
-              <II label="Weekly Special Day" value={T.weekly_special_day} icon="⭐"/>
+              <II label={t('detail.temple_type')}        value={T.temple_type}/>
+              <II label={t('detail.founded_by')}         value={T.founded_by}/>
+              <II label={t('detail.last_renovation')}    value={T.last_renovation_year}/>
+              <II label={t('detail.building_condition')} value={T.building_condition}/>
+              <II label={t('detail.managing_authority')} value={T.managing_authority}/>
+              <II label={t('detail.trust_name')}         value={T.trust_name}/>
+              <II label={t('detail.local_landmark')}     value={T.local_landmark} icon="🏛️"/>
+              <II label={t('detail.weekly_special_day')} value={T.weekly_special_day} icon="⭐"/>
               {v(T.online_puja_available) && T.online_puja_available!=='no' && (
-                <II label="Online Puja" value={T.online_puja_available==='yes'?'Available ✅':'Coming Soon 🔜'}/>
+                <II label={t('detail.online_puja')} value={T.online_puja_available==='yes'? t('detail.available') : t('detail.coming_soon')}/>
               )}
-              <II label="Local Name"         value={T.name_local}/>
-              <II label="Best Time to Visit" value={T.best_time_to_visit} icon="📅" full/>
-              <II label="Address"            value={T.address} icon="📌" full/>
+              <II label={t('detail.local_name')}         value={T.name_local}/>
+              <II label={t('detail.best_time_to_visit')} value={T.best_time_to_visit} icon="📅" full/>
+              <II label={t('detail.address')}            value={T.address} icon="📌" full/>
             </div>
           </ReadMore>
         </div>
@@ -598,15 +600,15 @@ export default function TempleDetailPage() {
         {/* ── HISTORY & SIGNIFICANCE ── */}
         {(v(T.history)||v(T.significance)||v(T.sthala_purana)||v(T.puranic_stories)||v(T.history_hindi)) && (
           <div className="sec" id="history">
-            <div className="sec-h"><div className="sec-icon">📜</div>History & Significance</div>
+            <div className="sec-h"><div className="sec-icon">📜</div>{t('detail.history_title')}</div>
             {v(T.history) && (
               <p className="prose" style={{display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden',marginBottom:0}}>{T.history}</p>
             )}
-            <ReadMore label="Read Full History">
+            <ReadMore label={t('detail.read_full_history')}>
               {v(T.history)         && <p className="prose">{T.history}</p>}
               {v(T.sthala_purana)   && <p className="prose prose-sm" style={{fontStyle:'italic',marginBottom:14}}>{T.sthala_purana}</p>}
               {v(T.puranic_stories) && (<div className="puranic"><div className="puranic-lbl">📖 Puranic Story</div><p className="prose-sm" style={{fontStyle:'italic'}}>{T.puranic_stories}</p></div>)}
-              {v(T.significance)    && (<div className="significance"><div className="sig-lbl">✨ Why Visit</div><p style={{fontSize:14,lineHeight:1.8,color:'#7A5538'}}>{T.significance}</p></div>)}
+              {v(T.significance)    && (<div className="significance"><div className="sig-lbl">✨ {t('detail.why_visit')}</div><p style={{fontSize:14,lineHeight:1.8,color:'#7A5538'}}>{T.significance}</p></div>)}
               {v(T.history_hindi)   && (<div className="hindi-block"><div className="hindi-lbl">हिंदी में इतिहास</div><p style={{fontFamily:"'Noto Sans Devanagari',sans-serif",fontSize:14,lineHeight:1.9,color:'#7A5538'}}>{T.history_hindi}</p></div>)}
             </ReadMore>
           </div>
@@ -615,7 +617,7 @@ export default function TempleDetailPage() {
         {/* ── PUJA & SERVICES ── */}
         {(pujaSchedule.length>0 || pujaServices.length>0) && (
           <div className="sec" id="puja">
-            <div className="sec-h"><div className="sec-icon">🕉️</div>Puja & Aarti</div>
+            <div className="sec-h"><div className="sec-icon">🕉️</div>{t('detail.sevas_title')}</div>
             {pujaSchedule.slice(0,3).map((p,i)=>(
               <div key={i} className="prow">
                 <div><span className="pname">{p.puja_name}</span>{p.puja_type&&<span style={{fontSize:11,color:'#A07050',marginLeft:8}}>{p.puja_type}</span>}</div>
@@ -623,7 +625,7 @@ export default function TempleDetailPage() {
               </div>
             ))}
             {(pujaSchedule.length > 3 || pujaServices.length > 0) && (
-              <ReadMore label="View Full Schedule">
+              <ReadMore label={t('detail.view_full_schedule')}>
                 {pujaSchedule.slice(3).map((p,i)=>(
                   <div key={i} className="prow">
                     <span className="pname">{p.puja_name}</span>
@@ -639,7 +641,7 @@ export default function TempleDetailPage() {
         {/* ── MANTRAS ── */}
         {mantras.length > 0 && (
           <div className="sec" id="mantras">
-            <div className="sec-h"><div className="sec-icon">🕉️</div>Mantras</div>
+            <div className="sec-h"><div className="sec-icon">🕉️</div>{t('detail.mantras_title')}</div>
             <div className="mantra">
               <div className="m-title">{mantras[0].title}{mantras[0].mantra_type&&<span style={{opacity:.4,fontWeight:400,marginLeft:8,fontSize:11}}>· {mantras[0].mantra_type}</span>}</div>
               {mantras[0].sanskrit && <div className="m-sk" style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{mantras[0].sanskrit}</div>}
