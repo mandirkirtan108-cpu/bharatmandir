@@ -174,6 +174,8 @@ class TempleFieldUpdate(BaseModel):
     history:             Optional[str] = None
     significance:        Optional[str] = None
     website_url:         Optional[str] = None
+    custom_designation:  Optional[str] = None   # ← NEW
+    custom_facility:     Optional[str] = None   # ← NEW
 
 
 # ─────────────────────────────────────────────
@@ -237,7 +239,7 @@ async def create_temple(
     is_unesco_heritage:    bool = Form(False),
     is_state_heritage:     bool = Form(False),
 
-    # ── Step 5: Schedule ─────────────────────
+    # ── Step 4: Schedule ─────────────────────
     opening_time:               Optional[str] = Form(None),
     closing_time:               Optional[str] = Form(None),
     afternoon_closure_start:    Optional[str] = Form(None),
@@ -316,6 +318,9 @@ async def create_temple(
     category_tags:         Optional[str]  = Form(None),
     status:                str            = Form("draft"),
     source:                str            = Form("admin_form"),
+    # ── NEW: Custom fields from frontend ──────
+    custom_designation:    Optional[str]  = Form(None),   # ← NEW
+    custom_facility:       Optional[str]  = Form(None),   # ← NEW
 ):
     base_slug = slugify(name, city)
     state_code = state.strip()[:2].upper()
@@ -394,6 +399,7 @@ async def create_temple(
                 facebook_page, youtube_channel, instagram_handle, best_time_to_call,
                 entry_fee, dress_code, best_time_to_visit,
                 category_tags, status, source,
+                custom_designation, custom_facility,
                 verified, submitted_at
             ) VALUES (
                 %s,%s,%s,%s,%s,%s,
@@ -414,6 +420,7 @@ async def create_temple(
                 %s,%s,%s,%s,%s,%s,%s,%s,
                 %s,%s,%s,
                 %s,%s,%s,
+                %s,%s,
                 FALSE, NOW()
             )
             RETURNING id, slug, mkt_id
@@ -462,6 +469,7 @@ async def create_temple(
             _v(facebook_page), _v(youtube_channel), _v(instagram_handle), _v(best_time_to_call),
             entry_fee, _v(dress_code), _v(best_time_to_visit),
             tags, status, source,
+            _v(custom_designation), _v(custom_facility),   # ← NEW values
         ])
         row = cur.fetchone()
 
@@ -575,6 +583,7 @@ def get_temple_admin(
                    entry_fee, dress_code, best_time_to_visit,
                    average_rating, total_ratings,
                    status, verified, category_tags,
+                   custom_designation, custom_facility,
                    submitted_at, published_at, created_at
             FROM temples
             WHERE id = %s

@@ -7,16 +7,6 @@ import { adminAPI } from '../services/api';
 const SECTS = ['','Shaiva','Vaishnava','Shakta','Smartha','Jain','Buddhist','Sikh','Other'];
 const TYPES = ['','Mandir','Devasthan','Peeth','Mutt','Shrine','Other'];
 
-// Managing Authority now includes a "Custom" sentinel
-const MANAGING_AUTHORITIES = [
-  '',
-  'Private / Family Trust',
-  'Community / Village Trust',
-  'State Govt Endowment Board',
-  'Archaeological Survey of India (ASI)',
-  '__custom__',   // sentinel — renders as "Other / Custom…"
-];
-
 const STATES_IN = [
   'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi',
   'Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand',
@@ -26,7 +16,7 @@ const STATES_IN = [
 ];
 const SETTINGS = ['','Riverbank / Ghats','Hilltop / Mountain','Forest / Jungle','Urban / City','Cave / Underground','Island','Roadside / Highway','Village common'];
 
-// Architecture styles — multi-select now
+// Architecture styles — multi-select
 const ARCH_STYLES = ['Nagara (North Indian)','Dravidian (South Indian)','Vesara (Mixed)','Kalinga (Odisha)','Hemadpanthi','Modern / Other'];
 
 const BUILDING_CONDITIONS = ['','Excellent — well maintained','Good — minor maintenance needed','Fair — needs renovation','Poor — urgent repair needed'];
@@ -34,23 +24,12 @@ const WEEKDAYS = ['None / All days equal','Monday (Shiva)','Tuesday (Hanuman / D
 const SAMPRADAYAS = ['','Shaiva','Vaishnava','Shakta','Smarta','Ramanandi','Madhva','ISKCON / Vaishnava','Other'];
 const APPT_TYPES = ['','Hereditary family priest','Trust-appointed','Government / Endowment Board appointed','Community elected'];
 
-// Election cycles — includes custom sentinel
-const ELECTION_CYCLES = [
-  '',
-  'Annual',
-  'Every 2 years',
-  'Every 3 years',
-  'Permanent / No election',
-  'Government appointed',
-  '__custom__',   // sentinel
-];
-
 const STATUS_OPTS = ['draft','review','published','flagged','archived'];
 const SOURCE_OPTS = ['manual','wikidata','wikipedia','google_places','openstreetmap','government','ai_enriched','csv_import'];
 const ROLES = ['admin','temple_representative','volunteer','data_entry'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-// Special designations — includes a custom slot
+// Special designations
 const DESIGNATIONS = [
   { key:'is_jyotirlinga',     label:'⚡ Jyotirlinga' },
   { key:'is_shaktipeeth',     label:'🌸 Shaktipeeth' },
@@ -134,7 +113,7 @@ function to12h(val) {
   return `${h}:${m} ${ampm}`;
 }
 
-/** Convert "H:MM AM/PM" → "HH:MM" (24h) for <input type="time"> */
+/** Convert "H:MM AM/PM" → "HH:MM" (24h) for storage */
 function to24h(val) {
   if (!val) return '';
   const match = val.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -154,13 +133,11 @@ function TimeInput({ value, onChange, placeholder = '9:00 AM' }) {
   const handleChange = (e) => {
     const v = e.target.value;
     setRaw(v);
-    // Try to parse on every keystroke
     const match = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
     if (match) onChange(to24h(v));
   };
 
   const handleBlur = () => {
-    // Auto-format on blur: "9:00" → "9:00 AM" if no AM/PM typed
     let v = raw.trim();
     if (v && !/AM|PM/i.test(v)) {
       const parts = v.split(':');
@@ -187,7 +164,13 @@ function TimeInput({ value, onChange, placeholder = '9:00 AM' }) {
 }
 
 function initialForm() {
-  const bools = [...DESIGNATIONS.map(d=>d.key), ...PUJAS.map(p=>p.key), ...FACILITIES.map(f=>f.key), ...PROGRAMS.map(p=>p.key), ...DONATION_CATS.map(d=>d.key)];
+  const bools = [
+    ...DESIGNATIONS.map(d=>d.key),
+    ...PUJAS.map(p=>p.key),
+    ...FACILITIES.map(f=>f.key),
+    ...PROGRAMS.map(p=>p.key),
+    ...DONATION_CATS.map(d=>d.key),
+  ];
   const base = {
     name:'', name_hindi:'', name_local:'', temple_type:'', sect:'', managing_authority:'',
     managing_authority_custom:'',
@@ -211,8 +194,8 @@ function initialForm() {
     accept_online_donations:false, upi_id:'', certificate_80g_no:'',
     bank_account_name:'', bank_name_branch:'', bank_account_number:'', bank_ifsc:'',
     submitter_name:'', submitter_role:'admin', submitter_phone:'',
-    custom_designation:'',      // for custom special designation text
-    custom_facility:'',         // for custom facility text
+    custom_designation:'',
+    custom_facility:'',
   };
   bools.forEach(k => base[k] = false);
   return base;
@@ -323,7 +306,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .chip:hover{border-color:var(--s3);color:var(--s2);}
 .chip.on{border-color:var(--s2);background:var(--sl);color:var(--s1);font-weight:500;}
 
-/* PUJA / FACILITY GRID — whole box clickable */
+/* WHOLE-BOX CLICKABLE GRID — puja / facility / program */
 .puja-grid,.fac-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px;}
 .fac-grid{grid-template-columns:repeat(auto-fill,minmax(185px,1fr));}
 .puja-item,.fac-item{border:1.5px solid var(--bd2);border-radius:9px;padding:9px 12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:8px;user-select:none;}
@@ -333,8 +316,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 /* SCHEDULE BUILDER */
 .sched-builder{border:1px solid var(--bd2);border-radius:10px;overflow:hidden;}
-.sched-hdr{background:var(--parch);padding:10px 14px;font-size:10.5px;font-weight:500;color:var(--inkl);text-transform:uppercase;letter-spacing:.06em;display:grid;grid-template-columns:1fr 115px 100px 34px;gap:10px;}
-.sched-row{display:grid;grid-template-columns:1fr 115px 100px 34px;gap:10px;padding:8px 14px;border-top:1px solid var(--bd3);align-items:center;}
+.sched-hdr{background:var(--parch);padding:10px 14px;font-size:10.5px;font-weight:500;color:var(--inkl);text-transform:uppercase;letter-spacing:.06em;display:grid;grid-template-columns:1fr 130px 100px 34px;gap:10px;}
+.sched-row{display:grid;grid-template-columns:1fr 130px 100px 34px;gap:10px;padding:8px 14px;border-top:1px solid var(--bd3);align-items:center;}
 .sched-row input,.sched-row select{padding:6px 10px;border-radius:7px;font-size:12px;}
 .sched-del{width:28px;height:28px;border:1px solid var(--bd2);border-radius:7px;background:var(--white);color:var(--red);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
 .sched-del:hover{background:var(--redl);border-color:var(--red);}
@@ -432,8 +415,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 /* PUJA OFFERING BUILDER */
 .offering-builder{border:1px solid var(--bd2);border-radius:10px;overflow:hidden;margin-top:8px;}
-.offering-hdr{background:var(--parch);padding:9px 14px;font-size:10.5px;font-weight:500;color:var(--inkl);text-transform:uppercase;letter-spacing:.06em;display:grid;grid-template-columns:1fr 130px 34px;gap:10px;}
-.offering-row{display:grid;grid-template-columns:1fr 130px 34px;gap:10px;padding:8px 14px;border-top:1px solid var(--bd3);align-items:center;}
+.offering-hdr{background:var(--parch);padding:9px 14px;font-size:10.5px;font-weight:500;color:var(--inkl);text-transform:uppercase;letter-spacing:.06em;display:grid;grid-template-columns:1fr 160px 34px;gap:10px;}
+.offering-row{display:grid;grid-template-columns:1fr 160px 34px;gap:10px;padding:8px 14px;border-top:1px solid var(--bd3);align-items:center;}
 .offering-row input{padding:6px 10px;border-radius:7px;font-size:12px;}
 
 /* BANNERS */
@@ -453,6 +436,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .custom-input-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
 .custom-input-row input{flex:1;}
 
+/* Time input hint badge */
+.time-badge{display:inline-flex;align-items:center;gap:4px;background:var(--sl);border:1px solid var(--slm);border-radius:6px;padding:3px 8px;font-size:10px;color:var(--s1);font-weight:500;margin-top:4px;}
+
 @keyframes fadein{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 .form-section{animation:fadein .32s ease;}
 
@@ -461,8 +447,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   .page{padding:24px 14px 60px;}
   .fsec{padding:18px 16px;}
   .summary-grid{grid-template-columns:1fr 1fr;}
-  .sched-hdr,.sched-row{grid-template-columns:1fr 90px 80px 32px;font-size:11px;}
-  .offering-hdr,.offering-row{grid-template-columns:1fr 110px 32px;font-size:11px;}
+  .sched-hdr,.sched-row{grid-template-columns:1fr 110px 80px 32px;font-size:11px;}
+  .offering-hdr,.offering-row{grid-template-columns:1fr 130px 32px;font-size:11px;}
   .form-nav{gap:8px;}
 }
 `;
@@ -512,7 +498,7 @@ function SecLabel({ children }) {
   return <div className="sec-label">{children}</div>;
 }
 
-// Whole-box-clickable check grid
+/** Whole-box-clickable check grid — used for Pujas, Facilities, Programs, Donations */
 function CheckGrid({ items, form, toggle, className = 'puja-grid', itemClass = 'puja-item', nameClass = 'puja-name' }) {
   return (
     <div className={className}>
@@ -535,29 +521,33 @@ export default function AdminAddTemplePage() {
   const [form, setForm]     = useState(initialForm());
   const [step, setStep]     = useState(1);
   const [errors, setErrors] = useState({});
-  const [priests, setPriests]   = useState([initPriest()]);
-  const [scheds, setScheds]     = useState([initSched(), initSched()]);
-  const [pujaOfferings, setPujaOfferings] = useState([]);   // custom puja timings
-  const [mantras, setMantras]   = useState([initMantra()]);
-  const [festivals, setFestivs] = useState([initFestival()]);
-  const [photos, setPhotos]     = useState(Array(6).fill(null));
-  const [consents, setConsents] = useState([false,false,false,false,false]);
-  const [archStyles, setArchStyles] = useState([]);   // multi-select array
-  const [submitted, setSubmitted] = useState(false);
-  const [qrId, setQrId]         = useState('');
-  const [customDesignationText, setCustomDesignationText] = useState('');
+  const [priests, setPriests]         = useState([initPriest()]);
+  const [scheds, setScheds]           = useState([initSched(), initSched()]);
+  const [pujaOfferings, setPujaOfferings] = useState([]);
+  const [mantras, setMantras]         = useState([initMantra()]);
+  const [festivals, setFestivs]       = useState([initFestival()]);
+  const [photos, setPhotos]           = useState(Array(6).fill(null));
+  const [consents, setConsents]       = useState([false,false,false,false,false]);
+  const [archStyles, setArchStyles]   = useState([]);
+  const [submitted, setSubmitted]     = useState(false);
+  const [qrId, setQrId]               = useState('');
+
+  // Custom designation (Page 1)
   const [showCustomDesignation, setShowCustomDesignation] = useState(false);
-  const [customFacilityText, setCustomFacilityText] = useState('');
+  const [customDesignationText, setCustomDesignationText] = useState('');
+
+  // Custom facility (Page 4)
   const [showCustomFacility, setShowCustomFacility] = useState(false);
+  const [customFacilityText, setCustomFacilityText] = useState('');
+
   const progressRef = useRef(null);
 
   const set    = (k, v) => { setForm(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: undefined })); };
   const toggle = k       => setForm(p => ({ ...p, [k]: !p[k] }));
 
   // Architecture style multi-select
-  const toggleArchStyle = (s) => {
+  const toggleArchStyle = (s) =>
     setArchStyles(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
-  };
 
   // Managing authority helpers
   const isCustomAuthority = form.managing_authority === '__custom__';
@@ -567,10 +557,11 @@ export default function AdminAddTemplePage() {
   const isCustomCycle = form.election_cycle === '__custom__';
   const effectiveCycle = isCustomCycle ? form.election_cycle_custom : form.election_cycle;
 
+  // ── Validation ──────────────────────────────────────────────────────────────
   function validate(s) {
     const e = {};
     if (s === 1) {
-      if (!form.name.trim())         e.name = 'Temple name is required';
+      if (!form.name.trim())          e.name = 'Temple name is required';
       if (!form.primary_deity.trim()) e.primary_deity = 'Primary deity is required';
     }
     if (s === 2) {
@@ -586,13 +577,13 @@ export default function AdminAddTemplePage() {
 
   function nextStep(from) {
     if (!validate(from)) return;
-    const next = from + 1;
-    setStep(next);
+    setStep(from + 1);
     setTimeout(() => progressRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
   function prevStep(from) { setStep(from - 1); }
   function goStep(n) { if (n <= step) setStep(n); }
 
+  // ── Photos ──────────────────────────────────────────────────────────────────
   function handlePhotoChange(e, idx) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -601,27 +592,27 @@ export default function AdminAddTemplePage() {
   }
   function removePhoto(idx) { setPhotos(prev => { const a=[...prev]; a[idx]=null; return a; }); }
 
-  // Priests
+  // ── Priests ─────────────────────────────────────────────────────────────────
   const addPriest    = () => setPriests(p => [...p, initPriest()]);
   const removePriest = id => setPriests(p => p.filter(x => x.id !== id));
   const setPriest    = (id, k, v) => setPriests(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
 
-  // Schedule
-  const addSched    = () => setScheds(p => [...p, initSched()]);
-  const delSched    = id => setScheds(p => p.length > 1 ? p.filter(x=>x.id!==id) : p);
-  const setSched    = (id,k,v) => setScheds(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+  // ── Schedule ─────────────────────────────────────────────────────────────────
+  const addSched  = () => setScheds(p => [...p, initSched()]);
+  const delSched  = id => setScheds(p => p.length > 1 ? p.filter(x=>x.id!==id) : p);
+  const setSched  = (id,k,v) => setScheds(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
 
-  // Custom puja offerings
-  const addOffering    = () => setPujaOfferings(p => [...p, initPujaOffering()]);
-  const delOffering    = id => setPujaOfferings(p => p.filter(x=>x.id!==id));
-  const setOffering    = (id,k,v) => setPujaOfferings(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+  // ── Custom Puja Offerings ────────────────────────────────────────────────────
+  const addOffering = () => setPujaOfferings(p => [...p, initPujaOffering()]);
+  const delOffering = id => setPujaOfferings(p => p.filter(x=>x.id!==id));
+  const setOffering = (id,k,v) => setPujaOfferings(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
 
-  // Mantras
+  // ── Mantras ──────────────────────────────────────────────────────────────────
   const addMantra    = () => setMantras(p => [...p, initMantra()]);
   const removeMantra = id => setMantras(p => p.filter(x=>x.id!==id));
   const setMantra    = (id,k,v) => setMantras(p => p.map(x=>x.id===id ? {...x,[k]:v} : x));
 
-  // Festivals
+  // ── Festivals ─────────────────────────────────────────────────────────────────
   const addFest    = () => setFestivs(p => [...p, initFestival()]);
   const removeFest = id => setFestivs(p => p.filter(x=>x.id!==id));
   const setFest    = (id,k,v) => setFestivs(p => p.map(x=>x.id===id ? {...x,[k]:v} : x));
@@ -629,6 +620,7 @@ export default function AdminAddTemplePage() {
   const allConsents = consents.every(Boolean);
   const toggleConsent = i => setConsents(c => { const a=[...c]; a[i]=!a[i]; return a; });
 
+  // ── Submit ────────────────────────────────────────────────────────────────────
   async function submitForm() {
     if (!consents.every(Boolean)) return;
     const fd = new FormData();
@@ -703,12 +695,13 @@ export default function AdminAddTemplePage() {
     ['Source',        form.source || '—'],
   ];
 
-  // ── RENDER ────────────────────────────────────────────────────────────────
+  // ── RENDER ────────────────────────────────────────────────────────────────────
   return (
     <>
       <style>{css}</style>
       <Navbar />
 
+      {/* ── HERO ── */}
       <div className="hero">
         <div className="hero-bg">
           {['🛕','🪔','✨','🔱','🌸'].map((e, i) => (
@@ -722,6 +715,7 @@ export default function AdminAddTemplePage() {
         </div>
       </div>
 
+      {/* ── STEP PROGRESS ── */}
       <div className="progress-wrap" ref={progressRef}>
         <div className="progress">
           {STEP_LABELS.map((label, i) => {
@@ -744,6 +738,7 @@ export default function AdminAddTemplePage() {
 
       <div className="page">
         {submitted ? (
+          /* ── SUCCESS ── */
           <div className="success-page">
             <div className="success-icon">🕉️</div>
             <div className="success-title">Jai Shri Ram! Temple Added!</div>
@@ -759,12 +754,16 @@ export default function AdminAddTemplePage() {
               ))}
             </div>
             <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' }}>
-              <button className="btn-home" onClick={() => { setSubmitted(false); setForm(initialForm()); setStep(1); }}>+ Add Another Temple</button>
+              <button className="btn-home" onClick={() => { setSubmitted(false); setForm(initialForm()); setStep(1); setArchStyles([]); setPujaOfferings([]); }}>
+                + Add Another Temple
+              </button>
             </div>
           </div>
         ) : (
           <>
-            {/* ══ STEP 1: TEMPLE IDENTITY ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 1 — TEMPLE IDENTITY
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 1 && (
               <div className="form-section">
                 <SectionCard icon="🏛️" title="Temple Identity" sub="Core identification information">
@@ -781,7 +780,15 @@ export default function AdminAddTemplePage() {
                       <Inp id="name_local" type="text" value={form.name_local} onChange={v=>set('name_local',v)} placeholder="Name in regional language" />
                     </Field>
                     <Field label="Temple Type">
-                      <Sel id="temple_type" value={form.temple_type} onChange={v=>set('temple_type',v)} options={TYPES} />
+                      <Sel id="temple_type" value={form.temple_type} onChange={v=>set('temple_type',v)}>
+                        <option value="">Select</option>
+                        <option value="Mandir">Mandir</option>
+                        <option value="Devasthan">Devasthan</option>
+                        <option value="Peeth">Peeth</option>
+                        <option value="Mutt">Mutt</option>
+                        <option value="Shrine">Shrine</option>
+                        <option value="Other">Other / Custom</option>
+                      </Sel>
                     </Field>
                   </div>
                   <div className="fg-2">
@@ -789,7 +796,7 @@ export default function AdminAddTemplePage() {
                       <Sel id="sect" value={form.sect} onChange={v=>set('sect',v)} options={SECTS} />
                     </Field>
 
-                    {/* ── Managing Authority with Custom option ── */}
+                    {/* ── Managing Authority with Custom ── */}
                     <Field label="Managing Authority">
                       <Sel
                         id="managing_authority"
@@ -836,13 +843,19 @@ export default function AdminAddTemplePage() {
                   </div>
                 </SectionCard>
 
-                {/* ── Special Designations with Custom ── */}
+                {/* ── Special Designations with Custom chip ── */}
                 <SectionCard icon="⭐" title="Special Designations" sub="Sacred classifications this temple belongs to">
                   <div className="chip-group">
                     {DESIGNATIONS.map(({ key, label }) => (
-                      <span key={key} className={`chip${form[key] ? ' on' : ''}`} onClick={() => toggle(key)}>{label}</span>
+                      <span
+                        key={key}
+                        className={`chip${form[key] ? ' on' : ''}`}
+                        onClick={() => toggle(key)}
+                      >
+                        {label}
+                      </span>
                     ))}
-                    {/* Custom designation chip */}
+                    {/* Custom designation toggle chip */}
                     <span
                       className={`chip${showCustomDesignation ? ' on' : ''}`}
                       onClick={() => setShowCustomDesignation(p => !p)}
@@ -895,7 +908,9 @@ export default function AdminAddTemplePage() {
               </div>
             )}
 
-            {/* ══ STEP 2: LOCATION ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 2 — LOCATION
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 2 && (
               <div className="form-section">
                 <SectionCard icon="📍" title="Address & Location" sub="Physical location for maps and pilgrims">
@@ -958,7 +973,9 @@ export default function AdminAddTemplePage() {
               </div>
             )}
 
-            {/* ══ STEP 3: HISTORY ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 3 — HISTORY & ARCHITECTURE
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 3 && (
               <div className="form-section">
                 <SectionCard icon="📜" title="History & Significance" sub="Cultural and religious background">
@@ -982,7 +999,7 @@ export default function AdminAddTemplePage() {
 
                   {/* ── Architecture Style — MULTI SELECT ── */}
                   <SecLabel>Architecture & Construction</SecLabel>
-                  <Field label="Architecture Style" hint="Select all that apply — multiple styles can be chosen">
+                  <Field label="Architecture Style" hint="Click to select — multiple styles can be chosen">
                     <div className="chip-group" style={{ marginTop: 4 }}>
                       {ARCH_STYLES.map(s => (
                         <span
@@ -996,12 +1013,12 @@ export default function AdminAddTemplePage() {
                     </div>
                     {archStyles.length > 0 && (
                       <div className="field-hint" style={{ marginTop: 8 }}>
-                        Selected: {archStyles.join(' · ')}
+                        ✅ Selected: {archStyles.join(' · ')}
                       </div>
                     )}
                   </Field>
 
-                  <div className="fg-3" style={{ marginTop:14 }}>
+                  <div className="fg-3" style={{ marginTop: 14 }}>
                     <Field label="Estimated Year Built">
                       <Inp type="text" value={form.estimated_year_built} onChange={v=>set('estimated_year_built',v)} placeholder="e.g. 7th century, 1234 AD" />
                     </Field>
@@ -1024,11 +1041,19 @@ export default function AdminAddTemplePage() {
               </div>
             )}
 
-            {/* ══ STEP 4: VISIT INFO ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 4 — VISIT INFO (Timings, Pujas, Facilities)
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 4 && (
               <div className="form-section">
+                {/* ── Timings ── */}
                 <SectionCard icon="🕐" title="Timings & Entry" sub="When and how pilgrims can visit">
-                  {/* ── AM/PM time inputs ── */}
+                  <div className="info-banner">
+                    <span>🕐</span>
+                    <span>Enter times in <strong>AM / PM format</strong> — e.g. <strong>5:30 AM</strong>, <strong>9:00 PM</strong>. Type the time and the field will auto-format on exit.</span>
+                  </div>
+
+                  {/* Opening & Closing */}
                   <div className="fg-2" style={{ marginBottom: 14 }}>
                     <Field label="Opening Time" hint="e.g. 5:30 AM">
                       <TimeInput
@@ -1036,6 +1061,9 @@ export default function AdminAddTemplePage() {
                         onChange={v => set('opening_time', v)}
                         placeholder="5:30 AM"
                       />
+                      {form.opening_time && (
+                        <div className="time-badge">🕐 {to12h(form.opening_time)}</div>
+                      )}
                     </Field>
                     <Field label="Closing Time" hint="e.g. 9:00 PM">
                       <TimeInput
@@ -1043,24 +1071,37 @@ export default function AdminAddTemplePage() {
                         onChange={v => set('closing_time', v)}
                         placeholder="9:00 PM"
                       />
+                      {form.closing_time && (
+                        <div className="time-badge">🕐 {to12h(form.closing_time)}</div>
+                      )}
                     </Field>
                   </div>
+
+                  {/* Afternoon Closure */}
+                  <SecLabel>Afternoon Closure (optional)</SecLabel>
                   <div className="fg-2" style={{ marginBottom: 14 }}>
-                    <Field label="Afternoon Closure Start" hint="e.g. 12:00 PM" opt>
+                    <Field label="Closure Start" hint="e.g. 12:00 PM" opt>
                       <TimeInput
                         value={form.afternoon_closure_start}
                         onChange={v => set('afternoon_closure_start', v)}
                         placeholder="12:00 PM"
                       />
+                      {form.afternoon_closure_start && (
+                        <div className="time-badge">🕐 {to12h(form.afternoon_closure_start)}</div>
+                      )}
                     </Field>
-                    <Field label="Afternoon Closure End" hint="e.g. 4:00 PM" opt>
+                    <Field label="Closure End" hint="e.g. 4:00 PM" opt>
                       <TimeInput
                         value={form.afternoon_closure_end}
                         onChange={v => set('afternoon_closure_end', v)}
                         placeholder="4:00 PM"
                       />
+                      {form.afternoon_closure_end && (
+                        <div className="time-badge">🕐 {to12h(form.afternoon_closure_end)}</div>
+                      )}
                     </Field>
                   </div>
+
                   <div className="fg-3">
                     <Field label="Entry Fee (₹)">
                       <Inp type="number" min={0} step={0.5} value={form.entry_fee} onChange={v=>set('entry_fee',v)} placeholder="0 = Free" />
@@ -1080,6 +1121,7 @@ export default function AdminAddTemplePage() {
                   </Field>
                 </SectionCard>
 
+                {/* ── Contact & Social ── */}
                 <SectionCard icon="📞" title="Contact & Social Media" sub="How pilgrims and devotees can reach the temple">
                   <div className="fg-2">
                     <Field label="Temple Phone"><Inp type="tel" value={form.phone} onChange={v=>set('phone',v)} placeholder="+91 XXXXX XXXXX" /></Field>
@@ -1101,22 +1143,38 @@ export default function AdminAddTemplePage() {
                 </SectionCard>
 
                 {/* ── Puja Offerings — checkbox grid + custom timing builder ── */}
-                <SectionCard icon="🙏" title="Puja Offerings Available" sub="Select all puja types offered, and optionally set custom timings">
-                  <CheckGrid items={PUJAS} form={form} toggle={toggle} className="puja-grid" itemClass="puja-item" nameClass="puja-name" />
+                <SectionCard icon="🙏" title="Puja Offerings Available" sub="Select offered pujas, then optionally set timings for each">
+                  {/* Whole-box clickable grid */}
+                  <CheckGrid
+                    items={PUJAS}
+                    form={form}
+                    toggle={toggle}
+                    className="puja-grid"
+                    itemClass="puja-item"
+                    nameClass="puja-name"
+                  />
 
-                  <div style={{ marginTop: 20 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <div style={{ fontFamily: 'var(--ff-h)', fontSize: 13, color: 'var(--inkm)', fontWeight: 600 }}>
-                        Custom Puja Timings <span style={{ fontFamily: 'var(--ff-u)', fontWeight: 400, fontSize: 11, color: 'var(--inkll)' }}>(optional — add timings for specific pujas)</span>
+                  {/* Custom puja timings builder */}
+                  <div style={{ marginTop: 22 }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                      <div>
+                        <span style={{ fontFamily:'var(--ff-h)', fontSize:13, color:'var(--inkm)', fontWeight:600 }}>
+                          Custom Puja Timings
+                        </span>
+                        <span style={{ fontFamily:'var(--ff-u)', fontWeight:400, fontSize:11, color:'var(--inkll)', marginLeft:8 }}>
+                          (optional — set AM/PM timings for specific pujas)
+                        </span>
                       </div>
-                      <button className="add-btn" style={{ margin: 0 }} onClick={addOffering}>+ Add Puja Timing</button>
+                      <button className="add-btn" style={{ margin:0 }} onClick={addOffering}>
+                        + Add Puja Timing
+                      </button>
                     </div>
 
                     {pujaOfferings.length > 0 && (
                       <div className="offering-builder">
                         <div className="offering-hdr">
-                          <span>Puja Name</span>
-                          <span>Timing (AM/PM)</span>
+                          <span>Puja / Seva Name</span>
+                          <span>Timing (e.g. 6:00 AM)</span>
                           <span></span>
                         </div>
                         {pujaOfferings.map(o => (
@@ -1133,27 +1191,40 @@ export default function AdminAddTemplePage() {
                               onChange={e => setOffering(o.id, 'timing', e.target.value)}
                               placeholder="e.g. 6:00 AM"
                             />
-                            <button className="sched-del" onClick={() => delOffering(o.id)}>×</button>
+                            <button className="sched-del" onClick={() => delOffering(o.id)} title="Remove">×</button>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {pujaOfferings.length === 0 && (
+                      <div style={{ padding:'12px 14px', background:'var(--parch)', borderRadius:9, border:'1px dashed var(--bd1)', fontSize:12, color:'var(--inkll)', textAlign:'center' }}>
+                        Click "+ Add Puja Timing" to specify timings for individual pujas
                       </div>
                     )}
                   </div>
                 </SectionCard>
 
                 {/* ── Facilities — whole box clickable + custom option ── */}
-                <SectionCard icon="✅" title="Facilities Available" sub="Infrastructure and amenities at the temple">
-                  <CheckGrid items={FACILITIES} form={form} toggle={toggle} className="fac-grid" itemClass="fac-item" nameClass="fac-name" />
+                <SectionCard icon="✅" title="Facilities Available" sub="Infrastructure and amenities — click anywhere on the box to toggle">
+                  <CheckGrid
+                    items={FACILITIES}
+                    form={form}
+                    toggle={toggle}
+                    className="fac-grid"
+                    itemClass="fac-item"
+                    nameClass="fac-name"
+                  />
 
-                  {/* Custom facility */}
-                  <div style={{ marginTop: 12 }}>
+                  {/* Custom facility — whole box clickable */}
+                  <div style={{ marginTop: 10 }}>
                     <div
                       className={`fac-item${showCustomFacility ? ' on' : ''}`}
-                      style={{ display: 'inline-flex', cursor: 'pointer', minWidth: 185 }}
+                      style={{ display:'inline-flex', cursor:'pointer', minWidth:200, marginBottom: showCustomFacility ? 0 : 0 }}
                       onClick={() => setShowCustomFacility(p => !p)}
                     >
-                      <input type="checkbox" checked={showCustomFacility} onChange={() => {}} style={{ accentColor: 'var(--s2)', flexShrink: 0 }} />
-                      <span className="fac-name">✏️ Other / Custom</span>
+                      <input type="checkbox" checked={showCustomFacility} onChange={() => {}} style={{ accentColor:'var(--s2)', flexShrink:0 }} />
+                      <span className="fac-name">✏️ Other / Custom Facility</span>
                     </div>
                     {showCustomFacility && (
                       <div className="custom-input-row">
@@ -1161,16 +1232,23 @@ export default function AdminAddTemplePage() {
                           type="text"
                           value={customFacilityText}
                           onChange={setCustomFacilityText}
-                          placeholder="Describe the custom facility…"
+                          placeholder="Describe the custom facility (e.g. Helicopter pad, Annadanam Hall)…"
                         />
                       </div>
                     )}
                   </div>
 
                   {/* Community Programs — whole box clickable */}
-                  <div style={{ marginTop: 22 }}>
+                  <div style={{ marginTop: 24 }}>
                     <SecLabel>Community Programs</SecLabel>
-                    <CheckGrid items={PROGRAMS} form={form} toggle={toggle} className="fac-grid" itemClass="fac-item" nameClass="fac-name" />
+                    <CheckGrid
+                      items={PROGRAMS}
+                      form={form}
+                      toggle={toggle}
+                      className="fac-grid"
+                      itemClass="fac-item"
+                      nameClass="fac-name"
+                    />
                   </div>
                 </SectionCard>
 
@@ -1182,7 +1260,9 @@ export default function AdminAddTemplePage() {
               </div>
             )}
 
-            {/* ══ STEP 5: DIGITAL & SEVA ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 5 — DIGITAL & SEVA
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 5 && (
               <div className="form-section">
                 <SectionCard icon="📺" title="Digital & Live Services" sub="Online puja, live darshan and streaming">
@@ -1209,9 +1289,9 @@ export default function AdminAddTemplePage() {
 
                 <SectionCard icon="🎬" title="Video Content" sub="Aarti, intro, and 360° videos">
                   {[
-                    { icon:'🪔', label:'Aarti Video URL', key:'video_aarti_url', ph:'YouTube / Vimeo URL for Aarti video' },
+                    { icon:'🪔', label:'Aarti Video URL',          key:'video_aarti_url', ph:'YouTube / Vimeo URL for Aarti video' },
                     { icon:'🎥', label:'Intro / Overview Video URL', key:'video_intro_url', ph:'YouTube / Vimeo URL for temple intro' },
-                    { icon:'🔄', label:'360° Tour Video URL', key:'video_360_url', ph:'YouTube 360° URL for virtual darshan' },
+                    { icon:'🔄', label:'360° Tour Video URL',        key:'video_360_url',  ph:'YouTube 360° URL for virtual darshan' },
                   ].map(({ icon, label, key, ph }) => (
                     <Field key={key} label={label} opt>
                       <div className="video-field">
@@ -1230,20 +1310,31 @@ export default function AdminAddTemplePage() {
               </div>
             )}
 
-            {/* ══ STEP 6: PRIESTS & SCHEDULE ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 6 — PRIESTS & SCHEDULE
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 6 && (
               <div className="form-section">
+                {/* ── Priests ── */}
                 <SectionCard icon="👳" title="Temple Priests" sub="Priests serving at this temple">
                   {priests.map((p, idx) => (
                     <div className="priest-card" key={p.id}>
                       <div className="priest-card-hdr">
                         <div className="priest-card-title">👳 Priest #{idx + 1}</div>
-                        {idx > 0 && <button className="remove-priest" onClick={() => removePriest(p.id)}>× Remove</button>}
+                        {idx > 0 && (
+                          <button className="remove-priest" onClick={() => removePriest(p.id)}>× Remove</button>
+                        )}
                       </div>
                       <div className="fg-3">
-                        <Field label="Full Name" req><Inp type="text" value={p.name} onChange={v=>setPriest(p.id,'name',v)} placeholder="e.g. Pandit Ram Sharma" /></Field>
-                        <Field label="Title / Designation"><Inp type="text" value={p.title} onChange={v=>setPriest(p.id,'title',v)} placeholder="e.g. Head Priest, Pujari" /></Field>
-                        <Field label="Phone" req><Inp type="tel" value={p.phone} onChange={v=>setPriest(p.id,'phone',v)} placeholder="+91 XXXXX XXXXX" /></Field>
+                        <Field label="Full Name" req>
+                          <Inp type="text" value={p.name} onChange={v=>setPriest(p.id,'name',v)} placeholder="e.g. Pandit Ram Sharma" />
+                        </Field>
+                        <Field label="Title / Designation">
+                          <Inp type="text" value={p.title} onChange={v=>setPriest(p.id,'title',v)} placeholder="e.g. Head Priest, Pujari" />
+                        </Field>
+                        <Field label="Phone" req>
+                          <Inp type="tel" value={p.phone} onChange={v=>setPriest(p.id,'phone',v)} placeholder="+91 XXXXX XXXXX" />
+                        </Field>
                       </div>
                       <div className="fg-3">
                         <Field label="Sampradaya">
@@ -1256,25 +1347,31 @@ export default function AdminAddTemplePage() {
                             {APPT_TYPES.map(a=><option key={a} value={a}>{a||'Select'}</option>)}
                           </select>
                         </Field>
-                        {/* ── Years Serving — min 0, max 100 ── */}
-                        <Field label="Years Serving" hint="0 – 100 years">
+                        {/* ── Years Serving: 0–100 only, no negatives ── */}
+                        <Field label="Years Serving" hint="Enter 0 – 100 years only">
                           <Inp
                             type="number"
                             min={0}
                             max={100}
                             value={p.years}
                             onChange={v => {
-                              const n = parseInt(v, 10);
                               if (v === '') { setPriest(p.id, 'years', ''); return; }
+                              const n = parseInt(v, 10);
                               if (!isNaN(n) && n >= 0 && n <= 100) setPriest(p.id, 'years', String(n));
+                            }}
+                            onBlur={e => {
+                              const n = parseInt(e.target.value, 10);
+                              if (isNaN(n) || n < 0) setPriest(p.id, 'years', '0');
+                              else if (n > 100)       setPriest(p.id, 'years', '100');
                             }}
                             placeholder="e.g. 15"
                           />
                         </Field>
                       </div>
+                      {/* Head Priest toggle — whole box clickable */}
                       <div
                         className={`fac-item${p.is_head ? ' on' : ''}`}
-                        style={{ display:'inline-flex', cursor:'pointer', minWidth:180 }}
+                        style={{ display:'inline-flex', cursor:'pointer', minWidth:200 }}
                         onClick={() => setPriest(p.id,'is_head',!p.is_head)}
                       >
                         <input type="checkbox" checked={p.is_head} onChange={()=>{}} style={{ accentColor:'var(--s2)', marginRight:6 }} />
@@ -1285,10 +1382,19 @@ export default function AdminAddTemplePage() {
                   <button className="add-btn" onClick={addPriest}>+ Add Another Priest</button>
                 </SectionCard>
 
-                {/* ── Daily Puja Schedule — AM/PM time ── */}
-                <SectionCard icon="⏰" title="Daily Puja Schedule" sub="Timings of regular pujas and aartis (AM / PM format)">
+                {/* ── Daily Puja Schedule — AM/PM time format ── */}
+                <SectionCard icon="⏰" title="Daily Puja Schedule" sub="Timings of regular pujas and aartis — enter in AM / PM format (e.g. 5:30 AM)">
+                  <div className="info-banner" style={{ marginBottom:14 }}>
+                    <span>🕐</span>
+                    <span>Enter times in <strong>AM / PM format</strong> — e.g. <strong>5:30 AM</strong>, <strong>12:00 PM</strong>, <strong>7:30 PM</strong></span>
+                  </div>
                   <div className="sched-builder">
-                    <div className="sched-hdr"><span>Puja Name</span><span>Time (AM/PM)</span><span>Type</span><span></span></div>
+                    <div className="sched-hdr">
+                      <span>Puja / Aarti Name</span>
+                      <span>Time (AM / PM)</span>
+                      <span>Type</span>
+                      <span></span>
+                    </div>
                     {scheds.map(s => (
                       <div className="sched-row" key={s.id}>
                         <input
@@ -1297,7 +1403,7 @@ export default function AdminAddTemplePage() {
                           onChange={e => setSched(s.id,'name',e.target.value)}
                           placeholder="e.g. Mangal Aarti"
                         />
-                        {/* AM/PM time for schedule — inline text input */}
+                        {/* AM/PM free-text time input */}
                         <input
                           type="text"
                           value={s.time}
@@ -1307,22 +1413,29 @@ export default function AdminAddTemplePage() {
                         <select value={s.type} onChange={e=>setSched(s.id,'type',e.target.value)}>
                           {['Aarti','Puja','Abhishek','Bhog','Other'].map(t=><option key={t}>{t}</option>)}
                         </select>
-                        <button className="sched-del" onClick={() => delSched(s.id)}>×</button>
+                        <button className="sched-del" onClick={() => delSched(s.id)} title="Remove row">×</button>
                       </div>
                     ))}
                   </div>
                   <button className="add-sched-btn" onClick={addSched}>+ Add Puja Row</button>
                 </SectionCard>
 
+                {/* ── Temple Committee ── */}
                 <SectionCard icon="🎉" title="Temple Committee" sub="Governing committee details">
                   <div className="fg-2">
-                    <Field label="Chairman Name" opt><Inp type="text" value={form.chairman_name} onChange={v=>set('chairman_name',v)} placeholder="e.g. Sri Ramesh Gupta" /></Field>
-                    <Field label="Chairman Contact" opt><Inp type="tel" value={form.chairman_contact} onChange={v=>set('chairman_contact',v)} placeholder="+91 XXXXX XXXXX" /></Field>
+                    <Field label="Chairman Name" opt>
+                      <Inp type="text" value={form.chairman_name} onChange={v=>set('chairman_name',v)} placeholder="e.g. Sri Ramesh Gupta" />
+                    </Field>
+                    <Field label="Chairman Contact" opt>
+                      <Inp type="tel" value={form.chairman_contact} onChange={v=>set('chairman_contact',v)} placeholder="+91 XXXXX XXXXX" />
+                    </Field>
                   </div>
                   <div className="fg-2">
-                    <Field label="Committee Member Count" opt><Inp type="number" min={1} value={form.committee_count} onChange={v=>set('committee_count',v)} placeholder="e.g. 11" /></Field>
+                    <Field label="Committee Member Count" opt>
+                      <Inp type="number" min={1} value={form.committee_count} onChange={v=>set('committee_count',v)} placeholder="e.g. 11" />
+                    </Field>
 
-                    {/* ── Election Cycle with Custom ── */}
+                    {/* ── Election Cycle with Custom option ── */}
                     <Field label="Election Cycle">
                       <Sel value={form.election_cycle} onChange={v=>set('election_cycle',v)}>
                         <option value="">Select</option>
@@ -1339,7 +1452,7 @@ export default function AdminAddTemplePage() {
                             type="text"
                             value={form.election_cycle_custom}
                             onChange={v => set('election_cycle_custom', v)}
-                            placeholder="Enter custom election cycle…"
+                            placeholder="Enter custom election cycle (e.g. Every 5 years)…"
                           />
                         </div>
                       )}
@@ -1355,9 +1468,12 @@ export default function AdminAddTemplePage() {
               </div>
             )}
 
-            {/* ══ STEP 7: MEDIA ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 7 — MEDIA (Photos, Mantras, Festivals)
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 7 && (
               <div className="form-section">
+                {/* ── Photos ── */}
                 <SectionCard icon="🖼️" title="Temple Photos" sub="Upload photos for the temple gallery">
                   <div className="info-banner">
                     <span>ℹ️</span>
@@ -1365,7 +1481,7 @@ export default function AdminAddTemplePage() {
                   </div>
                   <div className="photo-grid">
                     {photos.map((url, idx) => (
-                      <div key={idx} className={`photo-slot${url ? ' has-img' : ''}`} style={{ position:'relative' }}>
+                      <div key={idx} className={`photo-slot${url ? ' has-img' : ''}`}>
                         {url ? (
                           <>
                             <div className="ps-preview" style={{ background:`url(${url}) center/cover` }} />
@@ -1376,7 +1492,12 @@ export default function AdminAddTemplePage() {
                             <div className="ps-icon">📸</div>
                             <div className="ps-label">{idx === 0 ? 'Hero Image' : `Gallery Photo ${idx+1}`}</div>
                             {idx === 0 && <div className="ps-req">Required</div>}
-                            <input type="file" accept="image/*" style={{ position:'absolute', inset:0, opacity:0, cursor:'pointer' }} onChange={e => handlePhotoChange(e, idx)} />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ position:'absolute', inset:0, opacity:0, cursor:'pointer' }}
+                              onChange={e => handlePhotoChange(e, idx)}
+                            />
                           </>
                         )}
                       </div>
@@ -1385,33 +1506,54 @@ export default function AdminAddTemplePage() {
                   <div className="field-hint" style={{ marginTop:10 }}>Accepted: JPG, PNG, WebP · Max 10MB per photo</div>
                 </SectionCard>
 
+                {/* ── Mantras ── */}
                 <SectionCard icon="🎵" title="Mantras" sub="Add mantras associated with this temple's deity">
                   {mantras.map((m, idx) => (
                     <div className="sub-card" key={m.id}>
-                      {idx > 0 && <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={() => removeMantra(m.id)}>× Remove</button>}
+                      {idx > 0 && (
+                        <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={() => removeMantra(m.id)}>× Remove</button>
+                      )}
                       <div className="fg-2">
-                        <Field label="Mantra Title"><Inp type="text" value={m.title} onChange={v=>setMantra(m.id,'title',v)} placeholder="e.g. Maha Mrityunjaya Mantra" /></Field>
-                        <Field label="Deity"><Inp type="text" value={m.deity} onChange={v=>setMantra(m.id,'deity',v)} placeholder="e.g. Lord Shiva" /></Field>
+                        <Field label="Mantra Title">
+                          <Inp type="text" value={m.title} onChange={v=>setMantra(m.id,'title',v)} placeholder="e.g. Maha Mrityunjaya Mantra" />
+                        </Field>
+                        <Field label="Deity">
+                          <Inp type="text" value={m.deity} onChange={v=>setMantra(m.id,'deity',v)} placeholder="e.g. Lord Shiva" />
+                        </Field>
                       </div>
-                      <Field label="Sanskrit Text"><Txt value={m.sanskrit} onChange={v=>setMantra(m.id,'sanskrit',v)} rows={2} placeholder="ॐ त्र्यम्बकं यजामहे…" /></Field>
-                      <Field label="Transliteration"><Inp type="text" value={m.transliteration} onChange={v=>setMantra(m.id,'transliteration',v)} placeholder="Om Tryambakam Yajamahe…" /></Field>
-                      <Field label="Meaning / Benefits"><Txt value={m.meaning} onChange={v=>setMantra(m.id,'meaning',v)} rows={2} placeholder="Meaning and spiritual benefits…" /></Field>
-                      <Field label="Audio URL" opt><Inp type="url" value={m.audio} onChange={v=>setMantra(m.id,'audio',v)} placeholder="https://...mp3" /></Field>
+                      <Field label="Sanskrit Text">
+                        <Txt value={m.sanskrit} onChange={v=>setMantra(m.id,'sanskrit',v)} rows={2} placeholder="ॐ त्र्यम्बकं यजामहे…" />
+                      </Field>
+                      <Field label="Transliteration">
+                        <Inp type="text" value={m.transliteration} onChange={v=>setMantra(m.id,'transliteration',v)} placeholder="Om Tryambakam Yajamahe…" />
+                      </Field>
+                      <Field label="Meaning / Benefits">
+                        <Txt value={m.meaning} onChange={v=>setMantra(m.id,'meaning',v)} rows={2} placeholder="Meaning and spiritual benefits…" />
+                      </Field>
+                      <Field label="Audio URL" opt>
+                        <Inp type="url" value={m.audio} onChange={v=>setMantra(m.id,'audio',v)} placeholder="https://...mp3" />
+                      </Field>
                     </div>
                   ))}
                   <button className="add-btn" onClick={addMantra}>+ Add Another Mantra</button>
                 </SectionCard>
 
-                {/* ── Festivals — Major Festival whole-row clickable ── */}
+                {/* ── Festivals — Major Festival: WHOLE ROW clickable ── */}
                 <SectionCard icon="🎊" title="Festivals" sub="Major festivals celebrated at this temple">
                   {festivals.map((f, idx) => (
                     <div className="sub-card" key={f.id}>
                       {idx > 0 && (
-                        <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={() => removeFest(f.id)}>× Remove</button>
+                        <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={() => removeFest(f.id)}>
+                          × Remove
+                        </button>
                       )}
                       <div className="fg-3">
-                        <Field label="Festival Name" req><Inp type="text" value={f.name} onChange={v=>setFest(f.id,'name',v)} placeholder="e.g. Mahashivratri" /></Field>
-                        <Field label="Hindu Month"><Inp type="text" value={f.hmonth} onChange={v=>setFest(f.id,'hmonth',v)} placeholder="e.g. Phalguna" /></Field>
+                        <Field label="Festival Name" req>
+                          <Inp type="text" value={f.name} onChange={v=>setFest(f.id,'name',v)} placeholder="e.g. Mahashivratri" />
+                        </Field>
+                        <Field label="Hindu Month">
+                          <Inp type="text" value={f.hmonth} onChange={v=>setFest(f.id,'hmonth',v)} placeholder="e.g. Phalguna" />
+                        </Field>
                         <Field label="Calendar Month">
                           <select value={f.month} onChange={e=>setFest(f.id,'month',e.target.value)}>
                             <option value="">Select</option>
@@ -1427,7 +1569,7 @@ export default function AdminAddTemplePage() {
                           <Field label="Duration (days)">
                             <Inp type="number" min={1} value={f.days} onChange={v=>setFest(f.id,'days',v)} placeholder="e.g. 3" />
                           </Field>
-                          {/* ── Major Festival — whole row clickable ── */}
+                          {/* ── Major Festival — ENTIRE ROW is clickable ── */}
                           <div
                             className={`festival-major-row${f.major ? ' on' : ''}`}
                             onClick={() => setFest(f.id,'major',!f.major)}
@@ -1439,10 +1581,12 @@ export default function AdminAddTemplePage() {
                               style={{ accentColor:'var(--s2)' }}
                             />
                             <span style={{ fontSize:13, color:'var(--inkm)', fontWeight: f.major ? 600 : 400 }}>
-                              ⭐ Major Festival
+                              ⭐ Mark as Major Festival
                             </span>
                             {f.major && (
-                              <span style={{ marginLeft:'auto', fontSize:11, color:'var(--s2)', fontWeight:600 }}>MARKED</span>
+                              <span style={{ marginLeft:'auto', fontSize:11, color:'var(--s2)', fontWeight:600, background:'var(--slm)', padding:'2px 8px', borderRadius:20 }}>
+                                MAJOR ✓
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1460,7 +1604,9 @@ export default function AdminAddTemplePage() {
               </div>
             )}
 
-            {/* ══ STEP 8: DONATIONS ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 8 — DONATIONS
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 8 && (
               <div className="form-section">
                 <SectionCard icon="💰" title="Online Donations" sub="Payment details for accepting donations">
@@ -1468,9 +1614,11 @@ export default function AdminAddTemplePage() {
                     <span>⚠️</span>
                     <span><strong>Security Notice:</strong> Bank account number will be encrypted in production. Ensure HTTPS is enabled before collecting banking data.</span>
                   </div>
+
+                  {/* Accept donations — whole box clickable */}
                   <div
                     className={`fac-item${form.accept_online_donations ? ' on' : ''}`}
-                    style={{ display:'inline-flex', cursor:'pointer', minWidth:280 }}
+                    style={{ display:'inline-flex', cursor:'pointer', minWidth:300 }}
                     onClick={() => set('accept_online_donations', !form.accept_online_donations)}
                   >
                     <input type="checkbox" checked={form.accept_online_donations} onChange={()=>{}} style={{ accentColor:'var(--s2)', marginRight:6 }} />
@@ -1480,22 +1628,41 @@ export default function AdminAddTemplePage() {
                   {form.accept_online_donations && (
                     <div style={{ marginTop:16 }}>
                       <div className="fg-2">
-                        <Field label="UPI ID" opt><Inp type="text" value={form.upi_id} onChange={v=>set('upi_id',v)} placeholder="e.g. temple@upi or 9876543210@paytm" /></Field>
-                        <Field label="80G Certificate No." opt><Inp type="text" value={form.certificate_80g_no} onChange={v=>set('certificate_80g_no',v)} placeholder="e.g. AAACT1234C2024001" /></Field>
+                        <Field label="UPI ID" opt>
+                          <Inp type="text" value={form.upi_id} onChange={v=>set('upi_id',v)} placeholder="e.g. temple@upi or 9876543210@paytm" />
+                        </Field>
+                        <Field label="80G Certificate No." opt>
+                          <Inp type="text" value={form.certificate_80g_no} onChange={v=>set('certificate_80g_no',v)} placeholder="e.g. AAACT1234C2024001" />
+                        </Field>
                       </div>
                       <SecLabel>Bank Details</SecLabel>
                       <div className="fg-2">
-                        <Field label="Account Holder Name"><Inp type="text" value={form.bank_account_name} onChange={v=>set('bank_account_name',v)} placeholder="e.g. Shri Mahakaleshwar Temple Trust" /></Field>
-                        <Field label="Bank & Branch Name"><Inp type="text" value={form.bank_name_branch} onChange={v=>set('bank_name_branch',v)} placeholder="e.g. SBI, Ujjain Main Branch" /></Field>
+                        <Field label="Account Holder Name">
+                          <Inp type="text" value={form.bank_account_name} onChange={v=>set('bank_account_name',v)} placeholder="e.g. Shri Mahakaleshwar Temple Trust" />
+                        </Field>
+                        <Field label="Bank & Branch Name">
+                          <Inp type="text" value={form.bank_name_branch} onChange={v=>set('bank_name_branch',v)} placeholder="e.g. SBI, Ujjain Main Branch" />
+                        </Field>
                       </div>
                       <div className="fg-2">
-                        <Field label="Account Number"><Inp type="text" value={form.bank_account_number} onChange={v=>set('bank_account_number',v)} placeholder="XXXXXXXXXXXX" /></Field>
-                        <Field label="IFSC Code"><Inp type="text" value={form.bank_ifsc} onChange={v=>set('bank_ifsc',v)} placeholder="e.g. SBIN0001234" maxLength={11} /></Field>
+                        <Field label="Account Number">
+                          <Inp type="text" value={form.bank_account_number} onChange={v=>set('bank_account_number',v)} placeholder="XXXXXXXXXXXX" />
+                        </Field>
+                        <Field label="IFSC Code">
+                          <Inp type="text" value={form.bank_ifsc} onChange={v=>set('bank_ifsc',v)} placeholder="e.g. SBIN0001234" maxLength={11} />
+                        </Field>
                       </div>
                       <SecLabel>Donation Categories</SecLabel>
                       <div className="donation-box">
                         <div className="donation-box-title">📋 What can devotees donate for?</div>
-                        <CheckGrid items={DONATION_CATS} form={form} toggle={toggle} className="fac-grid" itemClass="fac-item" nameClass="fac-name" />
+                        <CheckGrid
+                          items={DONATION_CATS}
+                          form={form}
+                          toggle={toggle}
+                          className="fac-grid"
+                          itemClass="fac-item"
+                          nameClass="fac-name"
+                        />
                       </div>
                     </div>
                   )}
@@ -1508,7 +1675,9 @@ export default function AdminAddTemplePage() {
               </div>
             )}
 
-            {/* ══ STEP 9: REVIEW & SUBMIT ══ */}
+            {/* ══════════════════════════════════════════════════════════════════
+                STEP 9 — REVIEW & SUBMIT
+            ══════════════════════════════════════════════════════════════════ */}
             {step === 9 && (
               <div className="form-section">
                 <div className="review-card">
@@ -1538,7 +1707,7 @@ export default function AdminAddTemplePage() {
                     </Field>
                   </div>
 
-                  <div style={{ marginTop:6 }}>
+                  <div style={{ marginTop: 6 }}>
                     <div className="consent-title">Consent & Compliance</div>
                     {[
                       'I confirm I am authorised to submit this temple\'s information to BharatMandir.',
