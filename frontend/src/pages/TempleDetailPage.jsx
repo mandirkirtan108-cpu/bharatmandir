@@ -750,14 +750,45 @@ export default function TempleDetailPage() {
               {T.donation_medical_camps    &&<div className="cause"><div className="cause-i">🏥</div><div className="cause-n">{t('detail.cause_medical')}</div></div>}
               {T.donation_general          &&<div className="cause"><div className="cause-i">🙏</div><div className="cause-n">{t('detail.cause_general')}</div></div>}
             </div>
-            {v(T.upi_id) && (
+            {(v(T.upi_id) || v(T.payment_page_url)) && (
               <>
-                <p style={{fontSize:11,textAlign:'center',color:'#A07050',margin:'8px 0 4px'}}>
-                  {t('detail.upi_id_label')}: <strong>{T.upi_id}</strong>
-                </p>
-                <button className="abtn" onClick={() => setShowUpiModal(true)}>
-                  {t('detail.donate_upi')}
-                </button>
+                {v(T.upi_id) && (
+                  <p style={{fontSize:11,textAlign:'center',color:'#A07050',margin:'8px 0 4px'}}>
+                    {t('detail.upi_id_label')}: <strong>{T.upi_id}</strong>
+                  </p>
+                )}
+                <div style={{
+                  display: 'flex',
+                  gap: 8,
+                  marginTop: 4,
+                  flexDirection: (v(T.upi_id) && v(T.payment_page_url)) ? 'row' : 'column',
+                }}>
+                  {v(T.upi_id) && (
+                    <button
+                      className="abtn"
+                      onClick={() => setShowUpiModal(true)}
+                      style={{ flex: 1, margin: 0 }}
+                    >
+                      🙏 {t('detail.donate_upi')}
+                    </button>
+                  )}
+                  {v(T.payment_page_url) && (
+                    <a
+                      href={T.payment_page_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="abtn"
+                      style={{
+                        flex: 1, margin: 0,
+                        textAlign: 'center', textDecoration: 'none',
+                        background: 'linear-gradient(135deg,#1A6B3A,#2E9E58)',
+                        color: '#fff', border: 'none',
+                      }}
+                    >
+                      💳 {t('detail.donate_online', { defaultValue: 'Donate Online' })} →
+                    </a>
+                  )}
+                </div>
               </>
             )}
             {v(T.certificate_80g_no)&&<p style={{fontSize:11,color:'#1A6B3A',marginTop:8,textAlign:'center'}}>{t('detail.exempt_80g')}: {T.certificate_80g_no}</p>}
