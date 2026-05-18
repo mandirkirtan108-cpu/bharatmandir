@@ -8,7 +8,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2, XCircle, Archive, Eye, RefreshCw,
   Search, Shield, ShieldCheck, ExternalLink, Clock,
@@ -461,44 +460,115 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
 
 // ── Edit Modal ────────────────────────────────────────────────────────────────
 function EditModal({ temple, onClose, onSaved }) {
-  const EDITABLE_FIELDS = [
-    { key: 'name',               label: 'Temple Name',        type: 'text' },
-    { key: 'name_hindi',         label: 'Name (Hindi)',        type: 'text' },
-    { key: 'primary_deity',      label: 'Primary Deity',       type: 'text' },
-    { key: 'sect',               label: 'Sect',                type: 'text' },
-    { key: 'temple_type',        label: 'Temple Type',         type: 'text' },
-    { key: 'architecture_style', label: 'Architecture Style',  type: 'text' },
-    { key: 'estimated_year_built', label: 'Est. Year Built',   type: 'text' },
-    { key: 'city',               label: 'City',                type: 'text' },
-    { key: 'state',              label: 'State',               type: 'text' },
-    { key: 'address',            label: 'Address',             type: 'text' },
-    { key: 'opening_time',       label: 'Opening Time',        type: 'text' },
-    { key: 'closing_time',       label: 'Closing Time',        type: 'text' },
-    { key: 'entry_fee',          label: 'Entry Fee (₹)',       type: 'number' },
-    { key: 'dress_code',         label: 'Dress Code',          type: 'text' },
-    { key: 'best_time_to_visit', label: 'Best Time to Visit',  type: 'text' },
-    { key: 'nearest_railway',    label: 'Nearest Railway',     type: 'text' },
-    { key: 'nearest_airport',    label: 'Nearest Airport',     type: 'text' },
-    { key: 'website_url',        label: 'Website URL',         type: 'text' },
-    { key: 'history',            label: 'History',             type: 'textarea' },
-    { key: 'significance',       label: 'Significance',        type: 'textarea' },
+
+  const SECTIONS = [
+    {
+      title: '🏛️ Basic Info',
+      fields: [
+        { key: 'name',                  label: 'Temple Name',           type: 'text' },
+        { key: 'name_hindi',            label: 'Name (Hindi)',           type: 'text' },
+        { key: 'name_local',            label: 'Name (Local Language)',  type: 'text' },
+        { key: 'primary_deity',         label: 'Primary Deity',          type: 'text' },
+        { key: 'secondary_deities',     label: 'Secondary Deities',      type: 'text' },
+        { key: 'sect',                  label: 'Sect',                   type: 'text' },
+        { key: 'temple_type',           label: 'Temple Type',            type: 'text' },
+        { key: 'architecture_style',    label: 'Architecture Style',     type: 'text' },
+        { key: 'estimated_year_built',  label: 'Est. Year Built',        type: 'text' },
+        { key: 'founded_by',            label: 'Founded By',             type: 'text' },
+        { key: 'last_renovation_year',  label: 'Last Renovation Year',   type: 'text' },
+        { key: 'building_condition',    label: 'Building Condition',     type: 'text' },
+        { key: 'managing_authority',    label: 'Managing Authority',     type: 'text' },
+        { key: 'trust_name',            label: 'Trust Name',             type: 'text' },
+        { key: 'trust_registration_no', label: 'Trust Reg. No.',         type: 'text' },
+      ],
+    },
+    {
+      title: '📍 Location',
+      fields: [
+        { key: 'address',             label: 'Full Address',          type: 'text' },
+        { key: 'city',                label: 'City',                  type: 'text' },
+        { key: 'district',            label: 'District',              type: 'text' },
+        { key: 'state',               label: 'State',                 type: 'text' },
+        { key: 'pincode',             label: 'Pincode',               type: 'text' },
+        { key: 'latitude',            label: 'Latitude',              type: 'text' },
+        { key: 'longitude',           label: 'Longitude',             type: 'text' },
+        { key: 'local_landmark',      label: 'Local Landmark',        type: 'text' },
+        { key: 'setting_environment', label: 'Setting / Environment', type: 'text' },
+        { key: 'nearest_bus_stand',   label: 'Nearest Bus Stand',     type: 'text' },
+        { key: 'nearest_railway',     label: 'Nearest Railway',       type: 'text' },
+        { key: 'nearest_airport',     label: 'Nearest Airport',       type: 'text' },
+        { key: 'google_maps_link',    label: 'Google Maps Link',      type: 'text', full: true },
+      ],
+    },
+    {
+      title: '🕐 Timings & Visit Info',
+      fields: [
+        { key: 'opening_time',            label: 'Opening Time',          type: 'text' },
+        { key: 'closing_time',            label: 'Closing Time',          type: 'text' },
+        { key: 'afternoon_closure_start', label: 'Afternoon Break Start', type: 'text' },
+        { key: 'afternoon_closure_end',   label: 'Afternoon Break End',   type: 'text' },
+        { key: 'weekly_special_day',      label: 'Weekly Special Day',    type: 'text' },
+        { key: 'best_time_to_visit',      label: 'Best Time to Visit',    type: 'text', full: true },
+        { key: 'entry_fee',               label: 'Entry Fee (₹, 0=Free)', type: 'number' },
+        { key: 'dress_code',              label: 'Dress Code',            type: 'text' },
+        { key: 'prasad_type',             label: 'Prasad Type',           type: 'text' },
+      ],
+    },
+    {
+      title: '📞 Contact & Social',
+      fields: [
+        { key: 'phone',            label: 'Phone',                    type: 'text' },
+        { key: 'whatsapp_number',  label: 'WhatsApp Number',          type: 'text' },
+        { key: 'official_email',   label: 'Official Email',           type: 'text' },
+        { key: 'best_time_to_call',label: 'Best Time to Call',        type: 'text' },
+        { key: 'website_url',      label: 'Website URL',              type: 'text' },
+        { key: 'payment_page_url', label: '💳 Payment / Donation URL',type: 'text' },
+        { key: 'facebook_page',    label: 'Facebook Page',            type: 'text' },
+        { key: 'instagram_handle', label: 'Instagram Handle',         type: 'text' },
+        { key: 'youtube_channel',  label: 'YouTube Channel',          type: 'text' },
+        { key: 'live_stream_url',  label: 'Live Stream URL',          type: 'text' },
+      ],
+    },
+    {
+      title: '💰 Finance & Donations',
+      fields: [
+        { key: 'upi_id',           label: 'UPI ID',              type: 'text' },
+        { key: 'certificate_80g_no',label: '80G Certificate No.',type: 'text' },
+        { key: 'bank_account_name',label: 'Bank Account Name',   type: 'text' },
+        { key: 'bank_name_branch', label: 'Bank Name / Branch',  type: 'text' },
+        { key: 'bank_ifsc',        label: 'Bank IFSC Code',      type: 'text' },
+      ],
+    },
+    {
+      title: '📖 History & Content',
+      fields: [
+        { key: 'history',          label: 'History',              type: 'textarea', rows: 6 },
+        { key: 'history_hindi',    label: 'History (Hindi)',      type: 'textarea', rows: 4 },
+        { key: 'significance',     label: 'Significance',         type: 'textarea', rows: 4 },
+        { key: 'sthala_purana',    label: 'Sthala Purana',        type: 'textarea', rows: 4 },
+        { key: 'puranic_stories',  label: 'Puranic Stories',      type: 'textarea', rows: 4 },
+      ],
+    },
   ];
 
+  // Flatten all fields for form init
+  const allFields = SECTIONS.flatMap(s => s.fields);
+
+  // Pre-fill form with ALL existing temple data
   const [form, setForm] = useState(() => {
     const init = {};
-    EDITABLE_FIELDS.forEach(f => { init[f.key] = temple[f.key] ?? ''; });
+    allFields.forEach(f => { init[f.key] = temple[f.key] ?? ''; });
     return init;
   });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [error,  setError]  = useState(null);
 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
-      // Only send non-empty changed fields
       const payload = {};
-      EDITABLE_FIELDS.forEach(f => {
+      allFields.forEach(f => {
         const val = form[f.key];
         if (val !== '' && val !== null && val !== undefined) {
           payload[f.key] = f.type === 'number' ? Number(val) : val;
@@ -514,6 +584,14 @@ function EditModal({ temple, onClose, onSaved }) {
     }
   };
 
+  const inputStyle = {
+    width: '100%', padding: '9px 12px',
+    border: '2px solid var(--cream-dark)', borderRadius: 10,
+    fontFamily: 'var(--font-body)', fontSize: 13,
+    color: 'var(--text-dark)', background: 'white',
+    outline: 'none', boxSizing: 'border-box',
+  };
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 10000,
@@ -522,7 +600,7 @@ function EditModal({ temple, onClose, onSaved }) {
     }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{
         background: 'var(--cream)', borderRadius: 20,
-        width: '100%', maxWidth: 680, maxHeight: '92vh',
+        width: '100%', maxWidth: 760, maxHeight: '94vh',
         overflow: 'hidden', display: 'flex', flexDirection: 'column',
         boxShadow: '0 24px 80px rgba(61,31,0,.35)',
       }}>
@@ -531,12 +609,18 @@ function EditModal({ temple, onClose, onSaved }) {
           background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
           padding: '18px 24px',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Pencil size={18} color="white" />
-            <h2 style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>
-              Edit Temple
-            </h2>
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>
+                Edit Temple
+              </h2>
+              <p style={{ color: 'rgba(255,255,255,.65)', fontSize: 12, margin: '2px 0 0', fontFamily: 'var(--font-display)' }}>
+                ID: {temple.id} · {temple.mkt_id || temple.slug}
+              </p>
+            </div>
           </div>
           <button onClick={onClose} style={{
             background: 'rgba(255,255,255,.15)', border: 'none', color: 'white',
@@ -548,89 +632,100 @@ function EditModal({ temple, onClose, onSaved }) {
         {error && (
           <div style={{
             background: '#fef2f2', borderBottom: '1px solid #fca5a5',
-            padding: '10px 20px', color: '#b91c1c',
+            padding: '10px 20px', color: '#b91c1c', flexShrink: 0,
             fontFamily: 'var(--font-display)', fontSize: 13, display: 'flex', gap: 8, alignItems: 'center',
           }}>
             <AlertTriangle size={15} /> {error}
           </div>
         )}
 
-        {/* Form Body */}
+        {/* Form Body — scrollable */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
-          <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'var(--text-light)', letterSpacing: '.06em', marginBottom: 16 }}>
-            TEMPLE ID: {temple.id} · {temple.mkt_id || temple.slug}
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 20px' }}>
-            {EDITABLE_FIELDS.map(f => (
-              <div key={f.key} style={{ gridColumn: f.type === 'textarea' ? '1 / -1' : undefined }}>
-                <label style={{
-                  display: 'block', marginBottom: 5,
-                  fontFamily: 'var(--font-display)', fontSize: 11,
-                  letterSpacing: '.06em', color: 'var(--text-light)', textTransform: 'uppercase',
-                }}>{f.label}</label>
-                {f.type === 'textarea' ? (
-                  <textarea
-                    value={form[f.key]}
-                    onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                    rows={4}
-                    style={{
-                      width: '100%', padding: '9px 12px',
-                      border: '2px solid var(--cream-dark)', borderRadius: 10,
-                      fontFamily: 'var(--font-body)', fontSize: 13,
-                      color: 'var(--text-dark)', background: 'white',
-                      resize: 'vertical', outline: 'none', boxSizing: 'border-box',
-                    }}
-                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
-                    onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-                  />
-                ) : (
-                  <input
-                    type={f.type}
-                    value={form[f.key]}
-                    onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                    style={{
-                      width: '100%', padding: '9px 12px',
-                      border: '2px solid var(--cream-dark)', borderRadius: 10,
-                      fontFamily: 'var(--font-body)', fontSize: 13,
-                      color: 'var(--text-dark)', background: 'white',
-                      outline: 'none', boxSizing: 'border-box',
-                    }}
-                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
-                    onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-                  />
-                )}
+          {SECTIONS.map(section => (
+            <div key={section.title} style={{ marginBottom: 28 }}>
+              {/* Section Header */}
+              <div style={{
+                fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
+                letterSpacing: '.08em', color: 'var(--saffron)',
+                textTransform: 'uppercase', marginBottom: 12,
+                paddingBottom: 8, borderBottom: '2px solid var(--cream-dark)',
+              }}>
+                {section.title}
               </div>
-            ))}
-          </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+                {section.fields.map(f => (
+                  <div key={f.key} style={{ gridColumn: (f.type === 'textarea' || f.full) ? '1 / -1' : undefined }}>
+                    <label style={{
+                      display: 'block', marginBottom: 5,
+                      fontFamily: 'var(--font-display)', fontSize: 11,
+                      letterSpacing: '.06em', color: 'var(--text-light)', textTransform: 'uppercase',
+                    }}>{f.label}</label>
+
+                    {f.type === 'textarea' ? (
+                      <textarea
+                        value={form[f.key]}
+                        onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        rows={f.rows || 4}
+                        placeholder={temple[f.key] ? String(temple[f.key]) : `Enter ${f.label}…`}
+                        style={{ ...inputStyle, resize: 'vertical' }}
+                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                        onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+                      />
+                    ) : (
+                      <input
+                        type={f.type}
+                        value={form[f.key]}
+                        onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        placeholder={
+                          temple[f.key] !== null && temple[f.key] !== undefined && temple[f.key] !== ''
+                            ? String(temple[f.key])
+                            : `Enter ${f.label}…`
+                        }
+                        style={inputStyle}
+                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                        onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Footer */}
         <div style={{
-          borderTop: '2px solid var(--cream-dark)',
+          borderTop: '2px solid var(--cream-dark)', flexShrink: 0,
           padding: '14px 24px', background: 'white',
-          display: 'flex', justifyContent: 'flex-end', gap: 10,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
         }}>
-          <button onClick={onClose} style={{
-            padding: '9px 18px', borderRadius: 50,
-            border: '2px solid var(--cream-dark)', background: 'white',
-            fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
-            cursor: 'pointer', color: 'var(--text-mid)', display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            <X size={14} /> Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving} style={{
-            padding: '9px 20px', borderRadius: 50,
-            border: '2px solid #3b82f6',
-            background: saving ? '#93c5fd' : '#3b82f6',
-            fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
-            cursor: saving ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700,
-            display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s',
-          }}>
-            {saving
-              ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Saving…</>
-              : <><Save size={14} /> Save Changes</>
-            }
-          </button>
+          <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'var(--text-light)', margin: 0 }}>
+            Only filled fields will be updated · Empty fields are ignored
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} style={{
+              padding: '9px 18px', borderRadius: 50,
+              border: '2px solid var(--cream-dark)', background: 'white',
+              fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
+              cursor: 'pointer', color: 'var(--text-mid)', display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <X size={14} /> Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving} style={{
+              padding: '9px 20px', borderRadius: 50,
+              border: '2px solid #3b82f6',
+              background: saving ? '#93c5fd' : '#3b82f6',
+              fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
+              cursor: saving ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s',
+            }}>
+              {saving
+                ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Saving…</>
+                : <><Save size={14} /> Save Changes</>
+              }
+            </button>
+          </div>
         </div>
       </div>
     </div>
