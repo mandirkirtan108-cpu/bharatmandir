@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routers import temples, route_planner, admin, festivals, spiritual_chat
+from routers.ai_festival_cache import router as ai_festival_cache_router  # ← FIX: was missing
 from db.connection import get_pool, close_pool
 import os
 from dotenv import load_dotenv
@@ -71,13 +72,14 @@ app.add_middleware(
 # Agar admin.router pehle hota, toh /api/admin/auth/login ko
 # admin router ka /api/admin/temples/{id} pattern intercept kar leta — 404!
 # ──────────────────────────────────────────────────────────────────────────────
-app.include_router(admin_auth_router)   # /api/admin/auth/*  — PEHLE
-app.include_router(admin.router)        # /api/admin/*       — BAAD MEIN
+app.include_router(admin_auth_router)          # /api/admin/auth/*      — PEHLE
+app.include_router(admin.router)               # /api/admin/*           — BAAD MEIN
 app.include_router(temples.router)
 app.include_router(route_planner.router)
 app.include_router(festivals.router)
+app.include_router(ai_festival_cache_router)   # /api/festivals/ai-cache/* ← FIX: was missing
 app.include_router(spiritual_chat.router)
-app.include_router(panchang_router)     # /api/panchang/*
+app.include_router(panchang_router)            # /api/panchang/*
 app.include_router(proxy.router)
 
 
