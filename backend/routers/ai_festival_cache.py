@@ -7,11 +7,17 @@ POST /api/admin/festivals/ai-refresh  → force-refresh AI festival cache (admin
 
 Logic:
 - Festivals are fetched from Claude API ONCE per year and stored in the `festivals`
-  table with source='ai_cache' and ai_generated=True.
+  table with source='ai_cache' and ai_generated=True, temple_id=NULL.
 - On cache hit (>= 10 rows for the year) → return DB rows immediately (no Claude call).
 - On cache miss → call Claude → INSERT into DB → return DB rows.
 - ?refresh=true or admin endpoint → force re-fetch from Claude, wipe old cache first.
 - On the 1st of every month, stale past months are pruned in the background.
+
+Fix log:
+- temple_id=NULL instead of 0 (foreign key violation fix)
+- Sentinel temple INSERT removed entirely
+- _fetch_and_store checks DB before calling Claude (cache-first)
+- DELETE only happens on force=True, not on every request
 """
 
 from fastapi import APIRouter, HTTPException, Header, Depends, BackgroundTasks, Query
@@ -28,11 +34,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["AI Festival Cache"])
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ANTHROPIC_API_KEY     = os.getenv("ANTHROPIC_API_KEY", "")
-ANTHROPIC_URL         = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL          = "claude-sonnet-4-20250514"
-AI_SENTINEL_TEMPLE_ID = 0   # sentinel temple_id for AI festivals with no real temple
-MIN_CACHE_COUNT       = 10  # minimum rows to consider cache valid
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_URL     = "https://api.anthropic.com/v1/messages"
+CLAUDE_MODEL      = "claude-sonnet-4-20250514"
+MIN_CACHE_COUNT   = 10   # fewer rows than this = treat as cache miss
 
 _ADMIN_SECRET = os.getenv("ADMIN_SECRET_KEY", "change-me-now")
 
@@ -62,12 +67,10 @@ Rules:
 
 def _get_cached_year(year: int) -> list[dict]:
     """
-    Return all ai_cache festivals for a given year from DB.
-    Returns [] (cache miss) if fewer than MIN_CACHE_COUNT rows exist —
-    this prevents a partial/corrupted cache from being served.
+    Return all ai_cache festivals for the given year from DB.
+    Returns [] if fewer than MIN_CACHE_COUNT rows exist (treats as cache miss).
     """
     with get_db_cursor() as cur:
-        # Quick count check first — avoids fetching rows only to discard them
         cur.execute("""
             SELECT COUNT(*) AS cnt
             FROM public.festivals
@@ -75,14 +78,15 @@ def _get_cached_year(year: int) -> list[dict]:
               AND cached_year = %s
         """, (year,))
         row = cur.fetchone()
-        if not row or (row["cnt"] < MIN_CACHE_COUNT):
+        count = row["cnt"] if row else 0
+
+        if count < MIN_CACHE_COUNT:
             logger.info(
-                f"Cache miss for year={year}: "
-                f"only {row['cnt'] if row else 0} rows (need >= {MIN_CACHE_COUNT})"
+                f"Cache MISS for year={year}: "
+                f"{count} rows in DB (need >= {MIN_CACHE_COUNT})"
             )
             return []
 
-        # Full fetch
         cur.execute("""
             SELECT
                 f.id,
@@ -91,6 +95,7 @@ def _get_cached_year(year: int) -> list[dict]:
                 f.significance,
                 f.month,
                 f.hindu_month,
+                f.hindu_tithi,
                 f.typical_date    AS exact_date,
                 f.display_date,
                 f.duration_days,
@@ -137,7 +142,7 @@ def _delete_stale_cache(year: int, before_month: int):
 def _delete_year_cache(year: int):
     """
     Wipe ALL ai_cache rows for a given year.
-    Called only on force-refresh — normal requests never delete the cache.
+    Called ONLY on force=True — normal requests never delete existing cache.
     """
     with get_db_cursor() as cur:
         cur.execute("""
@@ -145,28 +150,21 @@ def _delete_year_cache(year: int):
             WHERE source = 'ai_cache'
               AND cached_year = %s
         """, (year,))
-        deleted = cur.rowcount
-        logger.info(f"Force-refresh: deleted {deleted} ai_cache rows for year={year}")
+        logger.info(
+            f"Force-refresh: deleted {cur.rowcount} ai_cache rows for year={year}"
+        )
 
 
 def _insert_ai_festivals(festivals: list[dict], year: int):
     """
     Bulk-insert AI-fetched festivals into the festivals table.
-    Uses ON CONFLICT DO NOTHING so safe to call even if some rows already exist.
-    Does NOT delete existing rows — deletion is handled separately by the caller
-    only when force=True.
-    Raises on any DB error so the caller always knows if storage failed.
+
+    - temple_id = NULL  (AI festivals have no linked temple — foreign key is nullable)
+    - No sentinel temple row inserted
+    - ON CONFLICT DO NOTHING — safe to call even if some rows already exist
+    - Raises on any DB error so the caller knows if storage failed
     """
     with get_db_cursor() as cur:
-
-        # 1. Ensure sentinel temple row exists (temple_id=0)
-        cur.execute("""
-            INSERT INTO public.temples (id, name, city, state, slug, status)
-            VALUES (0, 'AI Generated', 'India', 'India', 'ai-generated', 'published')
-            ON CONFLICT (id) DO NOTHING
-        """)
-
-        # 2. Insert festivals — duplicates are silently skipped
         inserted = 0
         skipped  = 0
 
@@ -180,45 +178,59 @@ def _insert_ai_festivals(festivals: list[dict], year: int):
 
                 cur.execute("""
                     INSERT INTO public.festivals (
-                        temple_id, name, description, significance,
-                        month, hindu_month, typical_date,
-                        duration_days, is_major,
-                        source, ai_generated,
-                        deity, emoji,
-                        display_date, color,
-                        cached_year, cached_month
+                        temple_id,
+                        name,
+                        description,
+                        significance,
+                        month,
+                        hindu_month,
+                        hindu_tithi,
+                        typical_date,
+                        display_date,
+                        duration_days,
+                        is_major,
+                        source,
+                        ai_generated,
+                        deity,
+                        festival_type,
+                        emoji,
+                        color,
+                        cached_year,
+                        cached_month
                     ) VALUES (
-                        %s, %s, %s, %s,
+                        NULL,
+                        %s, %s, %s,
                         %s, %s, %s,
                         %s, %s,
+                        %s, %s,
                         'ai_cache', TRUE,
-                        %s, %s,
-                        %s, %s,
+                        %s, %s, %s, %s,
                         %s, %s
                     )
                     ON CONFLICT DO NOTHING
                 """, (
-                    AI_SENTINEL_TEMPLE_ID,
-                    (f.get("name") or "")[:200],
-                    f.get("description"),
-                    f.get("significance"),
-                    month,
-                    f.get("hindu_month"),
-                    f.get("exact_date"),
-                    max(1, int(f.get("duration_days") or 1)),
-                    bool(f.get("is_major")),
-                    f.get("deity"),
-                    f.get("emoji"),
-                    f.get("display_date"),
-                    f.get("color"),
-                    year,
-                    month,
+                    (f.get("name") or "")[:200],                # name
+                    f.get("description"),                        # description
+                    f.get("significance"),                       # significance
+                    month,                                       # month
+                    f.get("hindu_month"),                        # hindu_month
+                    f.get("hindu_tithi"),                        # hindu_tithi
+                    f.get("exact_date"),                         # typical_date
+                    f.get("display_date"),                       # display_date
+                    max(1, int(f.get("duration_days") or 1)),    # duration_days
+                    bool(f.get("is_major")),                     # is_major
+                    f.get("deity"),                              # deity
+                    f.get("festival_type"),                      # festival_type
+                    f.get("emoji"),                              # emoji
+                    f.get("color"),                              # color
+                    year,                                        # cached_year
+                    month,                                       # cached_month
                 ))
                 inserted += 1
 
             except Exception as e:
                 logger.error(f"Failed to insert festival '{f.get('name')}': {e}")
-                raise  # re-raise so caller knows something went wrong
+                raise
 
         logger.info(
             f"AI festivals stored: {inserted} inserted, "
@@ -236,9 +248,9 @@ async def _call_claude(prompt: str) -> list[dict]:
         response = await client.post(
             ANTHROPIC_URL,
             headers={
-                "x-api-key":           ANTHROPIC_API_KEY,
-                "anthropic-version":   "2023-06-01",
-                "content-type":        "application/json",
+                "x-api-key":         ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type":      "application/json",
             },
             json={
                 "model":      CLAUDE_MODEL,
@@ -281,23 +293,20 @@ async def _call_claude(prompt: str) -> list[dict]:
 async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
     """
     Main orchestrator:
-      - force=False (default): check DB first; call Claude only on cache miss.
-      - force=True: wipe existing cache, always call Claude.
+      force=False (default) → DB-first; Claude called only on cache miss.
+      force=True            → wipe year cache, always call Claude.
 
-    Returns the raw list Claude returned (for admin endpoint count reporting).
-    The GET endpoint always re-reads from DB after this call for consistency.
+    Returns list of festivals (from DB on hit, from Claude on miss/force).
     """
     if not force:
-        # ── Cache hit: return immediately, zero Claude calls ──────────────
         existing = _get_cached_year(year)
         if existing:
             logger.info(
-                f"_fetch_and_store: cache hit ({len(existing)} rows), "
-                f"skipping Claude API call for year={year}"
+                f"_fetch_and_store: cache hit ({len(existing)} rows) "
+                f"for year={year} — skipping Claude API call"
             )
             return existing
 
-    # ── Cache miss or force: wipe stale data then call Claude ────────────
     if force:
         _delete_year_cache(year)
 
@@ -315,7 +324,7 @@ async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
     logger.info(f"Claude returned {len(combined)} festivals for year={year}")
 
     if combined:
-        _insert_ai_festivals(combined, year)  # raises on DB error
+        _insert_ai_festivals(combined, year)
 
     return combined
 
@@ -325,15 +334,18 @@ async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
 @router.get("/api/festivals/ai-cache")
 async def get_ai_festival_cache(
     background_tasks: BackgroundTasks,
-    refresh: bool = Query(False, description="Set true to wipe DB cache and re-fetch from Claude"),
+    refresh: bool = Query(
+        False,
+        description="Set true to wipe DB cache and re-fetch from Claude"
+    ),
 ):
     """
     Return AI-generated festivals for the current year.
 
     Flow:
-    1. If ?refresh=true  → wipe DB cache → fetch from Claude → store → return.
-    2. If DB has >= 10 cached rows → return immediately (zero Claude calls).
-    3. If DB is empty / < 10 rows  → fetch from Claude → store → return.
+    1. ?refresh=true  → wipe DB cache → call Claude → store → return fresh data.
+    2. DB has >= 10 rows → return immediately (zero Claude calls).
+    3. DB empty / < 10  → call Claude → store → return.
     """
     today         = date.today()
     current_year  = today.year
@@ -343,7 +355,7 @@ async def get_ai_festival_cache(
     if today.day == 1 and current_month > 1:
         background_tasks.add_task(_delete_stale_cache, current_year, current_month)
 
-    # ── Force refresh ────────────────────────────────────────────────────
+    # ── Force refresh ──────────────────────────────────────────────────────
     if refresh:
         logger.info(f"Force refresh requested for year={current_year}")
         try:
@@ -360,10 +372,9 @@ async def get_ai_festival_cache(
             "festivals": stored,
         }
 
-    # ── Normal request: DB-first, Claude only on miss ────────────────────
+    # ── Normal: DB-first ──────────────────────────────────────────────────
     cached = _get_cached_year(current_year)
     if cached:
-        # Cache hit — return without calling Claude
         return {
             "source":    "db_cache",
             "year":      current_year,
@@ -371,7 +382,7 @@ async def get_ai_festival_cache(
             "festivals": cached,
         }
 
-    # Cache miss → fetch from Claude and store
+    # Cache miss → call Claude
     logger.info(f"DB cache miss for year={current_year}, fetching from Claude...")
     try:
         await _fetch_and_store(current_year, force=False)
@@ -384,7 +395,10 @@ async def get_ai_festival_cache(
 
     stored = _get_cached_year(current_year)
     if not stored:
-        raise HTTPException(status_code=502, detail="AI returned empty festival list")
+        raise HTTPException(
+            status_code=502,
+            detail="AI returned empty festival list"
+        )
 
     return {
         "source":    "fresh",
