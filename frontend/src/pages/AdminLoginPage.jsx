@@ -2,6 +2,7 @@
 // JWT-based login — replaces the old env-key login
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 
