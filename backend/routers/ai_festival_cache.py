@@ -6,8 +6,9 @@ GET  /api/festivals/ai-cache?refresh=true  → force-refresh (wipe DB cache, re-
 POST /api/admin/festivals/ai-refresh       → force-refresh AI festival cache (admin only)
 
 Fix log:
-- _get_cached_year no longer requires cached_year to be non-NULL
-  (falls back gracefully; works even before the ALTER TABLE migration runs)
+- _get_cached_year has ZERO dependency on cached_year column being populated.
+  Returns ALL rows where source='ai_cache', ordered by month.
+  Claude is NEVER called if >= MIN_CACHE_COUNT rows exist.
 - INSERT uses ON CONFLICT DO NOTHING and wraps errors per-row
 - _fetch_and_store is strictly DB-first: Claude is NEVER called if >= MIN_CACHE_COUNT rows exist
 - Force-refresh wipes only ai_cache rows, then re-fetches
@@ -61,35 +62,34 @@ Rules:
 
 def _get_cached_year(year: int) -> list[dict]:
     """
-    Return all ai_cache festivals for the given year from DB.
+    Return all ai_cache festivals from DB.
 
-    FIX: We first count ALL ai_cache rows (not filtered by cached_year) because
-    existing rows may have cached_year=NULL if the column was added after the
-    initial data was inserted.  If the total count is healthy we return them all
-    filtered loosely (cached_year = year OR cached_year IS NULL).
+    Deliberately does NOT filter by cached_year — the column may be NULL
+    on existing rows, and filtering by it causes a false cache miss which
+    triggers an unnecessary Claude API call.
 
-    Returns [] only if fewer than MIN_CACHE_COUNT rows exist anywhere with
-    source='ai_cache' — that is a genuine cache miss and warrants a Claude call.
+    Only returns [] (cache miss) if the total count of ai_cache rows is
+    below MIN_CACHE_COUNT — that is the only signal we need.
     """
     with get_db_cursor() as cur:
-        # Step 1: total count of all ai_cache rows (ignoring cached_year)
+
+        # ── Count all ai_cache rows (no year filter) ──────────────────────
         cur.execute("""
             SELECT COUNT(*) AS cnt
             FROM public.festivals
             WHERE source = 'ai_cache'
         """)
         row   = cur.fetchone()
-        total = row["cnt"] if row else 0
+        total = int(row["cnt"]) if row else 0
 
         if total < MIN_CACHE_COUNT:
             logger.info(
-                f"Cache MISS: only {total} ai_cache rows in DB total "
-                f"(need >= {MIN_CACHE_COUNT})"
+                f"Cache MISS: {total} ai_cache rows in DB "
+                f"(need >= {MIN_CACHE_COUNT}) — will call Claude"
             )
             return []
 
-        # Step 2: fetch rows for this year OR where cached_year is NULL
-        # (handles rows inserted before the cached_year column existed)
+        # ── Cache hit: return all ai_cache rows ───────────────────────────
         cur.execute("""
             SELECT
                 f.id,
@@ -117,51 +117,13 @@ def _get_cached_year(year: int) -> list[dict]:
                 NULL::text        AS temple_slug
             FROM public.festivals f
             WHERE f.source = 'ai_cache'
-              AND (f.cached_year = %s OR f.cached_year IS NULL)
             ORDER BY f.month ASC, f.typical_date ASC NULLS LAST
-        """, (year,))
+        """)
         rows = [dict(r) for r in cur.fetchall()]
-
-        # If the year-filtered query returned too few but total is fine,
-        # it means all rows have cached_year=NULL — return them anyway.
-        if len(rows) < MIN_CACHE_COUNT:
-            logger.warning(
-                f"cached_year filter returned only {len(rows)} rows for year={year}, "
-                f"but total ai_cache count is {total}. "
-                f"Fetching ALL ai_cache rows (cached_year column likely not backfilled)."
-            )
-            cur.execute("""
-                SELECT
-                    f.id,
-                    f.name,
-                    f.description,
-                    f.significance,
-                    f.month,
-                    f.hindu_month,
-                    f.hindu_tithi,
-                    f.typical_date    AS exact_date,
-                    f.display_date,
-                    f.duration_days,
-                    f.is_major,
-                    f.deity,
-                    f.festival_type,
-                    f.emoji,
-                    f.color,
-                    f.cached_year,
-                    f.cached_month,
-                    f.source,
-                    f.ai_generated,
-                    NULL::int         AS temple_id,
-                    NULL::text        AS temple_name,
-                    NULL::text        AS temple_city,
-                    NULL::text        AS temple_slug
-                FROM public.festivals f
-                WHERE f.source = 'ai_cache'
-                ORDER BY f.month ASC, f.typical_date ASC NULLS LAST
-            """)
-            rows = [dict(r) for r in cur.fetchall()]
-
-        logger.info(f"Cache HIT for year={year}: returning {len(rows)} festivals from DB")
+        logger.info(
+            f"Cache HIT: returning {len(rows)} ai_cache festivals from DB "
+            f"(total in DB: {total})"
+        )
         return rows
 
 
@@ -184,48 +146,48 @@ def _delete_stale_cache(year: int, before_month: int):
 
 
 def _delete_year_cache(year: int):
-    """
-    Wipe ALL ai_cache rows.
-    Called ONLY on force=True — normal requests never delete existing cache.
-    We delete ALL ai_cache rows (not just by year) because cached_year may be NULL.
-    """
+    """Wipe ALL ai_cache rows (called only on force refresh)."""
     with get_db_cursor() as cur:
         cur.execute("""
             DELETE FROM public.festivals
             WHERE source = 'ai_cache'
         """)
-        logger.info(
-            f"Force-refresh: deleted {cur.rowcount} ai_cache rows (all years)"
-        )
+        logger.info(f"Force-refresh: deleted {cur.rowcount} ai_cache rows")
 
 
 def _ensure_cached_year_columns():
     """
-    Idempotently add cached_year / cached_month columns if they don't exist,
-    then backfill NULL values from typical_date.
-    Safe to call on every startup.
+    Add cached_year/cached_month columns if missing and backfill from typical_date.
+    No-op if columns already exist and are populated.
+    Safe to call on every request.
     """
     with get_db_cursor() as cur:
-        # Add columns if missing
         cur.execute("""
             ALTER TABLE public.festivals
                 ADD COLUMN IF NOT EXISTS cached_year  INT,
                 ADD COLUMN IF NOT EXISTS cached_month INT
         """)
-
-        # Backfill from typical_date where possible
+        # Backfill from typical_date
         cur.execute("""
             UPDATE public.festivals
             SET
                 cached_year  = EXTRACT(YEAR  FROM typical_date::date)::INT,
                 cached_month = EXTRACT(MONTH FROM typical_date::date)::INT
-            WHERE source = 'ai_cache'
+            WHERE source    = 'ai_cache'
+              AND cached_year IS NULL
               AND typical_date IS NOT NULL
+        """)
+        # Rows without typical_date: use current year + the month column
+        cur.execute("""
+            UPDATE public.festivals
+            SET
+                cached_year  = EXTRACT(YEAR FROM NOW())::INT,
+                cached_month = month
+            WHERE source    = 'ai_cache'
               AND cached_year IS NULL
         """)
-        updated = cur.rowcount
-        if updated:
-            logger.info(f"Backfilled cached_year/cached_month for {updated} ai_cache rows")
+        if cur.rowcount:
+            logger.info(f"Backfilled cached_year for {cur.rowcount} ai_cache rows")
 
 
 def _insert_ai_festivals(festivals: list[dict], year: int):
