@@ -6,11 +6,11 @@ GET  /api/festivals/ai-cache?refresh=true → force-refresh (wipe DB cache, re-f
 POST /api/admin/festivals/ai-refresh  → force-refresh AI festival cache (admin only)
 
 Logic:
-- Festivals are fetched from Claude API once and stored in the `festivals` table
-  with source='ai_cache' and ai_generated=True.
+- Festivals are fetched from Claude API ONCE per year and stored in the `festivals`
+  table with source='ai_cache' and ai_generated=True.
+- On cache hit (>= 10 rows for the year) → return DB rows immediately (no Claude call).
 - On cache miss → call Claude → INSERT into DB → return DB rows.
-- On cache hit → return DB rows immediately (no Claude call).
-- ?refresh=true → wipe DB cache and re-fetch from Claude.
+- ?refresh=true or admin endpoint → force re-fetch from Claude, wipe old cache first.
 - On the 1st of every month, stale past months are pruned in the background.
 """
 
@@ -31,7 +31,8 @@ router = APIRouter(tags=["AI Festival Cache"])
 ANTHROPIC_API_KEY     = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_URL         = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL          = "claude-sonnet-4-20250514"
-AI_SENTINEL_TEMPLE_ID = 0  # sentinel temple_id for AI festivals with no real temple
+AI_SENTINEL_TEMPLE_ID = 0   # sentinel temple_id for AI festivals with no real temple
+MIN_CACHE_COUNT       = 10  # minimum rows to consider cache valid
 
 _ADMIN_SECRET = os.getenv("ADMIN_SECRET_KEY", "change-me-now")
 
@@ -60,8 +61,28 @@ Rules:
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 def _get_cached_year(year: int) -> list[dict]:
-    """Return all ai_cache festivals for a given year from DB."""
+    """
+    Return all ai_cache festivals for a given year from DB.
+    Returns [] (cache miss) if fewer than MIN_CACHE_COUNT rows exist —
+    this prevents a partial/corrupted cache from being served.
+    """
     with get_db_cursor() as cur:
+        # Quick count check first — avoids fetching rows only to discard them
+        cur.execute("""
+            SELECT COUNT(*) AS cnt
+            FROM public.festivals
+            WHERE source = 'ai_cache'
+              AND cached_year = %s
+        """, (year,))
+        row = cur.fetchone()
+        if not row or (row["cnt"] < MIN_CACHE_COUNT):
+            logger.info(
+                f"Cache miss for year={year}: "
+                f"only {row['cnt'] if row else 0} rows (need >= {MIN_CACHE_COUNT})"
+            )
+            return []
+
+        # Full fetch
         cur.execute("""
             SELECT
                 f.id,
@@ -91,7 +112,9 @@ def _get_cached_year(year: int) -> list[dict]:
               AND f.cached_year = %s
             ORDER BY f.month ASC, f.typical_date ASC NULLS LAST
         """, (year,))
-        return [dict(r) for r in cur.fetchall()]
+        rows = [dict(r) for r in cur.fetchall()]
+        logger.info(f"Cache HIT for year={year}: returning {len(rows)} festivals from DB")
+        return rows
 
 
 def _delete_stale_cache(year: int, before_month: int):
@@ -111,9 +134,27 @@ def _delete_stale_cache(year: int, before_month: int):
             )
 
 
+def _delete_year_cache(year: int):
+    """
+    Wipe ALL ai_cache rows for a given year.
+    Called only on force-refresh — normal requests never delete the cache.
+    """
+    with get_db_cursor() as cur:
+        cur.execute("""
+            DELETE FROM public.festivals
+            WHERE source = 'ai_cache'
+              AND cached_year = %s
+        """, (year,))
+        deleted = cur.rowcount
+        logger.info(f"Force-refresh: deleted {deleted} ai_cache rows for year={year}")
+
+
 def _insert_ai_festivals(festivals: list[dict], year: int):
     """
     Bulk-insert AI-fetched festivals into the festivals table.
+    Uses ON CONFLICT DO NOTHING so safe to call even if some rows already exist.
+    Does NOT delete existing rows — deletion is handled separately by the caller
+    only when force=True.
     Raises on any DB error so the caller always knows if storage failed.
     """
     with get_db_cursor() as cur:
@@ -125,12 +166,7 @@ def _insert_ai_festivals(festivals: list[dict], year: int):
             ON CONFLICT (id) DO NOTHING
         """)
 
-        # 2. Wipe stale cache for this year before inserting fresh data
-        cur.execute("""
-            DELETE FROM public.festivals
-            WHERE source = 'ai_cache' AND cached_year = %s
-        """, (year,))
-
+        # 2. Insert festivals — duplicates are silently skipped
         inserted = 0
         skipped  = 0
 
@@ -242,13 +278,41 @@ async def _call_claude(prompt: str) -> list[dict]:
         return []
 
 
-async def _fetch_and_store(year: int) -> list[dict]:
-    """Call Claude for the full year, store in DB, return raw Claude list."""
-    logger.info(f"Calling Claude API for year {year} (2 prompts)...")
-    h1 = await _call_claude(_make_prompt(year, "January, February, March, April, May, June"))
-    h2 = await _call_claude(_make_prompt(year, "July, August, September, October, November, December"))
+async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
+    """
+    Main orchestrator:
+      - force=False (default): check DB first; call Claude only on cache miss.
+      - force=True: wipe existing cache, always call Claude.
+
+    Returns the raw list Claude returned (for admin endpoint count reporting).
+    The GET endpoint always re-reads from DB after this call for consistency.
+    """
+    if not force:
+        # ── Cache hit: return immediately, zero Claude calls ──────────────
+        existing = _get_cached_year(year)
+        if existing:
+            logger.info(
+                f"_fetch_and_store: cache hit ({len(existing)} rows), "
+                f"skipping Claude API call for year={year}"
+            )
+            return existing
+
+    # ── Cache miss or force: wipe stale data then call Claude ────────────
+    if force:
+        _delete_year_cache(year)
+
+    logger.info(
+        f"Calling Claude API for year={year} "
+        f"({'force refresh' if force else 'cache miss'}) — 2 prompts..."
+    )
+    h1 = await _call_claude(
+        _make_prompt(year, "January, February, March, April, May, June")
+    )
+    h2 = await _call_claude(
+        _make_prompt(year, "July, August, September, October, November, December")
+    )
     combined = h1 + h2
-    logger.info(f"Claude returned {len(combined)} festivals for {year}")
+    logger.info(f"Claude returned {len(combined)} festivals for year={year}")
 
     if combined:
         _insert_ai_festivals(combined, year)  # raises on DB error
@@ -267,9 +331,9 @@ async def get_ai_festival_cache(
     Return AI-generated festivals for the current year.
 
     Flow:
-    1. If ?refresh=true → wipe DB cache → fetch from Claude → store → return.
-    2. If DB has cached rows → return immediately (no Claude call).
-    3. If DB is empty → fetch from Claude → store → return.
+    1. If ?refresh=true  → wipe DB cache → fetch from Claude → store → return.
+    2. If DB has >= 10 cached rows → return immediately (zero Claude calls).
+    3. If DB is empty / < 10 rows  → fetch from Claude → store → return.
     """
     today         = date.today()
     current_year  = today.year
@@ -279,11 +343,11 @@ async def get_ai_festival_cache(
     if today.day == 1 and current_month > 1:
         background_tasks.add_task(_delete_stale_cache, current_year, current_month)
 
-    # ── Force refresh ────────────────────────────────────────────────────────
+    # ── Force refresh ────────────────────────────────────────────────────
     if refresh:
-        logger.info(f"Force refresh requested for year {current_year}")
+        logger.info(f"Force refresh requested for year={current_year}")
         try:
-            await _fetch_and_store(current_year)
+            await _fetch_and_store(current_year, force=True)
         except Exception as e:
             logger.error(f"Force refresh failed: {e}")
             raise HTTPException(status_code=503, detail=f"Refresh failed: {str(e)}")
@@ -296,10 +360,10 @@ async def get_ai_festival_cache(
             "festivals": stored,
         }
 
-    # ── Cache hit ────────────────────────────────────────────────────────────
+    # ── Normal request: DB-first, Claude only on miss ────────────────────
     cached = _get_cached_year(current_year)
     if cached:
-        logger.info(f"DB cache hit: returning {len(cached)} festivals for {current_year}")
+        # Cache hit — return without calling Claude
         return {
             "source":    "db_cache",
             "year":      current_year,
@@ -307,10 +371,10 @@ async def get_ai_festival_cache(
             "festivals": cached,
         }
 
-    # ── Cache miss → fetch from Claude ───────────────────────────────────────
-    logger.info(f"DB cache miss for {current_year}, fetching from Claude...")
+    # Cache miss → fetch from Claude and store
+    logger.info(f"DB cache miss for year={current_year}, fetching from Claude...")
     try:
-        await _fetch_and_store(current_year)
+        await _fetch_and_store(current_year, force=False)
     except Exception as e:
         logger.error(f"Claude fetch failed: {e}")
         raise HTTPException(
@@ -342,10 +406,10 @@ async def admin_force_refresh():
     today        = date.today()
     current_year = today.year
 
-    logger.info(f"Admin triggered AI festival cache refresh for {current_year}")
+    logger.info(f"Admin triggered AI festival cache refresh for year={current_year}")
 
     try:
-        festivals = await _fetch_and_store(current_year)
+        festivals = await _fetch_and_store(current_year, force=True)
     except Exception as e:
         logger.error(f"Admin refresh failed: {e}")
         raise HTTPException(status_code=503, detail=str(e))
