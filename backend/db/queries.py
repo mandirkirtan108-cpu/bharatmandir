@@ -88,7 +88,7 @@ def get_temple_by_slug(slug: str):
                 prog_free_food, prog_medical_camps, prog_scholarship_edu,
                 prog_womens_selfhelp, prog_bhajan_kirtan, prog_disaster_relief,
                 -- Step 7 contact
-                phone, whatsapp_number, official_email, website_url,
+                phone, whatsapp_number, official_email, website_url, payment_page_url,
                 facebook_page, youtube_channel, instagram_handle,
                 best_time_to_call,
                 -- Practical
