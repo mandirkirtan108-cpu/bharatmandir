@@ -174,6 +174,7 @@ class TempleFieldUpdate(BaseModel):
     history:             Optional[str] = None
     significance:        Optional[str] = None
     website_url:         Optional[str] = None
+    payment_page_url:    Optional[str] = None
     custom_designation:  Optional[str] = None   # ← NEW
     custom_facility:     Optional[str] = None   # ← NEW
 
@@ -308,6 +309,7 @@ async def create_temple(
     whatsapp_number:       Optional[str]  = Form(None),
     official_email:        Optional[str]  = Form(None),
     website_url:           Optional[str]  = Form(None),
+    payment_page_url:      Optional[str]  = Form(None),
     facebook_page:         Optional[str]  = Form(None),
     youtube_channel:       Optional[str]  = Form(None),
     instagram_handle:      Optional[str]  = Form(None),
@@ -395,7 +397,7 @@ async def create_temple(
                 facility_medical_support,
                 prog_free_food, prog_medical_camps, prog_scholarship_edu,
                 prog_womens_selfhelp, prog_bhajan_kirtan, prog_disaster_relief,
-                phone, whatsapp_number, official_email, website_url,
+                phone, whatsapp_number, official_email, website_url, payment_page_url,
                 facebook_page, youtube_channel, instagram_handle, best_time_to_call,
                 entry_fee, dress_code, best_time_to_visit,
                 category_tags, status, source,
@@ -465,7 +467,7 @@ async def create_temple(
             facility_medical_support,
             prog_free_food, prog_medical_camps, prog_scholarship_edu,
             prog_womens_selfhelp, prog_bhajan_kirtan, prog_disaster_relief,
-            _v(phone), _v(whatsapp_number), _v(official_email), _v(website_url),
+            _v(phone), _v(whatsapp_number), _v(official_email), _v(website_url), _v(payment_page_url),
             _v(facebook_page), _v(youtube_channel), _v(instagram_handle), _v(best_time_to_call),
             entry_fee, _v(dress_code), _v(best_time_to_visit),
             tags, status, source,
@@ -578,7 +580,7 @@ def get_temple_admin(
                    facility_medical_support,
                    prog_free_food, prog_medical_camps, prog_scholarship_edu,
                    prog_womens_selfhelp, prog_bhajan_kirtan, prog_disaster_relief,
-                   phone, whatsapp_number, official_email, website_url,
+                   phone, whatsapp_number, official_email, website_url, payment_page_url,
                    facebook_page, youtube_channel, instagram_handle, best_time_to_call,
                    entry_fee, dress_code, best_time_to_visit,
                    average_rating, total_ratings,
