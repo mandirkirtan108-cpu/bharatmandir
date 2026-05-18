@@ -760,6 +760,17 @@ export default function TempleDetailPage() {
                 </button>
               </>
             )}
+            {v(T.payment_page_url) && (
+              <a
+                href={T.payment_page_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="abtn"
+                style={{display:'block',textAlign:'center',marginTop: v(T.upi_id) ? 8 : 0, textDecoration:'none', background:'linear-gradient(135deg,#1A6B3A,#2E9E58)', color:'#fff', border:'none'}}
+              >
+                💳 {t('detail.donate_online', { defaultValue: 'Donate Online' })} →
+              </a>
+            )}
             {v(T.certificate_80g_no)&&<p style={{fontSize:11,color:'#1A6B3A',marginTop:8,textAlign:'center'}}>{t('detail.exempt_80g')}: {T.certificate_80g_no}</p>}
           </div>
         )}
