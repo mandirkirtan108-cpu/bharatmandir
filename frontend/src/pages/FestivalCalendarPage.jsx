@@ -13,6 +13,10 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 // Flow:
 //   Browser → GET /api/festivals          (temple-linked festivals)
 //   Browser → GET /api/festivals/ai-cache (AI festivals stored in DB by backend)
+//
+// FIX: fetchFestivalsFromDB is only called ONCE on mount (not on every render).
+//      The result is stored in state; subsequent renders use state, never re-fetch
+//      unless the user explicitly clicks Refresh.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const HINDU_MONTHS = [
@@ -133,6 +137,9 @@ export default function FestivalCalendarPage() {
   const [claudeErrorMsg, setClaudeErrorMsg]     = useState('');
   const [dbSource, setDbSource]                 = useState(null); // 'db_cache' | 'fresh'
   const [selectedFestival, setSelectedFestival] = useState(null);
+  // FIX: track whether we have already fetched AI festivals this session
+  // so we never re-fetch on re-renders or state changes
+  const [aiFetchDone, setAiFetchDone]           = useState(false);
 
   const currentYear = new Date().getFullYear();
 
@@ -146,7 +153,12 @@ export default function FestivalCalendarPage() {
   }, []);
 
   // ── Fetch AI festivals — backend checks DB first, calls Claude if needed ──
+  // FIX: `forceRefresh=false` path now truly never re-fetches if aiFetchDone=true.
+  // Only the manual Refresh button passes forceRefresh=true.
   const fetchFestivalsFromDB = useCallback(async (forceRefresh = false) => {
+    // If already fetched this session and not a forced refresh, skip entirely
+    if (!forceRefresh && aiFetchDone) return;
+
     setClaudeLoading(true);
     setClaudeError(false);
     setClaudeErrorMsg('');
@@ -165,23 +177,31 @@ export default function FestivalCalendarPage() {
 
       const data = await res.json();
       setClaudeFestivals(Array.isArray(data.festivals) ? data.festivals : []);
-      setDbSource(data.source || null); // 'db_cache' or 'fresh'
+      setDbSource(data.source || null);
+      setAiFetchDone(true); // FIX: mark done so we never call again this session
 
     } catch (err) {
       setClaudeError(true);
       setClaudeErrorMsg(err.message || 'Unknown error');
       setClaudeFestivals([]);
       setDbSource(null);
+      // FIX: still mark done even on error to stop infinite retry on re-renders
+      setAiFetchDone(true);
     } finally {
       setClaudeLoading(false);
     }
-  }, []);
+  // FIX: aiFetchDone in deps so the guard inside works correctly
+  }, [aiFetchDone]);
 
-  // ── Initial load ──────────────────────────────────────────────────────────
+  // ── Initial load — runs exactly ONCE ─────────────────────────────────────
   useEffect(() => {
     fetchFestivals();
-    fetchFestivalsFromDB(false);
-  }, [fetchFestivals, fetchFestivalsFromDB]);
+    // Only fetch AI festivals if we haven't already this session
+    if (!aiFetchDone) {
+      fetchFestivalsFromDB(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // empty deps = runs once on mount
 
   useEffect(() => {
     const handler = () => fetchFestivals();
@@ -191,8 +211,31 @@ export default function FestivalCalendarPage() {
 
   // ── Refresh button: force re-fetch from Claude via backend ─────────────────
   const handleRefresh = () => {
+    setAiFetchDone(false); // allow the next fetchFestivalsFromDB to run
     fetchFestivals();
-    fetchFestivalsFromDB(true);
+    // We call with forceRefresh=true directly — bypass the aiFetchDone guard
+    setClaudeLoading(true);
+    setClaudeError(false);
+    setClaudeErrorMsg('');
+    fetch(`${API_BASE}/api/festivals/ai-cache?refresh=true`)
+      .then(async res => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `Server error ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        setClaudeFestivals(Array.isArray(data.festivals) ? data.festivals : []);
+        setDbSource(data.source || null);
+        setAiFetchDone(true);
+      })
+      .catch(err => {
+        setClaudeError(true);
+        setClaudeErrorMsg(err.message || 'Unknown error');
+        setAiFetchDone(true);
+      })
+      .finally(() => setClaudeLoading(false));
   };
 
   // ── Merge temple + AI festivals (de-duplicate by name+month) ──────────────
@@ -353,7 +396,7 @@ export default function FestivalCalendarPage() {
             }}>
               ⚠️ {claudeErrorMsg}{' '}
               <button
-                onClick={() => fetchFestivalsFromDB(false)}
+                onClick={handleRefresh}
                 style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}
               >
                 {t('festival.retry')}
