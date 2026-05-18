@@ -8,6 +8,48 @@ import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// ── Cache key & helpers ────────────────────────────────────────────────────────
+const CACHE_KEY = 'bharatmandir_claude_festivals';
+
+/**
+ * Returns cache if it exists AND was fetched in the current calendar month+year.
+ * If the month has rolled over (e.g. we stored in April, now it's May) → stale → null.
+ */
+function getValidCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { year, month, festivals } = JSON.parse(raw);
+    const now = new Date();
+    if (year === now.getFullYear() && month === now.getMonth()) {
+      return festivals; // still same calendar month → valid
+    }
+    // Month rolled over → clear stale cache
+    localStorage.removeItem(CACHE_KEY);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCache(festivals) {
+  try {
+    const now = new Date();
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      year: now.getFullYear(),
+      month: now.getMonth(), // 0-indexed
+      festivals,
+    }));
+  } catch {
+    // localStorage full or unavailable — silently skip
+  }
+}
+
+function clearCache() {
+  try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 const HINDU_MONTHS = [
   'Chaitra','Vaishakha','Jyeshtha','Ashadha',
   'Shravana','Bhadrapada','Ashwin','Kartika',
@@ -136,10 +178,13 @@ export default function FestivalCalendarPage() {
   const [claudeLoading, setClaudeLoading]       = useState(true);
   const [claudeError, setClaudeError]           = useState(false);
   const [claudeErrorMsg, setClaudeErrorMsg]     = useState('');
+  // 'cache' | 'fresh' | null — shown as a small info badge
+  const [claudeSource, setClaudeSource]         = useState(null);
   const [selectedFestival, setSelectedFestival] = useState(null);
 
   const currentYear = new Date().getFullYear();
 
+  // ── Backend festivals ────────────────────────────────────────────────────
   const fetchFestivals = useCallback(() => {
     setLoading(true);
     axios.get(`${API_BASE}/api/festivals?limit=500`)
@@ -148,6 +193,7 @@ export default function FestivalCalendarPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // ── Claude API (single half) ─────────────────────────────────────────────
   const callClaudeAPI = useCallback(async (prompt, apiKey) => {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -167,7 +213,8 @@ export default function FestivalCalendarPage() {
     if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
     if (data.error) throw new Error(data.error.message || 'Unknown API error');
     const rawText = data.content?.[0]?.text || '[]';
-    const cleaned = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    const cleaned = rawText
+      .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
     try {
       const parsed = JSON.parse(cleaned);
       return Array.isArray(parsed) ? parsed : [];
@@ -184,8 +231,24 @@ export default function FestivalCalendarPage() {
     }
   }, []);
 
-  const fetchFestivalsFromClaude = useCallback(async () => {
-    setClaudeLoading(true); setClaudeError(false); setClaudeErrorMsg('');
+  // ── Load Claude festivals — cache first, API only if stale ───────────────
+  const fetchFestivalsFromClaude = useCallback(async (forceRefresh = false) => {
+    setClaudeLoading(true);
+    setClaudeError(false);
+    setClaudeErrorMsg('');
+
+    // 1. Try cache unless forced
+    if (!forceRefresh) {
+      const cached = getValidCache();
+      if (cached) {
+        setClaudeFestivals(cached);
+        setClaudeSource('cache');
+        setClaudeLoading(false);
+        return;
+      }
+    }
+
+    // 2. Cache miss / force refresh → call API
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) {
       setClaudeError(true);
@@ -193,24 +256,30 @@ export default function FestivalCalendarPage() {
       setClaudeLoading(false);
       return;
     }
+
     try {
       const [h1, h2] = await Promise.all([
         callClaudeAPI(PROMPT_H1, apiKey),
         callClaudeAPI(PROMPT_H2, apiKey),
       ]);
-      setClaudeFestivals([...h1, ...h2]);
+      const combined = [...h1, ...h2];
+      setClaudeFestivals(combined);
+      setClaudeSource('fresh');
+      saveCache(combined);          // ← persist for the rest of the month
     } catch (err) {
       setClaudeError(true);
       setClaudeErrorMsg(err.message || 'Unknown error');
       setClaudeFestivals([]);
+      setClaudeSource(null);
     } finally {
       setClaudeLoading(false);
     }
   }, [callClaudeAPI]);
 
+  // ── Initial load ─────────────────────────────────────────────────────────
   useEffect(() => {
     fetchFestivals();
-    fetchFestivalsFromClaude();
+    fetchFestivalsFromClaude(false); // use cache if available
   }, [fetchFestivals, fetchFestivalsFromClaude]);
 
   useEffect(() => {
@@ -219,6 +288,14 @@ export default function FestivalCalendarPage() {
     return () => window.removeEventListener('festival:added', handler);
   }, [fetchFestivals]);
 
+  // ── Force-refresh: clears cache then re-fetches from Claude API ──────────
+  const handleRefresh = () => {
+    clearCache();
+    fetchFestivals();
+    fetchFestivalsFromClaude(true); // force fresh API call
+  };
+
+  // ── Merge API + Claude festivals (de-duplicate) ──────────────────────────
   const allFestivals = useMemo(() => {
     const apiKeys = new Set(apiFestivals.map(festKey));
     const claudeFiltered = claudeFestivals.filter(f => !apiKeys.has(festKey(f)));
@@ -278,8 +355,6 @@ export default function FestivalCalendarPage() {
     if (next > 12) next = 1;
     return next;
   });
-
-  const handleRefresh = () => { fetchFestivals(); fetchFestivalsFromClaude(); };
 
   return (
     <>
@@ -342,6 +417,8 @@ export default function FestivalCalendarPage() {
               String(currentYear),
               ...(claudeCount > 0 ? [`✨ ${claudeCount} ${t('festival.ai_curated')}`] : []),
               ...(apiCount > 0 ? [`🛕 ${apiCount} ${t('festival.temple_festivals')}`] : []),
+              // Show cache badge so users know it's instant
+              ...(claudeSource === 'cache' ? ['⚡ Cached'] : []),
             ].map((s, i) => (
               <span key={i} style={{
                 fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.08em',
@@ -351,6 +428,7 @@ export default function FestivalCalendarPage() {
             ))}
           </div>
 
+          {/* Status indicators */}
           {claudeLoading && (
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
@@ -370,7 +448,7 @@ export default function FestivalCalendarPage() {
               border: '1px solid rgba(255,150,50,.2)',
             }}>
               ⚠️ {claudeErrorMsg || t('festival.loading')}{' '}
-              <button onClick={fetchFestivalsFromClaude}
+              <button onClick={() => fetchFestivalsFromClaude(true)}
                 style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}>
                 {t('festival.retry')}
               </button>
@@ -388,7 +466,7 @@ export default function FestivalCalendarPage() {
       }}>
         <div style={{ maxWidth: 1140, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 9px', borderBottom: '1px solid rgba(237,224,204,0.5)' }}>
-            {/* Search box */}
+            {/* Search */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8, background: 'white',
               border: '1.5px solid #E8D5B8', borderRadius: 10, padding: '7px 14px',
@@ -425,12 +503,29 @@ export default function FestivalCalendarPage() {
 
             <div style={{ flex: 1 }} />
 
-            {/* Refresh */}
-            <button onClick={handleRefresh} disabled={isAnyLoading} title={t('festival.retry')} style={{
-              width: 32, height: 32, borderRadius: 8, border: '1.5px solid #E8D5B8', background: 'white',
-              cursor: isAnyLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', color: '#B8906A', transition: 'all .18s', opacity: isAnyLoading ? 0.4 : 1,
-            }}
+            {/* Cache status pill */}
+            {claudeSource && !claudeLoading && (
+              <span title={claudeSource === 'cache' ? 'Loaded from local cache — no API call made' : 'Freshly fetched from Claude API'} style={{
+                fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.06em',
+                color: claudeSource === 'cache' ? '#16a34a' : '#7C3AED',
+                background: claudeSource === 'cache' ? 'rgba(16,163,74,0.08)' : 'rgba(124,58,237,0.08)',
+                border: `1px solid ${claudeSource === 'cache' ? 'rgba(16,163,74,.25)' : 'rgba(124,58,237,.25)'}`,
+                padding: '4px 10px', borderRadius: 50, cursor: 'default', whiteSpace: 'nowrap',
+              }}>
+                {claudeSource === 'cache' ? '⚡ cached' : '✨ fresh'}
+              </span>
+            )}
+
+            {/* Refresh — clears cache and re-fetches */}
+            <button
+              onClick={handleRefresh}
+              disabled={isAnyLoading}
+              title="Force refresh from Claude API (clears cache)"
+              style={{
+                width: 32, height: 32, borderRadius: 8, border: '1.5px solid #E8D5B8', background: 'white',
+                cursor: isAnyLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: '#B8906A', transition: 'all .18s', opacity: isAnyLoading ? 0.4 : 1,
+              }}
               onMouseEnter={e => { if (!isAnyLoading) { e.currentTarget.style.borderColor='#E8650A'; e.currentTarget.style.color='#E8650A'; e.currentTarget.style.background='#FFF8F2'; }}}
               onMouseLeave={e => { e.currentTarget.style.borderColor='#E8D5B8'; e.currentTarget.style.color='#B8906A'; e.currentTarget.style.background='white'; }}
             >
