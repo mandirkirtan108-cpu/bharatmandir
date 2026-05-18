@@ -554,12 +554,25 @@ function EditModal({ temple, onClose, onSaved }) {
   // Flatten all fields for form init
   const allFields = SECTIONS.flatMap(s => s.fields);
 
-  // Pre-fill form with ALL existing temple data
-  const [form, setForm] = useState(() => {
+  // Fetch full temple detail first (list view has limited fields)
+  const [fullTemple, setFullTemple] = useState(null);
+  const [fetchingDetail, setFetchingDetail] = useState(true);
+
+  useEffect(() => {
+    fetchTempleDetail(temple.id)
+      .then(d => { setFullTemple(d); setFetchingDetail(false); })
+      .catch(() => { setFullTemple(temple); setFetchingDetail(false); });
+  }, [temple.id]);
+
+  // Re-initialize form once full data arrives
+  const [form, setForm] = useState({});
+  useEffect(() => {
+    if (!fullTemple) return;
     const init = {};
-    allFields.forEach(f => { init[f.key] = temple[f.key] ?? ''; });
-    return init;
-  });
+    allFields.forEach(f => { init[f.key] = fullTemple[f.key] ?? ''; });
+    setForm(init);
+  }, [fullTemple]);
+
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
 
@@ -641,6 +654,15 @@ function EditModal({ temple, onClose, onSaved }) {
 
         {/* Form Body — scrollable */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
+          {fetchingDetail ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: 14 }}>
+              <Loader2 size={32} color="#3b82f6" style={{ animation: 'spin .8s linear infinite' }} />
+              <span style={{ fontFamily: 'var(--font-display)', color: 'var(--text-light)', fontSize: 13 }}>
+                Loading temple details…
+              </span>
+            </div>
+          ) : (
+            <div>
           {SECTIONS.map(section => (
             <div key={section.title} style={{ marginBottom: 28 }}>
               {/* Section Header */}
@@ -667,7 +689,7 @@ function EditModal({ temple, onClose, onSaved }) {
                         value={form[f.key]}
                         onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
                         rows={f.rows || 4}
-                        placeholder={temple[f.key] ? String(temple[f.key]) : `Enter ${f.label}…`}
+                        placeholder={fullTemple?.[f.key] ? String(fullTemple[f.key]) : `Enter ${f.label}…`}
                         style={{ ...inputStyle, resize: 'vertical' }}
                         onFocus={e => e.target.style.borderColor = '#3b82f6'}
                         onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
@@ -678,8 +700,8 @@ function EditModal({ temple, onClose, onSaved }) {
                         value={form[f.key]}
                         onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
                         placeholder={
-                          temple[f.key] !== null && temple[f.key] !== undefined && temple[f.key] !== ''
-                            ? String(temple[f.key])
+                          fullTemple?.[f.key] !== null && fullTemple?.[f.key] !== undefined && fullTemple?.[f.key] !== ''
+                            ? String(fullTemple[f.key])
                             : `Enter ${f.label}…`
                         }
                         style={inputStyle}
@@ -692,6 +714,8 @@ function EditModal({ temple, onClose, onSaved }) {
               </div>
             </div>
           ))}
+            </div>
+          )} {/* end fetchingDetail */}
         </div>
 
         {/* Footer */}
