@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Calendar, Star, Search, ChevronLeft, ChevronRight, MapPin, Filter, RefreshCw } from 'lucide-react';
+import { Calendar, Star, Search, ChevronLeft, ChevronRight, MapPin, RefreshCw } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import axios from 'axios';
@@ -105,23 +105,8 @@ const MONTH_SEASON = {
   11: { season: 'Autumn', icon: '🍂' }, 12: { season: 'Winter', icon: '❄️' },
 };
 
-function makePrompt(months) {
-  return `List ALL Hindu festivals for 2025 in months: ${months}.
-Return ONLY a valid JSON array. No explanation, no markdown, no backticks, no extra text.
-Each object must have EXACTLY these fields:
-{"name":"string","month":1,"exact_date":"2025-01-14","display_date":"14 January 2025","hindu_tithi":"string","hindu_month":"string","significance":"one sentence","description":"2-3 sentences max","is_major":true,"duration_days":1,"deity":"Surya","emoji":"🪁","color":"#E8650A"}
-Rules:
-- Cover every festival, vrat, Ekadashi, Purnima, Chaturthi in those months
-- Include regional festivals (Pongal, Onam, Bihu, Ugadi, Baisakhi etc.) where applicable
-- is_major=true only for nationally celebrated festivals
-- deity: Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other
-- description max 2-3 sentences (keep short to avoid truncation)
-- Sort by exact_date ascending
-- Output ONLY the JSON array, nothing else`;
-}
-
-const PROMPT_H1 = makePrompt('January, February, March, April, May, June');
-const PROMPT_H2 = makePrompt('July, August, September, October, November, December');
+// ─── Dynamic current year — kabhi bhi hardcode mat karo ─────────────────────
+const CURRENT_YEAR = new Date().getFullYear();
 
 export default function FestivalCalendarPage() {
   const { t } = useTranslation();
@@ -139,8 +124,7 @@ export default function FestivalCalendarPage() {
   const [claudeFromCache, setClaudeFromCache]   = useState(false);
   const [selectedFestival, setSelectedFestival] = useState(null);
 
-  const currentYear = new Date().getFullYear();
-
+  // ── Temple-linked festivals from DB ────────────────────────────────────────
   const fetchFestivals = useCallback(() => {
     setLoading(true);
     axios.get(`${API_BASE}/api/festivals?limit=500`)
@@ -149,121 +133,41 @@ export default function FestivalCalendarPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const callOpenAIAPI = useCallback(async (prompt, apiKey) => {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        max_tokens: 5000,
-        temperature: 0.2,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a Hindu festival calendar expert. Always respond with valid JSON arrays only. No markdown, no explanations, no extra text.',
-          },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
-    const rawText = data.choices?.[0]?.message?.content || '[]';
-    const cleaned = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-    try {
-      const parsed = JSON.parse(cleaned);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      try {
-        const lastComma = cleaned.lastIndexOf('},');
-        if (lastComma !== -1) {
-          const partial = cleaned.substring(0, lastComma + 1) + ']';
-          const recovered = JSON.parse(partial);
-          return Array.isArray(recovered) ? recovered : [];
-        }
-      } catch (_) {}
-      return [];
-    }
-  }, []);
-
-  // ─── DB-based cache helpers ─────────────────────────────────────────────────
-  // Step 1: /api/festivals/ai-cache/status  → check karo DB mein data hai ya nahi
-  // Step 2a: needs_refresh=false → /api/festivals/ai-cache  (DB se seedha lo)
-  // Step 2b: needs_refresh=true  → Claude API call → /api/festivals/ai-cache mein save karo
-
-  const fetchFestivalsFromClaude = useCallback(async (forceRefresh = false) => {
-    setClaudeLoading(true); setClaudeError(false); setClaudeErrorMsg(''); setClaudeFromCache(false);
+  // ── AI festivals — sirf backend se, frontend pe koi LLM call nahi ──────────
+  // Backend khud DB check karta hai → cache miss pe Claude call karta hai
+  // Hum bas /api/festivals/ai-cache hit karte hain
+  const fetchFestivalsFromBackend = useCallback(async (forceRefresh = false) => {
+    setClaudeLoading(true);
+    setClaudeError(false);
+    setClaudeErrorMsg('');
+    setClaudeFromCache(false);
 
     try {
-      // ── Step 1: Status check ─────────────────────────────────────────────
-      const statusRes = await axios.get(`${API_BASE}/api/festivals/ai-cache/status`);
-      const { needs_refresh, total, last_fetched } = statusRes.data;
+      const url = `${API_BASE}/api/festivals/ai-cache${forceRefresh ? '?refresh=true' : ''}`;
+      const res = await axios.get(url);
 
-      // ── Step 2a: DB mein data hai aur refresh nahi chahiye ──────────────
-      if (!forceRefresh && !needs_refresh && total > 0) {
-        const cacheRes = await axios.get(`${API_BASE}/api/festivals/ai-cache`);
-        const cached   = Array.isArray(cacheRes.data) ? cacheRes.data : [];
-        setClaudeFestivals(cached.map(f => ({ ...f, _claude: true })));
-        setClaudeFromCache(true);
-        setClaudeLoading(false);
-        return; // ✅ DB cache hit — koi Claude API call nahi!
-      }
+      // Backend response: { source, year, count, festivals: [...] }
+      const festivals = Array.isArray(res.data?.festivals)
+        ? res.data.festivals
+        : Array.isArray(res.data)
+          ? res.data   // fallback agar purana format ho
+          : [];
 
-      // ── Step 2b: Claude API call karo (pehli tarikh ya missing data) ────
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-      if (!apiKey) {
-        // API key nahi → purana DB data hi use karo
-        if (total > 0) {
-          const cacheRes = await axios.get(`${API_BASE}/api/festivals/ai-cache`);
-          const cached   = Array.isArray(cacheRes.data) ? cacheRes.data : [];
-          setClaudeFestivals(cached.map(f => ({ ...f, _claude: true })));
-          setClaudeFromCache(true);
-        } else {
-          setClaudeError(true);
-          setClaudeErrorMsg('API key missing. Add VITE_OPENAI_API_KEY to your .env file.');
-        }
-        setClaudeLoading(false);
-        return;
-      }
-
-      // Claude se fresh data fetch karo
-      const [h1, h2] = await Promise.all([
-        callOpenAIAPI(PROMPT_H1, apiKey),
-        callOpenAIAPI(PROMPT_H2, apiKey),
-      ]);
-      const combined = [...h1, ...h2];
-
-      // ── Step 3: DB mein save karo ────────────────────────────────────────
-      const currentYear = new Date().getFullYear();
-      try {
-        await axios.post(`${API_BASE}/api/festivals/ai-cache`, {
-          year:      currentYear,
-          festivals: combined,
-        });
-      } catch (saveErr) {
-        console.warn('DB mein save nahi ho saka:', saveErr.message);
-        // Save fail hone pe bhi UI mein data dikhao
-      }
-
-      setClaudeFestivals(combined.map(f => ({ ...f, _claude: true })));
-      setClaudeFromCache(false);
-
+      setClaudeFestivals(festivals.map(f => ({ ...f, _claude: true })));
+      setClaudeFromCache(res.data?.source === 'db_cache');
     } catch (err) {
       setClaudeError(true);
-      setClaudeErrorMsg(err.message || 'Unknown error');
+      setClaudeErrorMsg(err?.response?.data?.detail || err.message || 'Unknown error');
       setClaudeFestivals([]);
     } finally {
       setClaudeLoading(false);
     }
-  }, [callOpenAIAPI]);
+  }, []);
 
   useEffect(() => {
     fetchFestivals();
-    fetchFestivalsFromClaude();
-  }, [fetchFestivals, fetchFestivalsFromClaude]);
+    fetchFestivalsFromBackend();
+  }, [fetchFestivals, fetchFestivalsFromBackend]);
 
   useEffect(() => {
     const handler = () => fetchFestivals();
@@ -311,7 +215,9 @@ export default function FestivalCalendarPage() {
     });
     Object.values(map).forEach(arr =>
       arr.sort((a, b) => {
-        if (a.exact_date && b.exact_date) return a.exact_date.localeCompare(b.exact_date);
+        const da = a.exact_date || a.typical_date;
+        const db = b.exact_date || b.typical_date;
+        if (da && db) return da.localeCompare(db);
         return (b.is_major ? 1 : 0) - (a.is_major ? 1 : 0) || (a.name || '').localeCompare(b.name || '');
       })
     );
@@ -331,7 +237,10 @@ export default function FestivalCalendarPage() {
     return next;
   });
 
-  const handleRefresh = () => { fetchFestivals(); fetchFestivalsFromClaude(true); };
+  const handleRefresh = () => {
+    fetchFestivals();
+    fetchFestivalsFromBackend(true); // force=true → backend wipes cache & re-fetches Claude
+  };
 
   return (
     <>
@@ -391,9 +300,9 @@ export default function FestivalCalendarPage() {
             {[
               `${totalCount} ${t('festival.festivals')}`,
               t('festival.months'),
-              String(currentYear),
+              String(CURRENT_YEAR),   // ← dynamic year
               ...(claudeCount > 0 ? [`✨ ${claudeCount} ${t('festival.ai_curated')}`] : []),
-              ...(apiCount > 0 ? [`🛕 ${apiCount} ${t('festival.temple_festivals')}`] : []),
+              ...(apiCount > 0    ? [`🛕 ${apiCount} ${t('festival.temple_festivals')}`] : []),
             ].map((s, i) => (
               <span key={i} style={{
                 fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.08em',
@@ -432,7 +341,7 @@ export default function FestivalCalendarPage() {
               border: '1px solid rgba(255,150,50,.2)',
             }}>
               ⚠️ {claudeErrorMsg || t('festival.loading')}{' '}
-              <button onClick={fetchFestivalsFromClaude}
+              <button onClick={() => fetchFestivalsFromBackend(false)}
                 style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}>
                 {t('festival.retry')}
               </button>
@@ -555,7 +464,13 @@ export default function FestivalCalendarPage() {
         <div style={{ maxWidth: 1140, margin: '0 auto', padding: '0 24px' }}>
           {viewMode === 'calendar' ? (
             <>
-              <PremiumMonthNavigator selectedMonth={selectedMonth} byMonth={byMonth} onSelect={setSelectedMonth} onPrev={() => goMonth(-1)} onNext={() => goMonth(1)} />
+              <PremiumMonthNavigator
+                selectedMonth={selectedMonth}
+                byMonth={byMonth}
+                onSelect={setSelectedMonth}
+                onPrev={() => goMonth(-1)}
+                onNext={() => goMonth(1)}
+              />
               <div style={{ marginBottom: 32 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                   <div>
@@ -563,7 +478,7 @@ export default function FestivalCalendarPage() {
                       <span style={{ fontSize: 28 }}>{MONTH_SEASON[selectedMonth]?.icon}</span>
                       <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 900, color: '#4b1d04', letterSpacing: '-0.5px' }}>
                         {GREGORIAN_MONTHS[selectedMonth - 1]}
-                        <span style={{ fontWeight: 400, color: '#9A7150', fontSize: 22, marginLeft: 10 }}>{currentYear}</span>
+                        <span style={{ fontWeight: 400, color: '#9A7150', fontSize: 22, marginLeft: 10 }}>{CURRENT_YEAR}</span>
                       </h2>
                     </div>
                     <p style={{ fontFamily: 'var(--font-hindi)', fontSize: 15, color: '#9A7150', marginTop: 0 }}>
@@ -705,7 +620,7 @@ function PremiumMonthNavigator({ selectedMonth, byMonth, onSelect, onPrev, onNex
       <div style={{ position: 'absolute', right: -30, top: -30, width: 180, height: 180, borderRadius: '50%', background: 'radial-gradient(circle, rgba(232,101,10,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', left: -20, bottom: -20, width: 120, height: 120, borderRadius: '50%', background: 'radial-gradient(circle, rgba(200,150,12,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.14em', color: '#C8960C', textTransform: 'uppercase', fontWeight: 700, textAlign: 'center', marginBottom: 14, opacity: 0.8 }}>
-        ✦ Hindu Festival Calendar 2025 ✦
+        ✦ Hindu Festival Calendar {CURRENT_YEAR} ✦
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button onClick={onPrev} style={{ width: 40, height: 40, borderRadius: '50%', border: '1.5px solid #EDE0CC', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .22s', boxShadow: '0 2px 8px rgba(61,31,0,0.06)' }}
@@ -747,6 +662,10 @@ function PremiumFestivalCard({ festival, compact, index, onClick }) {
   const [hovered, setHovered] = useState(false);
   const tint = `${color}18`;
   const tintMid = `${color}30`;
+
+  // exact_date ya typical_date — jo bhi available ho
+  const displayDate = festival.display_date || null;
+
   return (
     <div className="fest-card-premium" onClick={onClick} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ animation: `cardIn .4s ease both`, animationDelay: `${Math.min(index * 0.06, 0.5)}s` }}>
       <div className="card-glow" style={{ background: `radial-gradient(ellipse at 30% 0%, ${tintMid} 0%, transparent 70%)` }} />
@@ -755,9 +674,9 @@ function PremiumFestivalCard({ festival, compact, index, onClick }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
           <div style={{ width: compact ? 48 : 60, height: compact ? 48 : 60, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: compact ? 14 : 18, background: tint, border: `1.5px solid ${tintMid}`, fontSize: compact ? 22 : 28, flexShrink: 0, transition: 'all .3s', ...(hovered ? { transform: 'scale(1.08) rotate(-4deg)', boxShadow: `0 8px 20px ${color}30` } : {}) }}>{emoji}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {festival.display_date && (
+            {displayDate && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color, background: tint, border: `1px solid ${tintMid}`, padding: '2px 8px', borderRadius: 50, marginBottom: 6, letterSpacing: '.04em', fontFamily: 'var(--font-display)' }}>
-                📅 {festival.display_date}
+                📅 {displayDate}
               </div>
             )}
             <div style={{ fontFamily: 'var(--font-display)', fontSize: compact ? 14 : 16, fontWeight: 800, color: '#2D1200', marginBottom: 3, lineHeight: 1.25, letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={festival.name}>{festival.name}</div>
@@ -794,6 +713,10 @@ function FestivalModal({ festival, onClose }) {
   const hinduMonth = festival.hindu_month || HINDU_MONTHS[((festival.month || 1) - 1) % 12] || '';
   const emoji = festival.emoji || '🛕';
   const color = festival.color || '#E8650A';
+
+  // exact_date (AI cache) ya typical_date (DB festivals) — dono handle karo
+  const displayDate = festival.display_date || null;
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(26,10,0,.72)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'fadeIn .2s ease' }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ background: '#FDF6EC', borderRadius: 32, maxWidth: 580, width: '100%', overflow: 'hidden', animation: 'slideUp .28s cubic-bezier(.34,1.2,.64,1)', boxShadow: '0 40px 100px rgba(26,10,0,.5), 0 8px 24px rgba(26,10,0,.2)', maxHeight: '90vh', overflowY: 'auto', border: '1.5px solid rgba(255,200,100,0.15)' }}>
@@ -801,7 +724,7 @@ function FestivalModal({ festival, onClose }) {
           <div style={{ fontSize: 42, width: 74, height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 22, background: 'white', border: `2px solid ${color}30`, boxShadow: `0 8px 24px ${color}20`, flexShrink: 0 }}>{emoji}</div>
           <div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 900, color: '#2D1200', marginBottom: 6, letterSpacing: '-0.3px' }}>{festival.name}</div>
-            {festival.display_date && <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color, fontWeight: 700, marginBottom: 5 }}>📅 {festival.display_date}</div>}
+            {displayDate && <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color, fontWeight: 700, marginBottom: 5 }}>📅 {displayDate}</div>}
             {festival.hindu_tithi && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: '#9A7150' }}>{festival.hindu_tithi}</div>}
             <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
               {festival.is_major && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 50, border: `1px solid ${color}40`, color: '#B84D00', background: `${color}12`, fontFamily: 'var(--font-display)', fontWeight: 600 }}>{t('festival.major')}</span>}
@@ -831,10 +754,10 @@ function FestivalModal({ festival, onClose }) {
             <div style={{ flex: 1, height: 1, background: '#EDE0CC' }} /><span style={{ fontSize: 12 }}>🔱</span><div style={{ flex: 1, height: 1, background: '#EDE0CC' }} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }} className="fest-modal-meta">
-            {festival.display_date && (
+            {displayDate && (
               <div style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 16, padding: '12px 16px', gridColumn: '1 / -1' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.1em', color: '#9A7150', marginBottom: 4, fontWeight: 700 }}>{t('festival.date')}</div>
-                <div style={{ fontFamily: 'var(--font-body)', fontSize: 16, fontWeight: 700, color }}>{festival.display_date}</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 16, fontWeight: 700, color }}>{displayDate}</div>
               </div>
             )}
             {[
