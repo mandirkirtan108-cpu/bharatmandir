@@ -113,11 +113,11 @@ async def plan_route(req: RoutePlanRequest):
     AI-powered temple route planner using OpenAI GPT (server-side key).
     No user API key required.
     """
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    api_key = os.environ.get("VITE_OPENAI_API_KEY", "")
     if not api_key:
         raise HTTPException(
             status_code=500,
-            detail="OPENAI_API_KEY not configured on server."
+            detail="VITE_OPENAI_API_KEY not configured on server."
         )
 
     db_context = get_temples_in_region(req.start, req.destination)
