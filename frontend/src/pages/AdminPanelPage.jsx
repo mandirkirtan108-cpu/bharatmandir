@@ -439,7 +439,7 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
             )}
             {!t.verified && (
               <ActionBtn icon={<ShieldCheck size={15} />} label="Mark Verified"
-                color="#7c3aed" bg="#f5f3ff" border="#c4b5fd"
+                color="#92400e" bg="#f5f3ff" border="#c4b5fd"
                 loading={actionLoading === 'verify'} onClick={doVerify} />
             )}
           </div>
@@ -1105,7 +1105,7 @@ export default function AdminPanelPage() {
             <Link to="/admin/add-festival" style={{
               display: 'inline-flex', alignItems: 'center', gap: 7,
               padding: '10px 18px',
-              background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+              background: 'linear-gradient(135deg, #92400e, #92400e)',
               border: '2px solid transparent', borderRadius: 50,
               fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
               color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
@@ -1315,7 +1315,7 @@ function TempleRow({ t, i, total, actionLoading, onReview, onEdit, onDelete, onQ
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
               <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-light)', background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4 }}>{t.mkt_id || `#${t.id}`}</span>
-              {t.verified && <ShieldCheck size={12} color="#7c3aed" />}
+              {t.verified && <ShieldCheck size={12} color="#92400e" />}
               <StatusBadge status={t.status} />
             </div>
           </div>
@@ -1362,7 +1362,7 @@ function TempleNameCell({ t }) {
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{t.name}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
           <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-light)', background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4 }}>{t.mkt_id || `#${t.id}`}</span>
-          {t.verified && <ShieldCheck size={12} color="#7c3aed" />}
+          {t.verified && <ShieldCheck size={12} color="#92400e" />}
         </div>
       </div>
     </div>
