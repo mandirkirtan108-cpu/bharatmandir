@@ -213,7 +213,7 @@ export default function FestivalCalendarPage() {
       }
 
       // ── Step 2b: Claude API call karo (pehli tarikh ya missing data) ────
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+      const apiKey = import.meta.env.OPENAI_API_KEY;
       if (!apiKey) {
         // API key nahi → purana DB data hi use karo
         if (total > 0) {
