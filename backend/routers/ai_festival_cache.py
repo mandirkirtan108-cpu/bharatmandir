@@ -1,18 +1,24 @@
 """
 AI Festival Cache Router — BharatMandir
 ======================================================
-GET  /api/festivals/ai-cache               → return cached or freshly fetched AI festivals
-GET  /api/festivals/ai-cache?refresh=true  → force-refresh (wipe DB cache, re-fetch)
-POST /api/admin/festivals/ai-refresh       → force-refresh AI festival cache (admin only)
+Ek baar Claude se data fetch karo → festivals table mein daalo (source='ai_cache')
+Agle baar seedha festivals table se lo — koi AI call nahi
 
-Fix log:
-- _get_cached_year has ZERO dependency on cached_year column being populated.
-  Returns ALL rows where source='ai_cache', ordered by month.
-  Claude is NEVER called if >= MIN_CACHE_COUNT rows exist.
-- INSERT uses ON CONFLICT DO NOTHING and wraps errors per-row
-- _fetch_and_store is strictly DB-first: Claude is NEVER called if >= MIN_CACHE_COUNT rows exist
-- Force-refresh wipes only ai_cache rows, then re-fetches
-- Added /api/festivals/ai-cache/debug endpoint for quick diagnostics
+Routes:
+  GET  /api/festivals/ai-cache          → DB se lo (cache miss pe Claude call)
+  GET  /api/festivals/ai-cache?refresh=true  → force wipe + re-fetch
+  GET  /api/festivals/ai-cache/debug    → diagnostics
+  POST /api/admin/festivals/ai-refresh  → admin force refresh (X-Admin-Key required)
+
+Storage:
+  Table: public.festivals
+  source = 'ai_cache'
+  temple_id = NULL (AI festivals ka koi temple nahi hota)
+
+Cache Logic:
+  - >= MIN_CACHE_COUNT rows with source='ai_cache' → CACHE HIT → sirf DB se return
+  - < MIN_CACHE_COUNT → CACHE MISS → Claude call → insert → return
+  - ON CONFLICT DO NOTHING → duplicate-safe
 """
 
 from fastapi import APIRouter, HTTPException, Header, Depends, BackgroundTasks, Query
@@ -32,7 +38,7 @@ router = APIRouter(tags=["AI Festival Cache"])
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_URL     = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL      = "claude-sonnet-4-20250514"
-MIN_CACHE_COUNT   = 10   # fewer rows than this = treat as cache miss
+MIN_CACHE_COUNT   = 50   # itne se kam rows = cache miss → Claude call
 
 _ADMIN_SECRET = os.getenv("ADMIN_SECRET_KEY", "change-me-now")
 
@@ -42,54 +48,73 @@ def require_admin(x_admin_key: str = Header(...)):
         raise HTTPException(status_code=403, detail="Forbidden: invalid admin key")
 
 
-# ── Prompts ───────────────────────────────────────────────────────────────────
-def _make_prompt(year: int, months: str) -> str:
-    return f"""List ALL Hindu festivals for {year} in months: {months}.
-Return ONLY a valid JSON array. No explanation, no markdown, no backticks, no extra text.
-Each object must have EXACTLY these fields:
-{{"name":"string","month":1,"exact_date":"{year}-01-14","display_date":"14 January {year}","hindu_tithi":"string","hindu_month":"string","significance":"one sentence","description":"2-3 sentences max","is_major":true,"duration_days":1,"deity":"Surya","emoji":"🪁","color":"#E8650A"}}
-Rules:
-- Cover every festival, vrat, Ekadashi, Purnima, Amavasya, Chaturthi in those months
-- Include regional festivals (Pongal, Onam, Bihu, Ugadi, Baisakhi, Lohri etc.)
-- is_major=true only for nationally celebrated festivals
-- deity: Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other
-- description max 2-3 sentences
-- Sort by exact_date ascending
-- Output ONLY the JSON array, nothing else"""
+# ── Schema ensure ─────────────────────────────────────────────────────────────
 
-
-# ── DB helpers ────────────────────────────────────────────────────────────────
-
-def _get_cached_year(year: int) -> list[dict]:
+def _ensure_schema():
     """
-    Return all ai_cache festivals from DB.
-
-    Deliberately does NOT filter by cached_year — the column may be NULL
-    on existing rows, and filtering by it causes a false cache miss which
-    triggers an unnecessary Claude API call.
-
-    Only returns [] (cache miss) if the total count of ai_cache rows is
-    below MIN_CACHE_COUNT — that is the only signal we need.
+    festivals table mein required columns add karo agar missing hain.
+    Safe to call on every request — ALTER TABLE IF NOT EXISTS is idempotent.
     """
     with get_db_cursor() as cur:
+        cur.execute("""
+            ALTER TABLE public.festivals
+                ADD COLUMN IF NOT EXISTS cached_year  INT,
+                ADD COLUMN IF NOT EXISTS cached_month INT,
+                ADD COLUMN IF NOT EXISTS display_date TEXT,
+                ADD COLUMN IF NOT EXISTS hindu_tithi  TEXT,
+                ADD COLUMN IF NOT EXISTS color        TEXT
+        """)
+        # Backfill cached_year/cached_month from typical_date for existing ai_cache rows
+        cur.execute("""
+            UPDATE public.festivals
+            SET
+                cached_year  = EXTRACT(YEAR  FROM typical_date::date)::INT,
+                cached_month = EXTRACT(MONTH FROM typical_date::date)::INT
+            WHERE source     = 'ai_cache'
+              AND cached_year IS NULL
+              AND typical_date IS NOT NULL
+              AND typical_date ~ '^\d{4}-\d{2}-\d{2}$'
+        """)
+        cur.execute("""
+            UPDATE public.festivals
+            SET
+                cached_year  = EXTRACT(YEAR FROM NOW())::INT,
+                cached_month = month
+            WHERE source     = 'ai_cache'
+              AND cached_year IS NULL
+        """)
 
-        # ── Count all ai_cache rows (no year filter) ──────────────────────
+
+# ── DB read ───────────────────────────────────────────────────────────────────
+
+def _get_cached_festivals(year: int) -> list[dict]:
+    """
+    festivals table se source='ai_cache' rows lo.
+    Return [] agar < MIN_CACHE_COUNT rows hain (cache miss signal).
+    Year filter: cached_year = year, ya fallback to typical_date year.
+    """
+    with get_db_cursor() as cur:
+        # Total count check (year-specific)
         cur.execute("""
             SELECT COUNT(*) AS cnt
             FROM public.festivals
             WHERE source = 'ai_cache'
-        """)
+              AND (
+                cached_year = %s
+                OR (cached_year IS NULL AND EXTRACT(YEAR FROM typical_date::date)::INT = %s)
+              )
+        """, (year, year))
         row   = cur.fetchone()
         total = int(row["cnt"]) if row else 0
 
         if total < MIN_CACHE_COUNT:
             logger.info(
-                f"Cache MISS: {total} ai_cache rows in DB "
+                f"Cache MISS: {total} ai_cache rows for year={year} "
                 f"(need >= {MIN_CACHE_COUNT}) — will call Claude"
             )
             return []
 
-        # ── Cache hit: return all ai_cache rows ───────────────────────────
+        # Cache hit — return all rows for this year
         cur.execute("""
             SELECT
                 f.id,
@@ -117,91 +142,41 @@ def _get_cached_year(year: int) -> list[dict]:
                 NULL::text        AS temple_slug
             FROM public.festivals f
             WHERE f.source = 'ai_cache'
-            ORDER BY f.month ASC, f.typical_date ASC NULLS LAST
-        """)
+              AND (
+                f.cached_year = %s
+                OR (f.cached_year IS NULL AND EXTRACT(YEAR FROM f.typical_date::date)::INT = %s)
+              )
+            ORDER BY f.month ASC, f.typical_date ASC NULLS LAST, f.name ASC
+        """, (year, year))
+
         rows = [dict(r) for r in cur.fetchall()]
-        logger.info(
-            f"Cache HIT: returning {len(rows)} ai_cache festivals from DB "
-            f"(total in DB: {total})"
-        )
+        logger.info(f"Cache HIT: {len(rows)} festivals for year={year}")
         return rows
 
 
-def _delete_stale_cache(year: int, before_month: int):
-    """Delete ai_cache rows for months that have already passed this year."""
+# ── DB write ──────────────────────────────────────────────────────────────────
+
+def _clear_ai_cache(year: int):
+    """Force refresh ke liye — sirf is saal ke ai_cache rows delete karo."""
     with get_db_cursor() as cur:
         cur.execute("""
             DELETE FROM public.festivals
-            WHERE source = 'ai_cache'
+            WHERE source      = 'ai_cache'
               AND cached_year = %s
-              AND cached_month IS NOT NULL
-              AND cached_month < %s
-        """, (year, before_month))
-        deleted = cur.rowcount
-        if deleted:
-            logger.info(
-                f"Pruned {deleted} stale ai_cache rows "
-                f"(year={year}, before_month={before_month})"
-            )
+        """, (year,))
+        logger.info(f"Cleared {cur.rowcount} ai_cache rows for year={year}")
 
 
-def _delete_year_cache(year: int):
-    """Wipe ALL ai_cache rows (called only on force refresh)."""
+def _insert_festivals(festivals: list[dict], year: int) -> int:
+    """
+    Claude se aaye festivals ko festivals table mein insert karo.
+    ON CONFLICT DO NOTHING — duplicate-safe (name + month + cached_year unique hona chahiye).
+    Returns count of inserted rows.
+    """
+    inserted = 0
+    skipped  = 0
+
     with get_db_cursor() as cur:
-        cur.execute("""
-            DELETE FROM public.festivals
-            WHERE source = 'ai_cache'
-        """)
-        logger.info(f"Force-refresh: deleted {cur.rowcount} ai_cache rows")
-
-
-def _ensure_cached_year_columns():
-    """
-    Add cached_year/cached_month columns if missing and backfill from typical_date.
-    No-op if columns already exist and are populated.
-    Safe to call on every request.
-    """
-    with get_db_cursor() as cur:
-        cur.execute("""
-            ALTER TABLE public.festivals
-                ADD COLUMN IF NOT EXISTS cached_year  INT,
-                ADD COLUMN IF NOT EXISTS cached_month INT
-        """)
-        # Backfill from typical_date
-        cur.execute("""
-            UPDATE public.festivals
-            SET
-                cached_year  = EXTRACT(YEAR  FROM typical_date::date)::INT,
-                cached_month = EXTRACT(MONTH FROM typical_date::date)::INT
-            WHERE source    = 'ai_cache'
-              AND cached_year IS NULL
-              AND typical_date IS NOT NULL
-        """)
-        # Rows without typical_date: use current year + the month column
-        cur.execute("""
-            UPDATE public.festivals
-            SET
-                cached_year  = EXTRACT(YEAR FROM NOW())::INT,
-                cached_month = month
-            WHERE source    = 'ai_cache'
-              AND cached_year IS NULL
-        """)
-        if cur.rowcount:
-            logger.info(f"Backfilled cached_year for {cur.rowcount} ai_cache rows")
-
-
-def _insert_ai_festivals(festivals: list[dict], year: int):
-    """
-    Bulk-insert AI-fetched festivals into the festivals table.
-
-    - temple_id = NULL  (AI festivals have no linked temple)
-    - ON CONFLICT DO NOTHING — safe to call even if some rows already exist
-    - Raises on unexpected DB errors
-    """
-    with get_db_cursor() as cur:
-        inserted = 0
-        skipped  = 0
-
         for f in festivals:
             try:
                 month = f.get("month")
@@ -209,6 +184,21 @@ def _insert_ai_festivals(festivals: list[dict], year: int):
                     skipped += 1
                     continue
                 month = int(month)
+
+                name = (f.get("name") or "").strip()[:200]
+                if not name:
+                    skipped += 1
+                    continue
+
+                # exact_date validation
+                exact_date = None
+                raw_date   = f.get("exact_date") or ""
+                if raw_date and len(raw_date) == 10:
+                    try:
+                        date.fromisoformat(raw_date)
+                        exact_date = raw_date
+                    except ValueError:
+                        pass
 
                 cur.execute("""
                     INSERT INTO public.festivals (
@@ -243,43 +233,58 @@ def _insert_ai_festivals(festivals: list[dict], year: int):
                     )
                     ON CONFLICT DO NOTHING
                 """, (
-                    (f.get("name") or "")[:200],
-                    f.get("description"),
-                    f.get("significance"),
+                    name,
+                    (f.get("description") or "")[:1000] or None,
+                    (f.get("significance") or "")[:500] or None,
                     month,
-                    f.get("hindu_month"),
-                    f.get("hindu_tithi"),
-                    f.get("exact_date"),
-                    f.get("display_date"),
+                    (f.get("hindu_month") or "")[:100] or None,
+                    (f.get("hindu_tithi") or "")[:200] or None,
+                    exact_date,
+                    (f.get("display_date") or "")[:100] or None,
                     max(1, int(f.get("duration_days") or 1)),
                     bool(f.get("is_major")),
-                    f.get("deity"),
-                    f.get("festival_type"),
-                    f.get("emoji"),
-                    f.get("color"),
+                    (f.get("deity") or "Other")[:50],
+                    None,  # festival_type
+                    (f.get("emoji") or "🛕")[:10],
+                    (f.get("color") or "#E8650A")[:20],
                     year,
                     month,
                 ))
                 inserted += 1
 
             except Exception as e:
-                logger.error(f"Failed to insert festival '{f.get('name')}': {e}")
-                raise
+                logger.error(f"Insert failed for '{f.get('name')}': {e}")
+                # Ek festival fail ho to baki continue karo
+                continue
 
-        logger.info(
-            f"AI festivals stored: {inserted} inserted, "
-            f"{skipped} skipped (year={year})"
-        )
+    logger.info(f"Inserted {inserted}, skipped {skipped} for year={year}")
+    return inserted
 
 
-# ── Claude API call ───────────────────────────────────────────────────────────
+# ── Claude API ────────────────────────────────────────────────────────────────
+
+def _make_prompt(year: int, months: str) -> str:
+    return f"""List ALL major and minor Hindu festivals, vrats, Ekadashi, Purnima, Amavasya, and Chaturthi for {year} in months: {months}.
+Return ONLY a valid JSON array. No explanation, no markdown, no backticks.
+Each object must have EXACTLY these fields:
+{{"name":"string","month":1,"exact_date":"{year}-01-14","display_date":"14 January {year}","hindu_tithi":"Makar Sankranti","hindu_month":"Pausha","significance":"one clear sentence about why this festival is celebrated","description":"2-3 sentences about rituals and traditions","is_major":true,"duration_days":1,"deity":"Surya","emoji":"🪁","color":"#E8650A"}}
+Rules:
+- Include ALL festivals including regional ones: Pongal, Onam, Bihu, Ugadi, Baisakhi, Lohri, Gudi Padwa, Vishu etc.
+- Include all Ekadashi, Purnima, Amavasya of each month
+- is_major=true for nationally celebrated festivals only
+- deity must be one of: Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other
+- exact_date must be accurate for year {year} in YYYY-MM-DD format
+- description: max 2-3 sentences, keep concise
+- Sort by exact_date ascending within the months
+- Output ONLY the JSON array, nothing else, no trailing text"""
+
 
 async def _call_claude(prompt: str) -> list[dict]:
     if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY not set in environment")
+        raise RuntimeError("ANTHROPIC_API_KEY environment variable not set")
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        response = await client.post(
+    async with httpx.AsyncClient(timeout=180) as client:
+        resp = await client.post(
             ANTHROPIC_URL,
             headers={
                 "x-api-key":         ANTHROPIC_API_KEY,
@@ -293,77 +298,78 @@ async def _call_claude(prompt: str) -> list[dict]:
             },
         )
 
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Claude API error {response.status_code}: {response.text[:300]}"
-        )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Claude API {resp.status_code}: {resp.text[:400]}")
 
-    data = response.json()
-    raw  = data.get("content", [{}])[0].get("text", "[]")
-
-    # Strip markdown fences if present
+    data    = resp.json()
+    raw     = data.get("content", [{}])[0].get("text", "[]")
     cleaned = raw.strip()
+
+    # Strip markdown fences
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[-1]
         cleaned = cleaned.rsplit("```", 1)[0].strip()
 
     try:
         parsed = json.loads(cleaned)
-        return parsed if isinstance(parsed, list) else []
+        if isinstance(parsed, list):
+            return parsed
     except json.JSONDecodeError:
-        # Attempt partial recovery (truncated response)
-        try:
-            idx = cleaned.rfind("},")
-            if idx != -1:
-                partial = cleaned[: idx + 1] + "]"
-                parsed  = json.loads("[" + partial.lstrip("["))
-                return parsed if isinstance(parsed, list) else []
-        except Exception:
-            pass
-        logger.error("Failed to parse Claude JSON response")
-        return []
+        pass
 
+    # Partial recovery — truncated response
+    try:
+        idx = cleaned.rfind("},")
+        if idx != -1:
+            partial = cleaned[:idx + 1] + "]"
+            parsed  = json.loads("[" + partial.lstrip("["))
+            if isinstance(parsed, list):
+                logger.warning(f"Partial recovery: got {len(parsed)} items")
+                return parsed
+    except Exception:
+        pass
+
+    logger.error("Could not parse Claude response as JSON")
+    return []
+
+
+# ── Main orchestrator ─────────────────────────────────────────────────────────
 
 async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
     """
-    Main orchestrator:
-      force=False (default) → DB-first; Claude called ONLY on genuine cache miss.
-      force=True            → wipe all ai_cache rows, always call Claude.
-
-    Returns list of festivals (from DB on hit, from Claude on miss/force).
+    force=False: DB check → cache hit return, miss pe Claude call
+    force=True : clear cache → Claude call → store → return
     """
-    # Ensure schema is ready before every fetch
-    _ensure_cached_year_columns()
+    _ensure_schema()
 
     if not force:
-        existing = _get_cached_year(year)
+        existing = _get_cached_festivals(year)
         if existing:
-            logger.info(
-                f"_fetch_and_store: cache hit ({len(existing)} rows) "
-                f"for year={year} — skipping Claude API call"
-            )
+            logger.info(f"Returning {len(existing)} cached festivals for year={year}")
             return existing
 
     if force:
-        _delete_year_cache(year)
+        _clear_ai_cache(year)
 
-    logger.info(
-        f"Calling Claude API for year={year} "
-        f"({'force refresh' if force else 'cache miss'}) — 2 prompts..."
-    )
-    h1 = await _call_claude(
-        _make_prompt(year, "January, February, March, April, May, June")
-    )
-    h2 = await _call_claude(
-        _make_prompt(year, "July, August, September, October, November, December")
-    )
+    # Claude se 2 prompts — H1 aur H2
+    logger.info(f"Calling Claude for year={year} ({'force' if force else 'miss'})...")
+
+    try:
+        h1 = await _call_claude(_make_prompt(year, "January, February, March, April, May, June"))
+        h2 = await _call_claude(_make_prompt(year, "July, August, September, October, November, December"))
+    except Exception as e:
+        logger.error(f"Claude API call failed: {e}")
+        raise
+
     combined = h1 + h2
-    logger.info(f"Claude returned {len(combined)} festivals for year={year}")
+    logger.info(f"Claude returned {len(combined)} festivals total")
 
     if combined:
-        _insert_ai_festivals(combined, year)
+        count = _insert_festivals(combined, year)
+        logger.info(f"Stored {count} new festivals in DB for year={year}")
 
-    return combined
+    # DB se fresh read karke return karo
+    return _get_cached_festivals(year)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -371,86 +377,89 @@ async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
 @router.get("/api/festivals/ai-cache/debug")
 async def debug_ai_cache():
     """
-    Diagnostic endpoint — shows exactly what is stored in the DB.
-    Call this first when troubleshooting repeated Claude calls.
+    Diagnostic — DB mein kya stored hai instantly dekho.
+    Troubleshoot karne ke liye pehle yahi call karo.
     """
+    _ensure_schema()
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT
-                source,
                 cached_year,
-                COUNT(*)        AS total,
-                MIN(month)      AS min_month,
-                MAX(month)      AS max_month
+                COUNT(*)     AS total,
+                MIN(month)   AS min_month,
+                MAX(month)   AS max_month,
+                SUM(CASE WHEN is_major THEN 1 ELSE 0 END) AS major_count
             FROM public.festivals
             WHERE source = 'ai_cache'
-            GROUP BY source, cached_year
+            GROUP BY cached_year
             ORDER BY cached_year NULLS LAST
         """)
-        rows = [dict(r) for r in cur.fetchall()]
+        breakdown = [dict(r) for r in cur.fetchall()]
 
-        cur.execute("""
-            SELECT COUNT(*) AS total_ai_cache
-            FROM public.festivals
-            WHERE source = 'ai_cache'
-        """)
-        total = cur.fetchone()["total_ai_cache"]
+        cur.execute("SELECT COUNT(*) AS total FROM public.festivals WHERE source = 'ai_cache'")
+        total = cur.fetchone()["total"]
 
+    current_year = date.today().year
     return {
-        "total_ai_cache_rows": total,
+        "total_ai_cache_rows":      total,
         "min_needed_for_cache_hit": MIN_CACHE_COUNT,
-        "will_hit_cache": total >= MIN_CACHE_COUNT,
-        "breakdown_by_year": rows,
+        "will_hit_cache":           total >= MIN_CACHE_COUNT,
+        "current_year":             current_year,
+        "breakdown_by_year":        breakdown,
+        "anthropic_key_set":        bool(ANTHROPIC_API_KEY),
     }
 
 
 @router.get("/api/festivals/ai-cache")
 async def get_ai_festival_cache(
     background_tasks: BackgroundTasks,
-    refresh: bool = Query(
-        False,
-        description="Set true to wipe DB cache and re-fetch from Claude"
-    ),
+    refresh: bool = Query(False, description="true = wipe cache and re-fetch from Claude"),
 ):
     """
-    Return AI-generated festivals for the current year.
+    Main endpoint — festivals return karo.
 
     Flow:
-    1. Ensure cached_year/cached_month columns exist (idempotent, fast).
-    2. ?refresh=true  → wipe DB cache → call Claude → store → return fresh data.
-    3. DB has >= MIN_CACHE_COUNT rows → return immediately (zero Claude calls).
-    4. DB empty / < MIN_CACHE_COUNT  → call Claude → store → return.
+    1. Schema ensure (fast, idempotent)
+    2. refresh=true → wipe → Claude → store → return
+    3. DB >= MIN_CACHE_COUNT rows → seedha return (NO Claude call)
+    4. DB empty/kam → Claude → store → return
     """
     today         = date.today()
     current_year  = today.year
     current_month = today.month
 
-    # Ensure columns exist on every request (no-op after first run)
-    _ensure_cached_year_columns()
+    _ensure_schema()
 
-    # Prune past months in background on 1st of each month
+    # 1st of month pe purane months ki rows background mein clean karo
     if today.day == 1 and current_month > 1:
-        background_tasks.add_task(_delete_stale_cache, current_year, current_month)
+        def _prune():
+            with get_db_cursor() as cur:
+                cur.execute("""
+                    DELETE FROM public.festivals
+                    WHERE source      = 'ai_cache'
+                      AND cached_year = %s
+                      AND cached_month IS NOT NULL
+                      AND cached_month < %s
+                """, (current_year, current_month))
+                logger.info(f"Pruned {cur.rowcount} past-month ai_cache rows")
+        background_tasks.add_task(_prune)
 
-    # ── Force refresh ──────────────────────────────────────────────────────
+    # Force refresh
     if refresh:
-        logger.info(f"Force refresh requested for year={current_year}")
+        logger.info(f"Force refresh: year={current_year}")
         try:
-            await _fetch_and_store(current_year, force=True)
+            festivals = await _fetch_and_store(current_year, force=True)
         except Exception as e:
-            logger.error(f"Force refresh failed: {e}")
-            raise HTTPException(status_code=503, detail=f"Refresh failed: {str(e)}")
-
-        stored = _get_cached_year(current_year)
+            raise HTTPException(503, f"Refresh failed: {e}")
         return {
             "source":    "fresh",
             "year":      current_year,
-            "count":     len(stored),
-            "festivals": stored,
+            "count":     len(festivals),
+            "festivals": festivals,
         }
 
-    # ── Normal: DB-first ──────────────────────────────────────────────────
-    cached = _get_cached_year(current_year)
+    # Normal DB-first flow
+    cached = _get_cached_festivals(current_year)
     if cached:
         return {
             "source":    "db_cache",
@@ -459,56 +468,44 @@ async def get_ai_festival_cache(
             "festivals": cached,
         }
 
-    # Cache miss → call Claude
-    logger.info(f"DB cache miss for year={current_year}, fetching from Claude...")
+    # Cache miss — Claude call karo
+    logger.info(f"Cache miss for year={current_year}, calling Claude...")
     try:
-        await _fetch_and_store(current_year, force=False)
+        festivals = await _fetch_and_store(current_year, force=False)
     except Exception as e:
         logger.error(f"Claude fetch failed: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Could not fetch festivals from AI: {str(e)}"
-        )
+        raise HTTPException(503, f"AI fetch failed: {e}")
 
-    stored = _get_cached_year(current_year)
-    if not stored:
-        raise HTTPException(
-            status_code=502,
-            detail="AI returned empty festival list — check ANTHROPIC_API_KEY and DB commit"
-        )
+    if not festivals:
+        raise HTTPException(502, "Claude returned empty list — check ANTHROPIC_API_KEY")
 
     return {
         "source":    "fresh",
         "year":      current_year,
-        "count":     len(stored),
-        "festivals": stored,
+        "count":     len(festivals),
+        "festivals": festivals,
     }
 
 
-@router.post(
-    "/api/admin/festivals/ai-refresh",
-    dependencies=[Depends(require_admin)],
-)
+@router.post("/api/admin/festivals/ai-refresh", dependencies=[Depends(require_admin)])
 async def admin_force_refresh():
     """
-    Admin endpoint: wipe ALL ai_cache rows and re-fetch from Claude.
-    Requires X-Admin-Key header.
+    Admin: Force wipe + re-fetch from Claude.
+    Header required: X-Admin-Key: <ADMIN_SECRET_KEY>
     """
     today        = date.today()
     current_year = today.year
 
-    logger.info(f"Admin triggered AI festival cache refresh for year={current_year}")
-
+    logger.info(f"Admin force refresh triggered for year={current_year}")
     try:
         festivals = await _fetch_and_store(current_year, force=True)
     except Exception as e:
-        logger.error(f"Admin refresh failed: {e}")
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(503, str(e))
 
     return {
         "success":      True,
         "year":         current_year,
-        "fetched":      len(festivals),
-        "message":      f"Cache refreshed: {len(festivals)} festivals stored for {current_year}",
+        "count":        len(festivals),
+        "message":      f"{len(festivals)} festivals stored for {current_year}",
         "refreshed_at": datetime.utcnow().isoformat(),
     }
