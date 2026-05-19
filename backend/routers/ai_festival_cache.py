@@ -1,345 +1,574 @@
 """
 AI Festival Cache Router — BharatMandir
-Fixed: proper cache check, correct DB read/write, no silent failures
+======================================================
+GET  /api/festivals/ai-cache               → return cached or freshly fetched AI festivals
+GET  /api/festivals/ai-cache?refresh=true  → force-refresh (wipe DB cache, re-fetch)
+POST /api/admin/festivals/ai-refresh       → force-refresh AI festival cache (admin only)
+
+Switched from Claude to OpenAI (gpt-4o) for accurate festival dates.
+Year-aware: festivals are fetched and cached PER YEAR.
+If the year changes (e.g. 2026 → 2027), a fresh fetch is triggered automatically.
 """
 
 from fastapi import APIRouter, HTTPException, Header, Depends, BackgroundTasks, Query
-import httpx, json, os, logging
+from typing import Optional
+import httpx
+import json
+import os
+import logging
 from datetime import date, datetime
+
 from db.connection import get_db_cursor
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["AI Festival Cache"])
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-ANTHROPIC_URL     = "https://api.anthropic.com/v1/messages"
-CLAUDE_MODEL      = "claude-sonnet-4-20250514"
+# ── Config ────────────────────────────────────────────────────────────────────
+OPENAI_API_KEY  = os.getenv("VITE_OPENAI_API_KEY", "")
+OPENAI_URL      = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL    = "gpt-4o"          # accurate dates; swap to gpt-4o-mini to save cost
+MIN_CACHE_COUNT = 10                # fewer rows than this = treat as cache miss
 
-_ADMIN_SECRET = os.getenv("ADMIN_SECRET_KEY", "change-me-now")
+_ADMIN_SECRET = os.getenv("VITE_ADMIN_SECRET_KEY", "change-me-now")
+
 
 def require_admin(x_admin_key: str = Header(...)):
     if x_admin_key != _ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
+        raise HTTPException(status_code=403, detail="Forbidden: invalid admin key")
 
 
-# ── Schema ensure ─────────────────────────────────────────────────────────────
-def _ensure_schema():
-    """temple_id ko nullable banao + missing columns add karo. Idempotent."""
-    with get_db_cursor() as cur:
-        try:
-            cur.execute("ALTER TABLE public.festivals ALTER COLUMN temple_id DROP NOT NULL")
-        except Exception:
-            pass  # Already nullable — ignore
-
-    with get_db_cursor() as cur:
-        cur.execute("""
-            ALTER TABLE public.festivals
-                ADD COLUMN IF NOT EXISTS cached_year  INT,
-                ADD COLUMN IF NOT EXISTS cached_month INT,
-                ADD COLUMN IF NOT EXISTS display_date TEXT,
-                ADD COLUMN IF NOT EXISTS hindu_tithi  TEXT,
-                ADD COLUMN IF NOT EXISTS color        TEXT
-        """)
-
-
-# ── DB helpers ────────────────────────────────────────────────────────────────
-def _count_cached(year: int) -> int:
-    with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT COUNT(*) AS cnt FROM public.festivals WHERE source='ai_cache' AND cached_year=%s",
-            (year,)
-        )
-        row = cur.fetchone()
-        return int(row["cnt"]) if row else 0
-
-
-def _get_cached(year: int) -> list[dict]:
-    with get_db_cursor() as cur:
-        cur.execute("""
-            SELECT
-                f.id, f.name, f.description, f.significance,
-                f.month, f.hindu_month, f.hindu_tithi,
-                f.typical_date AS exact_date,
-                f.display_date, f.duration_days, f.is_major,
-                f.deity, f.emoji, f.color,
-                f.cached_year, f.source,
-                NULL::int  AS temple_id,
-                NULL::text AS temple_name,
-                NULL::text AS temple_city,
-                NULL::text AS temple_slug
-            FROM public.festivals f
-            WHERE f.source='ai_cache' AND f.cached_year=%s
-            ORDER BY f.month ASC, f.typical_date ASC NULLS LAST, f.name ASC
-        """, (year,))
-        return [dict(r) for r in cur.fetchall()]
-
-
-def _clear_cache(year: int):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "DELETE FROM public.festivals WHERE source='ai_cache' AND cached_year=%s",
-            (year,)
-        )
-        logger.info(f"Cleared {cur.rowcount} ai_cache rows for year={year}")
-
-
-def _insert(festivals: list[dict], year: int) -> int:
-    inserted = 0
-    with get_db_cursor() as cur:
-        for f in festivals:
-            try:
-                month = int(f.get("month", 0))
-                name  = (f.get("name") or "").strip()[:200]
-                if not name or not (1 <= month <= 12):
-                    continue
-
-                exact_date = None
-                rd = (f.get("exact_date") or "").strip()
-                if len(rd) == 10:
-                    try:
-                        date.fromisoformat(rd)
-                        exact_date = rd
-                    except ValueError:
-                        pass
-
-                cur.execute("""
-                    INSERT INTO public.festivals (
-                        temple_id, name, description, significance,
-                        month, hindu_month, hindu_tithi,
-                        typical_date, display_date,
-                        duration_days, is_major,
-                        source, ai_generated,
-                        deity, emoji, color,
-                        cached_year, cached_month
-                    ) VALUES (
-                        NULL, %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s,
-                        %s, %s,
-                        'ai_cache', TRUE,
-                        %s, %s, %s,
-                        %s, %s
-                    )
-                    ON CONFLICT DO NOTHING
-                """, (
-                    name,
-                    (f.get("description") or "")[:1000] or None,
-                    (f.get("significance") or "")[:500]  or None,
-                    month,
-                    (f.get("hindu_month") or "")[:100] or None,
-                    (f.get("hindu_tithi") or "")[:200] or None,
-                    exact_date,
-                    (f.get("display_date") or "")[:100] or None,
-                    max(1, int(f.get("duration_days") or 1)),
-                    bool(f.get("is_major")),
-                    (f.get("deity") or "Other")[:50],
-                    (f.get("emoji") or "🛕")[:10],
-                    (f.get("color") or "#E8650A")[:20],
-                    year, month,
-                ))
-                inserted += 1
-            except Exception as e:
-                logger.error(f"Insert error '{f.get('name')}': {e}")
-                continue
-    logger.info(f"Inserted {inserted}/{len(festivals)} festivals for year={year}")
-    return inserted
-
-
-# ── Claude API ────────────────────────────────────────────────────────────────
+# ── Prompts ───────────────────────────────────────────────────────────────────
 def _make_prompt(year: int, months: str) -> str:
-    return f"""List ALL Hindu festivals, vrats, Ekadashi, Purnima, Amavasya for {year} in months: {months}.
-Return ONLY a valid JSON array. No markdown, no explanation, no extra text.
-Each item must have exactly these fields:
-{{"name":"Makar Sankranti","month":1,"exact_date":"{year}-01-14","display_date":"14 January {year}","hindu_tithi":"Uttarayan","hindu_month":"Pausha","significance":"Sun enters Capricorn marking harvest season.","description":"People fly kites and eat til-gur. Celebrated across India as Pongal, Lohri, Bihu.","is_major":true,"duration_days":1,"deity":"Surya","emoji":"🪁","color":"#E8650A"}}
+    return f"""You are an expert in the Hindu calendar. List ALL Hindu festivals, vrats, and observances for the year {year} occurring in these months: {months}.
+
+CRITICAL: Use the EXACT Gregorian calendar dates for {year}. Do NOT guess or reuse dates from other years. Hindu festival dates shift every year based on the lunisolar calendar — calculate them accurately for {year}.
+
+Return ONLY a valid JSON array. No explanation, no markdown, no backticks, no extra text before or after.
+
+Each object must have EXACTLY these fields:
+{{"name":"string","month":1,"exact_date":"{year}-01-14","display_date":"14 January {year}","hindu_tithi":"string","hindu_month":"string","significance":"one sentence","description":"2-3 sentences","is_major":true,"duration_days":1,"deity":"Surya","emoji":"🪁","color":"#E8650A"}}
+
 Rules:
-- Include ALL festivals + regional ones: Pongal, Onam, Bihu, Ugadi, Baisakhi, Lohri, Gudi Padwa, Vishu
-- Every Ekadashi, Purnima, Amavasya of each month
-- exact_date must be accurate for year {year} in YYYY-MM-DD format
-- deity: Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other
+- month: integer 1-12 (Gregorian month number)
+- exact_date: YYYY-MM-DD format, must be a real date in {year}
+- display_date: human-readable, e.g. "14 January {year}"
+- Cover every festival, vrat, Ekadashi, Purnima, Amavasya, Chaturthi, Sankashti
+- Include regional festivals: Pongal, Onam, Bihu, Ugadi, Baisakhi, Lohri, Gudi Padwa, Vishu, Rath Yatra, Chhath Puja
+- is_major: true only for nationally celebrated festivals
+- deity: one of Shiva/Vishnu/Krishna/Rama/Ganesha/Durga/Lakshmi/Saraswati/Surya/Hanuman/Other
+- duration_days: accurate multi-day festivals (e.g. Navratri=9, Diwali=5)
 - Sort by exact_date ascending
 - Output ONLY the JSON array, nothing else"""
 
 
-async def _call_claude(prompt: str) -> list[dict]:
-    if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY not set in environment")
+# ── DB helpers ────────────────────────────────────────────────────────────────
 
-    async with httpx.AsyncClient(timeout=180) as client:
-        resp = await client.post(
-            ANTHROPIC_URL,
+def _ensure_cached_year_columns():
+    """
+    Idempotently add cached_year/cached_month columns if missing.
+    Backfills NULL values from typical_date or month column.
+    Safe to call on every request — no-op after first run.
+    """
+    with get_db_cursor() as cur:
+        cur.execute("""
+            ALTER TABLE public.festivals
+                ADD COLUMN IF NOT EXISTS cached_year  INT,
+                ADD COLUMN IF NOT EXISTS cached_month INT
+        """)
+        # Backfill from typical_date where available
+        cur.execute("""
+            UPDATE public.festivals
+            SET
+                cached_year  = EXTRACT(YEAR  FROM typical_date::date)::INT,
+                cached_month = EXTRACT(MONTH FROM typical_date::date)::INT
+            WHERE source     = 'ai_cache'
+              AND cached_year IS NULL
+              AND typical_date IS NOT NULL
+        """)
+        # Rows without typical_date: use current year + month column
+        cur.execute("""
+            UPDATE public.festivals
+            SET
+                cached_year  = EXTRACT(YEAR FROM NOW())::INT,
+                cached_month = month
+            WHERE source     = 'ai_cache'
+              AND cached_year IS NULL
+        """)
+        if cur.rowcount:
+            logger.info(f"Backfilled cached_year for {cur.rowcount} ai_cache rows")
+
+
+def _get_cached_year(year: int) -> list[dict]:
+    """
+    Return all ai_cache festivals for the given year from DB.
+
+    Cache hit:  returns rows if >= MIN_CACHE_COUNT rows exist for this specific year.
+    Cache miss: returns [] — caller must fetch from OpenAI.
+
+    Strict year filter ensures each year gets its own accurate dated data.
+    Includes NULL cached_year fallback for migration compatibility.
+    """
+    with get_db_cursor() as cur:
+        # Check rows for THIS specific year
+        cur.execute("""
+            SELECT COUNT(*) AS cnt
+            FROM public.festivals
+            WHERE source      = 'ai_cache'
+              AND cached_year = %s
+        """, (year,))
+        year_count = int(cur.fetchone()["cnt"] or 0)
+
+        if year_count >= MIN_CACHE_COUNT:
+            cur.execute("""
+                SELECT
+                    f.id,
+                    f.name,
+                    f.description,
+                    f.significance,
+                    f.month,
+                    f.hindu_month,
+                    f.hindu_tithi,
+                    f.typical_date    AS exact_date,
+                    f.display_date,
+                    f.duration_days,
+                    f.is_major,
+                    f.deity,
+                    f.festival_type,
+                    f.emoji,
+                    f.color,
+                    f.cached_year,
+                    f.cached_month,
+                    f.source,
+                    f.ai_generated,
+                    NULL::int         AS temple_id,
+                    NULL::text        AS temple_name,
+                    NULL::text        AS temple_city,
+                    NULL::text        AS temple_slug
+                FROM public.festivals f
+                WHERE f.source      = 'ai_cache'
+                  AND f.cached_year = %s
+                ORDER BY f.month ASC, f.typical_date ASC NULLS LAST
+            """, (year,))
+            rows = [dict(r) for r in cur.fetchall()]
+            logger.info(f"Cache HIT for year={year}: returning {len(rows)} festivals")
+            return rows
+
+        # Fallback: rows with NULL cached_year (pre-migration data)
+        cur.execute("""
+            SELECT COUNT(*) AS cnt
+            FROM public.festivals
+            WHERE source = 'ai_cache'
+              AND cached_year IS NULL
+        """)
+        null_count = int(cur.fetchone()["cnt"] or 0)
+
+        if null_count >= MIN_CACHE_COUNT:
+            logger.warning(
+                f"No year={year} rows, but {null_count} rows have cached_year=NULL. "
+                f"Backfilling and returning them."
+            )
+            # Stamp them with the current year so future requests hit the fast path
+            cur.execute("""
+                UPDATE public.festivals
+                SET cached_year  = %s,
+                    cached_month = month
+                WHERE source      = 'ai_cache'
+                  AND cached_year IS NULL
+            """, (year,))
+            cur.execute("""
+                SELECT
+                    f.id, f.name, f.description, f.significance,
+                    f.month, f.hindu_month, f.hindu_tithi,
+                    f.typical_date AS exact_date, f.display_date,
+                    f.duration_days, f.is_major, f.deity,
+                    f.festival_type, f.emoji, f.color,
+                    f.cached_year, f.cached_month,
+                    f.source, f.ai_generated,
+                    NULL::int  AS temple_id, NULL::text AS temple_name,
+                    NULL::text AS temple_city, NULL::text AS temple_slug
+                FROM public.festivals f
+                WHERE f.source = 'ai_cache'
+                ORDER BY f.month ASC, f.typical_date ASC NULLS LAST
+            """)
+            rows = [dict(r) for r in cur.fetchall()]
+            return rows
+
+        logger.info(
+            f"Cache MISS for year={year}: "
+            f"{year_count} year-matched rows, {null_count} NULL-year rows "
+            f"(need >= {MIN_CACHE_COUNT}) — will call OpenAI"
+        )
+        return []
+
+
+def _delete_year_cache(year: int):
+    """
+    Wipe ai_cache rows for the given year only.
+    Called only on force refresh — preserves cached data for other years.
+    """
+    with get_db_cursor() as cur:
+        cur.execute("""
+            DELETE FROM public.festivals
+            WHERE source = 'ai_cache'
+              AND (cached_year = %s OR cached_year IS NULL)
+        """, (year,))
+        logger.info(f"Force-refresh: deleted {cur.rowcount} ai_cache rows for year={year}")
+
+
+def _delete_stale_cache(year: int, before_month: int):
+    """Delete ai_cache rows for months that have already passed this year."""
+    with get_db_cursor() as cur:
+        cur.execute("""
+            DELETE FROM public.festivals
+            WHERE source       = 'ai_cache'
+              AND cached_year  = %s
+              AND cached_month IS NOT NULL
+              AND cached_month < %s
+        """, (year, before_month))
+        deleted = cur.rowcount
+        if deleted:
+            logger.info(f"Pruned {deleted} stale ai_cache rows (year={year}, before_month={before_month})")
+
+
+def _insert_ai_festivals(festivals: list[dict], year: int):
+    """
+    Bulk-insert OpenAI-fetched festivals into the festivals table.
+    - temple_id = NULL (AI festivals have no linked temple)
+    - ON CONFLICT DO NOTHING — safe to re-run without duplicates
+    """
+    with get_db_cursor() as cur:
+        inserted = 0
+        skipped  = 0
+
+        for f in festivals:
+            try:
+                month = f.get("month")
+                if not month or not (1 <= int(month) <= 12):
+                    skipped += 1
+                    continue
+                month = int(month)
+
+                cur.execute("""
+                    INSERT INTO public.festivals (
+                        temple_id,
+                        name,
+                        description,
+                        significance,
+                        month,
+                        hindu_month,
+                        hindu_tithi,
+                        typical_date,
+                        display_date,
+                        duration_days,
+                        is_major,
+                        source,
+                        ai_generated,
+                        deity,
+                        festival_type,
+                        emoji,
+                        color,
+                        cached_year,
+                        cached_month
+                    ) VALUES (
+                        NULL,
+                        %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s,
+                        %s, %s,
+                        'ai_cache', TRUE,
+                        %s, %s, %s, %s,
+                        %s, %s
+                    )
+                    ON CONFLICT DO NOTHING
+                """, (
+                    (f.get("name") or "")[:200],
+                    f.get("description"),
+                    f.get("significance"),
+                    month,
+                    f.get("hindu_month"),
+                    f.get("hindu_tithi"),
+                    f.get("exact_date"),
+                    f.get("display_date"),
+                    max(1, int(f.get("duration_days") or 1)),
+                    bool(f.get("is_major")),
+                    f.get("deity"),
+                    f.get("festival_type"),
+                    f.get("emoji"),
+                    f.get("color"),
+                    year,
+                    month,
+                ))
+                inserted += 1
+
+            except Exception as e:
+                logger.error(f"Failed to insert festival '{f.get('name')}': {e}")
+                raise
+
+        logger.info(f"AI festivals stored: {inserted} inserted, {skipped} skipped (year={year})")
+
+
+# ── OpenAI API call ───────────────────────────────────────────────────────────
+
+async def _call_openai(prompt: str) -> list[dict]:
+    """Call OpenAI chat completions and return parsed festival list."""
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY not set in environment")
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.post(
+            OPENAI_URL,
             headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type":  "application/json",
             },
             json={
-                "model": CLAUDE_MODEL,
-                "max_tokens": 8000,
-                "messages": [{"role": "user", "content": prompt}],
+                "model":       OPENAI_MODEL,
+                "temperature": 0,       # deterministic output — no hallucinated dates
+                "messages": [
+                    {
+                        "role":    "system",
+                        "content": (
+                            "You are an expert in the Hindu lunisolar calendar. "
+                            "You always return accurate Gregorian dates for Hindu festivals "
+                            "for the exact year requested. You never guess or reuse dates from other years. "
+                            "You output only valid JSON arrays with no extra text."
+                        ),
+                    },
+                    {
+                        "role":    "user",
+                        "content": prompt,
+                    },
+                ],
             },
         )
 
-    if resp.status_code != 200:
-        raise RuntimeError(f"Claude API {resp.status_code}: {resp.text[:400]}")
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"OpenAI API error {response.status_code}: {response.text[:400]}"
+        )
 
-    raw = resp.json().get("content", [{}])[0].get("text", "[]").strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    data    = response.json()
+    raw     = data.get("choices", [{}])[0].get("message", {}).get("content", "[]")
+    cleaned = raw.strip()
+
+    # Strip markdown fences if model wraps response in ```json ... ```
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+        cleaned = cleaned.rsplit("```", 1)[0].strip()
 
     try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            return parsed
+        parsed = json.loads(cleaned)
+        return parsed if isinstance(parsed, list) else []
     except json.JSONDecodeError:
-        pass
-
-    # Partial recovery for truncated response
-    try:
-        idx = raw.rfind("},")
-        if idx != -1:
-            partial = json.loads("[" + raw[:idx+1].lstrip("[") + "]")
-            if isinstance(partial, list):
-                logger.warning(f"Partial recovery: {len(partial)} items")
-                return partial
-    except Exception:
-        pass
-
-    logger.error("Could not parse Claude response")
-    return []
+        # Partial recovery for truncated responses
+        try:
+            idx = cleaned.rfind("},")
+            if idx != -1:
+                partial = cleaned[: idx + 1] + "]"
+                parsed  = json.loads("[" + partial.lstrip("["))
+                return parsed if isinstance(parsed, list) else []
+        except Exception:
+            pass
+        logger.error(f"Failed to parse OpenAI JSON. Raw snippet: {cleaned[:300]}")
+        return []
 
 
-# ── Orchestrator ──────────────────────────────────────────────────────────────
 async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
-    try:
-        _ensure_schema()
-    except Exception as e:
-        logger.warning(f"Schema: {e}")
+    """
+    Main orchestrator.
+      force=False → DB-first; OpenAI called ONLY on genuine cache miss for this year.
+      force=True  → wipe year cache, always call OpenAI.
+
+    Two API calls (Jan–Jun + Jul–Dec) for complete yearly coverage within token limits.
+    """
+    _ensure_cached_year_columns()
 
     if not force:
-        count = _count_cached(year)
-        logger.info(f"Cached count for {year}: {count}")
-        if count > 0:
-            return _get_cached(year)
+        existing = _get_cached_year(year)
+        if existing:
+            logger.info(f"_fetch_and_store: cache hit ({len(existing)} rows) for year={year} — skipping OpenAI")
+            return existing
 
     if force:
-        _clear_cache(year)
+        _delete_year_cache(year)
 
-    logger.info(f"Fetching from Claude for year={year}...")
-    h1 = await _call_claude(_make_prompt(year, "January, February, March, April, May, June"))
-    h2 = await _call_claude(_make_prompt(year, "July, August, September, October, November, December"))
+    logger.info(
+        f"Calling OpenAI ({OPENAI_MODEL}) for year={year} "
+        f"({'force refresh' if force else 'cache miss'}) — 2 prompts..."
+    )
+
+    h1 = await _call_openai(_make_prompt(year, "January, February, March, April, May, June"))
+    h2 = await _call_openai(_make_prompt(year, "July, August, September, October, November, December"))
+
     combined = h1 + h2
-    logger.info(f"Claude returned {len(combined)} festivals")
+    logger.info(f"OpenAI returned {len(combined)} festivals for year={year}")
 
-    if not combined:
-        raise RuntimeError("Claude returned empty list")
+    if combined:
+        _insert_ai_festivals(combined, year)
 
-    _insert(combined, year)
-
-    result = _get_cached(year)
-    logger.info(f"Returning {len(result)} festivals from DB")
-    return result
+    return combined
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("/api/festivals/ai-cache/debug")
-async def debug_cache():
-    """Ek call mein pura diagnosis — kya stored hai, kya missing hai."""
-    try:
-        _ensure_schema()
-    except Exception:
-        pass
+async def debug_ai_cache():
+    """
+    Diagnostic endpoint — shows exactly what is stored in DB per year.
+    Check this first when troubleshooting repeated OpenAI calls.
+    """
+    today        = date.today()
+    current_year = today.year
 
-    year = date.today().year
     with get_db_cursor() as cur:
         cur.execute("""
-            SELECT cached_year, COUNT(*) AS total, MIN(month) AS min_m, MAX(month) AS max_m
-            FROM public.festivals WHERE source='ai_cache'
-            GROUP BY cached_year ORDER BY cached_year NULLS LAST
+            SELECT
+                source,
+                cached_year,
+                COUNT(*)   AS total,
+                MIN(month) AS min_month,
+                MAX(month) AS max_month
+            FROM public.festivals
+            WHERE source = 'ai_cache'
+            GROUP BY source, cached_year
+            ORDER BY cached_year NULLS LAST
         """)
         breakdown = [dict(r) for r in cur.fetchall()]
 
-        cur.execute("SELECT COUNT(*) AS c FROM public.festivals WHERE source='ai_cache'")
-        total = cur.fetchone()["c"]
+        cur.execute("""
+            SELECT COUNT(*) AS total_ai_cache
+            FROM public.festivals
+            WHERE source = 'ai_cache'
+        """)
+        total = cur.fetchone()["total_ai_cache"]
 
         cur.execute("""
-            SELECT is_nullable FROM information_schema.columns
-            WHERE table_name='festivals' AND column_name='temple_id' AND table_schema='public'
-        """)
-        nr = cur.fetchone()
-        temple_nullable = dict(nr)["is_nullable"] if nr else "unknown"
+            SELECT COUNT(*) AS this_year_count
+            FROM public.festivals
+            WHERE source      = 'ai_cache'
+              AND cached_year = %s
+        """, (current_year,))
+        this_year = cur.fetchone()["this_year_count"]
 
     return {
-        "current_year":       year,
-        "total_ai_cache":     total,
-        "cached_this_year":   _count_cached(year),
-        "temple_id_nullable": temple_nullable,  # Must be 'YES'
-        "anthropic_key_set":  bool(ANTHROPIC_API_KEY),
-        "breakdown":          breakdown,
+        "current_year":             current_year,
+        "total_ai_cache_rows":      total,
+        "this_year_rows":           this_year,
+        "min_needed_for_cache_hit": MIN_CACHE_COUNT,
+        "will_hit_cache":           this_year >= MIN_CACHE_COUNT,
+        "model_used":               OPENAI_MODEL,
+        "breakdown_by_year":        breakdown,
     }
 
 
 @router.get("/api/festivals/ai-cache")
-async def get_ai_cache(
+async def get_ai_festival_cache(
     background_tasks: BackgroundTasks,
-    refresh: bool = Query(False),
+    refresh: bool = Query(False, description="Set true to wipe DB cache and re-fetch from OpenAI"),
 ):
+    """
+    Return AI-generated festivals for the CURRENT calendar year.
+
+    Year-aware behaviour:
+    - current_year is computed fresh on every request from date.today().year
+    - Cache is keyed by cached_year in the DB
+    - When the year rolls over (Jan 1), cached_year won't match → automatic cache miss
+      → OpenAI fetches the new year's accurate dates → stored for the whole new year
+
+    Flow:
+    1. _ensure_cached_year_columns() — schema migration, idempotent
+    2. refresh=true → delete this year's rows → OpenAI → store → return
+    3. DB has >= MIN_CACHE_COUNT rows for current_year → return from DB (no AI call)
+    4. DB miss → OpenAI → store → return
+    """
+    today         = date.today()
+    current_year  = today.year
+    current_month = today.month
+
+    _ensure_cached_year_columns()
+
+    # Prune past months in background on 1st of each month
+    if today.day == 1 and current_month > 1:
+        background_tasks.add_task(_delete_stale_cache, current_year, current_month)
+
+    # ── Force refresh ──────────────────────────────────────────────────────
+    if refresh:
+        logger.info(f"Force refresh requested for year={current_year}")
+        try:
+            await _fetch_and_store(current_year, force=True)
+        except Exception as e:
+            logger.error(f"Force refresh failed: {e}")
+            raise HTTPException(status_code=503, detail=f"Refresh failed: {str(e)}")
+
+        stored = _get_cached_year(current_year)
+        return {
+            "source":    "fresh",
+            "year":      current_year,
+            "count":     len(stored),
+            "festivals": stored,
+        }
+
+    # ── Normal: DB-first ──────────────────────────────────────────────────
+    cached = _get_cached_year(current_year)
+    if cached:
+        return {
+            "source":    "db_cache",
+            "year":      current_year,
+            "count":     len(cached),
+            "festivals": cached,
+        }
+
+    # Cache miss → call OpenAI
+    logger.info(f"DB cache miss for year={current_year}, fetching from OpenAI...")
+    try:
+        await _fetch_and_store(current_year, force=False)
+    except Exception as e:
+        logger.error(f"OpenAI fetch failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Could not fetch festivals from AI: {str(e)}"
+        )
+
+    stored = _get_cached_year(current_year)
+    if not stored:
+        raise HTTPException(
+            status_code=502,
+            detail="AI returned empty festival list — check OPENAI_API_KEY and DB commit"
+        )
+
+    return {
+        "source":    "fresh",
+        "year":      current_year,
+        "count":     len(stored),
+        "festivals": stored,
+    }
+
+
+@router.post(
+    "/api/admin/festivals/ai-refresh",
+    dependencies=[Depends(require_admin)],
+)
+async def admin_force_refresh():
+    """
+    Admin endpoint: wipe this year's ai_cache rows and re-fetch from OpenAI.
+    Requires X-Admin-Key header matching ADMIN_SECRET_KEY env var.
+    """
     today        = date.today()
     current_year = today.year
 
+    logger.info(f"Admin triggered AI festival cache refresh for year={current_year}")
+
     try:
-        _ensure_schema()
+        festivals = await _fetch_and_store(current_year, force=True)
     except Exception as e:
-        logger.warning(f"Schema: {e}")
+        logger.error(f"Admin refresh failed: {e}")
+        raise HTTPException(status_code=503, detail=str(e))
 
-    # 1st of month — prune old months in background
-    if today.day == 1 and today.month > 1:
-        def _prune():
-            with get_db_cursor() as cur:
-                cur.execute("""
-                    DELETE FROM public.festivals
-                    WHERE source='ai_cache' AND cached_year=%s AND cached_month<%s
-                """, (current_year, today.month))
-        background_tasks.add_task(_prune)
-
-    # Force refresh
-    if refresh:
-        try:
-            festivals = await _fetch_and_store(current_year, force=True)
-        except Exception as e:
-            raise HTTPException(503, f"Refresh failed: {e}")
-        return {"source": "fresh", "year": current_year, "count": len(festivals), "festivals": festivals}
-
-    # DB-first: agar kuch bhi cached hai to return karo
-    count = _count_cached(current_year)
-    if count > 0:
-        festivals = _get_cached(current_year)
-        return {"source": "db_cache", "year": current_year, "count": len(festivals), "festivals": festivals}
-
-    # Cache empty — Claude se fetch karo
-    try:
-        festivals = await _fetch_and_store(current_year, force=False)
-    except Exception as e:
-        logger.error(f"Fetch failed: {e}")
-        raise HTTPException(503, f"AI fetch failed: {e}")
-
-    if not festivals:
-        raise HTTPException(502,
-            "Claude returned empty list — check ANTHROPIC_API_KEY and run /api/festivals/ai-cache/debug")
-
-    return {"source": "fresh", "year": current_year, "count": len(festivals), "festivals": festivals}
-
-
-@router.post("/api/admin/festivals/ai-refresh", dependencies=[Depends(require_admin)])
-async def admin_refresh():
-    year = date.today().year
-    try:
-        festivals = await _fetch_and_store(year, force=True)
-    except Exception as e:
-        raise HTTPException(503, str(e))
     return {
-        "success": True,
-        "year": year,
-        "count": len(festivals),
+        "success":      True,
+        "year":         current_year,
+        "fetched":      len(festivals),
+        "model":        OPENAI_MODEL,
+        "message":      f"Cache refreshed: {len(festivals)} festivals stored for {current_year}",
         "refreshed_at": datetime.utcnow().isoformat(),
     }
