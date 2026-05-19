@@ -619,7 +619,7 @@ function EditModal({ temple, onClose, onSaved }) {
       }}>
         {/* Header */}
         <div style={{
-          background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+          background: 'linear-gradient(135deg, #92400e, #bf5310)',
           padding: '18px 24px',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           flexShrink: 0,
@@ -656,7 +656,7 @@ function EditModal({ temple, onClose, onSaved }) {
         <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
           {fetchingDetail ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: 14 }}>
-              <Loader2 size={32} color="#3b82f6" style={{ animation: 'spin .8s linear infinite' }} />
+              <Loader2 size={32} color="#bf5310" style={{ animation: 'spin .8s linear infinite' }} />
               <span style={{ fontFamily: 'var(--font-display)', color: 'var(--text-light)', fontSize: 13 }}>
                 Loading temple details…
               </span>
@@ -691,7 +691,7 @@ function EditModal({ temple, onClose, onSaved }) {
                         rows={f.rows || 4}
                         placeholder={fullTemple?.[f.key] ? String(fullTemple[f.key]) : `Enter ${f.label}…`}
                         style={{ ...inputStyle, resize: 'vertical' }}
-                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                        onFocus={e => e.target.style.borderColor = '#bf5310'}
                         onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
                       />
                     ) : (
@@ -705,7 +705,7 @@ function EditModal({ temple, onClose, onSaved }) {
                             : `Enter ${f.label}…`
                         }
                         style={inputStyle}
-                        onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                        onFocus={e => e.target.style.borderColor = '#bf5310'}
                         onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
                       />
                     )}
@@ -738,8 +738,8 @@ function EditModal({ temple, onClose, onSaved }) {
             </button>
             <button onClick={handleSave} disabled={saving} style={{
               padding: '9px 20px', borderRadius: 50,
-              border: '2px solid #3b82f6',
-              background: saving ? '#93c5fd' : '#3b82f6',
+              border: '2px solid #bf5310',
+              background: saving ? '#bf5310' : '#bf5310',
               fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
               cursor: saving ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700,
               display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s',
@@ -1105,7 +1105,7 @@ export default function AdminPanelPage() {
             <Link to="/admin/add-festival" style={{
               display: 'inline-flex', alignItems: 'center', gap: 7,
               padding: '10px 18px',
-              background: 'linear-gradient(135deg, #92400e, #92400e)',
+              background: 'linear-gradient(135deg, #92400e, #bf5310)',
               border: '2px solid transparent', borderRadius: 50,
               fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
               color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
@@ -1362,7 +1362,7 @@ function TempleNameCell({ t }) {
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{t.name}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
           <span style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-light)', background: 'var(--cream-dark)', padding: '1px 6px', borderRadius: 4 }}>{t.mkt_id || `#${t.id}`}</span>
-          {t.verified && <ShieldCheck size={12} color="#92400e" />}
+          {t.verified && <ShieldCheck size={12} color="#7c3aed" />}
         </div>
       </div>
     </div>
