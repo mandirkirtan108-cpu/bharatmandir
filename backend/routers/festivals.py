@@ -48,7 +48,7 @@ def get_all_festivals(
     with get_db_cursor() as cur:
         where_conditions = [
             "t.status = 'published'",
-            "f.source != 'ai_cache'",   # ← exclude AI-cache rows from this endpoint
+            "f.source != 'ai_cache'",
         ]
         params = []
 
