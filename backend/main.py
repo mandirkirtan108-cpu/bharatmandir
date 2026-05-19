@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from routers import proxy
 from routers.admin_auth import router as admin_auth_router
 from routers.panchang import router as panchang_router
+from routers.ai_festival_cache import router as ai_festival_cache_router  # ← ADDED
 
 
 load_dotenv()
@@ -71,13 +72,14 @@ app.add_middleware(
 # Agar admin.router pehle hota, toh /api/admin/auth/login ko
 # admin router ka /api/admin/temples/{id} pattern intercept kar leta — 404!
 # ──────────────────────────────────────────────────────────────────────────────
-app.include_router(admin_auth_router)   # /api/admin/auth/*  — PEHLE
-app.include_router(admin.router)        # /api/admin/*       — BAAD MEIN
+app.include_router(admin_auth_router)         # /api/admin/auth/*  — PEHLE
+app.include_router(admin.router)              # /api/admin/*       — BAAD MEIN
 app.include_router(temples.router)
 app.include_router(route_planner.router)
 app.include_router(festivals.router)
+app.include_router(ai_festival_cache_router)  # /api/festivals/ai-cache  ← ADDED
 app.include_router(spiritual_chat.router)
-app.include_router(panchang_router)     # /api/panchang/*
+app.include_router(panchang_router)           # /api/panchang/*
 app.include_router(proxy.router)
 
 
