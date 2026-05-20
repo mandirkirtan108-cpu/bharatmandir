@@ -2,11 +2,11 @@
 AI Festival Cache Router — BharatMandir
 ======================================================
 GET  /api/festivals/ai-cache               → return cached festivals (DB-first)
-GET  /api/festivals/ai-cache?refresh=true  → force-refresh from ProKerala
+GET  /api/festivals/ai-cache?refresh=true  → force-refresh from Calendarific
 GET  /api/festivals/ai-cache/debug         → diagnostic info
 POST /api/admin/festivals/ai-refresh       → admin force-refresh (X-Admin-Key header)
 
-Data source : ProKerala API (verified Hindu festival dates via OAuth2)
+Data source : Calendarific API (verified Hindu festival dates)
 Descriptions: OpenAI (gpt-4o) — used ONLY for text, never for dates
 Year-aware  : auto-detects new year, fetches fresh data automatically
 """
@@ -20,14 +20,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["AI Festival Cache"])
 
 # ── Config ────────────────────────────────────────────────────────────────────
-PROKERALA_CLIENT_ID     = os.getenv("PROKERALA_CLIENT_ID", "")
-PROKERALA_CLIENT_SECRET = os.getenv("PROKERALA_CLIENT_SECRET", "")
-PROKERALA_TOKEN_URL     = "https://api.prokerala.com/token"
-PROKERALA_API_BASE      = "https://api.prokerala.com/v2"
-
-# Ujjain — standard meridian reference for Hindu calendar calculations
-INDIA_COORDINATES       = "23.1765,75.7885"
-INDIA_TIMEZONE          = "Asia/Kolkata"
+CALENDARIFIC_API_KEY    = os.getenv("CALENDARIFIC_API_KEY", "")
+CALENDARIFIC_URL        = "https://calendarific.com/api/v2/holidays"
 
 OPENAI_API_KEY          = os.getenv("VITE_OPENAI_API_KEY", "")
 OPENAI_URL              = "https://api.openai.com/v1/chat/completions"
@@ -182,176 +176,95 @@ def _get_duration(name: str) -> int:
     return 1
 
 
-# ── ProKerala OAuth2 token ────────────────────────────────────────────────────
-async def _get_prokerala_token() -> str:
-    """Fetch a fresh OAuth2 access token from ProKerala."""
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.post(
-            PROKERALA_TOKEN_URL,
-            data={
-                "grant_type":    "client_credentials",
-                "client_id":     PROKERALA_CLIENT_ID,
-                "client_secret": PROKERALA_CLIENT_SECRET,
+# ── Calendarific festival fetch ───────────────────────────────────────────────
+async def _fetch_from_calendarific(year: int) -> list[dict]:
+    """
+    Fetch Hindu festivals from Calendarific API for the full year.
+    Single API call — returns all religious holidays for India.
+    Auth: api_key query param (free tier = 1000 calls/month)
+    """
+    if not CALENDARIFIC_API_KEY:
+        raise RuntimeError(
+            "CALENDARIFIC_API_KEY not set in Railway environment variables. "
+            "Get a free key at calendarific.com"
+        )
+
+    logger.info(f"Fetching Calendarific holidays for year={year}...")
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(
+            CALENDARIFIC_URL,
+            params={
+                "api_key": CALENDARIFIC_API_KEY,
+                "country": "IN",
+                "year":    year,
+                "type":    "religious",
             },
         )
+
     if r.status_code != 200:
-        raise RuntimeError(
-            f"ProKerala token error {r.status_code}: {r.text[:300]}"
-        )
-    token = r.json().get("access_token")
-    if not token:
-        raise RuntimeError(f"ProKerala token response missing access_token: {r.text[:200]}")
-    return token
+        raise RuntimeError(f"Calendarific {r.status_code}: {r.text[:300]}")
 
-
-# ── ProKerala festival fetch ──────────────────────────────────────────────────
-async def _fetch_from_prokerala(year: int) -> list[dict]:
-    """
-    Fetch Hindu festivals from ProKerala Calendar API for all 12 months.
-
-    ProKerala endpoint: GET /v2/calendar/holiday
-    Required params: datetime (ISO8601), coordinates, timezone
-    Auth: Bearer token (OAuth2 client_credentials)
-
-    We call once per month (12 calls total per year).
-    All 12 calls use the same token fetched once up front.
-    """
-    if not PROKERALA_CLIENT_ID or not PROKERALA_CLIENT_SECRET:
-        raise RuntimeError(
-            "PROKERALA_CLIENT_ID or PROKERALA_CLIENT_SECRET not set in Railway environment variables"
-        )
-
-    logger.info(f"Fetching ProKerala token...")
-    token = await _get_prokerala_token()
-    headers = {"Authorization": f"Bearer {token}"}
+    holidays = r.json().get("response", {}).get("holidays", [])
+    logger.info(f"Calendarific returned {len(holidays)} raw holidays for {year}")
 
     festivals  = []
     seen_names = set()
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        for month in range(1, 13):
-            datetime_str = f"{year}-{month:02d}-01T00:00:00+05:30"
+    for h in holidays:
+        name = (h.get("name") or "").strip()
+        if not name:
+            continue
 
-            logger.info(f"Fetching ProKerala month={month}/{year}...")
-            try:
-                r = await client.get(
-                    f"{PROKERALA_API_BASE}/calendar/holiday",
-                    headers=headers,
-                    params={
-                        "datetime":    datetime_str,
-                        "coordinates": INDIA_COORDINATES,
-                        "timezone":    INDIA_TIMEZONE,
-                    },
-                )
-            except Exception as e:
-                logger.warning(f"ProKerala request failed month={month}: {e}")
-                continue
+        fest_type = " ".join(h.get("type", [])) if isinstance(h.get("type"), list) else (h.get("type") or "")
 
-            if r.status_code == 401:
-                # Token expired mid-loop — refresh and retry once
-                logger.warning("Token expired mid-loop, refreshing...")
-                token = await _get_prokerala_token()
-                headers = {"Authorization": f"Bearer {token}"}
-                r = await client.get(
-                    f"{PROKERALA_API_BASE}/calendar/holiday",
-                    headers=headers,
-                    params={
-                        "datetime":    datetime_str,
-                        "coordinates": INDIA_COORDINATES,
-                        "timezone":    INDIA_TIMEZONE,
-                    },
-                )
+        if not _is_hindu_festival(name, fest_type):
+            continue
 
-            if r.status_code != 200:
-                logger.warning(
-                    f"ProKerala month={month} returned {r.status_code}: {r.text[:200]}"
-                )
-                continue
+        if name.lower() in seen_names:
+            continue
+        seen_names.add(name.lower())
 
-            resp_data = r.json()
+        date_iso = h.get("date", {}).get("iso", "")[:10]
+        date_str = date_iso or f"{year}-01-01"
 
-            # ProKerala response shape: {"data": {"holiday_list": [...]}}
-            # or sometimes: {"data": [...]}
-            raw = resp_data.get("data", {})
-            if isinstance(raw, dict):
-                holidays = raw.get("holiday_list", [])
-            elif isinstance(raw, list):
-                holidays = raw
-            else:
-                holidays = []
+        try:
+            dt         = datetime.strptime(date_str, "%Y-%m-%d")
+            fest_month = dt.month
+        except ValueError:
+            dt         = datetime(year, 1, 1)
+            fest_month = 1
 
-            logger.info(f"  month={month}: {len(holidays)} raw holidays")
+        emoji, color = _get_emoji_color(name)
+        deity        = _get_deity(name)
+        display_date = dt.strftime("%d %B %Y").lstrip("0")
 
-            for h in holidays:
-                name = (h.get("name") or "").strip()
-                if not name:
-                    continue
+        festivals.append({
+            "name":         name,
+            "month":        fest_month,
+            "exact_date":   date_str,
+            "display_date": display_date,
+            "hindu_tithi":  h.get("description", ""),
+            "hindu_month":  "",
+            "significance": "",
+            "description":  "",
+            "is_major": any(kw in name.lower() for kw in [
+                "diwali", "deepavali", "holi", "navratri", "dussehra",
+                "janmashtami", "ganesh chaturthi", "ram navami",
+                "hanuman jayanti", "maha shivaratri", "mahashivratri",
+                "raksha bandhan", "pongal", "onam", "baisakhi",
+                "guru nanak", "mahavir jayanti", "buddha purnima",
+                "chhath", "dhanteras", "bhai dooj", "karwa chauth",
+                "akshaya tritiya", "guru purnima", "rath yatra",
+            ]),
+            "duration_days": _get_duration(name),
+            "deity":        deity,
+            "emoji":        emoji,
+            "color":        color,
+            "festival_type": fest_type or "hindu",
+        })
 
-                fest_type = ""
-                if isinstance(h.get("type"), list):
-                    fest_type = " ".join(h["type"])
-                elif isinstance(h.get("type"), str):
-                    fest_type = h["type"]
-
-                # Filter to Hindu/Jain/Sikh only
-                if not _is_hindu_festival(name, fest_type):
-                    continue
-
-                # De-duplicate
-                if name.lower() in seen_names:
-                    continue
-                seen_names.add(name.lower())
-
-                # Parse date — ProKerala returns ISO date in h["date"]
-                date_str = ""
-                if isinstance(h.get("date"), str):
-                    date_str = h["date"][:10]
-                elif isinstance(h.get("date"), dict):
-                    date_str = h["date"].get("gregorian", {}).get("date", "")[:10]
-
-                if not date_str:
-                    date_str = f"{year}-{month:02d}-01"
-
-                try:
-                    dt         = datetime.strptime(date_str, "%Y-%m-%d")
-                    fest_month = dt.month
-                except ValueError:
-                    dt         = datetime(year, month, 1)
-                    fest_month = month
-
-                emoji, color = _get_emoji_color(name)
-                deity        = _get_deity(name)
-                # cross-platform date formatting (no %-d on Windows)
-                display_date = dt.strftime("%d %B %Y").lstrip("0")
-
-                festivals.append({
-                    "name":         name,
-                    "month":        fest_month,
-                    "exact_date":   date_str,
-                    "display_date": display_date,
-                    "hindu_tithi":  h.get("description", ""),
-                    "hindu_month":  "",
-                    "significance": "",
-                    "description":  "",
-                    "is_major":     any(
-                        kw in name.lower() for kw in [
-                            "diwali", "deepavali", "holi", "navratri", "dussehra",
-                            "janmashtami", "ganesh chaturthi", "ram navami",
-                            "hanuman jayanti", "maha shivaratri", "mahashivratri",
-                            "raksha bandhan", "pongal", "onam", "baisakhi",
-                            "guru nanak", "mahavir jayanti", "buddha purnima",
-                            "chhath", "dhanteras", "bhai dooj", "karwa chauth",
-                            "akshaya tritiya", "guru purnima", "rath yatra",
-                        ]
-                    ),
-                    "duration_days": _get_duration(name),
-                    "deity":        deity,
-                    "emoji":        emoji,
-                    "color":        color,
-                    "festival_type": fest_type or "hindu",
-                })
-
-    logger.info(f"ProKerala total: {len(festivals)} Hindu/Jain/Sikh festivals for {year}")
+    logger.info(f"Calendarific filtered: {len(festivals)} Hindu/Jain/Sikh festivals for {year}")
     return festivals
 
 
@@ -363,7 +276,7 @@ async def _enrich_with_descriptions(festivals: list[dict]) -> list[dict]:
       - description  (2-3 sentences)
       - hindu_month  (Sanskrit month name)
 
-    Dates, names, tithis — all come from ProKerala. Never from AI.
+    Dates, names — all come from Calendarific. Never from AI.
     Falls back to placeholder text gracefully if OpenAI fails.
     """
     if not OPENAI_API_KEY:
@@ -448,7 +361,6 @@ def _ensure_cached_year_columns():
                 ADD COLUMN IF NOT EXISTS cached_year  INT,
                 ADD COLUMN IF NOT EXISTS cached_month INT
         """)
-        # Backfill any existing rows that have typical_date but no cached_year
         cur.execute("""
             UPDATE public.festivals
             SET cached_year  = EXTRACT(YEAR  FROM typical_date::date)::INT,
@@ -457,7 +369,6 @@ def _ensure_cached_year_columns():
               AND cached_year IS NULL
               AND typical_date IS NOT NULL
         """)
-        # Fallback: use current year for rows with no date at all
         cur.execute("""
             UPDATE public.festivals
             SET cached_year  = EXTRACT(YEAR FROM NOW())::INT,
@@ -596,7 +507,7 @@ def require_admin(x_admin_key: str = Header(...)):
 async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
     """
     1. Check DB cache — return immediately if >=10 rows exist for this year.
-    2. On miss (or force=True): fetch from ProKerala (real verified dates).
+    2. On miss (or force=True): fetch from Calendarific (real verified dates).
     3. Enrich with OpenAI descriptions (dates never touched by AI).
     4. Store in DB and return.
     """
@@ -610,13 +521,13 @@ async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
     if force:
         _delete_year_cache(year)
 
-    # Fetch verified dates from ProKerala
-    festivals = await _fetch_from_prokerala(year)
+    # Fetch verified dates from Calendarific
+    festivals = await _fetch_from_calendarific(year)
 
     if not festivals:
         raise RuntimeError(
-            f"ProKerala returned 0 Hindu festivals for {year}. "
-            "Check PROKERALA_CLIENT_ID, PROKERALA_CLIENT_SECRET, and API quota."
+            f"Calendarific returned 0 Hindu festivals for {year}. "
+            "Check CALENDARIFIC_API_KEY in Railway environment variables."
         )
 
     # Enrich with OpenAI descriptions only (never dates)
@@ -660,30 +571,29 @@ async def debug_ai_cache():
         this_yr = cur.fetchone()["t"]
 
     return {
-        "current_year":                  yr,
-        "total_ai_cache_rows":           total,
-        "this_year_rows":                this_yr,
-        "min_needed_for_cache_hit":      MIN_CACHE_COUNT,
-        "will_hit_cache":                this_yr >= MIN_CACHE_COUNT,
-        "prokerala_client_id_set":       bool(PROKERALA_CLIENT_ID),
-        "prokerala_client_secret_set":   bool(PROKERALA_CLIENT_SECRET),
-        "openai_key_set":                bool(OPENAI_API_KEY),
-        "breakdown_by_year":             breakdown,
+        "current_year":             yr,
+        "total_ai_cache_rows":      total,
+        "this_year_rows":           this_yr,
+        "min_needed_for_cache_hit": MIN_CACHE_COUNT,
+        "will_hit_cache":           this_yr >= MIN_CACHE_COUNT,
+        "calendarific_key_set":     bool(CALENDARIFIC_API_KEY),
+        "openai_key_set":           bool(OPENAI_API_KEY),
+        "breakdown_by_year":        breakdown,
     }
 
 
 @router.get("/api/festivals/ai-cache")
 async def get_ai_festival_cache(
     background_tasks: BackgroundTasks,
-    refresh: bool = Query(False, description="Force re-fetch from ProKerala"),
+    refresh: bool = Query(False, description="Force re-fetch from Calendarific"),
 ):
     """
     Return Hindu festivals for the current year.
 
     - DB hit  → instant response (zero external API calls)
-    - DB miss → ProKerala fetch + OpenAI descriptions + store → return
-    - Jan 1   → automatic cache miss for new year → fresh ProKerala data
-    - ?refresh=true → wipe year cache → re-fetch from ProKerala
+    - DB miss → Calendarific fetch + OpenAI descriptions + store → return
+    - Jan 1   → automatic cache miss for new year → fresh Calendarific data
+    - ?refresh=true → wipe year cache → re-fetch from Calendarific
     """
     today         = date.today()
     current_year  = today.year
@@ -720,12 +630,12 @@ async def get_ai_festival_cache(
             "festivals": cached,
         }
 
-    # Cache miss — fetch from ProKerala
-    logger.info(f"Cache miss for year={current_year} — fetching from ProKerala...")
+    # Cache miss — fetch from Calendarific
+    logger.info(f"Cache miss for year={current_year} — fetching from Calendarific...")
     try:
         await _fetch_and_store(current_year, force=False)
     except Exception as e:
-        logger.error(f"ProKerala fetch failed: {e}")
+        logger.error(f"Calendarific fetch failed: {e}")
         raise HTTPException(status_code=503, detail=str(e))
 
     stored = _get_cached_year(current_year)
@@ -733,9 +643,9 @@ async def get_ai_festival_cache(
         raise HTTPException(
             status_code=502,
             detail=(
-                "No festivals stored after ProKerala fetch. "
-                "Check PROKERALA_CLIENT_ID, PROKERALA_CLIENT_SECRET, "
-                "and confirm conn.commit() is in get_db_cursor()."
+                "No festivals stored after Calendarific fetch. "
+                "Check CALENDARIFIC_API_KEY and confirm conn.commit() "
+                "is in get_db_cursor()."
             ),
         )
     return {
@@ -751,7 +661,7 @@ async def get_ai_festival_cache(
     dependencies=[Depends(require_admin)],
 )
 async def admin_force_refresh():
-    """Admin: wipe and re-fetch from ProKerala. Requires X-Admin-Key header."""
+    """Admin: wipe and re-fetch from Calendarific. Requires X-Admin-Key header."""
     today = date.today()
     yr    = today.year
     try:
@@ -762,7 +672,7 @@ async def admin_force_refresh():
         "success":      True,
         "year":         yr,
         "fetched":      len(festivals),
-        "source":       "prokerala",
+        "source":       "calendarific",
         "message":      f"Refreshed: {len(festivals)} festivals for {yr}",
         "refreshed_at": datetime.utcnow().isoformat(),
     }
