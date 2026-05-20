@@ -119,13 +119,9 @@ export default function FestivalCalendarPage() {
   const [claudeFestivals, setClaudeFestivals] = useState([]);
   const [loading, setLoading]                 = useState(true);
   const [claudeLoading, setClaudeLoading]     = useState(true);
-  const [claudeError, setClaudeError]         = useState(false);
-  const [claudeErrorMsg, setClaudeErrorMsg]   = useState('');
-  const [claudeFromCache, setClaudeFromCache] = useState(false);
   const [selectedFestival, setSelectedFestival] = useState(null);
 
   // ── FIX: useRef to ensure AI fetch runs exactly ONCE per mount ────────────
-  // Using ref instead of state so it never triggers a re-render / re-effect
   const aiFetchDone = useRef(false);
 
   // ── Temple-linked festivals ───────────────────────────────────────────────
@@ -135,18 +131,13 @@ export default function FestivalCalendarPage() {
       .then(r => setApiFestivals(Array.isArray(r.data) ? r.data : []))
       .catch(() => setApiFestivals([]))
       .finally(() => setLoading(false));
-  }, []); // stable — no deps needed
+  }, []);
 
   // ── Calendarific/AI festivals from backend ────────────────────────────────
-  // Backend handles all caching logic. Frontend just calls once.
   const fetchFestivalsFromBackend = useCallback(async (forceRefresh = false) => {
-    // Guard: skip if already fetched this session and not a manual refresh
     if (!forceRefresh && aiFetchDone.current) return;
 
     setClaudeLoading(true);
-    setClaudeError(false);
-    setClaudeErrorMsg('');
-    setClaudeFromCache(false);
 
     try {
       const url = `${API_BASE}/api/festivals/ai-cache${forceRefresh ? '?refresh=true' : ''}`;
@@ -159,24 +150,21 @@ export default function FestivalCalendarPage() {
           : [];
 
       setClaudeFestivals(festivals.map(f => ({ ...f, _claude: true })));
-      setClaudeFromCache(res.data?.source === 'db_cache');
-      aiFetchDone.current = true; // mark done — no more calls until manual refresh
+      aiFetchDone.current = true;
     } catch (err) {
-      setClaudeError(true);
-      setClaudeErrorMsg(err?.response?.data?.detail || err.message || 'Unknown error');
       setClaudeFestivals([]);
-      aiFetchDone.current = true; // mark done even on error — stop retry loop
+      aiFetchDone.current = true;
     } finally {
       setClaudeLoading(false);
     }
-  }, []); // stable — aiFetchDone is a ref, not state
+  }, []);
 
   // ── Mount: fetch both sources exactly ONCE ────────────────────────────────
   useEffect(() => {
     fetchFestivals();
     fetchFestivalsFromBackend(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // empty array = runs once on mount, never again
+  }, []);
 
   // ── Listen for manually added temple festivals ────────────────────────────
   useEffect(() => {
@@ -185,11 +173,11 @@ export default function FestivalCalendarPage() {
     return () => window.removeEventListener('festival:added', handler);
   }, [fetchFestivals]);
 
-  // ── Refresh button: force re-fetch from Calendarific ─────────────────────
+  // ── Refresh button ────────────────────────────────────────────────────────
   const handleRefresh = useCallback(() => {
-    aiFetchDone.current = false; // reset guard so fetchFestivalsFromBackend runs
+    aiFetchDone.current = false;
     fetchFestivals();
-    fetchFestivalsFromBackend(true); // force=true → backend wipes cache & re-fetches
+    fetchFestivalsFromBackend(true);
   }, [fetchFestivals, fetchFestivalsFromBackend]);
 
   // ── Merge: temple festivals + AI/Calendarific festivals ──────────────────
@@ -338,32 +326,6 @@ export default function FestivalCalendarPage() {
               {t('festival.loading')}
             </div>
           )}
-          {claudeFromCache && !claudeLoading && (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
-              fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,213,128,0.65)',
-              background: 'rgba(255,255,255,0.06)', padding: '6px 16px', borderRadius: 50,
-              border: '1px solid rgba(255,255,255,0.10)',
-            }}>
-              ⚡ Loaded from database
-            </div>
-          )}
-          {claudeError && !claudeLoading && (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
-              fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,180,120,.85)',
-              background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
-              border: '1px solid rgba(255,150,50,.2)',
-            }}>
-              ⚠️ {claudeErrorMsg}{' '}
-              <button
-                onClick={handleRefresh}
-                style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}
-              >
-                {t('festival.retry')}
-              </button>
-            </div>
-          )}
         </div>
       </section>
 
@@ -412,16 +374,6 @@ export default function FestivalCalendarPage() {
             </span>
 
             <div style={{ flex: 1 }} />
-
-            {/* Cache badge */}
-            {claudeFromCache && !claudeLoading && (
-              <span style={{
-                fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.06em',
-                color: '#16a34a', background: 'rgba(16,163,74,0.08)',
-                border: '1px solid rgba(16,163,74,.25)',
-                padding: '4px 10px', borderRadius: 50, whiteSpace: 'nowrap',
-              }}>⚡ DB cache</span>
-            )}
 
             {/* Refresh button */}
             <button
@@ -722,11 +674,9 @@ function PremiumFestivalCard({ festival, compact, index, onClick }) {
               </div>
             )}
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-              {festival.is_major && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(232,101,10,.3)', color: '#B84D00', background: 'rgba(232,101,10,.1)', fontWeight: 600 }}>{t('festival.major')}</span>}
               {festival.duration_days > 1 && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid #EDE0CC', color: '#5C3D1E', background: '#FDF6EC' }}>{festival.duration_days} {t('festival.days')}</span>}
               {festival.deity && festival.deity !== 'Other' && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)' }}>{festival.deity}</span>}
               {festival.temple_id && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)' }}>{t('festival.temple_label')}</span>}
-              {festival._claude && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)' }}>{t('festival.ai_label')}</span>}
             </div>
             {festival.temple_name && (
               <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 11, color: '#16a34a', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -762,7 +712,6 @@ function FestivalModal({ festival, onClose }) {
             {displayDate && <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color, fontWeight: 700, marginBottom: 5 }}>📅 {displayDate}</div>}
             {festival.hindu_tithi && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: '#9A7150' }}>{festival.hindu_tithi}</div>}
             <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-              {festival.is_major && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 50, border: `1px solid ${color}40`, color: '#B84D00', background: `${color}12`, fontFamily: 'var(--font-display)', fontWeight: 600 }}>{t('festival.major')}</span>}
               {festival.temple_id && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 50, border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)', fontFamily: 'var(--font-display)' }}>{t('festival.temple_label')}</span>}
               {festival._claude && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 50, border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)', fontFamily: 'var(--font-display)' }}>{t('festival.ai_label')} {t('festival.ai_curated')}</span>}
               {festival.deity && festival.deity !== 'Other' && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 50, border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)', fontFamily: 'var(--font-display)' }}>{festival.deity}</span>}
