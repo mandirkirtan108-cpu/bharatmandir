@@ -72,16 +72,15 @@ app.add_middleware(
 # Agar admin.router pehle hota, toh /api/admin/auth/login ko
 # admin router ka /api/admin/temples/{id} pattern intercept kar leta — 404!
 # ──────────────────────────────────────────────────────────────────────────────
-app.include_router(admin_auth_router)          # /api/admin/auth/*      — PEHLE
-app.include_router(admin.router)               # /api/admin/*           — BAAD MEIN
+app.include_router(admin_auth_router)
+app.include_router(admin.router)
 app.include_router(temples.router)
 app.include_router(route_planner.router)
-app.include_router(festivals.router)
-app.include_router(ai_festival_cache_router)   # /api/festivals/ai-cache/*
+app.include_router(ai_festival_cache_router)   # ← moved UP, before festivals
+app.include_router(festivals.router)           # ← moved DOWN
 app.include_router(spiritual_chat.router)
-app.include_router(panchang_router)            # /api/panchang/*
+app.include_router(panchang_router)
 app.include_router(proxy.router)
-
 
 @app.get("/")
 def root():
