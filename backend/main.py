@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routers import temples, route_planner, admin, festivals, spiritual_chat
-from routers.ai_festival_cache import router as ai_festival_cache_router  # ← FIX: was missing
+from routers.ai_festival_cache import router as ai_festival_cache_router
 from db.connection import get_pool, close_pool
 import os
 from dotenv import load_dotenv
@@ -77,7 +77,7 @@ app.include_router(admin.router)               # /api/admin/*           — BAAD
 app.include_router(temples.router)
 app.include_router(route_planner.router)
 app.include_router(festivals.router)
-app.include_router(ai_festival_cache_router)   # /api/festivals/ai-cache/* ← FIX: was missing
+app.include_router(ai_festival_cache_router)   # /api/festivals/ai-cache/*
 app.include_router(spiritual_chat.router)
 app.include_router(panchang_router)            # /api/panchang/*
 app.include_router(proxy.router)
