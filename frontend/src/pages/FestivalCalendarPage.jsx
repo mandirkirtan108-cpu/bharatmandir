@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Calendar, Star, Search, ChevronLeft, ChevronRight, MapPin, RefreshCw } from 'lucide-react';
@@ -105,38 +105,44 @@ const MONTH_SEASON = {
   11: { season: 'Autumn', icon: '🍂' }, 12: { season: 'Winter', icon: '❄️' },
 };
 
-// ─── Dynamic current year — kabhi bhi hardcode mat karo ─────────────────────
+// Dynamic — never hardcoded
 const CURRENT_YEAR = new Date().getFullYear();
 
 export default function FestivalCalendarPage() {
   const { t } = useTranslation();
-  const [selectedMonth, setSelectedMonth]       = useState(new Date().getMonth() + 1);
-  const [viewMode, setViewMode]                 = useState('calendar');
-  const [deityFilter, setDeityFilter]           = useState('All');
-  const [typeFilter, setTypeFilter]             = useState('All');
-  const [searchQuery, setSearchQuery]           = useState('');
-  const [apiFestivals, setApiFestivals]         = useState([]);
-  const [claudeFestivals, setClaudeFestivals]   = useState([]);
-  const [loading, setLoading]                   = useState(true);
-  const [claudeLoading, setClaudeLoading]       = useState(true);
-  const [claudeError, setClaudeError]           = useState(false);
-  const [claudeErrorMsg, setClaudeErrorMsg]     = useState('');
-  const [claudeFromCache, setClaudeFromCache]   = useState(false);
+  const [selectedMonth, setSelectedMonth]     = useState(new Date().getMonth() + 1);
+  const [viewMode, setViewMode]               = useState('calendar');
+  const [deityFilter, setDeityFilter]         = useState('All');
+  const [typeFilter, setTypeFilter]           = useState('All');
+  const [searchQuery, setSearchQuery]         = useState('');
+  const [apiFestivals, setApiFestivals]       = useState([]);
+  const [claudeFestivals, setClaudeFestivals] = useState([]);
+  const [loading, setLoading]                 = useState(true);
+  const [claudeLoading, setClaudeLoading]     = useState(true);
+  const [claudeError, setClaudeError]         = useState(false);
+  const [claudeErrorMsg, setClaudeErrorMsg]   = useState('');
+  const [claudeFromCache, setClaudeFromCache] = useState(false);
   const [selectedFestival, setSelectedFestival] = useState(null);
 
-  // ── Temple-linked festivals from DB ────────────────────────────────────────
+  // ── FIX: useRef to ensure AI fetch runs exactly ONCE per mount ────────────
+  // Using ref instead of state so it never triggers a re-render / re-effect
+  const aiFetchDone = useRef(false);
+
+  // ── Temple-linked festivals ───────────────────────────────────────────────
   const fetchFestivals = useCallback(() => {
     setLoading(true);
     axios.get(`${API_BASE}/api/festivals?limit=500`)
       .then(r => setApiFestivals(Array.isArray(r.data) ? r.data : []))
       .catch(() => setApiFestivals([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, []); // stable — no deps needed
 
-  // ── AI festivals — sirf backend se, frontend pe koi LLM call nahi ──────────
-  // Backend khud DB check karta hai → cache miss pe Claude call karta hai
-  // Hum bas /api/festivals/ai-cache hit karte hain
+  // ── Calendarific/AI festivals from backend ────────────────────────────────
+  // Backend handles all caching logic. Frontend just calls once.
   const fetchFestivalsFromBackend = useCallback(async (forceRefresh = false) => {
+    // Guard: skip if already fetched this session and not a manual refresh
+    if (!forceRefresh && aiFetchDone.current) return;
+
     setClaudeLoading(true);
     setClaudeError(false);
     setClaudeErrorMsg('');
@@ -146,38 +152,51 @@ export default function FestivalCalendarPage() {
       const url = `${API_BASE}/api/festivals/ai-cache${forceRefresh ? '?refresh=true' : ''}`;
       const res = await axios.get(url);
 
-      // Backend response: { source, year, count, festivals: [...] }
       const festivals = Array.isArray(res.data?.festivals)
         ? res.data.festivals
         : Array.isArray(res.data)
-          ? res.data   // fallback agar purana format ho
+          ? res.data
           : [];
 
       setClaudeFestivals(festivals.map(f => ({ ...f, _claude: true })));
       setClaudeFromCache(res.data?.source === 'db_cache');
+      aiFetchDone.current = true; // mark done — no more calls until manual refresh
     } catch (err) {
       setClaudeError(true);
       setClaudeErrorMsg(err?.response?.data?.detail || err.message || 'Unknown error');
       setClaudeFestivals([]);
+      aiFetchDone.current = true; // mark done even on error — stop retry loop
     } finally {
       setClaudeLoading(false);
     }
-  }, []);
+  }, []); // stable — aiFetchDone is a ref, not state
 
+  // ── Mount: fetch both sources exactly ONCE ────────────────────────────────
   useEffect(() => {
     fetchFestivals();
-    fetchFestivalsFromBackend();
-  }, [fetchFestivals, fetchFestivalsFromBackend]);
+    fetchFestivalsFromBackend(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // empty array = runs once on mount, never again
 
+  // ── Listen for manually added temple festivals ────────────────────────────
   useEffect(() => {
     const handler = () => fetchFestivals();
     window.addEventListener('festival:added', handler);
     return () => window.removeEventListener('festival:added', handler);
   }, [fetchFestivals]);
 
+  // ── Refresh button: force re-fetch from Calendarific ─────────────────────
+  const handleRefresh = useCallback(() => {
+    aiFetchDone.current = false; // reset guard so fetchFestivalsFromBackend runs
+    fetchFestivals();
+    fetchFestivalsFromBackend(true); // force=true → backend wipes cache & re-fetches
+  }, [fetchFestivals, fetchFestivalsFromBackend]);
+
+  // ── Merge: temple festivals + AI/Calendarific festivals ──────────────────
   const allFestivals = useMemo(() => {
-    const apiKeys = new Set(apiFestivals.map(festKey));
+    const apiKeys       = new Set(apiFestivals.map(festKey));
     const claudeFiltered = claudeFestivals.filter(f => !apiKeys.has(festKey(f)));
+
     const enrichedAPI = apiFestivals.map(f => {
       const { emoji, color } = getEmojiColor(f);
       return { ...f, emoji: f.emoji || emoji, color: f.color || color };
@@ -186,6 +205,7 @@ export default function FestivalCalendarPage() {
       const { emoji, color } = getEmojiColor(f);
       return { ...f, _claude: true, emoji: f.emoji || emoji, color: f.color || color };
     });
+
     return [...enrichedClaude, ...enrichedAPI];
   }, [apiFestivals, claudeFestivals]);
 
@@ -236,11 +256,6 @@ export default function FestivalCalendarPage() {
     if (next > 12) next = 1;
     return next;
   });
-
-  const handleRefresh = () => {
-    fetchFestivals();
-    fetchFestivalsFromBackend(true); // force=true → backend wipes cache & re-fetches Claude
-  };
 
   return (
     <>
@@ -300,7 +315,7 @@ export default function FestivalCalendarPage() {
             {[
               `${totalCount} ${t('festival.festivals')}`,
               t('festival.months'),
-              String(CURRENT_YEAR),   // ← dynamic year
+              String(CURRENT_YEAR),
               ...(claudeCount > 0 ? [`✨ ${claudeCount} ${t('festival.ai_curated')}`] : []),
               ...(apiCount > 0    ? [`🛕 ${apiCount} ${t('festival.temple_festivals')}`] : []),
             ].map((s, i) => (
@@ -330,7 +345,7 @@ export default function FestivalCalendarPage() {
               background: 'rgba(255,255,255,0.06)', padding: '6px 16px', borderRadius: 50,
               border: '1px solid rgba(255,255,255,0.10)',
             }}>
-              💾 Cached data — refreshes on 1st of next month
+              ⚡ Loaded from database
             </div>
           )}
           {claudeError && !claudeLoading && (
@@ -340,9 +355,11 @@ export default function FestivalCalendarPage() {
               background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
               border: '1px solid rgba(255,150,50,.2)',
             }}>
-              ⚠️ {claudeErrorMsg || t('festival.loading')}{' '}
-              <button onClick={() => fetchFestivalsFromBackend(false)}
-                style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}>
+              ⚠️ {claudeErrorMsg}{' '}
+              <button
+                onClick={handleRefresh}
+                style={{ background:'none', border:'none', color:'inherit', cursor:'pointer', textDecoration:'underline' }}
+              >
                 {t('festival.retry')}
               </button>
             </div>
@@ -359,7 +376,8 @@ export default function FestivalCalendarPage() {
       }}>
         <div style={{ maxWidth: 1140, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 9px', borderBottom: '1px solid rgba(237,224,204,0.5)' }}>
-            {/* Search box */}
+
+            {/* Search */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8, background: 'white',
               border: '1.5px solid #E8D5B8', borderRadius: 10, padding: '7px 14px',
@@ -371,8 +389,8 @@ export default function FestivalCalendarPage() {
                 placeholder={t('festival.search_placeholder')}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                onFocus={e => { e.currentTarget.parentElement.style.borderColor = '#E8650A'; e.currentTarget.parentElement.style.boxShadow = '0 0 0 3px rgba(232,101,10,0.1)'; }}
-                onBlur={e => { e.currentTarget.parentElement.style.borderColor = '#E8D5B8'; e.currentTarget.parentElement.style.boxShadow = '0 1px 4px rgba(61,31,0,0.05)'; }}
+                onFocus={e => { e.currentTarget.parentElement.style.borderColor='#E8650A'; e.currentTarget.parentElement.style.boxShadow='0 0 0 3px rgba(232,101,10,0.1)'; }}
+                onBlur={e => { e.currentTarget.parentElement.style.borderColor='#E8D5B8'; e.currentTarget.parentElement.style.boxShadow='0 1px 4px rgba(61,31,0,0.05)'; }}
               />
               {searchQuery ? (
                 <button onClick={() => setSearchQuery('')} style={{ background: '#F0E6D6', border: 'none', cursor: 'pointer', width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9A7150', fontSize: 10, flexShrink: 0 }}>✕</button>
@@ -385,8 +403,7 @@ export default function FestivalCalendarPage() {
             {(deityFilter !== 'All' || typeFilter !== 'All' || searchQuery) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(232,101,10,0.07)', border: '1px solid rgba(232,101,10,0.18)', borderRadius: 8, padding: '4px 10px', fontFamily: 'var(--font-body)', fontSize: 12, color: '#A04000' }}>
                 {[deityFilter !== 'All' && deityFilter, typeFilter !== 'All' && typeFilter, searchQuery && `"${searchQuery}"`].filter(Boolean).join(' · ')}
-                <button onClick={() => { setDeityFilter('All'); setTypeFilter('All'); setSearchQuery(''); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A04000', fontSize: 13, lineHeight: 1, padding: '0 0 0 2px', opacity: 0.7 }}>×</button>
+                <button onClick={() => { setDeityFilter('All'); setTypeFilter('All'); setSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A04000', fontSize: 13, lineHeight: 1, padding: '0 0 0 2px', opacity: 0.7 }}>×</button>
               </div>
             )}
 
@@ -396,12 +413,26 @@ export default function FestivalCalendarPage() {
 
             <div style={{ flex: 1 }} />
 
-            {/* Refresh */}
-            <button onClick={handleRefresh} disabled={isAnyLoading} title={t('festival.retry')} style={{
-              width: 32, height: 32, borderRadius: 8, border: '1.5px solid #E8D5B8', background: 'white',
-              cursor: isAnyLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', color: '#B8906A', transition: 'all .18s', opacity: isAnyLoading ? 0.4 : 1,
-            }}
+            {/* Cache badge */}
+            {claudeFromCache && !claudeLoading && (
+              <span style={{
+                fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.06em',
+                color: '#16a34a', background: 'rgba(16,163,74,0.08)',
+                border: '1px solid rgba(16,163,74,.25)',
+                padding: '4px 10px', borderRadius: 50, whiteSpace: 'nowrap',
+              }}>⚡ DB cache</span>
+            )}
+
+            {/* Refresh button */}
+            <button
+              onClick={handleRefresh}
+              disabled={isAnyLoading}
+              title="Refresh festivals from Calendarific"
+              style={{
+                width: 32, height: 32, borderRadius: 8, border: '1.5px solid #E8D5B8', background: 'white',
+                cursor: isAnyLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: '#B8906A', transition: 'all .18s', opacity: isAnyLoading ? 0.4 : 1,
+              }}
               onMouseEnter={e => { if (!isAnyLoading) { e.currentTarget.style.borderColor='#E8650A'; e.currentTarget.style.color='#E8650A'; e.currentTarget.style.background='#FFF8F2'; }}}
               onMouseLeave={e => { e.currentTarget.style.borderColor='#E8D5B8'; e.currentTarget.style.color='#B8906A'; e.currentTarget.style.background='white'; }}
             >
@@ -471,6 +502,7 @@ export default function FestivalCalendarPage() {
                 onPrev={() => goMonth(-1)}
                 onNext={() => goMonth(1)}
               />
+
               <div style={{ marginBottom: 32 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                   <div>
@@ -588,20 +620,20 @@ export default function FestivalCalendarPage() {
         @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
         .scrollbar-hide::-webkit-scrollbar { display:none; }
         .scrollbar-hide { -ms-overflow-style:none; scrollbar-width:none; }
-        .month-pill { display: flex; flex-direction: column; align-items: center; padding: 10px 10px 8px; border-radius: 18px; flex-shrink: 0; cursor: pointer; transition: all .25s cubic-bezier(.34,1.56,.64,1); border: 1.5px solid transparent; position: relative; overflow: hidden; min-width: 56px; }
-        .month-pill:hover:not(.active) { background: rgba(232,101,10,0.08); border-color: rgba(232,101,10,0.25); transform: translateY(-2px); }
-        .month-pill.active { background: linear-gradient(145deg, #E8650A 0%, #B84D00 100%); border-color: #E8650A; transform: translateY(-3px); box-shadow: 0 10px 30px rgba(232,101,10,0.38), 0 4px 12px rgba(232,101,10,0.22); }
-        .month-pill .pill-name { font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: .06em; color: #5C3D1E; transition: color .2s; }
-        .month-pill.active .pill-name { color: white; }
-        .month-pill .pill-count { font-size: 10px; font-weight: 800; margin-top: 4px; min-width: 20px; text-align: center; padding: 2px 6px; border-radius: 50px; transition: all .2s; }
-        .month-pill:not(.active) .pill-count { background: rgba(232,101,10,0.12); color: #B84D00; }
-        .month-pill.active .pill-count { background: rgba(255,255,255,0.22); color: white; }
-        .month-pill .pill-dot { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: rgba(232,101,10,0.5); opacity: 0; transition: opacity .2s; }
-        .month-pill.has-temple .pill-dot { opacity: 1; background: #16a34a; }
-        .fest-card-premium { background: white; border-radius: 24px; border: 1.5px solid rgba(237,224,204,0.8); overflow: hidden; transition: all .3s cubic-bezier(.34,1.2,.64,1); cursor: pointer; position: relative; }
-        .fest-card-premium:hover { transform: translateY(-6px); box-shadow: 0 20px 48px rgba(61,31,0,0.14), 0 6px 16px rgba(61,31,0,0.08); border-color: transparent; }
-        .fest-card-premium .card-glow { position: absolute; top: 0; left: 0; right: 0; height: 200px; opacity: 0; transition: opacity .3s; pointer-events: none; }
-        .fest-card-premium:hover .card-glow { opacity: 1; }
+        .month-pill { display:flex; flex-direction:column; align-items:center; padding:10px 10px 8px; border-radius:18px; flex-shrink:0; cursor:pointer; transition:all .25s cubic-bezier(.34,1.56,.64,1); border:1.5px solid transparent; position:relative; overflow:hidden; min-width:56px; }
+        .month-pill:hover:not(.active) { background:rgba(232,101,10,0.08); border-color:rgba(232,101,10,0.25); transform:translateY(-2px); }
+        .month-pill.active { background:linear-gradient(145deg,#E8650A 0%,#B84D00 100%); border-color:#E8650A; transform:translateY(-3px); box-shadow:0 10px 30px rgba(232,101,10,0.38),0 4px 12px rgba(232,101,10,0.22); }
+        .month-pill .pill-name { font-family:var(--font-display); font-size:12px; font-weight:700; letter-spacing:.06em; color:#5C3D1E; transition:color .2s; }
+        .month-pill.active .pill-name { color:white; }
+        .month-pill .pill-count { font-size:10px; font-weight:800; margin-top:4px; min-width:20px; text-align:center; padding:2px 6px; border-radius:50px; transition:all .2s; }
+        .month-pill:not(.active) .pill-count { background:rgba(232,101,10,0.12); color:#B84D00; }
+        .month-pill.active .pill-count { background:rgba(255,255,255,0.22); color:white; }
+        .month-pill .pill-dot { position:absolute; bottom:4px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:rgba(232,101,10,0.5); opacity:0; transition:opacity .2s; }
+        .month-pill.has-temple .pill-dot { opacity:1; background:#16a34a; }
+        .fest-card-premium { background:white; border-radius:24px; border:1.5px solid rgba(237,224,204,0.8); overflow:hidden; transition:all .3s cubic-bezier(.34,1.2,.64,1); cursor:pointer; position:relative; }
+        .fest-card-premium:hover { transform:translateY(-6px); box-shadow:0 20px 48px rgba(61,31,0,0.14),0 6px 16px rgba(61,31,0,0.08); border-color:transparent; }
+        .fest-card-premium .card-glow { position:absolute; top:0; left:0; right:0; height:200px; opacity:0; transition:opacity .3s; pointer-events:none; }
+        .fest-card-premium:hover .card-glow { opacity:1; }
         @media(max-width:640px){ .fest-modal-meta { grid-template-columns:1fr !important; } }
       `}</style>
     </>
@@ -623,16 +655,18 @@ function PremiumMonthNavigator({ selectedMonth, byMonth, onSelect, onPrev, onNex
         ✦ Hindu Festival Calendar {CURRENT_YEAR} ✦
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button onClick={onPrev} style={{ width: 40, height: 40, borderRadius: '50%', border: '1.5px solid #EDE0CC', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .22s', boxShadow: '0 2px 8px rgba(61,31,0,0.06)' }}
+        <button onClick={onPrev}
+          style={{ width: 40, height: 40, borderRadius: '50%', border: '1.5px solid #EDE0CC', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .22s', boxShadow: '0 2px 8px rgba(61,31,0,0.06)' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor='#E8650A'; e.currentTarget.style.background='#FFF5EC'; e.currentTarget.style.color='#E8650A'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor='#EDE0CC'; e.currentTarget.style.background='white'; e.currentTarget.style.color='#7a3208'; }}
         ><ChevronLeft size={18} /></button>
+
         <div style={{ display: 'flex', gap: 5, flex: 1, overflowX: 'auto', scrollbarWidth: 'none', padding: '4px 2px' }} className="scrollbar-hide">
           {GREGORIAN_MONTHS.map((m, i) => {
-            const mNum = i + 1;
-            const count = (byMonth[mNum] || []).length;
+            const mNum      = i + 1;
+            const count     = (byMonth[mNum] || []).length;
             const hasTemple = (byMonth[mNum] || []).some(f => f.temple_id);
-            const isActive = selectedMonth === mNum;
+            const isActive  = selectedMonth === mNum;
             return (
               <button key={m} onClick={() => onSelect(mNum)} className={`month-pill${isActive ? ' active' : ''}${hasTemple ? ' has-temple' : ''}`}>
                 <span style={{ fontSize: 11, marginBottom: 2, opacity: isActive ? 0.9 : 0.45, lineHeight: 1 }}>{MONTH_SEASON[mNum]?.icon}</span>
@@ -643,11 +677,14 @@ function PremiumMonthNavigator({ selectedMonth, byMonth, onSelect, onPrev, onNex
             );
           })}
         </div>
-        <button onClick={onNext} style={{ width: 40, height: 40, borderRadius: '50%', border: '1.5px solid #EDE0CC', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .22s', boxShadow: '0 2px 8px rgba(61,31,0,0.06)' }}
+
+        <button onClick={onNext}
+          style={{ width: 40, height: 40, borderRadius: '50%', border: '1.5px solid #EDE0CC', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7a3208', flexShrink: 0, transition: 'all .22s', boxShadow: '0 2px 8px rgba(61,31,0,0.06)' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor='#E8650A'; e.currentTarget.style.background='#FFF5EC'; e.currentTarget.style.color='#E8650A'; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor='#EDE0CC'; e.currentTarget.style.background='white'; e.currentTarget.style.color='#7a3208'; }}
         ><ChevronRight size={18} /></button>
       </div>
+
       <div style={{ marginTop: 14, height: 3, background: '#F5EDE0', borderRadius: 99, overflow: 'hidden' }}>
         <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg, #E8650A, #FFB347)', width: `${(selectedMonth / 12) * 100}%`, transition: 'width .4s cubic-bezier(.34,1.2,.64,1)', boxShadow: '0 0 8px rgba(232,101,10,0.4)' }} />
       </div>
@@ -657,17 +694,16 @@ function PremiumMonthNavigator({ selectedMonth, byMonth, onSelect, onPrev, onNex
 
 function PremiumFestivalCard({ festival, compact, index, onClick }) {
   const { t } = useTranslation();
-  const emoji = festival.emoji || '🛕';
-  const color = festival.color || '#E8650A';
+  const emoji    = festival.emoji || '🛕';
+  const color    = festival.color || '#E8650A';
   const [hovered, setHovered] = useState(false);
-  const tint = `${color}18`;
-  const tintMid = `${color}30`;
-
-  // exact_date ya typical_date — jo bhi available ho
+  const tint     = `${color}18`;
+  const tintMid  = `${color}30`;
   const displayDate = festival.display_date || null;
 
   return (
-    <div className="fest-card-premium" onClick={onClick} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ animation: `cardIn .4s ease both`, animationDelay: `${Math.min(index * 0.06, 0.5)}s` }}>
+    <div className="fest-card-premium" onClick={onClick} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+      style={{ animation: `cardIn .4s ease both`, animationDelay: `${Math.min(index * 0.06, 0.5)}s` }}>
       <div className="card-glow" style={{ background: `radial-gradient(ellipse at 30% 0%, ${tintMid} 0%, transparent 70%)` }} />
       <div style={{ height: compact ? 4 : 5, background: `linear-gradient(90deg, ${color}, ${color}88, transparent)`, transition: 'all .3s', ...(hovered ? { height: compact ? 5 : 6 } : {}) }} />
       <div style={{ padding: compact ? '16px 18px' : '22px 22px 16px', position: 'relative' }}>
@@ -711,14 +747,13 @@ function FestivalModal({ festival, onClose }) {
   const { t } = useTranslation();
   const monthName  = GREGORIAN_MONTHS[(festival.month || 1) - 1] || '';
   const hinduMonth = festival.hindu_month || HINDU_MONTHS[((festival.month || 1) - 1) % 12] || '';
-  const emoji = festival.emoji || '🛕';
-  const color = festival.color || '#E8650A';
-
-  // exact_date (AI cache) ya typical_date (DB festivals) — dono handle karo
+  const emoji      = festival.emoji || '🛕';
+  const color      = festival.color || '#E8650A';
   const displayDate = festival.display_date || null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(26,10,0,.72)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'fadeIn .2s ease' }} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(26,10,0,.72)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'fadeIn .2s ease' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ background: '#FDF6EC', borderRadius: 32, maxWidth: 580, width: '100%', overflow: 'hidden', animation: 'slideUp .28s cubic-bezier(.34,1.2,.64,1)', boxShadow: '0 40px 100px rgba(26,10,0,.5), 0 8px 24px rgba(26,10,0,.2)', maxHeight: '90vh', overflowY: 'auto', border: '1.5px solid rgba(255,200,100,0.15)' }}>
         <div style={{ padding: '30px 30px 22px', background: `linear-gradient(135deg, ${color}18 0%, ${color}08 100%)`, borderBottom: `1px solid ${color}22`, display: 'flex', alignItems: 'flex-start', gap: 18 }}>
           <div style={{ fontSize: 42, width: 74, height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 22, background: 'white', border: `2px solid ${color}30`, boxShadow: `0 8px 24px ${color}20`, flexShrink: 0 }}>{emoji}</div>
@@ -734,6 +769,7 @@ function FestivalModal({ festival, onClose }) {
             </div>
           </div>
         </div>
+
         <div style={{ padding: '22px 30px 28px' }}>
           {festival.temple_name && (
             <div style={{ background: 'rgba(16,163,74,0.06)', border: '1px solid rgba(16,163,74,.2)', borderRadius: 16, padding: '14px 18px', marginBottom: 20 }}>
@@ -763,7 +799,7 @@ function FestivalModal({ festival, onClose }) {
             {[
               { label: 'GREGORIAN MONTH', value: monthName },
               { label: 'HINDU MONTH', value: hinduMonth, hindi: true },
-              ...(festival.hindu_tithi ? [{ label: t('panchang.tithi').toUpperCase(), value: festival.hindu_tithi, small: true }] : []),
+              ...(festival.hindu_tithi ? [{ label: 'TITHI', value: festival.hindu_tithi, small: true }] : []),
               { label: t('festival.duration').toUpperCase(), value: `${festival.duration_days || 1} ${(festival.duration_days || 1) === 1 ? t('festival.day') : t('festival.days')}` },
               { label: 'SOURCE', value: festival._claude ? `✨ ${t('festival.ai_curated')}` : festival.source || `🛕 ${t('festival.temple_label')}`, small: true },
             ].map((item, idx) => (
