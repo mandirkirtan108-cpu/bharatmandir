@@ -68,7 +68,7 @@ function SectionTitle({ icon, children }) {
   );
 }
 
-// ── Temple-style timing strip (like Image 2) ──────────────────────────────
+// ── Temple-style timing strip — UPDATED for readability ──────────────────────
 function TimingStrip({ items }) {
   return (
     <div style={{
@@ -80,26 +80,32 @@ function TimingStrip({ items }) {
       {items.map((item, i) => (
         <div key={i} style={{
           flex: 1,
-          padding: '14px 12px',
+          padding: '18px 16px',
           textAlign: 'center',
           background: item.bg || 'var(--cream)',
           borderRight: i < items.length - 1 ? '1px solid var(--cream-dark)' : 'none',
         }}>
+          {/* Label row — on top, small caps */}
           <p style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 15,
-            fontWeight: 700,
-            color: item.color || 'var(--brown)',
-            marginBottom: 4,
-            whiteSpace: 'nowrap',
-          }}>{item.value}</p>
-          <p style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 9,
-            letterSpacing: '.08em',
+            fontSize: 11,
+            letterSpacing: '.09em',
             textTransform: 'uppercase',
             color: item.labelColor || 'var(--text-light)',
+            marginBottom: 8,
+            fontWeight: 600,
           }}>{item.label}</p>
+
+          {/* Time — large bold, high contrast */}
+          <p style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 20,
+            fontWeight: 800,
+            color: item.color || 'var(--brown)',
+            lineHeight: 1.15,
+            letterSpacing: '-0.01em',
+            whiteSpace: 'nowrap',
+          }}>{item.value}</p>
         </div>
       ))}
     </div>
@@ -298,7 +304,7 @@ export default function PanchangPage() {
                   ))}
                 </div>
 
-                {/* ✅ 3 key timings — Temple-style strip */}
+                {/* ✅ 3 key timings — Updated TimingStrip with large readable text */}
                 <div style={{ marginBottom: 18 }}>
                   <TimingStrip items={[
                     {
