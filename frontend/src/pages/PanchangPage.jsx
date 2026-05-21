@@ -33,7 +33,6 @@ const VERDICT_ICON  = { excellent: '🌟', good: '✅', average: '⚡', avoid: '
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// Convert 24h "HH:MM" to "H:MM AM/PM"
 function to12h(timeStr) {
   if (!timeStr) return timeStr;
   if (/am|pm/i.test(timeStr)) return timeStr;
@@ -69,6 +68,44 @@ function SectionTitle({ icon, children }) {
   );
 }
 
+// ── Temple-style timing strip (like Image 2) ──────────────────────────────
+function TimingStrip({ items }) {
+  return (
+    <div style={{
+      display: 'flex',
+      borderRadius: 'var(--radius)',
+      border: '1px solid var(--cream-dark)',
+      overflow: 'hidden',
+    }}>
+      {items.map((item, i) => (
+        <div key={i} style={{
+          flex: 1,
+          padding: '14px 12px',
+          textAlign: 'center',
+          background: item.bg || 'var(--cream)',
+          borderRight: i < items.length - 1 ? '1px solid var(--cream-dark)' : 'none',
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 15,
+            fontWeight: 700,
+            color: item.color || 'var(--brown)',
+            marginBottom: 4,
+            whiteSpace: 'nowrap',
+          }}>{item.value}</p>
+          <p style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 9,
+            letterSpacing: '.08em',
+            textTransform: 'uppercase',
+            color: item.labelColor || 'var(--text-light)',
+          }}>{item.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PanchangPage() {
   const { t } = useTranslation();
   const [selected,     setSelected]     = useState(null);
@@ -84,7 +121,6 @@ export default function PanchangPage() {
 
   const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
 
-  // ── Daily Panchang ────────────────────────────────────────────────────────
   const fetchDailyPanchang = async () => {
     setDailyLoading(true); setDailyResult(null); setError(null);
     try {
@@ -103,7 +139,6 @@ export default function PanchangPage() {
     }
   };
 
-  // ── Muhurat Finder ────────────────────────────────────────────────────────
   const findMuhurat = async () => {
     if (!selected) { setError('Please select a Muhurat type first.'); return; }
     setLoading(true); setResult(null); setError(null);
@@ -115,10 +150,7 @@ export default function PanchangPage() {
           muhurat_type:  selected,
           muhurat_label: selectedType?.label || selected,
           muhurat_hindi: selectedType?.hindi || '',
-          date,
-          name:  name || '',
-          rashi: rashi || '',
-          city:  city || 'India',
+          date, name: name || '', rashi: rashi || '', city: city || 'India',
         }),
       });
       const data = await res.json();
@@ -146,7 +178,7 @@ export default function PanchangPage() {
       <Navbar />
       <div style={{ background: 'var(--cream)', minHeight: '100vh', paddingBottom: 80 }}>
 
-        {/* ══════════════ HERO ══════════════ */}
+        {/* HERO */}
         <section style={{
           position: 'relative', overflow: 'hidden', color: 'white',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
@@ -163,7 +195,6 @@ export default function PanchangPage() {
             background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
             pointerEvents: 'none',
           }} />
-
           <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -174,7 +205,6 @@ export default function PanchangPage() {
             }}>
               <Sun size={13} /> {t('panchang.badge')}
             </div>
-
             <h1 style={{
               fontFamily: 'var(--font-display)', fontWeight: 900,
               fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
@@ -182,7 +212,6 @@ export default function PanchangPage() {
             }}>
               AI <span style={{ color: '#FFD580' }}>Pandit Ji</span> — Panchang {t('panchang.title_span')}
             </h1>
-
             <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 18, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7 }}>
               {t('panchang.subtitle')}
             </p>
@@ -191,9 +220,7 @@ export default function PanchangPage() {
 
         <div className="container" style={{ maxWidth: 960, paddingTop: 36 }}>
 
-          {/* ════════════════════════════════════════════════════════
-              SECTION 1 — Daily Panchang
-          ════════════════════════════════════════════════════════ */}
+          {/* SECTION 1 — Daily Panchang */}
           <Card>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--brown)', marginBottom: 4 }}>
               {t('panchang.today')}
@@ -227,7 +254,6 @@ export default function PanchangPage() {
               </button>
             </div>
 
-            {/* ── Daily Result ── */}
             {dailyResult && (
               <div style={{ animation: 'fadeDown .5s ease both' }}>
 
@@ -251,10 +277,8 @@ export default function PanchangPage() {
                 </div>
 
                 {/* 5 Angas */}
-                <div
-                  className="panchang-angas"
-                  style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 18 }}
-                >
+                <div className="panchang-angas"
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 18 }}>
                   {[
                     { label: 'Tithi',     icon: '🌙', val: dailyResult.tithi?.name,     sub: dailyResult.tithi?.nature },
                     { label: 'Nakshatra', icon: '⭐', val: dailyResult.nakshatra?.name, sub: dailyResult.nakshatra?.lord },
@@ -274,23 +298,44 @@ export default function PanchangPage() {
                   ))}
                 </div>
 
-                {/* 3 key timings */}
-                <div
-                  className="panchang-timings"
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}
-                >
-                  {[
-                    { label: '🌅 BRAHMA MUHURAT', time: to12h(dailyResult.brahma_muhurat?.time), note: dailyResult.brahma_muhurat?.benefit, bg: '#f0fdf4', border: '#86efac', color: '#15803d', labelColor: '#16a34a' },
-                    { label: '☀️ ABHIJIT MUHURAT', time: to12h(dailyResult.abhijit_muhurat?.time), note: dailyResult.abhijit_muhurat?.benefit, bg: '#f0f9ff', border: '#7dd3fc', color: '#075985', labelColor: '#0369a1' },
-                    { label: '🚫 RAHU KAAL',       time: to12h(dailyResult.rahu_kaal?.time),       note: 'Avoid all auspicious work',         bg: '#fef2f2', border: '#fca5a5', color: '#b91c1c', labelColor: '#dc2626' },
-                  ].map(item => (
-                    <div key={item.label} style={{ background: item.bg, borderRadius: 'var(--radius)', padding: '14px 16px', border: `1px solid ${item.border}` }}>
-                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: item.labelColor, letterSpacing: '.07em', marginBottom: 4 }}>{item.label}</p>
-                      {/* ✅ FIX: whiteSpace nowrap prevents time from wrapping */}
-                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: item.color, fontWeight: 700, whiteSpace: 'nowrap' }}>{item.time}</p>
-                      <p style={{ fontSize: 11, color: item.labelColor, marginTop: 4 }}>{item.note}</p>
-                    </div>
-                  ))}
+                {/* ✅ 3 key timings — Temple-style strip */}
+                <div style={{ marginBottom: 18 }}>
+                  <TimingStrip items={[
+                    {
+                      value: to12h(dailyResult.brahma_muhurat?.time) || '—',
+                      label: '🌅 Brahma Muhurat',
+                      color: '#15803d', labelColor: '#16a34a', bg: '#f0fdf4',
+                    },
+                    {
+                      value: to12h(dailyResult.abhijit_muhurat?.time) || '—',
+                      label: '☀️ Abhijit Muhurat',
+                      color: '#075985', labelColor: '#0369a1', bg: '#f0f9ff',
+                    },
+                    {
+                      value: to12h(dailyResult.rahu_kaal?.time) || '—',
+                      label: '🚫 Rahu Kaal',
+                      color: '#b91c1c', labelColor: '#dc2626', bg: '#fef2f2',
+                    },
+                  ]} />
+                  {/* sub-notes row */}
+                  <div style={{ display: 'flex', gap: 0, marginTop: 0 }}>
+                    {[
+                      { note: dailyResult.brahma_muhurat?.benefit, color: '#16a34a' },
+                      { note: dailyResult.abhijit_muhurat?.benefit, color: '#0369a1' },
+                      { note: 'Avoid all auspicious work', color: '#dc2626' },
+                    ].map((n, i) => (
+                      <div key={i} style={{
+                        flex: 1, padding: '6px 12px 10px',
+                        fontSize: 11, color: n.color, textAlign: 'center', lineHeight: 1.4,
+                        borderLeft: i > 0 ? '1px solid var(--cream-dark)' : 'none',
+                        borderBottom: '1px solid var(--cream-dark)',
+                        borderRight: i === 2 ? '1px solid var(--cream-dark)' : 'none',
+                        background: i === 0 ? '#f0fdf4' : i === 1 ? '#f0f9ff' : '#fef2f2',
+                        borderBottomLeftRadius: i === 0 ? 'var(--radius)' : 0,
+                        borderBottomRightRadius: i === 2 ? 'var(--radius)' : 0,
+                      }}>{n.note}</div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Choghadiya */}
@@ -307,7 +352,6 @@ export default function PanchangPage() {
                           border: `1px solid ${c.nature === 'good' ? '#86efac' : c.nature === 'bad' ? '#fca5a5' : '#e2e8f0'}`,
                         }}>
                           <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: c.nature === 'good' ? '#16a34a' : c.nature === 'bad' ? '#dc2626' : '#64748b' }}>{c.name}</p>
-                          {/* ✅ FIX: whiteSpace nowrap on choghadiya time too */}
                           <p style={{ fontSize: 11, color: 'var(--text-light)', whiteSpace: 'nowrap' }}>{to12h(c.time)}</p>
                           <p style={{ fontSize: 10, color: 'var(--text-light)', marginTop: 2 }}>{c.good_for}</p>
                         </div>
@@ -317,12 +361,10 @@ export default function PanchangPage() {
                 )}
 
                 {/* Do / Avoid */}
-                <div
-                  className="panchang-do-avoid"
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
-                >
+                <div className="panchang-do-avoid"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {[
-                    { title: '✅ DO TODAY', items: dailyResult.do_today, bg: '#f0fdf4', border: '#86efac', color: '#15803d', hdr: '#16a34a' },
+                    { title: '✅ DO TODAY',    items: dailyResult.do_today,    bg: '#f0fdf4', border: '#86efac', color: '#15803d', hdr: '#16a34a' },
                     { title: '🚫 AVOID TODAY', items: dailyResult.avoid_today, bg: '#fef2f2', border: '#fca5a5', color: '#b91c1c', hdr: '#dc2626' },
                   ].map(s => (
                     <div key={s.title} style={{ background: s.bg, borderRadius: 'var(--radius)', padding: '14px 16px', border: `1px solid ${s.border}` }}>
@@ -339,9 +381,7 @@ export default function PanchangPage() {
             )}
           </Card>
 
-          {/* ════════════════════════════════════════════════════════
-              SECTION 2 — Muhurat Finder
-          ════════════════════════════════════════════════════════ */}
+          {/* SECTION 2 — Muhurat Finder */}
           <Card>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--brown)', marginBottom: 4 }}>
               Muhurat Finder
@@ -350,13 +390,10 @@ export default function PanchangPage() {
               Find the most auspicious time for your important occasion
             </p>
 
-            {/* Occasion Grid */}
             <div style={{ marginBottom: 24 }}>
               <label style={labelStyle}>Select Occasion</label>
-              <div
-                className="muhurat-occasion-grid"
-                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))', gap: 10 }}
-              >
+              <div className="muhurat-occasion-grid"
+                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))', gap: 10 }}>
                 {MUHURAT_TYPES.map(m => (
                   <button key={m.id} onClick={() => setSelected(m.id)} style={{
                     padding: '14px 10px', borderRadius: 'var(--radius)',
@@ -374,24 +411,19 @@ export default function PanchangPage() {
               </div>
             </div>
 
-            {/* Personal Details */}
-            <div
-              className="muhurat-form-grid"
-              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}
-            >
+            <div className="muhurat-form-grid"
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}>
               <div>
                 <label style={labelStyle}>Date</label>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                  style={{ ...inputStyle, background: 'var(--cream)' }}
-                />
+                  style={{ ...inputStyle, background: 'var(--cream)' }} />
               </div>
               <div>
                 <label style={labelStyle}>Your Name (optional)</label>
                 <input type="text" value={name} onChange={e => setName(e.target.value)}
                   placeholder="e.g. Rahul Sharma" style={inputStyle}
                   onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-                />
+                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'} />
               </div>
               <div>
                 <label style={labelStyle}>Rashi (Moon Sign)</label>
@@ -406,8 +438,7 @@ export default function PanchangPage() {
                 <input type="text" value={city} onChange={e => setCity(e.target.value)}
                   placeholder="e.g. Varanasi…" style={inputStyle}
                   onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-                />
+                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'} />
               </div>
             </div>
 
@@ -431,18 +462,12 @@ export default function PanchangPage() {
           {loading && (
             <div style={{ textAlign: 'center', padding: '60px 20px' }}>
               <div style={{ fontSize: 56, marginBottom: 16, animation: 'pulse-om 2s ease-in-out infinite' }}>🛕</div>
-              <p style={{ fontFamily: 'var(--font-hindi)', color: 'var(--text-light)', fontSize: 17 }}>
-                Consulting the stars…
-              </p>
-              <p style={{ color: 'var(--text-light)', fontSize: 13, marginTop: 6 }}>
-                Calculating auspicious timings based on Vedic astrology
-              </p>
+              <p style={{ fontFamily: 'var(--font-hindi)', color: 'var(--text-light)', fontSize: 17 }}>Consulting the stars…</p>
+              <p style={{ color: 'var(--text-light)', fontSize: 13, marginTop: 6 }}>Calculating auspicious timings based on Vedic astrology</p>
             </div>
           )}
 
-          {/* ════════════════════════════════════════════════════════
-              Muhurat Results
-          ════════════════════════════════════════════════════════ */}
+          {/* Muhurat Results */}
           {result && !loading && (
             <div style={{ animation: 'fadeDown .6s ease both' }}>
 
@@ -475,95 +500,120 @@ export default function PanchangPage() {
               </div>
 
               {/* Main + Sidebar */}
-              <div
-                className="muhurat-results-grid"
-                style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}
-              >
+              <div className="muhurat-results-grid"
+                style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}>
 
                 {/* LEFT col */}
                 <div>
 
-                  {/* ✅ Auspicious Timings — FIXED */}
+                  {/* ✅ Auspicious Timings — Temple strip style */}
                   <Card accent="rgba(34,197,94,0.3)">
                     <SectionTitle icon={<Clock size={14} color="white" />}>Shubh Muhurat Timings</SectionTitle>
-                    {(result.auspicious_timings || []).map((timing, i) => (
-                      <div key={i} style={{
-                        background: '#f0fdf4',
-                        borderRadius: 'var(--radius)',
-                        padding: '14px 18px',
-                        border: '1px solid #86efac',
-                        marginBottom: 10,
-                        /* ✅ FIX: center align so badge sits level with time */
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 16,
-                      }}>
-                        <div style={{ minWidth: 0 }}>
-                          {/* ✅ FIX: whiteSpace nowrap stops "AM" dropping to next line */}
-                          <p style={{
-                            fontFamily: 'var(--font-display)',
-                            fontSize: 17,
-                            color: '#15803d',
-                            fontWeight: 700,
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {to12h(timing.time)}
-                          </p>
-                          <p style={{ fontSize: 13, color: '#16a34a', marginTop: 4, lineHeight: 1.4 }}>
-                            {timing.reason}
-                          </p>
-                        </div>
-                        {/* ✅ FIX: flexShrink 0 keeps badge from being squished */}
-                        <span style={{
-                          background: '#16a34a',
-                          color: 'white',
-                          borderRadius: 50,
-                          padding: '4px 14px',
-                          fontSize: 11,
-                          fontFamily: 'var(--font-display)',
-                          flexShrink: 0,
-                          whiteSpace: 'nowrap',
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {(result.auspicious_timings || []).map((timing, i) => (
+                        <div key={i} style={{
+                          borderRadius: 'var(--radius)',
+                          border: '1px solid #86efac',
+                          overflow: 'hidden',
+                          background: '#f0fdf4',
                         }}>
-                          {timing.quality}
-                        </span>
-                      </div>
-                    ))}
+                          {/* Top row: time strip */}
+                          <div style={{
+                            display: 'flex',
+                            borderBottom: '1px solid #86efac',
+                          }}>
+                            {/* Time cell */}
+                            <div style={{
+                              flex: 1,
+                              padding: '12px 16px',
+                              borderRight: '1px solid #86efac',
+                            }}>
+                              <p style={{
+                                fontFamily: 'var(--font-display)',
+                                fontSize: 16,
+                                fontWeight: 700,
+                                color: '#15803d',
+                                whiteSpace: 'nowrap',
+                                marginBottom: 2,
+                              }}>{to12h(timing.time)}</p>
+                              <p style={{
+                                fontFamily: 'var(--font-display)',
+                                fontSize: 9,
+                                letterSpacing: '.08em',
+                                textTransform: 'uppercase',
+                                color: '#16a34a',
+                              }}>Shubh Timing</p>
+                            </div>
+                            {/* Quality badge cell */}
+                            <div style={{
+                              padding: '12px 20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: '#dcfce7',
+                            }}>
+                              <p style={{
+                                fontFamily: 'var(--font-display)',
+                                fontSize: 13,
+                                fontWeight: 700,
+                                color: '#15803d',
+                                whiteSpace: 'nowrap',
+                                marginBottom: 2,
+                                textAlign: 'center',
+                              }}>{timing.quality}</p>
+                            </div>
+                          </div>
+                          {/* Reason row */}
+                          <div style={{ padding: '10px 16px' }}>
+                            <p style={{ fontSize: 13, color: '#16a34a', lineHeight: 1.5 }}>{timing.reason}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </Card>
 
-                  {/* ✅ Inauspicious Timings — FIXED */}
+                  {/* ✅ Inauspicious Timings — Temple strip style */}
                   {result.timings_to_avoid?.length > 0 && (
                     <Card accent="rgba(220,38,38,0.25)">
                       <SectionTitle icon={<AlertCircle size={14} color="white" />}>Inauspicious Timings to Avoid</SectionTitle>
-                      {result.timings_to_avoid.map((timing, i) => (
-                        <div key={i} style={{
-                          background: '#fef2f2',
-                          borderRadius: 'var(--radius)',
-                          padding: '12px 16px',
-                          border: '1px solid #fca5a5',
-                          marginBottom: 8,
-                          /* ✅ FIX: center align */
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: 16,
-                        }}>
-                          {/* ✅ FIX: nowrap + flexShrink 0 keeps time on one line */}
-                          <span style={{
-                            fontFamily: 'var(--font-display)',
-                            fontSize: 14,
-                            color: '#b91c1c',
-                            fontWeight: 700,
-                            whiteSpace: 'nowrap',
-                            flexShrink: 0,
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {result.timings_to_avoid.map((timing, i) => (
+                          <div key={i} style={{
+                            borderRadius: 'var(--radius)',
+                            border: '1px solid #fca5a5',
+                            overflow: 'hidden',
+                            background: '#fef2f2',
                           }}>
-                            {to12h(timing.time)}
-                          </span>
-                          <span style={{ fontSize: 13, color: '#dc2626', textAlign: 'right', lineHeight: 1.4 }}>
-                            {timing.reason}
-                          </span>
-                        </div>
-                      ))}
+                            <div style={{
+                              display: 'flex',
+                              borderBottom: '1px solid #fca5a5',
+                            }}>
+                              {/* Time cell */}
+                              <div style={{ padding: '10px 16px', borderRight: '1px solid #fca5a5' }}>
+                                <p style={{
+                                  fontFamily: 'var(--font-display)',
+                                  fontSize: 15,
+                                  fontWeight: 700,
+                                  color: '#b91c1c',
+                                  whiteSpace: 'nowrap',
+                                  marginBottom: 2,
+                                }}>{to12h(timing.time)}</p>
+                                <p style={{
+                                  fontFamily: 'var(--font-display)',
+                                  fontSize: 9,
+                                  letterSpacing: '.08em',
+                                  textTransform: 'uppercase',
+                                  color: '#dc2626',
+                                }}>Avoid</p>
+                              </div>
+                              {/* Reason cell */}
+                              <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center' }}>
+                                <p style={{ fontSize: 13, color: '#dc2626', lineHeight: 1.4 }}>{timing.reason}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </Card>
                   )}
 
