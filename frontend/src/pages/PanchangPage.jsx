@@ -535,7 +535,7 @@ export default function PanchangPage() {
                               borderRight: '1px solid #86efac',
                             }}>
                               <p style={{
-                                fontFamily: 'var(--font-display)',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
                                 fontSize: 16,
                                 fontWeight: 700,
                                 color: '#15803d',
@@ -543,7 +543,7 @@ export default function PanchangPage() {
                                 marginBottom: 2,
                               }}>{to12h(timing.time)}</p>
                               <p style={{
-                                fontFamily: 'var(--font-display)',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
                                 fontSize: 9,
                                 letterSpacing: '.08em',
                                 textTransform: 'uppercase',
@@ -559,7 +559,7 @@ export default function PanchangPage() {
                               background: '#dcfce7',
                             }}>
                               <p style={{
-                                fontFamily: 'var(--font-display)',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
                                 fontSize: 13,
                                 fontWeight: 700,
                                 color: '#15803d',
@@ -597,7 +597,7 @@ export default function PanchangPage() {
                               {/* Time cell */}
                               <div style={{ padding: '10px 16px', borderRight: '1px solid #fca5a5' }}>
                                 <p style={{
-                                  fontFamily: 'var(--font-display)',
+                                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
                                   fontSize: 15,
                                   fontWeight: 700,
                                   color: '#b91c1c',
@@ -605,7 +605,7 @@ export default function PanchangPage() {
                                   marginBottom: 2,
                                 }}>{to12h(timing.time)}</p>
                                 <p style={{
-                                  fontFamily: 'var(--font-display)',
+                                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
                                   fontSize: 9,
                                   letterSpacing: '.08em',
                                   textTransform: 'uppercase',
