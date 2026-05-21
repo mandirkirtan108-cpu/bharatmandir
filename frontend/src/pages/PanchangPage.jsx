@@ -36,9 +36,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 // Convert 24h "HH:MM" to "H:MM AM/PM"
 function to12h(timeStr) {
   if (!timeStr) return timeStr;
-  // already has AM/PM
   if (/am|pm/i.test(timeStr)) return timeStr;
-  // handle "HH:MM - HH:MM IST" or "HH:MM - HH:MM"
   return timeStr.replace(/(\d{1,2}):(\d{2})/g, (_, h, m) => {
     const hour = parseInt(h, 10);
     const suffix = hour >= 12 ? 'PM' : 'AM';
@@ -288,7 +286,8 @@ export default function PanchangPage() {
                   ].map(item => (
                     <div key={item.label} style={{ background: item.bg, borderRadius: 'var(--radius)', padding: '14px 16px', border: `1px solid ${item.border}` }}>
                       <p style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: item.labelColor, letterSpacing: '.07em', marginBottom: 4 }}>{item.label}</p>
-                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: item.color, fontWeight: 700 }}>{item.time}</p>
+                      {/* ✅ FIX: whiteSpace nowrap prevents time from wrapping */}
+                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: item.color, fontWeight: 700, whiteSpace: 'nowrap' }}>{item.time}</p>
                       <p style={{ fontSize: 11, color: item.labelColor, marginTop: 4 }}>{item.note}</p>
                     </div>
                   ))}
@@ -308,7 +307,8 @@ export default function PanchangPage() {
                           border: `1px solid ${c.nature === 'good' ? '#86efac' : c.nature === 'bad' ? '#fca5a5' : '#e2e8f0'}`,
                         }}>
                           <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: c.nature === 'good' ? '#16a34a' : c.nature === 'bad' ? '#dc2626' : '#64748b' }}>{c.name}</p>
-                          <p style={{ fontSize: 11, color: 'var(--text-light)' }}>{to12h(c.time)}</p>
+                          {/* ✅ FIX: whiteSpace nowrap on choghadiya time too */}
+                          <p style={{ fontSize: 11, color: 'var(--text-light)', whiteSpace: 'nowrap' }}>{to12h(c.time)}</p>
                           <p style={{ fontSize: 10, color: 'var(--text-light)', marginTop: 2 }}>{c.good_for}</p>
                         </div>
                       ))}
@@ -483,39 +483,85 @@ export default function PanchangPage() {
                 {/* LEFT col */}
                 <div>
 
-                  {/* Auspicious Timings */}
+                  {/* ✅ Auspicious Timings — FIXED */}
                   <Card accent="rgba(34,197,94,0.3)">
                     <SectionTitle icon={<Clock size={14} color="white" />}>Shubh Muhurat Timings</SectionTitle>
                     {(result.auspicious_timings || []).map((timing, i) => (
                       <div key={i} style={{
-                        background: '#f0fdf4', borderRadius: 'var(--radius)', padding: '14px 18px',
-                        border: '1px solid #86efac', marginBottom: 10,
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+                        background: '#f0fdf4',
+                        borderRadius: 'var(--radius)',
+                        padding: '14px 18px',
+                        border: '1px solid #86efac',
+                        marginBottom: 10,
+                        /* ✅ FIX: center align so badge sits level with time */
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 16,
                       }}>
-                        <div>
-                          <p style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: '#15803d', fontWeight: 700 }}>{to12h(timing.time)}</p>
-                          <p style={{ fontSize: 13, color: '#16a34a', marginTop: 4 }}>{timing.reason}</p>
+                        <div style={{ minWidth: 0 }}>
+                          {/* ✅ FIX: whiteSpace nowrap stops "AM" dropping to next line */}
+                          <p style={{
+                            fontFamily: 'var(--font-display)',
+                            fontSize: 17,
+                            color: '#15803d',
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {to12h(timing.time)}
+                          </p>
+                          <p style={{ fontSize: 13, color: '#16a34a', marginTop: 4, lineHeight: 1.4 }}>
+                            {timing.reason}
+                          </p>
                         </div>
+                        {/* ✅ FIX: flexShrink 0 keeps badge from being squished */}
                         <span style={{
-                          background: '#16a34a', color: 'white', borderRadius: 50, padding: '3px 12px',
-                          fontSize: 11, fontFamily: 'var(--font-display)', flexShrink: 0,
-                        }}>{timing.quality}</span>
+                          background: '#16a34a',
+                          color: 'white',
+                          borderRadius: 50,
+                          padding: '4px 14px',
+                          fontSize: 11,
+                          fontFamily: 'var(--font-display)',
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {timing.quality}
+                        </span>
                       </div>
                     ))}
                   </Card>
 
-                  {/* Avoid */}
+                  {/* ✅ Inauspicious Timings — FIXED */}
                   {result.timings_to_avoid?.length > 0 && (
                     <Card accent="rgba(220,38,38,0.25)">
                       <SectionTitle icon={<AlertCircle size={14} color="white" />}>Inauspicious Timings to Avoid</SectionTitle>
                       {result.timings_to_avoid.map((timing, i) => (
                         <div key={i} style={{
-                          background: '#fef2f2', borderRadius: 'var(--radius)', padding: '12px 16px',
-                          border: '1px solid #fca5a5', marginBottom: 8,
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+                          background: '#fef2f2',
+                          borderRadius: 'var(--radius)',
+                          padding: '12px 16px',
+                          border: '1px solid #fca5a5',
+                          marginBottom: 8,
+                          /* ✅ FIX: center align */
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 16,
                         }}>
-                          <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: '#b91c1c', fontWeight: 700 }}>{to12h(timing.time)}</span>
-                          <span style={{ fontSize: 13, color: '#dc2626' }}>{timing.reason}</span>
+                          {/* ✅ FIX: nowrap + flexShrink 0 keeps time on one line */}
+                          <span style={{
+                            fontFamily: 'var(--font-display)',
+                            fontSize: 14,
+                            color: '#b91c1c',
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}>
+                            {to12h(timing.time)}
+                          </span>
+                          <span style={{ fontSize: 13, color: '#dc2626', textAlign: 'right', lineHeight: 1.4 }}>
+                            {timing.reason}
+                          </span>
                         </div>
                       ))}
                     </Card>
