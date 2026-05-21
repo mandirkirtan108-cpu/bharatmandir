@@ -68,7 +68,7 @@ function SectionTitle({ icon, children }) {
   );
 }
 
-// ── Temple-style timing strip — UPDATED for readability ──────────────────────
+// ── Temple-style timing strip — plain readable font ──────────────────────────
 function TimingStrip({ items }) {
   return (
     <div style={{
@@ -85,25 +85,25 @@ function TimingStrip({ items }) {
           background: item.bg || 'var(--cream)',
           borderRight: i < items.length - 1 ? '1px solid var(--cream-dark)' : 'none',
         }}>
-          {/* Label row — on top, small caps */}
+          {/* Label — small caps, plain font */}
           <p style={{
-            fontFamily: 'var(--font-display)',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
             fontSize: 11,
-            letterSpacing: '.09em',
+            letterSpacing: '.08em',
             textTransform: 'uppercase',
             color: item.labelColor || 'var(--text-light)',
             marginBottom: 8,
             fontWeight: 600,
           }}>{item.label}</p>
 
-          {/* Time — large bold, high contrast */}
+          {/* Time — large, bold, plain system font — no cursive */}
           <p style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 20,
-            fontWeight: 800,
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Inter", sans-serif',
+            fontSize: 22,
+            fontWeight: 700,
             color: item.color || 'var(--brown)',
-            lineHeight: 1.15,
-            letterSpacing: '-0.01em',
+            lineHeight: 1.1,
+            letterSpacing: '-0.02em',
             whiteSpace: 'nowrap',
           }}>{item.value}</p>
         </div>
