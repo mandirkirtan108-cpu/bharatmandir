@@ -68,44 +68,6 @@ function SectionTitle({ icon, children }) {
   );
 }
 
-// ── Temple-style timing strip (like Image 2) ──────────────────────────────
-function TimingStrip({ items }) {
-  return (
-    <div style={{
-      display: 'flex',
-      borderRadius: 'var(--radius)',
-      border: '1px solid var(--cream-dark)',
-      overflow: 'hidden',
-    }}>
-      {items.map((item, i) => (
-        <div key={i} style={{
-          flex: 1,
-          padding: '14px 12px',
-          textAlign: 'center',
-          background: item.bg || 'var(--cream)',
-          borderRight: i < items.length - 1 ? '1px solid var(--cream-dark)' : 'none',
-        }}>
-          <p style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 15,
-            fontWeight: 700,
-            color: item.color || 'var(--brown)',
-            marginBottom: 4,
-            whiteSpace: 'nowrap',
-          }}>{item.value}</p>
-          <p style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 9,
-            letterSpacing: '.08em',
-            textTransform: 'uppercase',
-            color: item.labelColor || 'var(--text-light)',
-          }}>{item.label}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function PanchangPage() {
   const { t } = useTranslation();
   const [selected,     setSelected]     = useState(null);
@@ -298,64 +260,67 @@ export default function PanchangPage() {
                   ))}
                 </div>
 
-                {/* ✅ 3 key timings — Temple-style strip */}
-                <div style={{ marginBottom: 18 }}>
-                  <TimingStrip items={[
-                    {
-                      value: to12h(dailyResult.brahma_muhurat?.time) || '—',
-                      label: '🌅 Brahma Muhurat',
-                      color: '#15803d', labelColor: '#16a34a', bg: '#f0fdf4',
-                    },
-                    {
-                      value: to12h(dailyResult.abhijit_muhurat?.time) || '—',
-                      label: '☀️ Abhijit Muhurat',
-                      color: '#075985', labelColor: '#0369a1', bg: '#f0f9ff',
-                    },
-                    {
-                      value: to12h(dailyResult.rahu_kaal?.time) || '—',
-                      label: '🚫 Rahu Kaal',
-                      color: '#b91c1c', labelColor: '#dc2626', bg: '#fef2f2',
-                    },
-                  ]} />
-                  {/* sub-notes row */}
-                  <div style={{ display: 'flex', gap: 0, marginTop: 0 }}>
-                    {[
-                      { note: dailyResult.brahma_muhurat?.benefit, color: '#16a34a' },
-                      { note: dailyResult.abhijit_muhurat?.benefit, color: '#0369a1' },
-                      { note: 'Avoid all auspicious work', color: '#dc2626' },
-                    ].map((n, i) => (
-                      <div key={i} style={{
-                        flex: 1, padding: '6px 12px 10px',
-                        fontSize: 11, color: n.color, textAlign: 'center', lineHeight: 1.4,
-                        borderLeft: i > 0 ? '1px solid var(--cream-dark)' : 'none',
-                        borderBottom: '1px solid var(--cream-dark)',
-                        borderRight: i === 2 ? '1px solid var(--cream-dark)' : 'none',
-                        background: i === 0 ? '#f0fdf4' : i === 1 ? '#f0f9ff' : '#fef2f2',
-                        borderBottomLeftRadius: i === 0 ? 'var(--radius)' : 0,
-                        borderBottomRightRadius: i === 2 ? 'var(--radius)' : 0,
-                      }}>{n.note}</div>
-                    ))}
-                  </div>
+                {/* ✅ 3 key timings — Choghadiya card style: name bold, time below, note last */}
+                <div className="panchang-timings"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}>
+                  {[
+                    { label: 'Brahma Muhurat', time: to12h(dailyResult.brahma_muhurat?.time), note: dailyResult.brahma_muhurat?.benefit, bg: '#f0fdf4', border: '#86efac', nameColor: '#15803d', timeColor: '#15803d', noteColor: '#16a34a' },
+                    { label: 'Abhijit Muhurat', time: to12h(dailyResult.abhijit_muhurat?.time), note: dailyResult.abhijit_muhurat?.benefit, bg: '#f0f9ff', border: '#7dd3fc', nameColor: '#075985', timeColor: '#075985', noteColor: '#0369a1' },
+                    { label: 'Rahu Kaal',       time: to12h(dailyResult.rahu_kaal?.time),       note: 'Avoid all auspicious work',         bg: '#fef2f2', border: '#fca5a5', nameColor: '#b91c1c', timeColor: '#b91c1c', noteColor: '#dc2626' },
+                  ].map(item => (
+                    <div key={item.label} style={{
+                      background: item.bg, borderRadius: 'var(--radius)',
+                      border: `1px solid ${item.border}`, padding: '14px 16px',
+                    }}>
+                      {/* Name on top — bold */}
+                      <p style={{
+                        fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
+                        color: item.nameColor, letterSpacing: '.04em', marginBottom: 6,
+                      }}>{item.label}</p>
+                      {/* Time — large, nowrap */}
+                      <p style={{
+                        fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700,
+                        color: item.timeColor, whiteSpace: 'nowrap', marginBottom: 6,
+                      }}>{item.time}</p>
+                      {/* Note — small */}
+                      <p style={{ fontSize: 11, color: item.noteColor, lineHeight: 1.4 }}>{item.note}</p>
+                    </div>
+                  ))}
                 </div>
 
-                {/* Choghadiya */}
+                {/* ✅ Choghadiya — same card style: name bold top, time below, note last */}
                 {dailyResult.choghadiya?.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <p style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'var(--brown)', marginBottom: 10, letterSpacing: '.05em' }}>
                       🕐 CHOGHADIYA
                     </p>
-                    <div className="panchang-choghadiya" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {dailyResult.choghadiya.map((c, i) => (
-                        <div key={i} style={{
-                          padding: '8px 14px', borderRadius: 8,
-                          background: c.nature === 'good' ? '#f0fdf4' : c.nature === 'bad' ? '#fef2f2' : '#f8fafc',
-                          border: `1px solid ${c.nature === 'good' ? '#86efac' : c.nature === 'bad' ? '#fca5a5' : '#e2e8f0'}`,
-                        }}>
-                          <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: c.nature === 'good' ? '#16a34a' : c.nature === 'bad' ? '#dc2626' : '#64748b' }}>{c.name}</p>
-                          <p style={{ fontSize: 11, color: 'var(--text-light)', whiteSpace: 'nowrap' }}>{to12h(c.time)}</p>
-                          <p style={{ fontSize: 10, color: 'var(--text-light)', marginTop: 2 }}>{c.good_for}</p>
-                        </div>
-                      ))}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px,1fr))', gap: 8 }}>
+                      {dailyResult.choghadiya.map((c, i) => {
+                        const isGood = c.nature === 'good';
+                        const isBad  = c.nature === 'bad';
+                        return (
+                          <div key={i} style={{
+                            padding: '12px 14px', borderRadius: 8,
+                            background: isGood ? '#f0fdf4' : isBad ? '#fef2f2' : '#f8fafc',
+                            border: `1px solid ${isGood ? '#86efac' : isBad ? '#fca5a5' : '#e2e8f0'}`,
+                          }}>
+                            {/* Name bold top */}
+                            <p style={{
+                              fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
+                              color: isGood ? '#16a34a' : isBad ? '#dc2626' : '#64748b',
+                              marginBottom: 4,
+                            }}>{c.name}</p>
+                            {/* Time nowrap below */}
+                            <p style={{
+                              fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
+                              color: isGood ? '#15803d' : isBad ? '#b91c1c' : '#475569',
+                              whiteSpace: 'nowrap', marginBottom: 4,
+                            }}>{to12h(c.time)}</p>
+                            {/* Good for — last */}
+                            <p style={{ fontSize: 10, color: 'var(--text-light)', lineHeight: 1.3 }}>{c.good_for}</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -506,111 +471,68 @@ export default function PanchangPage() {
                 {/* LEFT col */}
                 <div>
 
-                  {/* ✅ Auspicious Timings — Temple strip style */}
+                  {/* ✅ Auspicious Timings — Image 2 style: quality bold top, time below, reason last */}
                   <Card accent="rgba(34,197,94,0.3)">
                     <SectionTitle icon={<Clock size={14} color="white" />}>Shubh Muhurat Timings</SectionTitle>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px,1fr))', gap: 10 }}>
                       {(result.auspicious_timings || []).map((timing, i) => (
                         <div key={i} style={{
+                          background: '#f0fdf4',
                           borderRadius: 'var(--radius)',
                           border: '1px solid #86efac',
-                          overflow: 'hidden',
-                          background: '#f0fdf4',
+                          padding: '14px 16px',
                         }}>
-                          {/* Top row: time strip */}
-                          <div style={{
-                            display: 'flex',
-                            borderBottom: '1px solid #86efac',
-                          }}>
-                            {/* Time cell */}
-                            <div style={{
-                              flex: 1,
-                              padding: '12px 16px',
-                              borderRight: '1px solid #86efac',
-                            }}>
-                              <p style={{
-                                fontFamily: 'var(--font-display)',
-                                fontSize: 16,
-                                fontWeight: 700,
-                                color: '#15803d',
-                                whiteSpace: 'nowrap',
-                                marginBottom: 2,
-                              }}>{to12h(timing.time)}</p>
-                              <p style={{
-                                fontFamily: 'var(--font-display)',
-                                fontSize: 9,
-                                letterSpacing: '.08em',
-                                textTransform: 'uppercase',
-                                color: '#16a34a',
-                              }}>Shubh Timing</p>
-                            </div>
-                            {/* Quality badge cell */}
-                            <div style={{
-                              padding: '12px 20px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              background: '#dcfce7',
-                            }}>
-                              <p style={{
-                                fontFamily: 'var(--font-display)',
-                                fontSize: 13,
-                                fontWeight: 700,
-                                color: '#15803d',
-                                whiteSpace: 'nowrap',
-                                marginBottom: 2,
-                                textAlign: 'center',
-                              }}>{timing.quality}</p>
-                            </div>
-                          </div>
-                          {/* Reason row */}
-                          <div style={{ padding: '10px 16px' }}>
-                            <p style={{ fontSize: 13, color: '#16a34a', lineHeight: 1.5 }}>{timing.reason}</p>
-                          </div>
+                          {/* Quality — bold name on top */}
+                          <p style={{
+                            fontFamily: 'var(--font-display)',
+                            fontSize: 12, fontWeight: 700,
+                            color: '#16a34a',
+                            marginBottom: 6,
+                          }}>{timing.quality}</p>
+                          {/* Time — large, nowrap */}
+                          <p style={{
+                            fontFamily: 'var(--font-display)',
+                            fontSize: 15, fontWeight: 700,
+                            color: '#15803d',
+                            whiteSpace: 'nowrap',
+                            marginBottom: 6,
+                          }}>{to12h(timing.time)}</p>
+                          {/* Reason — small */}
+                          <p style={{ fontSize: 12, color: '#16a34a', lineHeight: 1.4 }}>{timing.reason}</p>
                         </div>
                       ))}
                     </div>
                   </Card>
 
-                  {/* ✅ Inauspicious Timings — Temple strip style */}
+                  {/* ✅ Inauspicious Timings — same pattern: label top, time below, reason last */}
                   {result.timings_to_avoid?.length > 0 && (
                     <Card accent="rgba(220,38,38,0.25)">
                       <SectionTitle icon={<AlertCircle size={14} color="white" />}>Inauspicious Timings to Avoid</SectionTitle>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px,1fr))', gap: 10 }}>
                         {result.timings_to_avoid.map((timing, i) => (
                           <div key={i} style={{
+                            background: '#fef2f2',
                             borderRadius: 'var(--radius)',
                             border: '1px solid #fca5a5',
-                            overflow: 'hidden',
-                            background: '#fef2f2',
+                            padding: '14px 16px',
                           }}>
-                            <div style={{
-                              display: 'flex',
-                              borderBottom: '1px solid #fca5a5',
-                            }}>
-                              {/* Time cell */}
-                              <div style={{ padding: '10px 16px', borderRight: '1px solid #fca5a5' }}>
-                                <p style={{
-                                  fontFamily: 'var(--font-display)',
-                                  fontSize: 15,
-                                  fontWeight: 700,
-                                  color: '#b91c1c',
-                                  whiteSpace: 'nowrap',
-                                  marginBottom: 2,
-                                }}>{to12h(timing.time)}</p>
-                                <p style={{
-                                  fontFamily: 'var(--font-display)',
-                                  fontSize: 9,
-                                  letterSpacing: '.08em',
-                                  textTransform: 'uppercase',
-                                  color: '#dc2626',
-                                }}>Avoid</p>
-                              </div>
-                              {/* Reason cell */}
-                              <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center' }}>
-                                <p style={{ fontSize: 13, color: '#dc2626', lineHeight: 1.4 }}>{timing.reason}</p>
-                              </div>
-                            </div>
+                            {/* Label — bold top */}
+                            <p style={{
+                              fontFamily: 'var(--font-display)',
+                              fontSize: 12, fontWeight: 700,
+                              color: '#dc2626',
+                              marginBottom: 6,
+                            }}>Avoid</p>
+                            {/* Time — large, nowrap */}
+                            <p style={{
+                              fontFamily: 'var(--font-display)',
+                              fontSize: 15, fontWeight: 700,
+                              color: '#b91c1c',
+                              whiteSpace: 'nowrap',
+                              marginBottom: 6,
+                            }}>{to12h(timing.time)}</p>
+                            {/* Reason — small */}
+                            <p style={{ fontSize: 12, color: '#dc2626', lineHeight: 1.4 }}>{timing.reason}</p>
                           </div>
                         ))}
                       </div>
