@@ -89,6 +89,20 @@ function getEmojiColor(festival) {
   return { emoji: '🛕', color: '#E8650A' };
 }
 
+// Format display_date to a clean readable format: "4 May 2026"
+function formatDisplayDate(raw) {
+  if (!raw) return null;
+  // If already in "D Month YYYY" format, return as-is
+  // Try to parse ISO or various formats
+  try {
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+  } catch {}
+  return raw;
+}
+
 function festKey(f) {
   return `${(f.name || '').toLowerCase().trim()}::${f.month}`;
 }
@@ -105,7 +119,6 @@ const MONTH_SEASON = {
   11: { season: 'Autumn', icon: '🍂' }, 12: { season: 'Winter', icon: '❄️' },
 };
 
-// Dynamic — never hardcoded
 const CURRENT_YEAR = new Date().getFullYear();
 
 export default function FestivalCalendarPage() {
@@ -121,10 +134,8 @@ export default function FestivalCalendarPage() {
   const [claudeLoading, setClaudeLoading]     = useState(true);
   const [selectedFestival, setSelectedFestival] = useState(null);
 
-  // ── FIX: useRef to ensure AI fetch runs exactly ONCE per mount ────────────
   const aiFetchDone = useRef(false);
 
-  // ── Temple-linked festivals ───────────────────────────────────────────────
   const fetchFestivals = useCallback(() => {
     setLoading(true);
     axios.get(`${API_BASE}/api/festivals?limit=500`)
@@ -133,25 +144,18 @@ export default function FestivalCalendarPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Calendarific/AI festivals from backend ────────────────────────────────
   const fetchFestivalsFromBackend = useCallback(async (forceRefresh = false) => {
     if (!forceRefresh && aiFetchDone.current) return;
-
     setClaudeLoading(true);
-
     try {
       const url = `${API_BASE}/api/festivals/ai-cache${forceRefresh ? '?refresh=true' : ''}`;
       const res = await axios.get(url);
-
       const festivals = Array.isArray(res.data?.festivals)
         ? res.data.festivals
-        : Array.isArray(res.data)
-          ? res.data
-          : [];
-
+        : Array.isArray(res.data) ? res.data : [];
       setClaudeFestivals(festivals.map(f => ({ ...f, _claude: true })));
       aiFetchDone.current = true;
-    } catch (err) {
+    } catch {
       setClaudeFestivals([]);
       aiFetchDone.current = true;
     } finally {
@@ -159,32 +163,27 @@ export default function FestivalCalendarPage() {
     }
   }, []);
 
-  // ── Mount: fetch both sources exactly ONCE ────────────────────────────────
   useEffect(() => {
     fetchFestivals();
     fetchFestivalsFromBackend(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Listen for manually added temple festivals ────────────────────────────
   useEffect(() => {
     const handler = () => fetchFestivals();
     window.addEventListener('festival:added', handler);
     return () => window.removeEventListener('festival:added', handler);
   }, [fetchFestivals]);
 
-  // ── Refresh button ────────────────────────────────────────────────────────
   const handleRefresh = useCallback(() => {
     aiFetchDone.current = false;
     fetchFestivals();
     fetchFestivalsFromBackend(true);
   }, [fetchFestivals, fetchFestivalsFromBackend]);
 
-  // ── Merge: temple festivals + AI/Calendarific festivals ──────────────────
   const allFestivals = useMemo(() => {
-    const apiKeys       = new Set(apiFestivals.map(festKey));
+    const apiKeys = new Set(apiFestivals.map(festKey));
     const claudeFiltered = claudeFestivals.filter(f => !apiKeys.has(festKey(f)));
-
     const enrichedAPI = apiFestivals.map(f => {
       const { emoji, color } = getEmojiColor(f);
       return { ...f, emoji: f.emoji || emoji, color: f.color || color };
@@ -193,7 +192,6 @@ export default function FestivalCalendarPage() {
       const { emoji, color } = getEmojiColor(f);
       return { ...f, _claude: true, emoji: f.emoji || emoji, color: f.color || color };
     });
-
     return [...enrichedClaude, ...enrichedAPI];
   }, [apiFestivals, claudeFestivals]);
 
@@ -235,7 +233,6 @@ export default function FestivalCalendarPage() {
   const currentMonthFestivals = byMonth[selectedMonth] || [];
   const totalCount   = filtered.length;
   const apiCount     = apiFestivals.length;
-  const claudeCount  = claudeFestivals.length;
   const isAnyLoading = loading || claudeLoading;
 
   const goMonth = dir => setSelectedMonth(m => {
@@ -299,13 +296,13 @@ export default function FestivalCalendarPage() {
             fontFamily: 'var(--font-hindi)',
           }}>{t('festival.subtitle')}</p>
 
+          {/* Hero stat pills — no AI Curated */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginTop: 28 }}>
             {[
               `${totalCount} ${t('festival.festivals')}`,
               t('festival.months'),
               String(CURRENT_YEAR),
-              ...(claudeCount > 0 ? [`✨ ${claudeCount} ${t('festival.ai_curated')}`] : []),
-              ...(apiCount > 0    ? [`🛕 ${apiCount} ${t('festival.temple_festivals')}`] : []),
+              ...(apiCount > 0 ? [`🛕 ${apiCount} ${t('festival.temple_festivals')}`] : []),
             ].map((s, i) => (
               <span key={i} style={{
                 fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.08em',
@@ -379,7 +376,7 @@ export default function FestivalCalendarPage() {
             <button
               onClick={handleRefresh}
               disabled={isAnyLoading}
-              title="Refresh festivals from Calendarific"
+              title="Refresh festivals"
               style={{
                 width: 32, height: 32, borderRadius: 8, border: '1.5px solid #E8D5B8', background: 'white',
                 cursor: isAnyLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center',
@@ -469,12 +466,10 @@ export default function FestivalCalendarPage() {
                       {HINDU_MONTHS[(selectedMonth + 1) % 12]} · {HINDU_MONTHS[selectedMonth % 12]}
                     </p>
                   </div>
+                  {/* Month section pills — only temple label + count, no AI Curated */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     {currentMonthFestivals.some(f => f.temple_id) && (
                       <PillBadge color="#16a34a" bg="rgba(16,163,74,0.08)" border="rgba(16,163,74,.2)">{t('festival.temple_label')}</PillBadge>
-                    )}
-                    {currentMonthFestivals.some(f => f._claude) && (
-                      <PillBadge color="#7C3AED" bg="rgba(124,58,237,0.08)" border="rgba(124,58,237,.2)">{t('festival.ai_label')} {t('festival.ai_curated')}</PillBadge>
                     )}
                     <PillBadge color="#E8650A" bg="rgba(232,101,10,0.1)" border="rgba(232,101,10,.25)" bold>
                       {currentMonthFestivals.length} {currentMonthFestivals.length !== 1 ? t('festival.festivals') : t('festival.day')}
@@ -497,19 +492,19 @@ export default function FestivalCalendarPage() {
 
               {currentMonthFestivals.length === 0 ? (
                 isAnyLoading ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 22 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
                     {[...Array(6)].map((_, i) => (
-                      <div key={i} style={{ background: 'white', borderRadius: 24, border: '1.5px solid rgba(237,224,204,0.8)', overflow: 'hidden', animation: `cardIn .4s ease both`, animationDelay: `${i * 0.07}s` }}>
+                      <div key={i} style={{ background: 'white', borderRadius: 20, border: '1.5px solid rgba(237,224,204,0.8)', overflow: 'hidden', animation: `cardIn .4s ease both`, animationDelay: `${i * 0.07}s` }}>
                         <div style={{ height: 5, background: 'linear-gradient(90deg, #EDE0CC, #F5EDE0)' }} />
                         <div style={{ padding: '22px 22px 18px', display: 'flex', gap: 16 }}>
-                          <div style={{ width: 60, height: 60, borderRadius: 18, background: '#F5EDE0', flexShrink: 0, animation: 'shimmer 1.5s ease-in-out infinite', animationDelay: `${i * 0.1}s` }} />
+                          <div style={{ width: 60, height: 60, borderRadius: 18, background: '#F5EDE0', flexShrink: 0, animation: 'shimmer 1.5s ease-in-out infinite' }} />
                           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            <div style={{ height: 10, borderRadius: 50, background: '#F5EDE0', width: '55%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
-                            <div style={{ height: 16, borderRadius: 6, background: '#F5EDE0', width: '80%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
-                            <div style={{ height: 12, borderRadius: 6, background: '#F5EDE0', width: '65%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
+                            <div style={{ height: 10, borderRadius: 50, background: '#F5EDE0', width: '40%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
+                            <div style={{ height: 18, borderRadius: 6, background: '#F5EDE0', width: '75%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
+                            <div style={{ height: 12, borderRadius: 6, background: '#F5EDE0', width: '55%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
                           </div>
                         </div>
-                        <div style={{ height: 38, background: '#FDFAF6', borderTop: '1px solid #F5EDE0' }} />
+                        <div style={{ height: 42, background: '#FDFAF6', borderTop: '1px solid #F5EDE0' }} />
                       </div>
                     ))}
                   </div>
@@ -526,7 +521,7 @@ export default function FestivalCalendarPage() {
                   </div>
                 )
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 22 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
                   {currentMonthFestivals.map((f, i) => (
                     <PremiumFestivalCard key={`${f.id || f.name}-${i}`} festival={f} index={i} onClick={() => setSelectedFestival(f)} />
                   ))}
@@ -547,7 +542,7 @@ export default function FestivalCalendarPage() {
                       <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'white', background: '#E8650A', padding: '2px 9px', borderRadius: 50 }}>{fests.length}</span>
                       <span style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: '#9A7150', marginLeft: 4 }}>{HINDU_MONTHS[(mNum + 1) % 12]}</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                       {fests.map((f, i) => (
                         <PremiumFestivalCard key={`${f.id || f.name}-${i}`} festival={f} index={i} compact onClick={() => setSelectedFestival(f)} />
                       ))}
@@ -582,9 +577,9 @@ export default function FestivalCalendarPage() {
         .month-pill.active .pill-count { background:rgba(255,255,255,0.22); color:white; }
         .month-pill .pill-dot { position:absolute; bottom:4px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:rgba(232,101,10,0.5); opacity:0; transition:opacity .2s; }
         .month-pill.has-temple .pill-dot { opacity:1; background:#16a34a; }
-        .fest-card-premium { background:white; border-radius:24px; border:1.5px solid rgba(237,224,204,0.8); overflow:hidden; transition:all .3s cubic-bezier(.34,1.2,.64,1); cursor:pointer; position:relative; }
-        .fest-card-premium:hover { transform:translateY(-6px); box-shadow:0 20px 48px rgba(61,31,0,0.14),0 6px 16px rgba(61,31,0,0.08); border-color:transparent; }
-        .fest-card-premium .card-glow { position:absolute; top:0; left:0; right:0; height:200px; opacity:0; transition:opacity .3s; pointer-events:none; }
+        .fest-card-premium { background:white; border-radius:20px; border:1.5px solid rgba(237,224,204,0.9); overflow:hidden; transition:all .28s cubic-bezier(.34,1.2,.64,1); cursor:pointer; position:relative; }
+        .fest-card-premium:hover { transform:translateY(-5px); box-shadow:0 16px 40px rgba(61,31,0,0.13),0 4px 12px rgba(61,31,0,0.07); border-color:rgba(232,101,10,0.2); }
+        .fest-card-premium .card-glow { position:absolute; top:0; left:0; right:0; height:180px; opacity:0; transition:opacity .3s; pointer-events:none; }
         .fest-card-premium:hover .card-glow { opacity:1; }
         @media(max-width:640px){ .fest-modal-meta { grid-template-columns:1fr !important; } }
       `}</style>
@@ -646,48 +641,165 @@ function PremiumMonthNavigator({ selectedMonth, byMonth, onSelect, onPrev, onNex
 
 function PremiumFestivalCard({ festival, compact, index, onClick }) {
   const { t } = useTranslation();
-  const emoji    = festival.emoji || '🛕';
-  const color    = festival.color || '#E8650A';
+  const emoji       = festival.emoji || '🛕';
+  const color       = festival.color || '#E8650A';
   const [hovered, setHovered] = useState(false);
-  const tint     = `${color}18`;
-  const tintMid  = `${color}30`;
-  const displayDate = festival.display_date || null;
+  const tint        = `${color}15`;
+  const tintMid     = `${color}28`;
+  const displayDate = formatDisplayDate(festival.display_date);
 
   return (
-    <div className="fest-card-premium" onClick={onClick} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-      style={{ animation: `cardIn .4s ease both`, animationDelay: `${Math.min(index * 0.06, 0.5)}s` }}>
+    <div
+      className="fest-card-premium"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ animation: `cardIn .4s ease both`, animationDelay: `${Math.min(index * 0.06, 0.5)}s` }}
+    >
       <div className="card-glow" style={{ background: `radial-gradient(ellipse at 30% 0%, ${tintMid} 0%, transparent 70%)` }} />
-      <div style={{ height: compact ? 4 : 5, background: `linear-gradient(90deg, ${color}, ${color}88, transparent)`, transition: 'all .3s', ...(hovered ? { height: compact ? 5 : 6 } : {}) }} />
-      <div style={{ padding: compact ? '16px 18px' : '22px 22px 16px', position: 'relative' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-          <div style={{ width: compact ? 48 : 60, height: compact ? 48 : 60, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: compact ? 14 : 18, background: tint, border: `1.5px solid ${tintMid}`, fontSize: compact ? 22 : 28, flexShrink: 0, transition: 'all .3s', ...(hovered ? { transform: 'scale(1.08) rotate(-4deg)', boxShadow: `0 8px 20px ${color}30` } : {}) }}>{emoji}</div>
+
+      {/* Top color bar */}
+      <div style={{
+        height: compact ? 4 : 5,
+        background: `linear-gradient(90deg, ${color}, ${color}66, transparent)`,
+        transition: 'height .25s',
+        ...(hovered ? { height: compact ? 5 : 7 } : {}),
+      }} />
+
+      {/* Card body */}
+      <div style={{ padding: compact ? '14px 16px 12px' : '20px 20px 14px', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+
+          {/* Emoji icon */}
+          <div style={{
+            width: compact ? 46 : 58,
+            height: compact ? 46 : 58,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: compact ? 14 : 16,
+            background: tint,
+            border: `1.5px solid ${tintMid}`,
+            fontSize: compact ? 22 : 26,
+            flexShrink: 0,
+            transition: 'all .28s cubic-bezier(.34,1.5,.64,1)',
+            ...(hovered ? { transform: 'scale(1.1) rotate(-5deg)', boxShadow: `0 8px 20px ${color}25` } : {}),
+          }}>{emoji}</div>
+
           <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Date badge — crisp, readable */}
             {displayDate && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color, background: tint, border: `1px solid ${tintMid}`, padding: '2px 8px', borderRadius: 50, marginBottom: 6, letterSpacing: '.04em', fontFamily: 'var(--font-display)' }}>
-                📅 {displayDate}
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                fontSize: 11,
+                fontWeight: 600,
+                color: color,
+                background: tint,
+                border: `1px solid ${tintMid}`,
+                padding: '3px 9px',
+                borderRadius: 6,
+                marginBottom: 7,
+                fontFamily: 'var(--font-body)',
+                letterSpacing: '0.01em',
+                lineHeight: 1.4,
+              }}>
+                <span style={{ fontSize: 10 }}>📅</span>
+                {displayDate}
               </div>
             )}
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: compact ? 14 : 16, fontWeight: 800, color: '#2D1200', marginBottom: 3, lineHeight: 1.25, letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={festival.name}>{festival.name}</div>
+
+            {/* Festival name */}
+            <div style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: compact ? 14 : 16,
+              fontWeight: 800,
+              color: '#1A0A00',
+              marginBottom: 3,
+              lineHeight: 1.25,
+              letterSpacing: '-0.2px',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }} title={festival.name}>
+              {festival.name}
+            </div>
+
+            {/* Tithi / significance subtitle */}
             {(festival.hindu_tithi || festival.significance) && (
-              <div style={{ fontFamily: 'var(--font-hindi)', fontSize: compact ? 11 : 12, color: '#9A7150', marginBottom: 8, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              <div style={{
+                fontFamily: 'var(--font-hindi)',
+                fontSize: compact ? 11 : 12,
+                color: '#9A7150',
+                marginBottom: festival.deity || festival.duration_days > 1 || festival.temple_id ? 8 : 0,
+                lineHeight: 1.45,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}>
                 {festival.hindu_tithi || festival.significance}
               </div>
             )}
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-              {festival.duration_days > 1 && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid #EDE0CC', color: '#5C3D1E', background: '#FDF6EC' }}>{festival.duration_days} {t('festival.days')}</span>}
-              {festival.deity && festival.deity !== 'Other' && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)' }}>{festival.deity}</span>}
-              {festival.temple_id && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 50, fontFamily: 'var(--font-display)', letterSpacing: '.04em', border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)' }}>{t('festival.temple_label')}</span>}
-            </div>
+
+            {/* Tag row */}
+            {(festival.duration_days > 1 || (festival.deity && festival.deity !== 'Other') || festival.temple_id) && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                {festival.duration_days > 1 && (
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, fontFamily: 'var(--font-display)', letterSpacing: '.03em', border: '1px solid #EDE0CC', color: '#5C3D1E', background: '#FDF6EC', fontWeight: 500 }}>
+                    {festival.duration_days} {t('festival.days')}
+                  </span>
+                )}
+                {festival.deity && festival.deity !== 'Other' && (
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, fontFamily: 'var(--font-display)', letterSpacing: '.03em', border: '1px solid rgba(29,78,216,.18)', color: '#1D4ED8', background: 'rgba(29,78,216,.05)', fontWeight: 500 }}>
+                    {festival.deity}
+                  </span>
+                )}
+                {festival.temple_id && (
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, fontFamily: 'var(--font-display)', letterSpacing: '.03em', border: '1px solid rgba(16,163,74,.22)', color: '#16a34a', background: 'rgba(16,163,74,.05)', fontWeight: 500 }}>
+                    {t('festival.temple_label')}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Temple name */}
             {festival.temple_name && (
-              <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 11, color: '#16a34a', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                <MapPin size={10} strokeWidth={2.5} />{festival.temple_name}{festival.temple_city ? `, ${festival.temple_city}` : ''}
+              <div style={{
+                fontFamily: 'var(--font-hindi)',
+                fontSize: 11,
+                color: '#16a34a',
+                marginTop: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>
+                <MapPin size={10} strokeWidth={2.5} />
+                {festival.temple_name}{festival.temple_city ? `, ${festival.temple_city}` : ''}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Bottom description strip */}
       {!compact && festival.significance && (
-        <div style={{ borderTop: `1px solid ${tint}`, padding: '10px 22px 14px', fontFamily: 'var(--font-body)', fontSize: 12, color: '#7A5035', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{festival.significance}</div>
+        <div style={{
+          borderTop: `1px solid ${tint}`,
+          padding: '10px 20px 14px',
+          fontFamily: 'var(--font-body)',
+          fontSize: 12,
+          color: '#7A5035',
+          lineHeight: 1.65,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}>
+          {festival.significance}
+        </div>
       )}
     </div>
   );
@@ -695,54 +807,61 @@ function PremiumFestivalCard({ festival, compact, index, onClick }) {
 
 function FestivalModal({ festival, onClose }) {
   const { t } = useTranslation();
-  const monthName  = GREGORIAN_MONTHS[(festival.month || 1) - 1] || '';
-  const hinduMonth = festival.hindu_month || HINDU_MONTHS[((festival.month || 1) - 1) % 12] || '';
-  const emoji      = festival.emoji || '🛕';
-  const color      = festival.color || '#E8650A';
-  const displayDate = festival.display_date || null;
+  const monthName   = GREGORIAN_MONTHS[(festival.month || 1) - 1] || '';
+  const hinduMonth  = festival.hindu_month || HINDU_MONTHS[((festival.month || 1) - 1) % 12] || '';
+  const emoji       = festival.emoji || '🛕';
+  const color       = festival.color || '#E8650A';
+  const displayDate = formatDisplayDate(festival.display_date);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(26,10,0,.72)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'fadeIn .2s ease' }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#FDF6EC', borderRadius: 32, maxWidth: 580, width: '100%', overflow: 'hidden', animation: 'slideUp .28s cubic-bezier(.34,1.2,.64,1)', boxShadow: '0 40px 100px rgba(26,10,0,.5), 0 8px 24px rgba(26,10,0,.2)', maxHeight: '90vh', overflowY: 'auto', border: '1.5px solid rgba(255,200,100,0.15)' }}>
-        <div style={{ padding: '30px 30px 22px', background: `linear-gradient(135deg, ${color}18 0%, ${color}08 100%)`, borderBottom: `1px solid ${color}22`, display: 'flex', alignItems: 'flex-start', gap: 18 }}>
-          <div style={{ fontSize: 42, width: 74, height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 22, background: 'white', border: `2px solid ${color}30`, boxShadow: `0 8px 24px ${color}20`, flexShrink: 0 }}>{emoji}</div>
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 900, color: '#2D1200', marginBottom: 6, letterSpacing: '-0.3px' }}>{festival.name}</div>
-            {displayDate && <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color, fontWeight: 700, marginBottom: 5 }}>📅 {displayDate}</div>}
-            {festival.hindu_tithi && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: '#9A7150' }}>{festival.hindu_tithi}</div>}
-            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-              {festival.temple_id && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 50, border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)', fontFamily: 'var(--font-display)' }}>{t('festival.temple_label')}</span>}
-              {festival._claude && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 50, border: '1px solid rgba(124,58,237,.25)', color: '#7C3AED', background: 'rgba(124,58,237,.06)', fontFamily: 'var(--font-display)' }}>{t('festival.ai_label')} {t('festival.ai_curated')}</span>}
-              {festival.deity && festival.deity !== 'Other' && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 50, border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)', fontFamily: 'var(--font-display)' }}>{festival.deity}</span>}
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(26,10,0,.72)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'fadeIn .2s ease' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div style={{ background: '#FDF6EC', borderRadius: 28, maxWidth: 580, width: '100%', overflow: 'hidden', animation: 'slideUp .28s cubic-bezier(.34,1.2,.64,1)', boxShadow: '0 40px 100px rgba(26,10,0,.5), 0 8px 24px rgba(26,10,0,.2)', maxHeight: '90vh', overflowY: 'auto', border: '1.5px solid rgba(255,200,100,0.15)' }}>
+        {/* Modal header */}
+        <div style={{ padding: '28px 28px 20px', background: `linear-gradient(135deg, ${color}15 0%, ${color}06 100%)`, borderBottom: `1px solid ${color}20`, display: 'flex', alignItems: 'flex-start', gap: 18 }}>
+          <div style={{ fontSize: 40, width: 70, height: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 20, background: 'white', border: `2px solid ${color}28`, boxShadow: `0 8px 24px ${color}18`, flexShrink: 0 }}>{emoji}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 900, color: '#1A0A00', marginBottom: 5, letterSpacing: '-0.3px', lineHeight: 1.2 }}>{festival.name}</div>
+            {displayDate && (
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color, fontWeight: 600, marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span>📅</span> {displayDate}
+              </div>
+            )}
+            {festival.hindu_tithi && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: '#9A7150', marginBottom: 8 }}>{festival.hindu_tithi}</div>}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {festival.temple_id && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(16,163,74,.25)', color: '#16a34a', background: 'rgba(16,163,74,.06)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>{t('festival.temple_label')}</span>}
+              {festival.deity && festival.deity !== 'Other' && <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(29,78,216,.2)', color: '#1D4ED8', background: 'rgba(29,78,216,.06)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>{festival.deity}</span>}
             </div>
           </div>
         </div>
 
-        <div style={{ padding: '22px 30px 28px' }}>
+        {/* Modal body */}
+        <div style={{ padding: '22px 28px 28px' }}>
           {festival.temple_name && (
-            <div style={{ background: 'rgba(16,163,74,0.06)', border: '1px solid rgba(16,163,74,.2)', borderRadius: 16, padding: '14px 18px', marginBottom: 20 }}>
+            <div style={{ background: 'rgba(16,163,74,0.06)', border: '1px solid rgba(16,163,74,.2)', borderRadius: 14, padding: '14px 16px', marginBottom: 20 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.1em', color: '#16a34a', marginBottom: 5, fontWeight: 700 }}>🛕 CELEBRATED AT</div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 700, color: '#2D1200' }}>{festival.temple_name}</div>
-              {festival.temple_city && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 12, color: '#16a34a', marginTop: 2 }}>📍 {festival.temple_city}</div>}
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 700, color: '#1A0A00' }}>{festival.temple_name}</div>
+              {festival.temple_city && <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 12, color: '#16a34a', marginTop: 3 }}>📍 {festival.temple_city}</div>}
             </div>
           )}
           {festival.significance && (
-            <p style={{ fontFamily: 'var(--font-body)', fontSize: 16, lineHeight: 1.75, color: '#4A2A00', marginBottom: 14 }}>
-              <strong style={{ color: '#2D1200' }}>{t('festival.significance')}:</strong> {festival.significance}
+            <p style={{ fontFamily: 'var(--font-body)', fontSize: 15, lineHeight: 1.8, color: '#4A2A00', marginBottom: 14 }}>
+              <strong style={{ color: '#1A0A00' }}>{t('festival.significance')}:</strong> {festival.significance}
             </p>
           )}
           {festival.description && festival.description !== festival.significance && (
-            <p style={{ fontFamily: 'var(--font-body)', fontSize: 15, lineHeight: 1.75, color: '#6B4423', marginBottom: 22 }}>{festival.description}</p>
+            <p style={{ fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: 1.8, color: '#6B4423', marginBottom: 22 }}>{festival.description}</p>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0', opacity: 0.4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0', opacity: 0.35 }}>
             <div style={{ flex: 1, height: 1, background: '#EDE0CC' }} /><span style={{ fontSize: 12 }}>🔱</span><div style={{ flex: 1, height: 1, background: '#EDE0CC' }} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }} className="fest-modal-meta">
             {displayDate && (
-              <div style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 16, padding: '12px 16px', gridColumn: '1 / -1' }}>
+              <div style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 14, padding: '12px 16px', gridColumn: '1 / -1' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.1em', color: '#9A7150', marginBottom: 4, fontWeight: 700 }}>{t('festival.date')}</div>
-                <div style={{ fontFamily: 'var(--font-body)', fontSize: 16, fontWeight: 700, color }}>{displayDate}</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 700, color }}>{displayDate}</div>
               </div>
             )}
             {[
@@ -752,7 +871,7 @@ function FestivalModal({ festival, onClose }) {
               { label: t('festival.duration').toUpperCase(), value: `${festival.duration_days || 1} ${(festival.duration_days || 1) === 1 ? t('festival.day') : t('festival.days')}` },
               { label: 'SOURCE', value: festival._claude ? `✨ ${t('festival.ai_curated')}` : festival.source || `🛕 ${t('festival.temple_label')}`, small: true },
             ].map((item, idx) => (
-              <div key={idx} style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 16, padding: '12px 16px' }}>
+              <div key={idx} style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 14, padding: '12px 16px' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.1em', color: '#9A7150', marginBottom: 4, fontWeight: 700 }}>{item.label}</div>
                 <div style={{ fontFamily: item.hindi ? 'var(--font-hindi)' : 'var(--font-body)', fontSize: item.small ? 13 : 15, fontWeight: 600, color: '#1A0A00' }}>{item.value}</div>
               </div>
@@ -761,11 +880,11 @@ function FestivalModal({ festival, onClose }) {
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={{ flex: 1, padding: '13px', border: '2px solid #EDE0CC', borderRadius: 50, background: 'white', fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em', color: '#5C3D1E', cursor: 'pointer', fontWeight: 600 }}>{t('festival.close')}</button>
             {festival.temple_slug ? (
-              <Link to={`/temple/${festival.temple_slug}`} onClick={onClose} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 20px', background: `linear-gradient(135deg, ${color}, #B84D00)`, color: 'white', border: 'none', borderRadius: 50, fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em', textDecoration: 'none', fontWeight: 600, boxShadow: `0 6px 20px ${color}40` }}>
+              <Link to={`/temple/${festival.temple_slug}`} onClick={onClose} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 20px', background: `linear-gradient(135deg, ${color}, #B84D00)`, color: 'white', border: 'none', borderRadius: 50, fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em', textDecoration: 'none', fontWeight: 600, boxShadow: `0 6px 20px ${color}38` }}>
                 <MapPin size={14} /> Visit Temple
               </Link>
             ) : (
-              <Link to={`/search?q=${encodeURIComponent(festival.name)}`} onClick={onClose} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 20px', background: 'linear-gradient(135deg, #E8650A, #B84D00)', color: 'white', border: 'none', borderRadius: 50, fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em', textDecoration: 'none', fontWeight: 600, boxShadow: '0 6px 20px rgba(232,101,10,0.4)' }}>
+              <Link to={`/search?q=${encodeURIComponent(festival.name)}`} onClick={onClose} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '13px 20px', background: 'linear-gradient(135deg, #E8650A, #B84D00)', color: 'white', border: 'none', borderRadius: 50, fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.05em', textDecoration: 'none', fontWeight: 600, boxShadow: '0 6px 20px rgba(232,101,10,0.38)' }}>
                 <MapPin size={14} /> Find Temples
               </Link>
             )}
