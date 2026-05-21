@@ -490,7 +490,7 @@ export default function PanchangPage() {
                       <div key={i} style={{
                         background: '#f0fdf4', borderRadius: 'var(--radius)', padding: '14px 18px',
                         border: '1px solid #86efac', marginBottom: 10,
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12,
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
                       }}>
                         <div>
                           <p style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: '#15803d', fontWeight: 700 }}>{to12h(timing.time)}</p>
