@@ -33,6 +33,20 @@ const VERDICT_ICON  = { excellent: '🌟', good: '✅', average: '⚡', avoid: '
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// Convert 24h "HH:MM" to "H:MM AM/PM"
+function to12h(timeStr) {
+  if (!timeStr) return timeStr;
+  // already has AM/PM
+  if (/am|pm/i.test(timeStr)) return timeStr;
+  // handle "HH:MM - HH:MM IST" or "HH:MM - HH:MM"
+  return timeStr.replace(/(\d{1,2}):(\d{2})/g, (_, h, m) => {
+    const hour = parseInt(h, 10);
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const h12 = hour % 12 || 12;
+    return `${h12}:${m} ${suffix}`;
+  });
+}
+
 function Card({ children, accent, style = {} }) {
   return (
     <div style={{
@@ -72,15 +86,7 @@ export default function PanchangPage() {
 
   const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
 
-  const getFullDate = (d) => {
-    const obj = new Date(d);
-    return {
-      full: obj.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }),
-      day:  obj.toLocaleDateString('en-IN', { weekday: 'long' }),
-    };
-  };
-
-  // ── Daily Panchang — backend call ─────────────────────────────────────────
+  // ── Daily Panchang ────────────────────────────────────────────────────────
   const fetchDailyPanchang = async () => {
     setDailyLoading(true); setDailyResult(null); setError(null);
     try {
@@ -99,7 +105,7 @@ export default function PanchangPage() {
     }
   };
 
-  // ── Muhurat Finder — backend call ─────────────────────────────────────────
+  // ── Muhurat Finder ────────────────────────────────────────────────────────
   const findMuhurat = async () => {
     if (!selected) { setError('Please select a Muhurat type first.'); return; }
     setLoading(true); setResult(null); setError(null);
@@ -134,7 +140,7 @@ export default function PanchangPage() {
   };
   const labelStyle = {
     fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.08em',
-    color: 'var(--text-light)', display: 'block', marginBottom: 6,
+    color: 'var(--text-light)', display: 'block', marginBottom: 6, textTransform: 'uppercase',
   };
 
   return (
@@ -148,13 +154,11 @@ export default function PanchangPage() {
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
           padding: '88px 24px 96px', textAlign: 'center',
         }}>
-          {/* Om watermark */}
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
             pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
           }}>ॐ</div>
-          {/* radial glow */}
           <div style={{
             position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
             width: 600, height: 300,
@@ -163,7 +167,6 @@ export default function PanchangPage() {
           }} />
 
           <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
-            {/* badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
@@ -175,13 +178,12 @@ export default function PanchangPage() {
             </div>
 
             <h1 style={{
-  fontFamily: 'var(--font-display)', fontWeight: 900,
-  fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
-  textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-  color: '#FFD580',
-}}>
-  AI <span style={{ color: '#FFD580' }}>Pandit Ji</span> — Panchang {t('panchang.title_span')}
-</h1>
+              fontFamily: 'var(--font-display)', fontWeight: 900,
+              fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
+              textShadow: '0 4px 40px rgba(0,0,0,0.3)', color: '#FFD580',
+            }}>
+              AI <span style={{ color: '#FFD580' }}>Pandit Ji</span> — Panchang {t('panchang.title_span')}
+            </h1>
 
             <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 18, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7 }}>
               {t('panchang.subtitle')}
@@ -191,7 +193,6 @@ export default function PanchangPage() {
 
         <div className="container" style={{ maxWidth: 960, paddingTop: 36 }}>
 
-
           {/* ════════════════════════════════════════════════════════
               SECTION 1 — Daily Panchang
           ════════════════════════════════════════════════════════ */}
@@ -200,19 +201,19 @@ export default function PanchangPage() {
               {t('panchang.today')}
             </h2>
             <p style={{ fontSize: 14, color: 'var(--text-light)', marginBottom: 22 }}>
-              {t('panchang.loading_sub')}
+              Get today's Tithi, Nakshatra, auspicious timings &amp; Choghadiya
             </p>
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 20 }}>
               <div>
-                <label style={labelStyle}>DATE</label>
+                <label style={labelStyle}>Date</label>
                 <input type="date" value={date}
                   onChange={e => { setDate(e.target.value); setResult(null); setDailyResult(null); }}
                   style={{ ...inputStyle, width: 180, background: 'var(--cream)' }}
                 />
               </div>
               <div>
-                <label style={labelStyle}>{t('map.city') || 'CITY'}</label>
+                <label style={labelStyle}>City</label>
                 <input type="text" value={city} onChange={e => setCity(e.target.value)}
                   placeholder="e.g. Ujjain, Mumbai…"
                   style={{ ...inputStyle, width: 210 }}
@@ -223,8 +224,8 @@ export default function PanchangPage() {
               <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading}
                 style={{ padding: '12px 24px', borderRadius: 'var(--radius)' }}>
                 {dailyLoading
-                  ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> {t('panchang.loading')}</>
-                  : <><Calendar size={15} /> {t('panchang.today')}</>}
+                  ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading…</>
+                  : <><Calendar size={15} /> Today's Panchang</>}
               </button>
             </div>
 
@@ -257,11 +258,11 @@ export default function PanchangPage() {
                   style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 18 }}
                 >
                   {[
-                    { label: 'Tithi',    icon: '🌙', val: dailyResult.tithi?.name,      sub: dailyResult.tithi?.nature },
-                    { label: 'Nakshatra',icon: '⭐', val: dailyResult.nakshatra?.name,  sub: dailyResult.nakshatra?.lord },
-                    { label: 'Yoga',     icon: '🔗', val: dailyResult.yoga?.name,       sub: dailyResult.yoga?.nature },
-                    { label: 'Karana',   icon: '⚡', val: dailyResult.karana?.name,     sub: dailyResult.karana?.nature },
-                    { label: 'Var',      icon: '☀️', val: dailyResult.var?.day,         sub: `Lord: ${dailyResult.var?.lord}` },
+                    { label: 'Tithi',     icon: '🌙', val: dailyResult.tithi?.name,     sub: dailyResult.tithi?.nature },
+                    { label: 'Nakshatra', icon: '⭐', val: dailyResult.nakshatra?.name, sub: dailyResult.nakshatra?.lord },
+                    { label: 'Yoga',      icon: '🔗', val: dailyResult.yoga?.name,      sub: dailyResult.yoga?.nature },
+                    { label: 'Karana',    icon: '⚡', val: dailyResult.karana?.name,    sub: dailyResult.karana?.nature },
+                    { label: 'Var',       icon: '☀️', val: dailyResult.var?.day,        sub: `Lord: ${dailyResult.var?.lord}` },
                   ].map(a => (
                     <div key={a.label} style={{
                       background: 'var(--cream)', borderRadius: 'var(--radius)', padding: '12px 8px',
@@ -281,14 +282,14 @@ export default function PanchangPage() {
                   style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}
                 >
                   {[
-                    { label: '🌅 BRAHMA MUHURAT', time: dailyResult.brahma_muhurat?.time, note: dailyResult.brahma_muhurat?.benefit, bg: '#f0fdf4', border: '#86efac', color: '#15803d', labelColor: '#16a34a' },
-                    { label: '☀️ ABHIJIT MUHURAT', time: dailyResult.abhijit_muhurat?.time, note: dailyResult.abhijit_muhurat?.benefit, bg: '#f0f9ff', border: '#7dd3fc', color: '#075985', labelColor: '#0369a1' },
-                    { label: '🚫 RAHU KAAL',      time: dailyResult.rahu_kaal?.time,       note: 'Avoid all auspicious work',          bg: '#fef2f2', border: '#fca5a5', color: '#b91c1c', labelColor: '#dc2626' },
-                  ].map(t => (
-                    <div key={t.label} style={{ background: t.bg, borderRadius: 'var(--radius)', padding: '14px 16px', border: `1px solid ${t.border}` }}>
-                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: t.labelColor, letterSpacing: '.07em', marginBottom: 4 }}>{t.label}</p>
-                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: t.color, fontWeight: 700 }}>{t.time}</p>
-                      <p style={{ fontSize: 11, color: t.labelColor, marginTop: 4 }}>{t.note}</p>
+                    { label: '🌅 BRAHMA MUHURAT', time: to12h(dailyResult.brahma_muhurat?.time), note: dailyResult.brahma_muhurat?.benefit, bg: '#f0fdf4', border: '#86efac', color: '#15803d', labelColor: '#16a34a' },
+                    { label: '☀️ ABHIJIT MUHURAT', time: to12h(dailyResult.abhijit_muhurat?.time), note: dailyResult.abhijit_muhurat?.benefit, bg: '#f0f9ff', border: '#7dd3fc', color: '#075985', labelColor: '#0369a1' },
+                    { label: '🚫 RAHU KAAL',       time: to12h(dailyResult.rahu_kaal?.time),       note: 'Avoid all auspicious work',         bg: '#fef2f2', border: '#fca5a5', color: '#b91c1c', labelColor: '#dc2626' },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: item.bg, borderRadius: 'var(--radius)', padding: '14px 16px', border: `1px solid ${item.border}` }}>
+                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: item.labelColor, letterSpacing: '.07em', marginBottom: 4 }}>{item.label}</p>
+                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: item.color, fontWeight: 700 }}>{item.time}</p>
+                      <p style={{ fontSize: 11, color: item.labelColor, marginTop: 4 }}>{item.note}</p>
                     </div>
                   ))}
                 </div>
@@ -307,7 +308,7 @@ export default function PanchangPage() {
                           border: `1px solid ${c.nature === 'good' ? '#86efac' : c.nature === 'bad' ? '#fca5a5' : '#e2e8f0'}`,
                         }}>
                           <p style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: c.nature === 'good' ? '#16a34a' : c.nature === 'bad' ? '#dc2626' : '#64748b' }}>{c.name}</p>
-                          <p style={{ fontSize: 11, color: 'var(--text-light)' }}>{c.time}</p>
+                          <p style={{ fontSize: 11, color: 'var(--text-light)' }}>{to12h(c.time)}</p>
                           <p style={{ fontSize: 10, color: 'var(--text-light)', marginTop: 2 }}>{c.good_for}</p>
                         </div>
                       ))}
@@ -343,15 +344,15 @@ export default function PanchangPage() {
           ════════════════════════════════════════════════════════ */}
           <Card>
             <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--brown)', marginBottom: 4 }}>
-              {t('panchang.muhurat_title')}
+              Muhurat Finder
             </h2>
             <p style={{ fontSize: 14, color: 'var(--text-light)', marginBottom: 24 }}>
-              {t('panchang.muhurat_subtitle')}
+              Find the most auspicious time for your important occasion
             </p>
 
             {/* Occasion Grid */}
             <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>{t('panchang.select_muhurat')}</label>
+              <label style={labelStyle}>Select Occasion</label>
               <div
                 className="muhurat-occasion-grid"
                 style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))', gap: 10 }}
@@ -379,13 +380,13 @@ export default function PanchangPage() {
               style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}
             >
               <div>
-                <label style={labelStyle}>{t('panchang.select_date').toUpperCase()}</label>
+                <label style={labelStyle}>Date</label>
                 <input type="date" value={date} onChange={e => setDate(e.target.value)}
                   style={{ ...inputStyle, background: 'var(--cream)' }}
                 />
               </div>
               <div>
-                <label style={labelStyle}>{t('panchang.your_name') || 'YOUR NAME (optional)'}</label>
+                <label style={labelStyle}>Your Name (optional)</label>
                 <input type="text" value={name} onChange={e => setName(e.target.value)}
                   placeholder="e.g. Rahul Sharma" style={inputStyle}
                   onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
@@ -393,15 +394,15 @@ export default function PanchangPage() {
                 />
               </div>
               <div>
-                <label style={labelStyle}>{t('panchang.select_rashi')}</label>
+                <label style={labelStyle}>Rashi (Moon Sign)</label>
                 <select value={rashi} onChange={e => setRashi(e.target.value)}
                   style={{ ...inputStyle, cursor: 'pointer', background: 'white' }}>
-                  <option value="">{t('panchang.select_rashi')}</option>
+                  <option value="">Select your Rashi…</option>
                   {RASHI_LIST.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>{t('map.city') || 'CITY'}</label>
+                <label style={labelStyle}>City</label>
                 <input type="text" value={city} onChange={e => setCity(e.target.value)}
                   placeholder="e.g. Varanasi…" style={inputStyle}
                   onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
@@ -413,8 +414,8 @@ export default function PanchangPage() {
             <button className="btn-primary" onClick={findMuhurat} disabled={loading}
               style={{ width: '100%', justifyContent: 'center', padding: '16px', fontSize: 15, borderRadius: 'var(--radius)', gap: 10 }}>
               {loading
-                ? <><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> {t('panchang.finding')}</>
-                : <><Sparkles size={18} /> {t('panchang.find_muhurat')}</>}
+                ? <><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Muhurat…</>
+                : <><Sparkles size={18} /> Find Auspicious Muhurat</>}
             </button>
           </Card>
 
@@ -431,10 +432,10 @@ export default function PanchangPage() {
             <div style={{ textAlign: 'center', padding: '60px 20px' }}>
               <div style={{ fontSize: 56, marginBottom: 16, animation: 'pulse-om 2s ease-in-out infinite' }}>🛕</div>
               <p style={{ fontFamily: 'var(--font-hindi)', color: 'var(--text-light)', fontSize: 17 }}>
-                {t('panchang.loading')}
+                Consulting the stars…
               </p>
               <p style={{ color: 'var(--text-light)', fontSize: 13, marginTop: 6 }}>
-                {t('panchang.loading_sub')}
+                Calculating auspicious timings based on Vedic astrology
               </p>
             </div>
           )}
@@ -484,21 +485,21 @@ export default function PanchangPage() {
 
                   {/* Auspicious Timings */}
                   <Card accent="rgba(34,197,94,0.3)">
-                    <SectionTitle icon={<Clock size={14} color="white" />}>{t('panchang.shubh_muhurat')}</SectionTitle>
-                    {(result.auspicious_timings || []).map((t, i) => (
+                    <SectionTitle icon={<Clock size={14} color="white" />}>Shubh Muhurat Timings</SectionTitle>
+                    {(result.auspicious_timings || []).map((timing, i) => (
                       <div key={i} style={{
                         background: '#f0fdf4', borderRadius: 'var(--radius)', padding: '14px 18px',
                         border: '1px solid #86efac', marginBottom: 10,
                         display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12,
                       }}>
                         <div>
-                          <p style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: '#15803d', fontWeight: 700 }}>{t.time}</p>
-                          <p style={{ fontSize: 13, color: '#16a34a', marginTop: 4 }}>{t.reason}</p>
+                          <p style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: '#15803d', fontWeight: 700 }}>{to12h(timing.time)}</p>
+                          <p style={{ fontSize: 13, color: '#16a34a', marginTop: 4 }}>{timing.reason}</p>
                         </div>
                         <span style={{
                           background: '#16a34a', color: 'white', borderRadius: 50, padding: '3px 12px',
                           fontSize: 11, fontFamily: 'var(--font-display)', flexShrink: 0,
-                        }}>{t.quality}</span>
+                        }}>{timing.quality}</span>
                       </div>
                     ))}
                   </Card>
@@ -506,15 +507,15 @@ export default function PanchangPage() {
                   {/* Avoid */}
                   {result.timings_to_avoid?.length > 0 && (
                     <Card accent="rgba(220,38,38,0.25)">
-                      <SectionTitle icon={<AlertCircle size={14} color="white" />}>{t('panchang.inauspicious')}</SectionTitle>
-                      {result.timings_to_avoid.map((t, i) => (
+                      <SectionTitle icon={<AlertCircle size={14} color="white" />}>Inauspicious Timings to Avoid</SectionTitle>
+                      {result.timings_to_avoid.map((timing, i) => (
                         <div key={i} style={{
                           background: '#fef2f2', borderRadius: 'var(--radius)', padding: '12px 16px',
                           border: '1px solid #fca5a5', marginBottom: 8,
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
                         }}>
-                          <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: '#b91c1c', fontWeight: 700 }}>{t.time}</span>
-                          <span style={{ fontSize: 13, color: '#dc2626' }}>{t.reason}</span>
+                          <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: '#b91c1c', fontWeight: 700 }}>{to12h(timing.time)}</span>
+                          <span style={{ fontSize: 13, color: '#dc2626' }}>{timing.reason}</span>
                         </div>
                       ))}
                     </Card>
@@ -523,11 +524,11 @@ export default function PanchangPage() {
                   {/* Rituals */}
                   {result.rituals_recommended?.length > 0 && (
                     <Card>
-                      <SectionTitle icon={<Star size={14} color="white" />}>{t('panchang.rituals') || 'Recommended Rituals'}</SectionTitle>
-                      {result.rituals_recommended.map((r, i) => (
+                      <SectionTitle icon={<Star size={14} color="white" />}>Recommended Rituals</SectionTitle>
+                      {result.rituals_recommended.map((ritual, i) => (
                         <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
                           <CheckCircle size={16} color="var(--saffron)" style={{ marginTop: 3, flexShrink: 0 }} />
-                          <span style={{ fontSize: 15, color: 'var(--text-mid)', lineHeight: 1.6 }}>{r}</span>
+                          <span style={{ fontSize: 15, color: 'var(--text-mid)', lineHeight: 1.6 }}>{ritual}</span>
                         </div>
                       ))}
                     </Card>
@@ -536,7 +537,7 @@ export default function PanchangPage() {
                   {/* Mantras */}
                   {result.mantras?.length > 0 && (
                     <Card>
-                      <SectionTitle icon="🕉️">{t('panchang.mantras_title') || 'Mantras to Chant'}</SectionTitle>
+                      <SectionTitle icon="🕉️">Mantras to Chant</SectionTitle>
                       {result.mantras.map((m, i) => (
                         <div key={i} className="mantra-card" style={{ marginBottom: 12 }}>
                           <div className="mantra-title">{m.deity} · Chant {m.chant_times} times</div>
@@ -613,7 +614,6 @@ export default function PanchangPage() {
         </div>
       </div>
 
-      {/* Global keyframes */}
       <style>{`
         @keyframes spin        { to { transform: rotate(360deg); } }
         @keyframes fadeDown    { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
