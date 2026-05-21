@@ -873,7 +873,6 @@ function FestivalModal({ festival, onClose }) {
               { label: 'HINDU MONTH', value: hinduMonth, hindi: true },
               ...(festival.hindu_tithi ? [{ label: 'TITHI', value: festival.hindu_tithi, small: true }] : []),
               { label: t('festival.duration').toUpperCase(), value: `${festival.duration_days || 1} ${(festival.duration_days || 1) === 1 ? t('festival.day') : t('festival.days')}` },
-              { label: 'SOURCE', value: festival._claude ? `✨ ${t('festival.ai_curated')}` : festival.source || `🛕 ${t('festival.temple_label')}`, small: true },
             ].map((item, idx) => (
               <div key={idx} style={{ background: 'white', border: '1px solid #EDE0CC', borderRadius: 14, padding: '12px 16px' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, letterSpacing: '.1em', color: '#9A7150', marginBottom: 4, fontWeight: 700 }}>{item.label}</div>
