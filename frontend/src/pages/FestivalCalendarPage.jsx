@@ -789,16 +789,20 @@ function PremiumFestivalCard({ festival, compact, index, onClick }) {
         <div style={{
           borderTop: `1px solid ${tint}`,
           padding: '10px 20px 14px',
-          fontFamily: 'var(--font-body)',
-          fontSize: 12,
-          color: '#7A5035',
-          lineHeight: 1.65,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
         }}>
-          {festival.significance}
+          <div style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 12,
+            color: '#7A5035',
+            lineHeight: 1.65,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}>
+            {festival.significance}
+          </div>
         </div>
       )}
     </div>
