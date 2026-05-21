@@ -121,23 +121,18 @@ export default function RoutePlannerPage() {
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
         padding: '88px 24px 96px', textAlign: 'center',
       }}>
-        {/* OM watermark */}
         <div style={{
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
           pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
         }}>ॐ</div>
-
-        {/* Radial glow */}
         <div style={{
           position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
           width: 600, height: 300,
           background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
-
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
-          {/* Badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
@@ -147,7 +142,6 @@ export default function RoutePlannerPage() {
           }}>
             ✨ AI Route Planner
           </div>
-
           <h1 style={{
             fontFamily: 'var(--font-display)', fontWeight: 900,
             fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
@@ -156,7 +150,6 @@ export default function RoutePlannerPage() {
             Your Journey,{' '}
             <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
           </h1>
-
           <p style={{ color: '#FFD580', opacity: 0.82, fontSize: 18, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7 }}>
             Tell us where you're headed — we'll find every sacred temple along your spiritual path.
           </p>
@@ -174,7 +167,6 @@ export default function RoutePlannerPage() {
             border: '1px solid rgba(232,101,10,0.12)', padding: '40px 40px 36px',
             position: 'relative', zIndex: 10,
           }}>
-            {/* Card title */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 32 }}>
               <div style={{
                 width: 50, height: 50, borderRadius: 16,
@@ -327,7 +319,6 @@ export default function RoutePlannerPage() {
             }}>
               {bookingMeta.icon}
             </div>
-
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18 }}>
               <div style={{
                 width: 60, height: 60, borderRadius: 18,
@@ -344,7 +335,6 @@ export default function RoutePlannerPage() {
                 <p style={{ color: '#9A7150', fontSize: 14 }}>{bookingSubtitle}</p>
               </div>
             </div>
-
             <div style={{ textAlign: 'center', flexShrink: 0 }}>
               <button
                 onClick={handleBookingClick}
@@ -384,6 +374,27 @@ export default function RoutePlannerPage() {
           {/* ── RESULTS ── */}
           {result && !loading && (
             <div style={{ marginTop: 40, animation: 'fadeDown .6s ease both' }}>
+
+              {/* ── TRAVEL TIME WARNING BANNER (shown when route is longer than user's time) ── */}
+              {result.travel_time_warning && (
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 14,
+                  background: '#FFFBEB',
+                  border: '1px solid #FCD34D',
+                  borderLeft: '4px solid #F59E0B',
+                  borderRadius: 16, padding: '16px 20px', marginBottom: 20,
+                }}>
+                  <span style={{ fontSize: 22, flexShrink: 0 }}>⏱️</span>
+                  <div>
+                    <p style={{ fontWeight: 700, color: '#92400E', fontSize: 14, marginBottom: 4 }}>
+                      Travel Time Heads-up
+                    </p>
+                    <p style={{ color: '#78350F', fontSize: 13, lineHeight: 1.6 }}>
+                      {result.travel_time_warning}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Route Summary Banner */}
               <div style={{
