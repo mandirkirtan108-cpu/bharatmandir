@@ -100,16 +100,13 @@ export default function SearchPage() {
         temples   = res.data || [];
         count     = temples.length;
       } else {
-        const params = { per_page: 200 };
+        // Fetch all; jyotirlinga/shaktipeeth filtered client-side for OR logic
+        const params = { per_page: 500 };
         if (selectedStates.length === 1) params.state = selectedStates[0];
         if (selectedSects.length  === 1) params.sect  = selectedSects[0];
-        if (jyotirlinga && !shaktipeeth) params.jyotirlinga = true;
-        if (shaktipeeth && !jyotirlinga) params.shaktipeeth = true;
         const res = await templeAPI.getAll(params);
         temples   = res.data.temples || [];
         count     = res.data.total   || 0;
-        if (jyotirlinga && shaktipeeth)
-          temples = temples.filter(t => t.is_jyotirlinga || t.is_shaktipeeth);
       }
 
       if (!nearbyMode) {
