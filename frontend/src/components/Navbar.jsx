@@ -46,11 +46,12 @@ export default function Navbar() {
   }, [sidebarOpen]);
 
   const NAV_LINKS = [
-  { to: '/route-planner', label: t('nav.route'),         icon: <Navigation size={17} /> },
-  { to: '/panchang',      label: t('nav.panchang'),      icon: <CalendarDays size={17} /> },
-  { to: '/festivals',     label: t('nav.festivals'),     icon: <Sparkles size={17} /> },
-  { to: '/sacred-books',  label: t('nav.sacred_books'),  icon: <BookOpen size={17} /> },
-];
+    { to: '/search',        label: '🛕 Temples',            icon: <Search size={17} /> },
+    { to: '/route-planner', label: t('nav.route'),          icon: <Navigation size={17} /> },
+    { to: '/panchang',      label: t('nav.panchang'),       icon: <CalendarDays size={17} /> },
+    { to: '/festivals',     label: t('nav.festivals'),      icon: <Sparkles size={17} /> },
+    { to: '/sacred-books',  label: t('nav.sacred_books'),   icon: <BookOpen size={17} /> },
+  ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
 
@@ -89,7 +90,24 @@ export default function Navbar() {
                 key={link.to}
                 to={link.to}
                 className={`nav-link nav-link-${index}${isActive(link.to) ? ' active' : ''}`}
+                style={link.to === '/search' ? {
+                  background: isActive('/search')
+                    ? 'linear-gradient(135deg, var(--saffron), var(--brown))'
+                    : 'linear-gradient(135deg,#fff5e6,#ffe0b0)',
+                  color: isActive('/search') ? 'white' : 'var(--saffron)',
+                  border: '1.5px solid var(--saffron)',
+                  borderRadius: 50,
+                  padding: '6px 16px',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontSize: 13,
+                  textDecoration: 'none',
+                  transition: 'all .2s',
+                } : {}}
               >
+                {link.to === '/search' && <Search size={14} />}
                 {link.label}
               </Link>
             ))}
@@ -141,7 +159,6 @@ export default function Navbar() {
 
             <div className="nav-divider" />
 
-            {/* ── Admin Panel link — only shown when authenticated ── */}
             {isAdmin ? (
               <>
                 <Link
@@ -244,6 +261,7 @@ export default function Navbar() {
               to={link.to}
               className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
               onClick={() => setSidebarOpen(false)}
+              style={link.to === '/search' ? { color: 'var(--saffron)', fontWeight: 700 } : {}}
             >
               <span className="sidebar-link-icon">{link.icon}</span>
               {link.label}
@@ -261,7 +279,6 @@ export default function Navbar() {
             {t('nav.ai_spiritual')}
           </Link>
 
-          {/* Admin-only links in sidebar — only when authenticated */}
           {isAdmin ? (
             <>
               <Link
