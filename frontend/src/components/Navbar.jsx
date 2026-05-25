@@ -46,11 +46,11 @@ export default function Navbar() {
   }, [sidebarOpen]);
 
   const NAV_LINKS = [
-    { to: '/search',        label: '🛕 Temples',            icon: <Search size={17} /> },
-    { to: '/route-planner', label: t('nav.route'),          icon: <Navigation size={17} /> },
-    { to: '/panchang',      label: t('nav.panchang'),       icon: <CalendarDays size={17} /> },
-    { to: '/festivals',     label: t('nav.festivals'),      icon: <Sparkles size={17} /> },
-    { to: '/sacred-books',  label: t('nav.sacred_books'),   icon: <BookOpen size={17} /> },
+    { to: '/search',        label: '🛕 Temples',           icon: <Search size={17} /> },
+    { to: '/route-planner', label: t('nav.route'),         icon: <Navigation size={17} /> },
+    { to: '/panchang',      label: t('nav.panchang'),      icon: <CalendarDays size={17} /> },
+    { to: '/festivals',     label: t('nav.festivals'),     icon: <Sparkles size={17} /> },
+    { to: '/sacred-books',  label: '📚 Library',           icon: <BookOpen size={17} /> },
   ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
@@ -69,7 +69,6 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* ── Navbar ─────────────────────────────────────────────────────── */}
       <nav className="navbar">
         <div className="navbar-inner">
 
@@ -83,7 +82,6 @@ export default function Navbar() {
 
           <div style={{ flex: 1 }} />
 
-          {/* Desktop nav links */}
           <div className="nav-actions nav-actions-desktop">
             {NAV_LINKS.map((link, index) => (
               <Link
@@ -97,7 +95,6 @@ export default function Navbar() {
 
             <div className="nav-divider" />
 
-            {/* ── AI Spiritual Guide button ── */}
             <Link
               to="/spiritual-guide"
               className={`nav-add-btn${isActive('/spiritual-guide') ? ' active' : ''}`}
@@ -206,7 +203,6 @@ export default function Navbar() {
             </select>
           </div>
 
-          {/* Mobile: hamburger */}
           <button
             className="nav-hamburger"
             onClick={() => setSidebarOpen(true)}
@@ -218,10 +214,8 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* ── Sidebar overlay ────────────────────────────────────────────── */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
-      {/* ── Sidebar drawer ─────────────────────────────────────────────── */}
       <aside ref={sidebarRef} className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
 
         <div className="sidebar-header">
@@ -251,7 +245,6 @@ export default function Navbar() {
             </Link>
           ))}
 
-          {/* ── AI Spiritual Guide in sidebar ── */}
           <Link
             to="/spiritual-guide"
             className={`sidebar-link${isActive('/spiritual-guide') ? ' active' : ''}`}
@@ -337,7 +330,6 @@ export default function Navbar() {
 
       </aside>
 
-      {/* ── Floating AI Spiritual Guide button ────────────────────────── */}
       <Link
         to="/spiritual-guide"
         style={{
