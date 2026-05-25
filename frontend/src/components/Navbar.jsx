@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut } from 'lucide-react';
+import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut, BookOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useAdminAuth } from '../hooks/useAdminAuth';
@@ -46,10 +46,11 @@ export default function Navbar() {
   }, [sidebarOpen]);
 
   const NAV_LINKS = [
-    { to: '/route-planner', label: t('nav.route'),     icon: <Navigation size={17} /> },
-    { to: '/panchang',      label: t('nav.panchang'),  icon: <CalendarDays size={17} /> },
-    { to: '/festivals',     label: t('nav.festivals'), icon: <Sparkles size={17} /> },
-  ];
+  { to: '/route-planner', label: t('nav.route'),         icon: <Navigation size={17} /> },
+  { to: '/panchang',      label: t('nav.panchang'),      icon: <CalendarDays size={17} /> },
+  { to: '/festivals',     label: t('nav.festivals'),     icon: <Sparkles size={17} /> },
+  { to: '/sacred-books',  label: t('nav.sacred_books'),  icon: <BookOpen size={17} /> },
+];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
 

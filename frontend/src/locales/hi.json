@@ -15,9 +15,10 @@
     "admin_login": "एडमिन लॉगिन",
     "admin_logout": "एडमिन लॉगआउट",
     "floating_ai": "🕉️ AI गाइड",
-    "ai_spiritual": "AI आध्यात्मिक गाइड"
+    "ai_spiritual": "AI आध्यात्मिक गाइड",
+    "sacred_books": "📚 पवित्र ग्रंथ",
+    "sacred_books_mobile": "पवित्र ग्रंथ"
   },
-
   "search_placeholder": "मंदिर, देवता, शहर खोजें...",
   "hero_search_placeholder": "मंदिर, देवता, या शहर खोजें...",
   "hero_badge": "🔱 भारत के पवित्र मंदिर",
@@ -25,14 +26,12 @@
   "hero_subtitle": "भारत के मंदिर",
   "hero_desc": "हर भक्त को भारत के कोने-कोने के पवित्र मंदिरों से जोड़ने का मंच — इतिहास, मंत्र और दिशाओं के साथ।",
   "search_btn": "खोजें",
-
   "stats": {
     "temples": "मंदिर सूचीबद्ध",
     "states": "राज्य शामिल",
     "jyotirlinga": "ज्योतिर्लिंग",
     "shaktipeeth": "शक्तिपीठ"
   },
-
   "filter": {
     "all": "सभी मंदिर",
     "all_states": "🗺️ सभी राज्य",
@@ -40,7 +39,6 @@
     "jyotirlinga": "ज्योतिर्लिंग",
     "shaktipeeth": "शक्तिपीठ"
   },
-
   "results_for": "खोज परिणाम",
   "filtered": "फ़िल्टर मंदिर",
   "all_sacred": "सभी पवित्र मंदिर",
@@ -50,31 +48,26 @@
   "try_again": "फिर कोशिश करें",
   "temples_count_singular": "मंदिर",
   "temples_count_plural": "मंदिर",
-
   "error": {
     "title": "मंदिर लोड नहीं हो सके",
     "backend": "बैकएंड से कनेक्ट नहीं हो सका। सुनिश्चित करें कि FastAPI पोर्ट 8000 पर चल रहा है।"
   },
-
   "badge": {
     "jyotirlinga": "ज्योतिर्लिंग",
     "shaktipeeth": "शक्तिपीठ",
     "heritage": "विरासत स्थल",
     "verified": "सत्यापित"
   },
-
   "card": {
     "view_qr": "QR कोड देखें",
     "temple": "मंदिर",
     "12_jyotirlinga": "12 ज्योतिर्लिंग",
     "51_shaktipeeth": "51 शक्तिपीठ"
   },
-
   "breadcrumb": {
     "home": "होम",
     "temples": "मंदिर"
   },
-
   "detail": {
     "loading": "मंदिर विवरण लोड हो रहा है...",
     "not_found": "मंदिर नहीं मिला",
@@ -194,7 +187,6 @@
     "read_more": "▼ और पढ़ें",
     "hindi_history_label": "हिंदी में इतिहास"
   },
-
   "upi": {
     "title": "🙏 UPI से दान करें",
     "subtitle": "राशि चुनें → किसी भी UPI ऐप से QR स्कैन करें",
@@ -207,7 +199,6 @@
     "copied": "✅ कॉपी हो गया!",
     "close": "बंद करें"
   },
-
   "search": {
     "title": "🔍 अपना मंदिर खोजें",
     "subtitle": "नाम, देवता, शहर से खोजें या फ़िल्टर का उपयोग करें",
@@ -225,20 +216,17 @@
     "empty_msg": "अलग कीवर्ड आज़माएं या कुछ फ़िल्टर हटाएं",
     "clear_filters": "फ़िल्टर साफ करें"
   },
-
   "sort": {
     "name_asc": "नाम (अ → ज्ञ)",
     "name_desc": "नाम (ज्ञ → अ)",
     "rating_desc": "सर्वोच्च रेटिंग",
     "city_asc": "शहर (अ → ज्ञ)"
   },
-
   "pagination": {
     "prev": "← पिछला",
     "next": "अगला →",
     "page_of": "पेज {{page}} / {{total}}"
   },
-
   "map": {
     "title": "मंदिर मानचित्र",
     "streets": "सड़क दृश्य",
@@ -261,7 +249,6 @@
     "your_location": "आपका स्थान",
     "hide": "छुपाएं"
   },
-
   "qr": {
     "loading": "QR कोड लोड हो रहा है...",
     "back_home": "होम पर वापस",
@@ -275,7 +262,6 @@
     "print": "प्रिंट करें",
     "view_temple": "मंदिर देखें"
   },
-
   "route": {
     "badge": "🛣️ AI यात्रा योजनाकार",
     "hero_title": "यात्रा",
@@ -347,10 +333,8 @@
     "consulting": "दिव्य मार्ग खोजा जा रहा है…",
     "ai_mapping": "AI आपकी यात्रा पर पवित्र मंदिर खोज रहा है"
   },
-
   "footer_tagline": "भारत का मंदिर खोज मंच",
   "footer_sub": "भक्तों को भारत के पवित्र मंदिरों से जोड़ना",
-
   "festival": {
     "badge": "🛕 भारतमंदिर प्रस्तुत करता है",
     "title": "पर्व कैलेंडर",
@@ -454,7 +438,6 @@
     "source_partnership": "🤝 साझेदारी",
     "source_csv": "📁 CSV आयात"
   },
-
   "panchang": {
     "badge": "🗓️ वैदिक पंचांग",
     "title": "पंचांग",
@@ -490,7 +473,6 @@
     "verdict_average": "सामान्य",
     "verdict_avoid": "टालें"
   },
-
   "spiritual": {
     "badge": "🕉️ आध्यात्मिक मार्गदर्शक",
     "title": "आध्यात्मिक",
@@ -511,7 +493,6 @@
     "send": "भेजें",
     "input_placeholder": "अपनी चिंता या प्रश्न साझा करें... (हिंदी या अंग्रेजी)"
   },
-
   "footer": {
     "tagline": "भारत का मंदिर खोज मंच",
     "sub": "भक्तों को भारत के पवित्र मंदिरों से जोड़ना",
@@ -524,7 +505,6 @@
     "festivals": "पर्व",
     "spiritual": "आध्यात्मिक मार्गदर्शक"
   },
-
   "admin": {
     "login_title": "एडमिन लॉगिन",
     "login_subtitle": "भारतमंदिर एडमिन पैनल",
@@ -544,7 +524,6 @@
     "signing_in": "साइन इन हो रहा है...",
     "home_link": "← होम"
   },
-
   "admin_panel": {
     "title": "एडमिन पैनल",
     "subtitle": "मंदिर ऑनबोर्डिंग और सत्यापन डैशबोर्ड",
@@ -670,7 +649,6 @@
     "field_intro_video": "परिचय वीडियो",
     "field_360_video": "360° वीडियो"
   },
-
   "admin_add_temple": {
     "page_badge": "⚙️ एडमिन पैनल",
     "page_title": "नया मंदिर जोड़ें",

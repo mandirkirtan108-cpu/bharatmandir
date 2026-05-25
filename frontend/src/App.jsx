@@ -14,6 +14,7 @@ import FestivalCalendarPage  from './pages/FestivalCalendarPage';
 import AdminAddFestivalPage  from './pages/AdminAddFestivalPage';
 import AdminPanelPage        from './pages/AdminPanelPage';
 import AdminLoginPage        from './pages/AdminLoginPage';
+import SacredBooksPage       from './pages/SacredBooksPage';   // ← NEW
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/panchang"        element={<PanchangPage />} />
           <Route path="/spiritual-guide" element={<SpiritualGuidePage />} />
           <Route path="/festivals"       element={<FestivalCalendarPage />} />
+          <Route path="/sacred-books"    element={<SacredBooksPage />} />  {/* ← NEW */}
 
           {/* ── Admin Login — public ───────────────────────── */}
           <Route path="/admin/login"     element={<AdminLoginPage />} />

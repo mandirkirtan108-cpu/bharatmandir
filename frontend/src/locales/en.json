@@ -15,9 +15,10 @@
     "admin_login": "Admin Login",
     "admin_logout": "Admin Logout",
     "floating_ai": "🕉️ AI Guide",
-    "ai_spiritual": "AI Spiritual Guide"
+    "ai_spiritual": "AI Spiritual Guide",
+    "sacred_books": "📚 Sacred Books",
+    "sacred_books_mobile": "Sacred Books"
   },
-
   "search_placeholder": "Search temples, deities, cities...",
   "hero_search_placeholder": "Search by temple, deity, or city...",
   "hero_badge": "🔱 Sacred Temples of India",
@@ -25,14 +26,12 @@
   "hero_subtitle": "Temples of Bharat",
   "hero_desc": "A platform to connect every devotee with the sacred temples across every corner of India — with history, mantras, and directions.",
   "search_btn": "Search",
-
   "stats": {
     "temples": "Temples Listed",
     "states": "States Covered",
     "jyotirlinga": "Jyotirlingas",
     "shaktipeeth": "Shaktipeeths"
   },
-
   "filter": {
     "all": "All Temples",
     "all_states": "🗺️ All States",
@@ -40,7 +39,6 @@
     "jyotirlinga": "Jyotirlinga",
     "shaktipeeth": "Shaktipeeth"
   },
-
   "results_for": "Results for",
   "filtered": "Filtered Temples",
   "all_sacred": "All Sacred Temples",
@@ -50,31 +48,26 @@
   "try_again": "Try Again",
   "temples_count_singular": "temple",
   "temples_count_plural": "temples",
-
   "error": {
     "title": "Could not load temples",
     "backend": "Unable to connect to the backend. Make sure FastAPI is running on port 8000."
   },
-
   "badge": {
     "jyotirlinga": "Jyotirlinga",
     "shaktipeeth": "Shaktipeeth",
     "heritage": "Heritage Site",
     "verified": "Verified"
   },
-
   "card": {
     "view_qr": "View QR Code",
     "temple": "Temple",
     "12_jyotirlinga": "12 Jyotirlingas",
     "51_shaktipeeth": "51 Shaktipeeths"
   },
-
   "breadcrumb": {
     "home": "Home",
     "temples": "Temples"
   },
-
   "detail": {
     "loading": "Loading temple details...",
     "not_found": "Temple not found",
@@ -194,7 +187,6 @@
     "read_more": "▼ Read More",
     "hindi_history_label": "History in Hindi"
   },
-
   "upi": {
     "title": "🙏 Donate via UPI",
     "subtitle": "Choose amount → Scan QR with any UPI app",
@@ -207,7 +199,6 @@
     "copied": "✅ Copied!",
     "close": "Close"
   },
-
   "search": {
     "title": "🔍 Find Your Temple",
     "subtitle": "Search by name, deity, city, or use filters to discover sacred temples",
@@ -225,20 +216,17 @@
     "empty_msg": "Try different keywords or clear some filters",
     "clear_filters": "Clear Filters"
   },
-
   "sort": {
     "name_asc": "Name (A → Z)",
     "name_desc": "Name (Z → A)",
     "rating_desc": "Highest Rated",
     "city_asc": "City (A → Z)"
   },
-
   "pagination": {
     "prev": "← Previous",
     "next": "Next →",
     "page_of": "Page {{page}} of {{total}}"
   },
-
   "map": {
     "title": "Temple Map",
     "streets": "Streets",
@@ -261,7 +249,6 @@
     "your_location": "Your Location",
     "hide": "Hide"
   },
-
   "qr": {
     "loading": "Loading QR Code...",
     "back_home": "Back to Home",
@@ -275,7 +262,6 @@
     "print": "Print",
     "view_temple": "View Temple"
   },
-
   "route": {
     "badge": "🛣️ AI Pilgrimage Planner",
     "hero_title": "Route",
@@ -347,10 +333,8 @@
     "consulting": "Consulting the divine route map…",
     "ai_mapping": "AI is mapping sacred temples along your journey"
   },
-
   "footer_tagline": "Temple Discovery Platform of India",
   "footer_sub": "Connecting devotees with the sacred temples of Bharat",
-
   "festival": {
     "badge": "🛕 BharatMandir Presents",
     "title": "Festival Calendar",
@@ -454,7 +438,6 @@
     "source_partnership": "🤝 Partnership",
     "source_csv": "📁 CSV Import"
   },
-
   "panchang": {
     "badge": "🗓️ Vedic Panchang",
     "title": "Panchang",
@@ -490,7 +473,6 @@
     "verdict_average": "Average",
     "verdict_avoid": "Avoid"
   },
-
   "spiritual": {
     "badge": "🕉️ Spiritual Guide",
     "title": "Spiritual",
@@ -511,7 +493,6 @@
     "send": "Send",
     "input_placeholder": "Share your concern or question... (Hindi or English)"
   },
-
   "footer": {
     "tagline": "Temple Discovery Platform of India",
     "sub": "Connecting devotees with the sacred temples of Bharat",
@@ -524,7 +505,6 @@
     "festivals": "Festivals",
     "spiritual": "Spiritual Guide"
   },
-
   "admin": {
     "login_title": "Admin Login",
     "login_subtitle": "BharatMandir Admin Panel",
@@ -544,7 +524,6 @@
     "signing_in": "Signing in...",
     "home_link": "← Home"
   },
-
   "admin_panel": {
     "title": "Admin Panel",
     "subtitle": "Temple Onboarding & Verification Dashboard",
@@ -670,7 +649,6 @@
     "field_intro_video": "Intro Video",
     "field_360_video": "360° Video"
   },
-
   "admin_add_temple": {
     "page_badge": "⚙️ ADMIN PANEL",
     "page_title": "Add New Temple",
