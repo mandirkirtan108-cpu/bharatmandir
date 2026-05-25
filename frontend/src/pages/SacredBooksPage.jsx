@@ -228,6 +228,10 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
 /* ═══════════════════════════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════════════════════════ */
+
+// Slugs jo sabse last mein aane chahiye
+const LAST_BOOKS = ['ramayana', 'mahabharata', 'ramayan', 'the-ramayana', 'the-mahabharata'];
+
 export default function SacredBooksPage() {
   // ── State ────────────────────────────────────────────────────
   const [books, setBooks] = useState([]);
@@ -360,11 +364,20 @@ export default function SacredBooksPage() {
 
   // ── Helpers ───────────────────────────────────────────────────
   const getProgress = (slug) => allProgress.find(p => p.slug === slug);
-  const filteredBooks = books.filter(b =>
-    !bookFilter || b.title.toLowerCase().includes(bookFilter.toLowerCase()) ||
-    b.deity?.toLowerCase().includes(bookFilter.toLowerCase()) ||
-    b.tradition?.toLowerCase().includes(bookFilter.toLowerCase())
-  );
+
+  // ── Ramayana & Mahabharata ko last mein sort karo ─────────────
+  const filteredBooks = books
+    .filter(b =>
+      !bookFilter || b.title.toLowerCase().includes(bookFilter.toLowerCase()) ||
+      b.deity?.toLowerCase().includes(bookFilter.toLowerCase()) ||
+      b.tradition?.toLowerCase().includes(bookFilter.toLowerCase())
+    )
+    .sort((a, b) => {
+      const aLast = LAST_BOOKS.includes(a.slug?.toLowerCase()) ? 1 : 0;
+      const bLast = LAST_BOOKS.includes(b.slug?.toLowerCase()) ? 1 : 0;
+      return aLast - bLast;
+    });
+
   const bk = selectedBook;
 
   // ── Render ────────────────────────────────────────────────────
