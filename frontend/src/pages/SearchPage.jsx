@@ -86,9 +86,10 @@ export default function SearchPage() {
         temples = res.data || [];
         if (selectedSects.length  > 0) temples = temples.filter(t => selectedSects.includes(t.sect));
         if (selectedStates.length > 0) temples = temples.filter(t => selectedStates.includes(t.state));
-        if (jyotirlinga)               temples = temples.filter(t => t.is_jyotirlinga);
-        if (shaktipeeth)               temples = temples.filter(t => t.is_shaktipeeth);
-        if (freeEntry)                 temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
+        if (jyotirlinga || shaktipeeth) temples = temples.filter(t =>
+          (jyotirlinga && t.is_jyotirlinga) || (shaktipeeth && t.is_shaktipeeth)
+        );
+        if (freeEntry) temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
         if (sort === 'name_asc')    temples = [...temples].sort((a, b) => (a.name||'').localeCompare(b.name||''));
         if (sort === 'name_desc')   temples = [...temples].sort((a, b) => (b.name||'').localeCompare(a.name||''));
         if (sort === 'rating_desc') temples = [...temples].sort((a, b) => (b.average_rating||0) - (a.average_rating||0));
@@ -99,20 +100,47 @@ export default function SearchPage() {
         temples   = res.data || [];
         count     = temples.length;
       } else {
-        const params = { per_page: 200 };
-        if (selectedStates.length === 1) params.state = selectedStates[0];
-        if (selectedSects.length  === 1) params.sect  = selectedSects[0];
-        if (jyotirlinga) params.jyotirlinga = true;
-        if (shaktipeeth) params.shaktipeeth = true;
-        const res = await templeAPI.getAll(params);
-        temples   = res.data.temples || [];
-        count     = res.data.total   || 0;
+        // Fetch ALL temples by paginating through backend (max 100 per call)
+        const fetchAll = async (extraParams = {}) => {
+          let all = [], pg = 1;
+          while (true) {
+            const res = await templeAPI.getAll({ per_page: 100, page: pg, ...extraParams });
+            const batch = res.data.temples || [];
+            all = [...all, ...batch];
+            if (all.length >= (res.data.total || 0) || batch.length < 100) break;
+            pg++;
+          }
+          return all;
+        };
+
+        if (jyotirlinga && shaktipeeth) {
+          // OR logic: fetch both from backend, merge unique
+          const [t1, t2] = await Promise.all([
+            fetchAll({ jyotirlinga: true }),
+            fetchAll({ shaktipeeth: true }),
+          ]);
+          const seen = new Set();
+          temples = [...t1, ...t2].filter(t => {
+            if (seen.has(t.id)) return false;
+            seen.add(t.id); return true;
+          });
+        } else if (jyotirlinga) {
+          temples = await fetchAll({ jyotirlinga: true });
+        } else if (shaktipeeth) {
+          temples = await fetchAll({ shaktipeeth: true });
+        } else {
+          // No special category filter — fetch all, then filter client-side
+          temples = await fetchAll();
+        }
+
+        // Client-side filters (state, sect, free entry)
+        if (selectedStates.length > 0) temples = temples.filter(t => selectedStates.includes(t.state));
+        if (selectedSects.length  > 0) temples = temples.filter(t => selectedSects.includes(t.sect));
+        if (freeEntry) temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
+        count = temples.length;
       }
 
       if (!nearbyMode) {
-        if (selectedSects.length  > 1) temples = temples.filter(t => selectedSects.includes(t.sect));
-        if (selectedStates.length > 1) temples = temples.filter(t => selectedStates.includes(t.state));
-        if (freeEntry)                 temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
         temples = [...temples].sort((a, b) => {
           if (sort === 'name_asc')    return (a.name || '').localeCompare(b.name || '');
           if (sort === 'name_desc')   return (b.name || '').localeCompare(a.name || '');
