@@ -86,9 +86,10 @@ export default function SearchPage() {
         temples = res.data || [];
         if (selectedSects.length  > 0) temples = temples.filter(t => selectedSects.includes(t.sect));
         if (selectedStates.length > 0) temples = temples.filter(t => selectedStates.includes(t.state));
-        if (jyotirlinga)               temples = temples.filter(t => t.is_jyotirlinga);
-        if (shaktipeeth)               temples = temples.filter(t => t.is_shaktipeeth);
-        if (freeEntry)                 temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
+        if (jyotirlinga || shaktipeeth) temples = temples.filter(t =>
+          (jyotirlinga && t.is_jyotirlinga) || (shaktipeeth && t.is_shaktipeeth)
+        );
+        if (freeEntry) temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
         if (sort === 'name_asc')    temples = [...temples].sort((a, b) => (a.name||'').localeCompare(b.name||''));
         if (sort === 'name_desc')   temples = [...temples].sort((a, b) => (b.name||'').localeCompare(a.name||''));
         if (sort === 'rating_desc') temples = [...temples].sort((a, b) => (b.average_rating||0) - (a.average_rating||0));
@@ -102,16 +103,22 @@ export default function SearchPage() {
         const params = { per_page: 200 };
         if (selectedStates.length === 1) params.state = selectedStates[0];
         if (selectedSects.length  === 1) params.sect  = selectedSects[0];
-        if (jyotirlinga) params.jyotirlinga = true;
-        if (shaktipeeth) params.shaktipeeth = true;
+        if (jyotirlinga && !shaktipeeth) params.jyotirlinga = true;
+        if (shaktipeeth && !jyotirlinga) params.shaktipeeth = true;
         const res = await templeAPI.getAll(params);
         temples   = res.data.temples || [];
         count     = res.data.total   || 0;
+        if (jyotirlinga && shaktipeeth)
+          temples = temples.filter(t => t.is_jyotirlinga || t.is_shaktipeeth);
       }
 
       if (!nearbyMode) {
         if (selectedSects.length  > 1) temples = temples.filter(t => selectedSects.includes(t.sect));
         if (selectedStates.length > 1) temples = temples.filter(t => selectedStates.includes(t.state));
+        // jyotirlinga + shaktipeeth = OR logic (show either)
+        if (jyotirlinga || shaktipeeth) temples = temples.filter(t =>
+          (jyotirlinga && t.is_jyotirlinga) || (shaktipeeth && t.is_shaktipeeth)
+        );
         if (freeEntry)                 temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
         temples = [...temples].sort((a, b) => {
           if (sort === 'name_asc')    return (a.name || '').localeCompare(b.name || '');
