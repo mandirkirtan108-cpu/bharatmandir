@@ -31,26 +31,25 @@ export default function SearchPage() {
   // ── Radius / Nearby state ──────────────────────────────────────────
   const [nearbyMode,     setNearbyMode]     = useState(false);
   const [radiusKm,       setRadiusKm]       = useState(10);
-  const [userLocation,   setUserLocation]   = useState(null);   // { lat, lng }
+  const [userLocation,   setUserLocation]   = useState(null);
   const [locationError,  setLocationError]  = useState('');
   const [locLoading,     setLocLoading]     = useState(false);
 
   const { translated: displayResults, translating } = useTranslatedTemples(results);
 
   const SORT_OPTIONS = [
-    { value: 'name_asc',    label: t('sort.name_asc') },
-    { value: 'name_desc',   label: t('sort.name_desc') },
-    { value: 'rating_desc', label: t('sort.rating_desc') },
-    { value: 'city_asc',    label: t('sort.city_asc') },
-    { value: 'distance_asc', label: 'दूरी (नज़दीक पहले)' },
+    { value: 'name_asc',     label: t('sort.name_asc') },
+    { value: 'name_desc',    label: t('sort.name_desc') },
+    { value: 'rating_desc',  label: t('sort.rating_desc') },
+    { value: 'city_asc',     label: t('sort.city_asc') },
+    { value: 'distance_asc', label: 'Nearest First' },
   ];
 
   const PER_PAGE = 12;
 
-  // ── Get user location ──────────────────────────────────────────────
   const getUserLocation = () => {
     if (!navigator.geolocation) {
-      setLocationError('आपका browser location support नहीं करता।');
+      setLocationError('Your browser does not support location access.');
       return;
     }
     setLocLoading(true);
@@ -61,8 +60,8 @@ export default function SearchPage() {
         setNearbyMode(true);
         setLocLoading(false);
       },
-      (err) => {
-        setLocationError('Location access नहीं मिली। कृपया browser में location allow करें।');
+      () => {
+        setLocationError('Location access denied. Please allow location in your browser and try again.');
         setLocLoading(false);
       },
       { timeout: 10000 }
@@ -75,7 +74,6 @@ export default function SearchPage() {
     setLocationError('');
   };
 
-  // ── Fetch results ──────────────────────────────────────────────────
   const fetchResults = useCallback(async (resetPage = true) => {
     setLoading(true);
     const currentPage = resetPage ? 1 : page;
@@ -84,28 +82,18 @@ export default function SearchPage() {
       let temples, count;
 
       if (nearbyMode && userLocation) {
-        // ── Nearby / Radius search ──
-        const res = await templeAPI.getNearby(
-          userLocation.lat,
-          userLocation.lng,
-          radiusKm,
-          100                    // limit — ज़्यादा लाओ, फिर client-side filter
-        );
+        const res = await templeAPI.getNearby(userLocation.lat, userLocation.lng, radiusKm, 100);
         temples = res.data || [];
-        // Apply extra filters on top
         if (selectedSects.length  > 0) temples = temples.filter(t => selectedSects.includes(t.sect));
         if (selectedStates.length > 0) temples = temples.filter(t => selectedStates.includes(t.state));
         if (jyotirlinga)               temples = temples.filter(t => t.is_jyotirlinga);
         if (shaktipeeth)               temples = temples.filter(t => t.is_shaktipeeth);
         if (freeEntry)                 temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
-        // Sort — default nearby keeps distance_asc (already sorted by backend)
         if (sort === 'name_asc')    temples = [...temples].sort((a, b) => (a.name||'').localeCompare(b.name||''));
         if (sort === 'name_desc')   temples = [...temples].sort((a, b) => (b.name||'').localeCompare(a.name||''));
         if (sort === 'rating_desc') temples = [...temples].sort((a, b) => (b.average_rating||0) - (a.average_rating||0));
         if (sort === 'city_asc')    temples = [...temples].sort((a, b) => (a.city||'').localeCompare(b.city||''));
-        // distance_asc → already in backend order, keep as-is
         count = temples.length;
-
       } else if (query.trim()) {
         const res = await templeAPI.search(query.trim());
         temples   = res.data || [];
@@ -147,7 +135,6 @@ export default function SearchPage() {
   }, [query, selectedSects, selectedStates, jyotirlinga, shaktipeeth, freeEntry, sort, page, nearbyMode, userLocation, radiusKm]);
 
   useEffect(() => { fetchResults(true); }, [selectedSects, selectedStates, jyotirlinga, shaktipeeth, freeEntry, sort]);
-  // Re-fetch when nearby params change
   useEffect(() => {
     if (nearbyMode && userLocation) fetchResults(true);
   }, [nearbyMode, userLocation, radiusKm]);
@@ -217,69 +204,107 @@ export default function SearchPage() {
               )}
             </div>
 
-            {/* ── NEARBY / RADIUS FILTER ── */}
-            <div className="search-filter-group" style={{ background: nearbyMode ? 'rgba(var(--saffron-rgb, 218,96,0), 0.06)' : 'transparent', borderRadius: 10, padding: nearbyMode ? '12px' : '0', transition: 'all 0.3s ease', marginBottom: 4 }}>
-              <span className="search-filter-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <MapPin size={14} style={{ color: 'var(--saffron)' }} />
-                आस-पास के मंदिर खोजें
-              </span>
+            {/* ══════════════════════════════════════════
+                NEARBY / RADIUS FILTER SECTION
+            ══════════════════════════════════════════ */}
+            <div style={{
+              border: nearbyMode ? '2px solid var(--saffron)' : '2px dashed var(--border)',
+              borderRadius: 12,
+              padding: 14,
+              marginBottom: 20,
+              background: nearbyMode ? 'rgba(218,96,0,0.05)' : 'transparent',
+              transition: 'all 0.3s ease',
+            }}>
 
-              {!nearbyMode && !userLocation && (
+              {/* Section heading */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: nearbyMode ? 'var(--saffron)' : 'var(--bg-alt, #f5f0e8)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, transition: 'background 0.3s',
+                }}>
+                  <MapPin size={16} style={{ color: nearbyMode ? 'white' : 'var(--saffron)' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--brown)', fontFamily: 'var(--font-display)', lineHeight: 1.2 }}>
+                    Search Nearby Temples
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 1 }}>
+                    Find temples within a radius
+                  </div>
+                </div>
+              </div>
+
+              {/* Get location button */}
+              {!userLocation && (
                 <button
                   onClick={getUserLocation}
                   disabled={locLoading}
                   style={{
-                    marginTop: 10,
                     width: '100%',
-                    padding: '9px 0',
-                    background: 'linear-gradient(135deg, var(--saffron) 0%, var(--brown) 100%)',
+                    padding: '10px 0',
+                    background: locLoading
+                      ? 'var(--border)'
+                      : 'linear-gradient(135deg, var(--saffron) 0%, var(--brown) 100%)',
                     color: 'white',
                     border: 'none',
                     borderRadius: 8,
                     fontSize: 13,
+                    fontWeight: 600,
                     fontFamily: 'var(--font-display)',
                     cursor: locLoading ? 'wait' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 6,
-                    opacity: locLoading ? 0.7 : 1,
+                    gap: 7,
                     transition: 'opacity 0.2s',
+                    letterSpacing: '0.3px',
                   }}
                 >
-                  <Navigation size={14} />
-                  {locLoading ? 'Location ले रहे हैं…' : 'मेरी Location उपयोग करें'}
+                  <Navigation size={15} />
+                  {locLoading ? 'Getting your location…' : 'Use My Location'}
                 </button>
               )}
 
+              {/* Location error */}
               {locationError && (
-                <p style={{ marginTop: 8, fontSize: 12, color: '#c0392b', lineHeight: 1.4 }}>
+                <p style={{ marginTop: 8, fontSize: 12, color: '#c0392b', lineHeight: 1.5, background: '#fdecea', padding: '6px 10px', borderRadius: 6 }}>
                   ⚠️ {locationError}
                 </p>
               )}
 
+              {/* Active radius controls */}
               {nearbyMode && userLocation && (
-                <div style={{ marginTop: 10 }}>
-                  {/* Radius Slider */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--font-display)' }}>
-                      खोज दायरा (Radius)
+                <div>
+                  {/* Status badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, padding: '5px 10px', background: '#eafaf1', borderRadius: 20, width: 'fit-content' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#27ae60', display: 'inline-block' }} />
+                    <span style={{ fontSize: 11, color: '#27ae60', fontWeight: 600 }}>Location detected</span>
+                  </div>
+
+                  {/* Radius label + badge */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)', fontFamily: 'var(--font-display)' }}>
+                      Search Radius
                     </span>
                     <span style={{
                       background: 'var(--saffron)',
                       color: 'white',
                       borderRadius: 20,
-                      padding: '2px 10px',
-                      fontSize: 12,
+                      padding: '3px 12px',
+                      fontSize: 13,
                       fontWeight: 700,
                       fontFamily: 'var(--font-display)',
-                      minWidth: 52,
+                      minWidth: 58,
                       textAlign: 'center',
+                      boxShadow: '0 2px 6px rgba(218,96,0,0.3)',
                     }}>
                       {radiusKm} km
                     </span>
                   </div>
 
+                  {/* Slider */}
                   <input
                     type="range"
                     min={1}
@@ -287,30 +312,34 @@ export default function SearchPage() {
                     step={1}
                     value={radiusKm}
                     onChange={e => setRadiusKm(Number(e.target.value))}
-                    style={{
-                      width: '100%',
-                      accentColor: 'var(--saffron)',
-                      cursor: 'pointer',
-                      height: 4,
-                    }}
+                    style={{ width: '100%', accentColor: 'var(--saffron)', cursor: 'pointer', height: 4, marginBottom: 10 }}
                   />
 
-                  {/* Quick preset buttons */}
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                  {/* Range labels */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-light)', marginBottom: 10, marginTop: -6 }}>
+                    <span>1 km</span>
+                    <span>50 km</span>
+                    <span>100 km</span>
+                  </div>
+
+                  {/* Quick preset pills */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                     {[5, 10, 25, 50].map(km => (
                       <button
                         key={km}
                         onClick={() => setRadiusKm(km)}
                         style={{
-                          padding: '3px 10px',
-                          fontSize: 11,
+                          padding: '4px 12px',
+                          fontSize: 12,
+                          fontWeight: radiusKm === km ? 700 : 400,
                           borderRadius: 20,
                           border: `1.5px solid ${radiusKm === km ? 'var(--saffron)' : 'var(--border)'}`,
-                          background: radiusKm === km ? 'var(--saffron)' : 'transparent',
+                          background: radiusKm === km ? 'var(--saffron)' : 'white',
                           color: radiusKm === km ? 'white' : 'var(--text-mid)',
                           cursor: 'pointer',
                           fontFamily: 'var(--font-display)',
                           transition: 'all 0.15s',
+                          boxShadow: radiusKm === km ? '0 2px 6px rgba(218,96,0,0.25)' : 'none',
                         }}
                       >
                         {km} km
@@ -318,21 +347,31 @@ export default function SearchPage() {
                     ))}
                   </div>
 
-                  <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ color: '#27ae60' }}>✓</span>
-                    Location मिली — {radiusKm} km के अंदर खोज रहे हैं
-                  </div>
-
+                  {/* Disable button */}
                   <button
                     onClick={disableNearby}
-                    style={{ marginTop: 8, fontSize: 11, color: '#c0392b', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                    style={{
+                      width: '100%',
+                      padding: '7px 0',
+                      fontSize: 12,
+                      color: '#c0392b',
+                      background: '#fdecea',
+                      border: '1px solid #f5c6c6',
+                      borderRadius: 7,
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-display)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5,
+                    }}
                   >
-                    × Nearby mode बंद करें
+                    <X size={12} /> Disable Nearby Search
                   </button>
                 </div>
               )}
             </div>
-            {/* ── END NEARBY FILTER ── */}
+            {/* ══════════════════════════════════════════ */}
 
             <div className="search-filter-group">
               <span className="search-filter-label">{t('search.special_categories')}</span>
@@ -383,7 +422,8 @@ export default function SearchPage() {
                   ? <span style={{ color: 'var(--text-light)', fontSize: 14 }}>{t('search.searching')}</span>
                   : <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--brown)' }}>
                       {nearbyMode && userLocation
-                        ? <><MapPin size={14} style={{ display: 'inline', marginRight: 4, color: 'var(--saffron)' }} />{total} मंदिर {radiusKm} km के अंदर</>
+                        ? <><MapPin size={14} style={{ display: 'inline', marginRight: 4, color: 'var(--saffron)' }} />
+                            {total} {total !== 1 ? 'temples' : 'temple'} within {radiusKm} km</>
                         : <>{total} {total !== 1 ? t('temples_count_plural') : t('temples_count_singular')} {t('search.found')}</>
                       }
                     </span>
@@ -396,12 +436,11 @@ export default function SearchPage() {
               </select>
             </div>
 
-            {/* Active filter chips */}
             {(selectedSects.length > 0 || selectedStates.length > 0 || nearbyMode) && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
                 {nearbyMode && (
                   <span style={{ background: '#27ae60', color: 'white', padding: '3px 12px', borderRadius: 50, fontSize: 12, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={disableNearby}>
-                    📍 {radiusKm} km <X size={10} />
+                    📍 Within {radiusKm} km <X size={10} />
                   </span>
                 )}
                 {selectedSects.map(s => (
@@ -420,7 +459,9 @@ export default function SearchPage() {
             {loading && (
               <div className="loading-wrap" style={{ minHeight: 200 }}>
                 <div className="spinner" />
-                <span className="loading-text">{nearbyMode ? 'आस-पास के मंदिर खोज रहे हैं…' : t('search.searching')}</span>
+                <span className="loading-text">
+                  {nearbyMode ? 'Searching nearby temples…' : t('search.searching')}
+                </span>
               </div>
             )}
 
@@ -435,18 +476,19 @@ export default function SearchPage() {
                 <div className="empty-icon">{nearbyMode ? '📍' : '🔍'}</div>
                 <div className="empty-title">
                   {nearbyMode
-                    ? `${radiusKm} km के अंदर कोई मंदिर नहीं मिला`
+                    ? `No temples found within ${radiusKm} km`
                     : t('no_temples')
                   }
                 </div>
                 <p className="empty-msg">
                   {nearbyMode
-                    ? 'Radius बढ़ाएं या दूसरे फ़िल्टर हटाएं।'
+                    ? 'Try increasing the radius or removing other filters.'
                     : t('search.empty_msg')
                   }
                 </p>
-                <button className="btn-primary" style={{ marginTop: 16 }} onClick={nearbyMode ? () => setRadiusKm(prev => Math.min(prev + 20, 100)) : clearAllFilters}>
-                  {nearbyMode ? 'Radius बढ़ाएं' : t('search.clear_filters')}
+                <button className="btn-primary" style={{ marginTop: 16 }}
+                  onClick={nearbyMode ? () => setRadiusKm(prev => Math.min(prev + 20, 100)) : clearAllFilters}>
+                  {nearbyMode ? 'Increase Radius' : t('search.clear_filters')}
                 </button>
               </div>
             )}
