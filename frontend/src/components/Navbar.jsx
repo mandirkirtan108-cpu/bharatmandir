@@ -90,24 +90,7 @@ export default function Navbar() {
                 key={link.to}
                 to={link.to}
                 className={`nav-link nav-link-${index}${isActive(link.to) ? ' active' : ''}`}
-                style={link.to === '/search' ? {
-                  background: isActive('/search')
-                    ? 'linear-gradient(135deg, var(--saffron), var(--brown))'
-                    : 'linear-gradient(135deg,#fff5e6,#ffe0b0)',
-                  color: isActive('/search') ? 'white' : 'var(--saffron)',
-                  border: '1.5px solid var(--saffron)',
-                  borderRadius: 50,
-                  padding: '6px 16px',
-                  fontWeight: 700,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  fontSize: 13,
-                  textDecoration: 'none',
-                  transition: 'all .2s',
-                } : {}}
               >
-                {link.to === '/search' && <Search size={14} />}
                 {link.label}
               </Link>
             ))}
