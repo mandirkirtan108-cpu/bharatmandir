@@ -71,7 +71,7 @@ def generate_otp() -> str:
 def send_otp_email(to_email: str, name: str, otp: str):
     try:
         resend.Emails.send({
-            "from": "BharatMandir <onboarding@resend.dev>",
+            "from": "BluQQ <noreply@bluqq.com>",
             "to": [to_email],
             "subject": "🛕 BharatMandir — Your OTP Code",
             "html": f"""
