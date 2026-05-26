@@ -18,7 +18,6 @@ import AdminLoginPage        from './pages/AdminLoginPage';
 import SacredBooksPage       from './pages/SacredBooksPage';
 import LoginPage             from './pages/LoginPage';
 import SignupPage            from './pages/SignupPage';
-import VerifyEmailPage       from './pages/VerifyEmailPage';
 
 function RootRedirect() {
   const { isLoggedIn } = useUserAuth();
@@ -50,7 +49,6 @@ export default function App() {
           {/* ── User Auth (all public) ──────────────────────── */}
           <Route path="/login"           element={<LoginPage />} />
           <Route path="/signup"          element={<SignupPage />} />
-          <Route path="/verify-email"    element={<VerifyEmailPage />} />
 
           {/* ── Admin Login — public ───────────────────────── */}
           <Route path="/admin/login"     element={<AdminLoginPage />} />

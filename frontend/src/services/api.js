@@ -121,10 +121,12 @@ const USER_REFRESH_KEY = 'bm_user_refresh_token';
 const USER_KEY         = 'bm_user';
 
 export const userAuthAPI = {
-  signup: (data) => api.post('/api/auth/signup', data),
-  login:  (data) => api.post('/api/auth/login',  data),
-  refresh: (refresh_token) => api.post('/api/auth/refresh', { refresh_token }),
-  verifyEmail: (token) => api.post('/api/auth/verify-email', { token }),
+  signup:    (data)          => api.post('/api/auth/signup',     data),
+  login:     (data)          => api.post('/api/auth/login',      data),
+  refresh:   (refresh_token) => api.post('/api/auth/refresh',    { refresh_token }),
+  verifyOTP: (email, otp)    => api.post('/api/auth/verify-otp', { email, otp }),
+  resendOTP: (email)         => api.post('/api/auth/resend-otp', { email }),
+
   me: () => {
     const token = localStorage.getItem(USER_ACCESS_KEY);
     return api.get('/api/auth/me', {
