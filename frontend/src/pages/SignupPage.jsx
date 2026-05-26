@@ -13,17 +13,17 @@ export default function SignupPage() {
   const { signup, isLoggedIn, loading, error } = useUserAuth();
   const navigate = useNavigate();
 
-  const [form, setForm]         = useState({ name:'', email:'', password:'', confirmPassword:'' });
-  const [showPass, setShowPass] = useState(false);
-  const [showConf, setShowConf] = useState(false);
-  const [localErr, setLocalErr] = useState('');
+  const [form, setForm]             = useState({ name:'', email:'', password:'', confirmPassword:'' });
+  const [showPass, setShowPass]     = useState(false);
+  const [showConf, setShowConf]     = useState(false);
+  const [localErr, setLocalErr]     = useState('');
 
   // OTP step
-  const [step, setStep]           = useState('signup'); // 'signup' | 'otp'
-  const [otp, setOtp]             = useState('');
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [otpError, setOtpError]   = useState('');
-  const [otpSuccess, setOtpSuccess] = useState('');
+  const [step, setStep]               = useState('signup'); // 'signup' | 'otp'
+  const [otp, setOtp]                 = useState('');
+  const [otpLoading, setOtpLoading]   = useState(false);
+  const [otpError, setOtpError]       = useState('');
+  const [otpSuccess, setOtpSuccess]   = useState('');
   const [resendTimer, setResendTimer] = useState(0);
 
   useEffect(() => { if (isLoggedIn) navigate('/', { replace: true }); }, [isLoggedIn, navigate]);
@@ -54,15 +54,15 @@ export default function SignupPage() {
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     setOtpError(''); setOtpSuccess('');
-    if (otp.length !== 6) { setOtpError('6-digit OTP daalo.'); return; }
+    if (otp.length !== 6) { setOtpError('Please enter the 6-digit OTP.'); return; }
     setOtpLoading(true);
     try {
       const res = await userAuthAPI.verifyOTP(form.email, otp);
       userAuthAPI.saveTokens(res.data);
-      setOtpSuccess('Email verified! 🎉 Home page pe ja rahe hain…');
+      setOtpSuccess('Email verified! 🎉 Redirecting to home page…');
       setTimeout(() => navigate('/', { replace: true }), 2000);
     } catch (err) {
-      setOtpError(err.response?.data?.detail || 'OTP galat hai. Dobara try karein.');
+      setOtpError(err.response?.data?.detail || 'Invalid OTP. Please try again.');
     } finally {
       setOtpLoading(false);
     }
@@ -73,10 +73,10 @@ export default function SignupPage() {
     setOtpError(''); setOtpSuccess('');
     try {
       await userAuthAPI.resendOTP(form.email);
-      setOtpSuccess('Naya OTP bheja gaya! Email check karein.');
+      setOtpSuccess('A new OTP has been sent! Please check your email.');
       setResendTimer(30);
     } catch (err) {
-      setOtpError(err.response?.data?.detail || 'Resend failed.');
+      setOtpError(err.response?.data?.detail || 'Resend failed. Please try again.');
     }
   };
 
@@ -174,7 +174,7 @@ export default function SignupPage() {
                 </div>
               </div>
               <button type="submit" disabled={loading} style={submitBtn(loading)}>
-                {loading ? 'Account creating' : 'Create Account'}
+                {loading ? 'Creating account…' : 'Create Account'}
               </button>
             </form>
             <p style={{ textAlign: 'center', marginTop: 24, color: W6, fontSize: 13 }}>
@@ -192,13 +192,14 @@ export default function SignupPage() {
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>📧</div>
               <p style={{ color: W6, fontSize: 14, lineHeight: 1.6, margin: 0 }}>
-                <strong style={{ color: W9 }}>{form.email}</strong> pe 6-digit OTP bheja gaya hai.
-                <br />OTP daalo aur account verify karo.
+                A 6-digit OTP has been sent to{' '}
+                <strong style={{ color: W9 }}>{form.email}</strong>.
+                <br />Enter the OTP below to verify your account.
               </p>
             </div>
 
-            {otpError   && <div style={errBox}>{otpError}</div>}
-            {otpSuccess  && <div style={successBox}>{otpSuccess}</div>}
+            {otpError  && <div style={errBox}>{otpError}</div>}
+            {otpSuccess && <div style={successBox}>{otpSuccess}</div>}
 
             <form onSubmit={handleVerifyOTP}>
               <div style={{ marginBottom: 24 }}>
@@ -222,7 +223,7 @@ export default function SignupPage() {
                 />
               </div>
               <button type="submit" disabled={otpLoading || otp.length !== 6} style={submitBtn(otpLoading || otp.length !== 6)}>
-                {otpLoading ? 'Verify ho raha hai…' : '✅ Verify OTP'}
+                {otpLoading ? 'Verifying…' : '✅ Verify OTP'}
               </button>
             </form>
 
@@ -230,7 +231,8 @@ export default function SignupPage() {
             <div style={{ textAlign: 'center', marginTop: 20 }}>
               {resendTimer > 0 ? (
                 <p style={{ color: W6, fontSize: 13 }}>
-                  OTP nahi mila? <span style={{ color: S }}>{resendTimer}s</span> baad resend karein
+                  Didn't receive OTP? Resend in{' '}
+                  <span style={{ color: S }}>{resendTimer}s</span>
                 </p>
               ) : (
                 <button onClick={handleResend} style={{
@@ -238,7 +240,7 @@ export default function SignupPage() {
                   color: S, fontSize: 13, fontWeight: 600,
                   cursor: 'pointer', textDecoration: 'underline',
                 }}>
-                  🔄 OTP Resend Karo
+                  🔄 Resend OTP
                 </button>
               )}
             </div>
@@ -248,7 +250,7 @@ export default function SignupPage() {
               borderRadius: 10, padding: '10px 14px', marginTop: 16,
               color: 'rgba(255,255,255,0.45)', fontSize: 12, textAlign: 'center',
             }}>
-              ⚠️ Spam/Junk folder bhi check karein · OTP 10 minute mein expire hoga
+              ⚠️ Please also check your Spam/Junk folder · OTP expires in 10 minutes
             </div>
           </div>
         )}
