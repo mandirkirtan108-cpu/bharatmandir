@@ -18,6 +18,7 @@ import AdminLoginPage        from './pages/AdminLoginPage';
 import SacredBooksPage       from './pages/SacredBooksPage';
 import LoginPage             from './pages/LoginPage';
 import SignupPage            from './pages/SignupPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 
 function RootRedirect() {
   const { isLoggedIn } = useUserAuth();
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="/admin/panel" element={
             <ProtectedRoute><AdminPanelPage /></ProtectedRoute>
           } />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
         </Routes>
       </BrowserRouter>
