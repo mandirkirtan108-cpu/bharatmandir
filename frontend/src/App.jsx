@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LangProvider } from './LangContext';
+import { useUserAuth } from './hooks/useUserAuth';
 import ProtectedRoute        from './components/ProtectedRoute';
 import HomePage              from './pages/HomePage';
 import TempleDetailPage      from './pages/TempleDetailPage';
@@ -18,14 +19,23 @@ import SacredBooksPage       from './pages/SacredBooksPage';
 import LoginPage             from './pages/LoginPage';
 import SignupPage            from './pages/SignupPage';
 
+function RootRedirect() {
+  const { isLoggedIn } = useUserAuth();
+  return isLoggedIn 
+    ? <HomePage /> 
+    : <Navigate to="/login" replace />;
+}
+
 export default function App() {
   return (
     <LangProvider>
       <BrowserRouter>
         <Routes>
 
+          {/* ── Root — login check ──────────────────────────── */}
+          <Route path="/"                element={<RootRedirect />} />
+
           {/* ── Public Routes ──────────────────────────────── */}
-          <Route path="/"                element={<HomePage />} />
           <Route path="/temple/:slug"    element={<TempleDetailPage />} />
           <Route path="/qr/:slug"        element={<TempleQRPage />} />
           <Route path="/map"             element={<MapPage />} />

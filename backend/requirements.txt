@@ -13,3 +13,4 @@ python-jose[cryptography]
 pytz
 openai
 resend
+pydantic[email]
