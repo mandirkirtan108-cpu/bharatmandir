@@ -14,7 +14,7 @@ adminApi.interceptors.request.use((config) => {
 
 // ── Response interceptor: refresh on 401, then retry ─────────────────
 let isRefreshing = false;
-let waitingQueue = []; // requests waiting while token refreshes
+let waitingQueue = [];
 
 function processQueue(newToken) {
   waitingQueue.forEach(({ resolve }) => resolve(newToken));
@@ -32,8 +32,6 @@ adminApi.interceptors.response.use(
   (res) => res,
   async (err) => {
     const original = err.config;
-
-    // Only handle 401, and only once per request (prevent infinite retry loop)
     if (err.response?.status !== 401 || original._retry) {
       return Promise.reject(err);
     }
@@ -45,7 +43,6 @@ adminApi.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    // If a refresh is already in progress, queue this request
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         waitingQueue.push({ resolve, reject });
@@ -55,7 +52,6 @@ adminApi.interceptors.response.use(
       });
     }
 
-    // This request is the one doing the refresh
     isRefreshing = true;
     try {
       const { data } = await axios.post(
@@ -64,31 +60,22 @@ adminApi.interceptors.response.use(
       );
       const newToken = data.access_token;
       sessionStorage.setItem('bm_access_token', newToken);
-
-      // Update default header for future requests
       adminApi.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-
-      // Let all queued requests through with the new token
       processQueue(newToken);
-
-      // Retry the original request
       original.headers['Authorization'] = `Bearer ${newToken}`;
       return adminApi(original);
-
     } catch (refreshErr) {
-      // Refresh itself failed (refresh token also expired) → force login
       waitingQueue.forEach(({ reject }) => reject(refreshErr));
       waitingQueue = [];
       clearSessionAndRedirect();
       return Promise.reject(refreshErr);
-
     } finally {
       isRefreshing = false;
     }
   }
 );
 
-// ── API exports (unchanged) ───────────────────────────────────────────
+// ── API exports ───────────────────────────────────────────
 export const templeAPI = {
   getAll:          (params = {}) => api.get('/api/temples', { params }),
   getBySlug:       (slug)        => api.get(`/api/temples/${slug}`),
@@ -126,4 +113,36 @@ export const adminAPI = {
 export const routeAPI = {
   plan:    (data) => api.post('/api/route/plan', data),
   presets: ()     => api.get('/api/route/presets'),
+};
+
+// ── User Auth API ────────────────────────────────────────────────────
+const USER_ACCESS_KEY  = 'bm_user_access_token';
+const USER_REFRESH_KEY = 'bm_user_refresh_token';
+const USER_KEY         = 'bm_user';
+
+export const userAuthAPI = {
+  signup: (data) => api.post('/api/auth/signup', data),
+  login:  (data) => api.post('/api/auth/login',  data),
+  refresh: (refresh_token) => api.post('/api/auth/refresh', { refresh_token }),
+  verifyEmail: (token) => api.post('/api/auth/verify-email', { token }),
+  me: () => {
+    const token = localStorage.getItem(USER_ACCESS_KEY);
+    return api.get('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  },
+  saveTokens(data) {
+    localStorage.setItem(USER_ACCESS_KEY,  data.access_token);
+    localStorage.setItem(USER_REFRESH_KEY, data.refresh_token);
+    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+  },
+  clearTokens() {
+    localStorage.removeItem(USER_ACCESS_KEY);
+    localStorage.removeItem(USER_REFRESH_KEY);
+    localStorage.removeItem(USER_KEY);
+  },
+  getUser() {
+    try { return JSON.parse(localStorage.getItem(USER_KEY)); }
+    catch { return null; }
+  },
 };

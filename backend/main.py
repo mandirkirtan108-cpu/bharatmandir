@@ -9,13 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routers import temples, route_planner, admin, festivals, spiritual_chat
 from routers.ai_festival_cache import router as ai_festival_cache_router
-from routers.sacred_books import router as sacred_books_router          # ← NEW
+from routers.sacred_books import router as sacred_books_router
 from db.connection import get_pool, close_pool
 import os
 from dotenv import load_dotenv
 from routers import proxy
 from routers.admin_auth import router as admin_auth_router
 from routers.panchang import router as panchang_router
+from routers.user_auth import router as user_auth_router
 
 
 load_dotenv()
@@ -67,6 +68,7 @@ app.add_middleware(
 )
 
 app.include_router(admin_auth_router)
+app.include_router(user_auth_router)
 app.include_router(admin.router)
 app.include_router(temples.router)
 app.include_router(route_planner.router)
@@ -75,7 +77,7 @@ app.include_router(festivals.router)
 app.include_router(spiritual_chat.router)
 app.include_router(panchang_router)
 app.include_router(proxy.router)
-app.include_router(sacred_books_router)                                  # ← NEW
+app.include_router(sacred_books_router)
 
 @app.get("/")
 def root():
