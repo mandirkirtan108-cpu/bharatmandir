@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut, BookOpen } from 'lucide-react';
+import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut, BookOpen, User } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useAdminAuth } from '../hooks/useAdminAuth';
+import { useUserAuth } from '../hooks/useUserAuth';
 
 export default function Navbar() {
   const [query, setQuery] = useState('');
@@ -13,7 +14,8 @@ export default function Navbar() {
   const { t } = useTranslation();
   const { lang, changeLang } = useLang();
   const sidebarRef = useRef(null);
-  const { isAdmin, logout } = useAdminAuth();
+  const { isAdmin, logout: adminLogout } = useAdminAuth();
+  const { isLoggedIn, user, logout: userLogout } = useUserAuth();
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -55,9 +57,15 @@ export default function Navbar() {
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
 
-  const handleLogout = () => {
-    logout();
+  const handleAdminLogout = () => {
+    adminLogout();
     navigate('/');
+    setSidebarOpen(false);
+  };
+
+  const handleUserLogout = () => {
+    userLogout();
+    navigate('/login');
     setSidebarOpen(false);
   };
 
@@ -158,7 +166,7 @@ export default function Navbar() {
                 </Link>
 
                 <button
-                  onClick={handleLogout}
+                  onClick={handleAdminLogout}
                   title={t('nav.admin_logout')}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -190,6 +198,43 @@ export default function Navbar() {
             )}
 
             <div className="nav-divider" />
+
+            {/* ── User logout button ── */}
+            {isLoggedIn && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 12px', borderRadius: 50,
+                  background: 'rgba(255,153,0,0.10)',
+                  border: '1px solid rgba(255,153,0,0.25)',
+                  color: '#ff9900', fontSize: 12, fontWeight: 600,
+                }}>
+                  <User size={13} />
+                  <span style={{
+                    maxWidth: 90, overflow: 'hidden',
+                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {user?.name?.split(' ')[0] || 'User'}
+                  </span>
+                </div>
+                <button
+                  onClick={handleUserLogout}
+                  title="Sign out"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '8px 12px', borderRadius: 50,
+                    border: '2px solid var(--cream-dark)', background: 'transparent',
+                    color: 'var(--text-light)', cursor: 'pointer',
+                    fontFamily: 'var(--font-display)', fontSize: 12,
+                    letterSpacing: '.04em', transition: 'all .2s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.color = 'var(--text-light)'; }}
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            )}
 
             <select
               className="nav-lang-select"
@@ -288,7 +333,7 @@ export default function Navbar() {
               </Link>
 
               <button
-                onClick={handleLogout}
+                onClick={handleAdminLogout}
                 className="sidebar-link"
                 style={{
                   background: 'none', border: 'none', width: '100%',
@@ -312,6 +357,41 @@ export default function Navbar() {
               <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
               {t('nav.admin_login')}
             </Link>
+          )}
+
+          {/* ── User logout in sidebar ── */}
+          {isLoggedIn && (
+            <>
+              <div style={{
+                margin: '8px 20px 0',
+                borderTop: '1px solid rgba(255,153,0,0.15)',
+                paddingTop: 8,
+              }} />
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 20px',
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  color: '#ff9900', fontSize: 13, fontWeight: 600,
+                }}>
+                  <User size={15} />
+                  <span>{user?.name || 'User'}</span>
+                </div>
+                <button
+                  onClick={handleUserLogout}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '7px 14px', borderRadius: 50,
+                    border: '1.5px solid #ef4444', background: 'rgba(239,68,68,0.08)',
+                    color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  <LogOut size={13} />
+                  Sign Out
+                </button>
+              </div>
+            </>
           )}
         </nav>
 
