@@ -174,7 +174,7 @@ export default function SignupPage() {
                 </div>
               </div>
               <button type="submit" disabled={loading} style={submitBtn(loading)}>
-                {loading ? 'Account ban raha hai…' : 'Create Account'}
+                {loading ? 'Account creating' : 'Create Account'}
               </button>
             </form>
             <p style={{ textAlign: 'center', marginTop: 24, color: W6, fontSize: 13 }}>
