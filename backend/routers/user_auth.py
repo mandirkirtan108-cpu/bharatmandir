@@ -21,7 +21,7 @@ JWT_SECRET    = os.environ.get("JWT_SECRET", "change-this-secret-in-production-N
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 REFRESH_TOKEN_EXPIRE_DAYS   = 30
-OTP_EXPIRE_MINUTES          = 10  # OTP 10 minute mein expire
+OTP_EXPIRE_MINUTES          = 10  # OTP expires in 10 minutes
 
 resend.api_key = os.environ.get("RESEND_API_KEY", "")
 FRONTEND_URL   = os.environ.get("FRONTEND_URL", "http://localhost:5173")
@@ -83,7 +83,7 @@ def send_otp_email(to_email: str, name: str, otp: str):
                 </div>
                 <p style="font-size: 16px;">Namaste <strong>{name}</strong>,</p>
                 <p style="color: #ccc;">
-                    Aapka email verify karne ke liye neeche diya gaya OTP use karein.
+                    Please use the OTP below to verify your email address.
                 </p>
                 <div style="text-align: center; margin: 32px 0;">
                     <div style="background: #ff9900; color: #1a0a00; padding: 20px 40px;
@@ -94,8 +94,8 @@ def send_otp_email(to_email: str, name: str, otp: str):
                     </div>
                 </div>
                 <p style="color: #888; font-size: 13px; text-align: center;">
-                    Ye OTP <strong>10 minute</strong> mein expire ho jaayega.<br/>
-                    Agar aapne signup nahi kiya to is email ko ignore karein.
+                    This OTP will expire in <strong>10 minutes</strong>.<br/>
+                    If you did not sign up, please ignore this email.
                 </p>
             </div>
             """
@@ -178,11 +178,10 @@ async def signup(body: SignupRequest):
 
         user_id, email, name, is_verified = row
 
-        # OTP email bhejo
         send_otp_email(email, name, otp)
 
         return {
-            "message": "Account created! OTP aapke email pe bheja gaya hai.",
+            "message": "Account created! An OTP has been sent to your email address.",
             "email": email,
         }
 
@@ -206,7 +205,7 @@ async def verify_otp(body: VerifyOTPRequest):
             )
             row = cur.fetchone()
             if not row:
-                raise HTTPException(status_code=400, detail="OTP galat hai ya expire ho gaya. Dobara try karein.")
+                raise HTTPException(status_code=400, detail="Invalid or expired OTP. Please try again.")
 
             cur.execute(
                 """UPDATE users
@@ -223,7 +222,7 @@ async def verify_otp(body: VerifyOTPRequest):
     refresh_token = create_token({"sub": str(user_id), "type": "refresh"}, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
 
     return {
-        "message": "Email verified! 🎉",
+        "message": "Email verified successfully! 🎉",
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
@@ -235,9 +234,9 @@ async def verify_otp(body: VerifyOTPRequest):
 async def resend_otp(body: ResendOTPRequest):
     user = get_user_by_email(body.email.lower())
     if not user:
-        raise HTTPException(status_code=404, detail="Email registered nahi hai.")
+        raise HTTPException(status_code=404, detail="Email address is not registered.")
     if user["is_verified"]:
-        raise HTTPException(status_code=400, detail="Email already verified hai.")
+        raise HTTPException(status_code=400, detail="This email is already verified.")
 
     otp         = generate_otp()
     otp_expires = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
@@ -251,7 +250,7 @@ async def resend_otp(body: ResendOTPRequest):
             )
 
     send_otp_email(body.email.lower(), user["name"], otp)
-    return {"message": "Naya OTP bheja gaya hai. Email check karein."}
+    return {"message": "A new OTP has been sent. Please check your email."}
 
 
 @router.post("/login")
@@ -264,7 +263,7 @@ async def login(body: LoginRequest):
     if not bcrypt.checkpw(body.password.encode('utf-8'), user["password_hash"].encode('utf-8')):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user["is_verified"]:
-        raise HTTPException(status_code=403, detail="Email verify nahi ki. Pehle OTP enter karein.")
+        raise HTTPException(status_code=403, detail="Email not verified. Please verify your email with the OTP first.")
 
     access_token  = create_token({"sub": str(user["id"]), "type": "access"},  timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     refresh_token = create_token({"sub": str(user["id"]), "type": "refresh"}, timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS))
