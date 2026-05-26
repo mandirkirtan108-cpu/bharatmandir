@@ -18,12 +18,12 @@ import AdminLoginPage        from './pages/AdminLoginPage';
 import SacredBooksPage       from './pages/SacredBooksPage';
 import LoginPage             from './pages/LoginPage';
 import SignupPage            from './pages/SignupPage';
-import VerifyEmailPage from './pages/VerifyEmailPage';
+import VerifyEmailPage       from './pages/VerifyEmailPage';
 
 function RootRedirect() {
   const { isLoggedIn } = useUserAuth();
-  return isLoggedIn 
-    ? <HomePage /> 
+  return isLoggedIn
+    ? <HomePage />
     : <Navigate to="/login" replace />;
 }
 
@@ -47,9 +47,10 @@ export default function App() {
           <Route path="/festivals"       element={<FestivalCalendarPage />} />
           <Route path="/sacred-books"    element={<SacredBooksPage />} />
 
-          {/* ── User Auth ───────────────────────────────────── */}
+          {/* ── User Auth (all public) ──────────────────────── */}
           <Route path="/login"           element={<LoginPage />} />
           <Route path="/signup"          element={<SignupPage />} />
+          <Route path="/verify-email"    element={<VerifyEmailPage />} />
 
           {/* ── Admin Login — public ───────────────────────── */}
           <Route path="/admin/login"     element={<AdminLoginPage />} />
@@ -64,7 +65,6 @@ export default function App() {
           <Route path="/admin/panel" element={
             <ProtectedRoute><AdminPanelPage /></ProtectedRoute>
           } />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
         </Routes>
       </BrowserRouter>

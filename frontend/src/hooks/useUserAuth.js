@@ -13,9 +13,8 @@ export function useUserAuth() {
   const signup = useCallback(async ({ name, email, password, confirmPassword }) => {
     setLoading(true); setError('');
     try {
-      const res = await userAuthAPI.signup({ name, email, password, confirm_password: confirmPassword });
-      userAuthAPI.saveTokens(res.data);
-      setUser(res.data.user);
+      await userAuthAPI.signup({ name, email, password, confirm_password: confirmPassword });
+      // ✅ Do NOT saveTokens or setUser here — user must verify email first
       return { success: true };
     } catch (err) {
       const msg = err.response?.data?.detail || err.message || 'Signup failed';

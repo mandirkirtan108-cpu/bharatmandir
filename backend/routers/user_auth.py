@@ -63,7 +63,7 @@ def send_verification_email(to_email: str, name: str, token: str):
     verify_url = f"{FRONTEND_URL}/verify-email?token={token}"
     try:
         resend.Emails.send({
-            "from": "BharatMandir <onboarding@resend.dev>",
+            "from": "BluQQ <noreply@bluqq.com>",
             "to": [to_email],
             "subject": "🛕 BharatMandir — Verify your email",
             "html": f"""
