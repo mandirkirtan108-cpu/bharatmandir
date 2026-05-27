@@ -219,19 +219,6 @@ export default function SearchPage() {
         }} />
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '0 auto' }}>
-          {/* Badge pill */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,213,128,0.3)',
-            borderRadius: 50, padding: '6px 20px', marginBottom: 22,
-            color: '#FFD580', fontSize: 12, letterSpacing: '.1em',
-            textTransform: 'uppercase', fontWeight: 500,
-            backdropFilter: 'blur(8px)',
-          }}>
-            🛕 Temple Discovery Platform
-          </div>
-
           {/* Main heading */}
           <h1 style={{
             fontFamily: 'var(--font-display)',
@@ -242,10 +229,7 @@ export default function SearchPage() {
             textShadow: '0 4px 40px rgba(0,0,0,0.3)',
             color: '#FFD580',
           }}>
-            {t('search.title') || 'Find Your'}{' '}
-            <span style={{ color: '#FFD580', opacity: 0.9 }}>
-              {t('search.title_accent') || 'Temple'}
-            </span>
+            🛕 Find Your Temple
           </h1>
 
           {/* Subtitle */}
@@ -255,7 +239,7 @@ export default function SearchPage() {
             margin: '0 auto 36px',
             fontWeight: 300, lineHeight: 1.7,
           }}>
-            {t('search.subtitle') || 'Search by name, deity, city, or use filters to discover sacred temples across India.'}
+            Search by name, deity, city, or use filters to discover sacred temples
           </p>
 
           {/* Search bar */}
