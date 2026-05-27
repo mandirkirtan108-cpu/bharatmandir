@@ -73,17 +73,7 @@ export default function Footer() {
             Discover heritage, plan pilgrimages, and seek divine guidance.
           </p>
 
-          {/* Mantra strip */}
-          <div style={{
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,213,128,0.15)',
-            borderRadius: 10, padding: '12px 16px',
-            fontFamily: 'var(--font-hindi)',
-            fontSize: 13, color: 'rgba(255,213,128,0.75)',
-            letterSpacing: '0.08em', lineHeight: 1.8,
-          }}>
-            🔱 ॐ नमः शिवाय · जय श्री राम · हरे कृष्ण
-          </div>
+         
         </div>
 
         {/* Explore column */}
@@ -151,18 +141,7 @@ export default function Footer() {
             ))}
           </ul>
 
-          {/* Feature badges */}
-          <div style={{ marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-            {['Multilingual', 'Free Entry Filter', 'Nearby Search'].map(badge => (
-              <span key={badge} style={{
-                background: 'rgba(200,82,10,0.18)',
-                border: '1px solid rgba(200,82,10,0.3)',
-                color: 'rgba(255,200,120,0.8)',
-                borderRadius: 50, padding: '3px 10px',
-                fontSize: 11, fontWeight: 600,
-              }}>{badge}</span>
-            ))}
-          </div>
+          
         </div>
       </div>
 
