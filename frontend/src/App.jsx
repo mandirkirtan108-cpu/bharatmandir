@@ -51,7 +51,7 @@ export default function App() {
             <ProtectedRoute><AdminAddFestivalPage /></ProtectedRoute>
           } />
           <Route path="/admin/panel" element={
-            <ProtectedRoute><AdminPanelPage /></ProtectedRoute>
+            <ProtectedRoute><AdminPanelPage /></ProtectedRoute> 
           } />
 
         </Routes>
