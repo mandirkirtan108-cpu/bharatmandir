@@ -211,7 +211,7 @@ export default function SearchPage() {
             color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
             fontWeight: 600, fontFamily: 'var(--font-display)',
           }}>
-            🛕 {t('search.badge') || 'Temple Discovery'}
+            🛕 {t(' ') || 'Temple Discovery'}
           </div>
 
           <h1 style={{
@@ -292,34 +292,8 @@ export default function SearchPage() {
             </button>
           </form>
 
-          {/* Quick hint tags */}
-          <div style={{
-            marginTop: 20, display: 'flex', gap: 8,
-            flexWrap: 'wrap', justifyContent: 'center',
-          }}>
-            {['Jyotirlinga', 'Shaktipeeth', 'Ujjain', 'Varanasi', 'Tirupati'].map(tag => (
-              <button
-                key={tag}
-                onClick={() => { setQuery(tag); setSearchParams({ q: tag }); fetchResults(true); }}
-                style={{
-                  padding: '5px 14px',
-                  background: 'rgba(255,255,255,0.1)',
-                  border: '1px solid rgba(255,213,128,0.25)',
-                  borderRadius: 50,
-                  color: 'rgba(255,255,255,0.85)',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-body)',
-                  backdropFilter: 'blur(6px)',
-                  transition: 'background .2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.10)'}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
+         
+          
         </div>
       </section>
       {/* ════════════════════════════════════ */}
