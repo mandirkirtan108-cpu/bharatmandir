@@ -384,15 +384,17 @@ export default function SacredBooksPage() {
   return (
     <>
       <Navbar />
-      <div style={{ minHeight: '100vh', background: 'var(--cream)', paddingTop: 72 }}>
+      <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
 
         {/* ── Hero Banner ─────────────────────────────────────── */}
         <div style={{
           background: 'linear-gradient(135deg, #1a0d00 0%, #3d1a00 50%, #2c1500 100%)',
-          padding: '36px 28px 40px',
+          padding: '0 28px 40px',
           textAlign: 'center',
           position: 'relative',
           overflow: 'hidden',
+          marginTop: 0,
+          paddingTop: 108,
         }}>
           <div style={{
             position: 'absolute', top: '50%', left: '50%',
