@@ -225,7 +225,7 @@ export default function HomePage() {
               textTransform: 'uppercase', letterSpacing: '.08em',
               alignSelf: 'center', marginRight: 4, whiteSpace: 'nowrap',
             }}>
-              {t('filter.by_deity') || 'Deity'}
+              {t('') || ''}
             </span>
             {DEITY_FILTERS.map((f) => (
               <button
@@ -245,7 +245,7 @@ export default function HomePage() {
               textTransform: 'uppercase', letterSpacing: '.08em',
               alignSelf: 'center', marginRight: 4, whiteSpace: 'nowrap',
             }}>
-              {t('filter.by_state') || 'State'}
+              {t('') || ''}
             </span>
             {STATES.map((s) => (
               <button
