@@ -384,67 +384,95 @@ export default function SacredBooksPage() {
   return (
     <>
       <Navbar />
-      <div style={{ minHeight: '100vh', background: 'var(--cream)', paddingTop: 72 }}>
+      <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
 
         {/* ── Hero Banner ─────────────────────────────────────── */}
-        <div style={{
-          background: 'linear-gradient(135deg, #1a0d00 0%, #3d1a00 50%, #2c1500 100%)',
-          padding: '36px 28px 40px',
-          textAlign: 'center',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%)',
-            fontSize: 180, opacity: 0.03,
-            fontFamily: 'var(--font-hindi)', color: 'white',
-            userSelect: 'none', pointerEvents: 'none',
-          }}>ॐ</div>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.1)',
-            color: 'var(--gold-light)', borderRadius: 99,
-            padding: '5px 14px', fontSize: 12, fontWeight: 600,
-            letterSpacing: '0.07em', marginBottom: 14,
-          }}>📚 Sacred Scriptures of Bharat</div>
-          <h1 style={{
-            fontFamily: 'var(--font-display)', color: 'white',
-            fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 700,
-            lineHeight: 1.15, marginBottom: 10,
-          }}>
-            Read the <span style={{ color: 'var(--gold-light)' }}>Sacred Books</span>
-          </h1>
-          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, maxWidth: 480, margin: '0 auto' }}>
-            Full text · Verse-by-verse · Sanskrit · Audio · Bookmarks · Reading progress
-          </p>
+<div style={{
+  position: 'relative',
+  overflow: 'hidden',
+  color: '#FFD580',
+  background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+  padding: '0 24px 56px',
+  paddingTop: 144,   // 72px navbar + 72px content breathing room
+  textAlign: 'center',
+}}>
+  {/* Radial glow — same as Route Planner */}
+  <div style={{
+    position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+    width: 600, height: 300,
+    background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
+    pointerEvents: 'none',
+  }} />
 
-          {/* Top nav tabs */}
-          <div style={{
-            display: 'flex', justifyContent: 'center', gap: 8, marginTop: 22, flexWrap: 'wrap',
-          }}>
-            {[
-              { id: 'library',   label: '🏛️ Library' },
-              { id: 'reader',    label: '📖 Reader',   disabled: !bk },
-              { id: 'bookmarks', label: `🔖 Bookmarks (${bookmarks.length})` },
-              { id: 'search',    label: '🔍 Search',   disabled: !bk },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                disabled={tab.disabled}
-                onClick={() => !tab.disabled && setView(tab.id)}
-                style={{
-                  padding: '8px 18px', borderRadius: 99, border: 'none',
-                  cursor: tab.disabled ? 'not-allowed' : 'pointer',
-                  fontSize: 13, fontWeight: 600,
-                  background: view === tab.id ? 'var(--gold-light)' : 'rgba(255,255,255,0.12)',
-                  color: view === tab.id ? 'var(--brown)' : tab.disabled ? 'rgba(255,255,255,0.3)' : 'white',
-                  transition: 'all 0.18s',
-                }}
-              >{tab.label}</button>
-            ))}
-          </div>
-        </div>
+  {/* OM watermark */}
+  <div style={{
+    position: 'absolute', inset: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 360, color: 'rgba(255,255,255,0.028)',
+    fontFamily: 'var(--font-hindi)',
+    pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
+  }}>ॐ</div>
+
+  <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+    {/* Badge */}
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      background: 'rgba(255,255,255,0.08)',
+      border: '1px solid rgba(255,213,128,0.3)',
+      borderRadius: 50, padding: '6px 20px', marginBottom: 20,
+      color: '#FFD580', fontSize: 12, letterSpacing: '.1em',
+      textTransform: 'uppercase', fontWeight: 500,
+      backdropFilter: 'blur(8px)',
+    }}>📚 Sacred Scriptures of Bharat</div>
+
+    {/* Title */}
+    <h1 style={{
+      fontFamily: 'var(--font-display)', fontWeight: 900,
+      fontSize: 'clamp(38px, 6vw, 72px)', lineHeight: 1.05, marginBottom: 18,
+      textShadow: '0 4px 40px rgba(0,0,0,0.3)', color: '#FFD580',
+    }}>
+      Read the <span style={{ color: '#FFD580' }}>Sacred Books</span>
+    </h1>
+
+    {/* Subtitle */}
+    <p style={{
+      color: '#FFD580', opacity: 0.82, fontSize: 18,
+      maxWidth: 540, margin: '0 auto 28px', fontWeight: 300, lineHeight: 1.7,
+    }}>
+      Full text · Verse-by-verse · Sanskrit · Audio · Bookmarks · Reading progress
+    </p>
+
+    {/* Nav tabs */}
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+      {[
+        { id: 'library',   label: '🏛️ Library' },
+        { id: 'reader',    label: '📖 Reader',               disabled: !bk },
+        { id: 'bookmarks', label: `🔖 Bookmarks (${bookmarks.length})` },
+        { id: 'search',    label: '🔍 Search',               disabled: !bk },
+      ].map(tab => (
+        <button
+          key={tab.id}
+          disabled={tab.disabled}
+          onClick={() => !tab.disabled && setView(tab.id)}
+          style={{
+            padding: '8px 20px', borderRadius: 50, border: 'none',
+            cursor: tab.disabled ? 'not-allowed' : 'pointer',
+            fontSize: 13, fontWeight: 600,
+            background: view === tab.id
+              ? '#FFD580'
+              : 'rgba(255,255,255,0.1)',
+            color: view === tab.id
+              ? '#7a3208'
+              : tab.disabled ? 'rgba(255,213,128,0.3)' : '#FFD580',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,213,128,0.2)',
+            transition: 'all 0.18s',
+          }}
+        >{tab.label}</button>
+      ))}
+    </div>
+  </div>
+</div>
 
         {/* ── LIBRARY VIEW ────────────────────────────────────── */}
         {view === 'library' && (

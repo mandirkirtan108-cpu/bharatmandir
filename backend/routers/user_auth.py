@@ -1,15 +1,16 @@
 """
-routers/user_auth.py — JWT-based User Authentication with Email OTP Verification
+routers/user_auth.py — JWT-based User Authentication + User Profile
 """
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 import bcrypt
 import os
 import random
 import resend
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from jose import JWTError, jwt
 
 from db.connection import get_db_connection
@@ -21,7 +22,7 @@ JWT_SECRET    = os.environ.get("JWT_SECRET", "change-this-secret-in-production-N
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 REFRESH_TOKEN_EXPIRE_DAYS   = 30
-OTP_EXPIRE_MINUTES          = 10  # OTP expires in 10 minutes
+OTP_EXPIRE_MINUTES          = 10
 
 resend.api_key = os.environ.get("RESEND_API_KEY", "")
 FRONTEND_URL   = os.environ.get("FRONTEND_URL", "http://localhost:5173")
@@ -47,6 +48,18 @@ class VerifyOTPRequest(BaseModel):
 
 class ResendOTPRequest(BaseModel):
     email: EmailStr
+
+class UpdateProfileRequest(BaseModel):
+    name:           Optional[str]   = None
+    phone:          Optional[str]   = None
+    date_of_birth:  Optional[date]  = None
+    gender:         Optional[str]   = None
+    city:           Optional[str]   = None
+    state:          Optional[str]   = None
+    pincode:        Optional[str]   = None
+    preferred_lang: Optional[str]   = None
+    bio:            Optional[str]   = None
+    avatar_url:     Optional[str]   = None
 
 
 # ── Token helpers ────────────────────────────────────────────────────
@@ -105,33 +118,49 @@ def send_otp_email(to_email: str, name: str, otp: str):
 
 
 # ── DB helpers ───────────────────────────────────────────────────────
+PROFILE_COLS = [
+    'id', 'email', 'name', 'password_hash', 'is_verified', 'is_active', 'created_at',
+    'phone', 'date_of_birth', 'gender', 'city', 'state', 'pincode',
+    'preferred_lang', 'bio', 'avatar_url', 'profile_updated_at'
+]
+
+PUBLIC_COLS = [
+    'id', 'email', 'name', 'is_verified', 'is_active', 'created_at',
+    'phone', 'date_of_birth', 'gender', 'city', 'state', 'pincode',
+    'preferred_lang', 'bio', 'avatar_url', 'profile_updated_at'
+]
+
 def get_user_by_email(email: str):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT id, email, name, password_hash, is_verified, is_active, created_at
-                   FROM users WHERE email = %s""",
+                f"""SELECT {', '.join(PROFILE_COLS)} FROM users WHERE email = %s""",
                 (email,)
             )
             row = cur.fetchone()
             if not row:
                 return None
-            cols = ['id', 'email', 'name', 'password_hash', 'is_verified', 'is_active', 'created_at']
-            return dict(zip(cols, row))
+            return dict(zip(PROFILE_COLS, row))
 
 def get_user_by_id(user_id: int):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT id, email, name, is_verified, is_active, created_at
-                   FROM users WHERE id = %s""",
+                f"""SELECT {', '.join(PUBLIC_COLS)} FROM users WHERE id = %s""",
                 (user_id,)
             )
             row = cur.fetchone()
             if not row:
                 return None
-            cols = ['id', 'email', 'name', 'is_verified', 'is_active', 'created_at']
-            return dict(zip(cols, row))
+            user = dict(zip(PUBLIC_COLS, row))
+            # Serialize date to string for JSON
+            if user.get('date_of_birth'):
+                user['date_of_birth'] = str(user['date_of_birth'])
+            if user.get('created_at'):
+                user['created_at'] = user['created_at'].isoformat()
+            if user.get('profile_updated_at'):
+                user['profile_updated_at'] = user['profile_updated_at'].isoformat()
+            return user
 
 
 # ── Auth dependency ──────────────────────────────────────────────────
@@ -177,7 +206,6 @@ async def signup(body: SignupRequest):
                 row = cur.fetchone()
 
         user_id, email, name, is_verified = row
-
         send_otp_email(email, name, otp)
 
         return {
@@ -275,11 +303,13 @@ async def login(body: LoginRequest):
     except Exception:
         pass
 
+    # Return full profile with tokens
+    full_user = get_user_by_id(user["id"])
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": {"id": user["id"], "email": user["email"], "name": user["name"], "is_verified": user["is_verified"]},
+        "user": full_user,
     }
 
 
@@ -298,3 +328,41 @@ async def refresh_token_endpoint(body: RefreshRequest):
 @router.get("/me")
 async def get_me(user: dict = Depends(get_current_user)):
     return user
+
+
+@router.patch("/profile")
+async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_user)):
+    """Update user profile fields. Only provided fields are updated."""
+    updates = {k: v for k, v in body.dict().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields provided to update.")
+
+    # Validate gender if provided
+    if "gender" in updates and updates["gender"] not in ("male", "female", "other"):
+        raise HTTPException(status_code=400, detail="Gender must be 'male', 'female', or 'other'.")
+
+    # Validate phone if provided (simple check)
+    if "phone" in updates:
+        phone = updates["phone"].strip()
+        if phone and (len(phone) < 7 or len(phone) > 15):
+            raise HTTPException(status_code=400, detail="Invalid phone number.")
+        updates["phone"] = phone
+
+    # Validate name if provided
+    if "name" in updates and len(updates["name"].strip()) < 2:
+        raise HTTPException(status_code=400, detail="Name must be at least 2 characters.")
+
+    updates["profile_updated_at"] = datetime.now(timezone.utc)
+
+    set_clause = ", ".join([f"{col} = %s" for col in updates.keys()])
+    values     = list(updates.values()) + [user["id"]]
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE users SET {set_clause} WHERE id = %s",
+                values
+            )
+
+    updated_user = get_user_by_id(user["id"])
+    return {"message": "Profile updated successfully.", "user": updated_user}

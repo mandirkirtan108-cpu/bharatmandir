@@ -18,6 +18,7 @@ import AdminLoginPage        from './pages/AdminLoginPage';
 import SacredBooksPage       from './pages/SacredBooksPage';
 import LoginPage             from './pages/LoginPage';
 import SignupPage            from './pages/SignupPage';
+import UserProfilePage       from './pages/UserProfilePage';
 
 function RootRedirect() {
   const { isLoggedIn } = useUserAuth();
@@ -46,9 +47,12 @@ export default function App() {
           <Route path="/festivals"       element={<FestivalCalendarPage />} />
           <Route path="/sacred-books"    element={<SacredBooksPage />} />
 
-          {/* ── User Auth (all public) ──────────────────────── */}
+          {/* ── User Auth ──────────────────────────────────── */}
           <Route path="/login"           element={<LoginPage />} />
           <Route path="/signup"          element={<SignupPage />} />
+
+          {/* ── User Profile (protected) ───────────────────── */}
+          <Route path="/profile"         element={<UserProfilePage />} />
 
           {/* ── Admin Login — public ───────────────────────── */}
           <Route path="/admin/login"     element={<AdminLoginPage />} />

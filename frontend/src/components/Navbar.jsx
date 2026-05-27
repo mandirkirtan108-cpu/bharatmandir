@@ -1,20 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, PlusCircle, Menu, X, Navigation, CalendarDays, Sparkles, LayoutDashboard, LogOut, BookOpen, User } from 'lucide-react';
+import { Search, Menu, X, Navigation, CalendarDays, Sparkles, BookOpen, User, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
-import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useUserAuth } from '../hooks/useUserAuth';
 
 export default function Navbar() {
-  const [query, setQuery] = useState('');
+  const [query, setQuery]         = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { t } = useTranslation();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const navigate    = useNavigate();
+  const location    = useLocation();
+  const { t }       = useTranslation();
   const { lang, changeLang } = useLang();
-  const sidebarRef = useRef(null);
-  const { isAdmin, logout: adminLogout } = useAdminAuth();
+  const sidebarRef  = useRef(null);
+  const userMenuRef = useRef(null);
   const { isLoggedIn, user, logout: userLogout } = useUserAuth();
 
   const handleSearch = (e) => {
@@ -28,59 +28,67 @@ export default function Navbar() {
 
   const isActive = (path) => location.pathname === path;
 
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [location.pathname]);
+  useEffect(() => { setSidebarOpen(false); setUserMenuOpen(false); }, [location.pathname]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (sidebarOpen && sidebarRef.current && !sidebarRef.current.contains(e.target)) {
         setSidebarOpen(false);
       }
+      if (userMenuOpen && userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setUserMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sidebarOpen]);
+  }, [sidebarOpen, userMenuOpen]);
 
   useEffect(() => {
     document.body.style.overflow = sidebarOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [sidebarOpen]);
 
-  const NAV_LINKS = [
-    { to: '/search',        label: '🛕 Temples',           icon: <Search size={17} /> },
-    { to: '/route-planner', label: t('nav.route'),         icon: <Navigation size={17} /> },
-    { to: '/panchang',      label: t('nav.panchang'),      icon: <CalendarDays size={17} /> },
-    { to: '/festivals',     label: t('nav.festivals'),     icon: <Sparkles size={17} /> },
-    { to: '/sacred-books',  label: '📚 Library',           icon: <BookOpen size={17} /> },
-  ];
-
-  const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
-
-  const handleAdminLogout = () => {
-    adminLogout();
-    navigate('/');
-    setSidebarOpen(false);
-  };
-
   const handleUserLogout = () => {
     userLogout();
+    setUserMenuOpen(false);
     navigate('/login');
     setSidebarOpen(false);
   };
 
+  const NAV_LINKS = [
+    { to: '/search',        label: '🛕 ' + 'Temples',        icon: <Search size={16} /> },
+    { to: '/route-planner', label: t('nav.route'),           icon: <Navigation size={16} /> },
+    { to: '/panchang',      label: t('nav.panchang'),        icon: <CalendarDays size={16} /> },
+    { to: '/festivals',     label: t('nav.festivals'),       icon: <Sparkles size={16} /> },
+    { to: '/sacred-books',  label: '📚 Library',             icon: <BookOpen size={16} /> },
+    { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'), icon: null, highlight: true },
+  ];
+
+  const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
+
   return (
     <>
+      {/* ── Ticker ── */}
       <div className="ticker-wrap">
         <div className="ticker-track">
           <span className="ticker-content">{tickerText}{tickerText}</span>
         </div>
       </div>
 
+      {/* ── Navbar ── */}
       <nav className="navbar">
-        <div className="navbar-inner">
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '11px 28px',
+          maxWidth: 1200,
+          margin: '0 auto',
+          gap: 0,
+          position: 'relative',
+        }}>
 
-          <Link to="/" className="nav-logo" style={{ marginRight: '60px' }}>
+          {/* Logo — left */}
+          <Link to="/" className="nav-logo" style={{ flexShrink: 0, marginRight: 'auto' }}>
             <span className="nav-logo-icon">🛕</span>
             <div>
               <span className="nav-logo-name">BharatMandir</span>
@@ -88,154 +96,39 @@ export default function Navbar() {
             </div>
           </Link>
 
-          <div style={{ flex: 1 }} />
-
-          <div className="nav-actions nav-actions-desktop">
-            {NAV_LINKS.map((link, index) => (
+          {/* ── Desktop centre links ── */}
+          <div className="nav-actions-desktop" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }}>
+            {NAV_LINKS.map((link) => (
               <Link
                 key={link.to}
                 to={link.to}
-                className={`nav-link nav-link-${index}${isActive(link.to) ? ' active' : ''}`}
+                className={`nav-link${isActive(link.to) ? ' active' : ''}${link.highlight ? ' nav-add-btn' : ''}`}
+                style={link.highlight ? {
+                  background: isActive(link.to)
+                    ? 'linear-gradient(135deg,#E06B25,#9A3C05)'
+                    : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
+                  color: isActive(link.to) ? '#fff' : '#C8520A',
+                  borderColor: '#C8520A',
+                  fontWeight: 700,
+                  marginLeft: 6,
+                } : {}}
               >
                 {link.label}
               </Link>
             ))}
+          </div>
 
-            <div className="nav-divider" />
-
-            <Link
-              to="/spiritual-guide"
-              className={`nav-add-btn${isActive('/spiritual-guide') ? ' active' : ''}`}
-              style={{
-                background: isActive('/spiritual-guide')
-                  ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
-                  : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-                color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
-                borderColor: '#FF6B00',
-                fontWeight: 700,
-              }}
-            >
-              <span>🕉️</span>
-              <span>{t('nav.ai_guide')}</span>
-            </Link>
-
-            {isAdmin && (
-              <>
-                <Link
-                  to="/admin/add"
-                  className="nav-add-btn"
-                  style={{
-                    background: 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-                    color: 'var(--brown-mid)',
-                    borderColor: 'var(--brown-mid)',
-                    fontWeight: 700,
-                  }}
-                >
-                  <PlusCircle size={15} />
-                  <span>{t('nav.add_temple')}</span>
-                </Link>
-
-                <Link
-                  to="/admin/add-festival"
-                  className="nav-add-btn nav-add-festival-btn"
-                >
-                  <Sparkles size={15} />
-                  <span>{t('nav.add_festival')}</span>
-                </Link>
-              </>
-            )}
-
-            <div className="nav-divider" />
-
-            {isAdmin ? (
-              <>
-                <Link
-                  to="/admin/panel"
-                  className={`nav-add-btn${isActive('/admin/panel') ? ' active' : ''}`}
-                  style={{
-                    background: isActive('/admin/panel')
-                      ? 'linear-gradient(135deg, var(--brown-mid), var(--brown))'
-                      : 'transparent',
-                    color: isActive('/admin/panel') ? 'white' : 'var(--brown-mid)',
-                    borderColor: 'var(--brown-mid)',
-                  }}
-                  title={t('nav.admin_panel')}
-                >
-                  <LayoutDashboard size={15} />
-                  <span>{t('nav.admin_panel')}</span>
-                </Link>
-
-                <button
-                  onClick={handleAdminLogout}
-                  title={t('nav.admin_logout')}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '8px 12px', borderRadius: 50,
-                    border: '2px solid var(--cream-dark)', background: 'transparent',
-                    color: 'var(--text-light)', cursor: 'pointer',
-                    fontFamily: 'var(--font-display)', fontSize: 12,
-                    letterSpacing: '.04em', transition: 'all .2s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.color = 'var(--text-light)'; }}
-                >
-                  <LogOut size={14} />
-                </button>
-              </>
-            ) : (
-              <Link
-                to="/admin/login"
-                className="nav-add-btn"
-                style={{
-                  color: 'var(--text-light)',
-                  borderColor: 'var(--cream-dark)',
-                }}
-                title={t('nav.admin_login')}
-              >
-                <LayoutDashboard size={15} />
-                <span>{t('nav.admin')}</span>
-              </Link>
-            )}
-
-            <div className="nav-divider" />
-
-            {/* ── User logout button ── */}
-            {isLoggedIn && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '6px 12px', borderRadius: 50,
-                  background: 'rgba(255,153,0,0.10)',
-                  border: '1px solid rgba(255,153,0,0.25)',
-                  color: '#ff9900', fontSize: 12, fontWeight: 600,
-                }}>
-                  <User size={13} />
-                  <span style={{
-                    maxWidth: 90, overflow: 'hidden',
-                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {user?.name?.split(' ')[0] || 'User'}
-                  </span>
-                </div>
-                <button
-                  onClick={handleUserLogout}
-                  title="Sign out"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '8px 12px', borderRadius: 50,
-                    border: '2px solid var(--cream-dark)', background: 'transparent',
-                    color: 'var(--text-light)', cursor: 'pointer',
-                    fontFamily: 'var(--font-display)', fontSize: 12,
-                    letterSpacing: '.04em', transition: 'all .2s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--cream-dark)'; e.currentTarget.style.color = 'var(--text-light)'; }}
-                >
-                  <LogOut size={14} />
-                </button>
-              </div>
-            )}
-
+          {/* ── Right side: lang + user ── */}
+          <div className="nav-actions-desktop" style={{
+            display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto',
+          }}>
             <select
               className="nav-lang-select"
               value={lang}
@@ -246,23 +139,124 @@ export default function Navbar() {
               <option value="mr">🟠 मराठी</option>
               <option value="ta">🌺 தமிழ்</option>
             </select>
+
+            {isLoggedIn ? (
+              /* ── User pill with dropdown ── */
+              <div ref={userMenuRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setUserMenuOpen(v => !v)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 7,
+                    padding: '7px 14px', borderRadius: 50,
+                    border: '1.5px solid #EDE3CE',
+                    background: userMenuOpen ? '#FAF6EE' : '#fff',
+                    color: '#5C3010', fontWeight: 600, fontSize: 13,
+                    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+                    transition: 'background 0.15s, border-color 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#C8520A'; }}
+                  onMouseLeave={e => { if (!userMenuOpen) e.currentTarget.style.borderColor = '#EDE3CE'; }}
+                >
+                  {/* tiny avatar circle */}
+                  <span style={{
+                    width: 22, height: 22, borderRadius: '50%',
+                    background: 'linear-gradient(135deg,#E06B25,#9A3C05)',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
+                  }}>
+                    {(user?.name || 'U')[0].toUpperCase()}
+                  </span>
+                  <span style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user?.name?.split(' ')[0] || 'Profile'}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                    style={{ opacity: 0.6, transition: 'transform 0.2s', transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+
+                {/* Dropdown */}
+                {userMenuOpen && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                    background: '#fff', borderRadius: 14, minWidth: 180,
+                    border: '1px solid #EDE3CE',
+                    boxShadow: '0 8px 32px rgba(44,21,0,0.14)',
+                    overflow: 'hidden', zIndex: 500,
+                    animation: 'fadeDown 0.16s ease',
+                  }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #EDE3CE' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#2C1500' }}>{user?.name}</div>
+                      <div style={{ fontSize: 12, color: '#A07050', marginTop: 2 }}>{user?.email}</div>
+                    </div>
+                    <Link
+                      to="/profile"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '11px 16px', color: '#4A2C10', fontSize: 14,
+                        fontWeight: 500, textDecoration: 'none',
+                        transition: 'background 0.15s',
+                        background: isActive('/profile') ? '#FAF6EE' : 'transparent',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#FAF6EE'}
+                      onMouseLeave={e => e.currentTarget.style.background = isActive('/profile') ? '#FAF6EE' : 'transparent'}
+                    >
+                      <User size={15} style={{ color: '#C8520A' }} />
+                      My Profile
+                    </Link>
+                    <button
+                      onClick={handleUserLogout}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                        padding: '11px 16px', border: 'none', background: 'transparent',
+                        color: '#B91C1C', fontSize: 14, fontWeight: 500,
+                        cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+                        borderTop: '1px solid #EDE3CE',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <LogOut size={15} />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '8px 18px', borderRadius: 50,
+                  background: 'linear-gradient(135deg,#E06B25,#9A3C05)',
+                  color: '#fff', fontWeight: 600, fontSize: 13,
+                  textDecoration: 'none',
+                  boxShadow: '0 3px 12px rgba(200,82,10,0.28)',
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                Sign In
+              </Link>
+            )}
           </div>
 
+          {/* Hamburger — mobile only */}
           <button
             className="nav-hamburger"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
+            style={{ marginLeft: 12 }}
           >
             <Menu size={24} />
           </button>
-
         </div>
       </nav>
 
+      {/* ── Sidebar overlay ── */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       <aside ref={sidebarRef} className={`sidebar${sidebarOpen ? ' sidebar-open' : ''}`}>
-
         <div className="sidebar-header">
           <Link to="/" className="nav-logo sidebar-logo" onClick={() => setSidebarOpen(false)}>
             <span className="nav-logo-icon">🛕</span>
@@ -283,115 +277,52 @@ export default function Navbar() {
               to={link.to}
               className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
               onClick={() => setSidebarOpen(false)}
-              style={link.to === '/search' ? { color: 'var(--saffron)', fontWeight: 700 } : {}}
+              style={link.highlight ? { color: '#FF6B00', fontWeight: 700 } : {}}
             >
-              <span className="sidebar-link-icon">{link.icon}</span>
+              <span className="sidebar-link-icon">{link.icon || <span>{link.label.split(' ')[0]}</span>}</span>
               {link.label}
             </Link>
           ))}
 
-          <Link
-            to="/spiritual-guide"
-            className={`sidebar-link${isActive('/spiritual-guide') ? ' active' : ''}`}
-            onClick={() => setSidebarOpen(false)}
-            style={{ color: '#FF6B00', fontWeight: 700 }}
-          >
-            <span className="sidebar-link-icon">🕉️</span>
-            {t('nav.ai_spiritual')}
-          </Link>
-
-          {isAdmin ? (
-            <>
-              <Link
-                to="/admin/add"
-                className={`sidebar-link${isActive('/admin/add') ? ' active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
-              >
-                <span className="sidebar-link-icon"><PlusCircle size={17} /></span>
-                {t('nav.add_temple')}
-              </Link>
-
-              <Link
-                to="/admin/add-festival"
-                className={`sidebar-link${isActive('/admin/add-festival') ? ' active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                style={{ color: '#C8960C', fontWeight: 700 }}
-              >
-                <span className="sidebar-link-icon">🌸</span>
-                {t('nav.add_festival')}
-              </Link>
-
-              <Link
-                to="/admin/panel"
-                className={`sidebar-link${isActive('/admin/panel') ? ' active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                style={{ color: 'var(--brown-mid)', fontWeight: 700 }}
-              >
-                <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
-                {t('nav.admin_panel')}
-              </Link>
-
-              <button
-                onClick={handleAdminLogout}
-                className="sidebar-link"
-                style={{
-                  background: 'none', border: 'none', width: '100%',
-                  textAlign: 'left', cursor: 'pointer', color: '#ef4444',
-                  fontFamily: 'var(--font-display)', fontWeight: 700,
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '12px 20px', fontSize: 14,
-                }}
-              >
-                <span className="sidebar-link-icon"><LogOut size={17} /></span>
-                {t('nav.admin_logout')}
-              </button>
-            </>
-          ) : (
-            <Link
-              to="/admin/login"
-              className={`sidebar-link${isActive('/admin/login') ? ' active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-              style={{ color: 'var(--text-light)' }}
-            >
-              <span className="sidebar-link-icon"><LayoutDashboard size={17} /></span>
-              {t('nav.admin_login')}
-            </Link>
-          )}
-
-          {/* ── User logout in sidebar ── */}
+          {/* User section in sidebar */}
           {isLoggedIn && (
             <>
-              <div style={{
-                margin: '8px 20px 0',
-                borderTop: '1px solid rgba(255,153,0,0.15)',
-                paddingTop: 8,
-              }} />
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '10px 20px',
-              }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  color: '#ff9900', fontSize: 13, fontWeight: 600,
-                }}>
-                  <User size={15} />
-                  <span>{user?.name || 'User'}</span>
-                </div>
-                <button
-                  onClick={handleUserLogout}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '7px 14px', borderRadius: 50,
-                    border: '1.5px solid #ef4444', background: 'rgba(239,68,68,0.08)',
-                    color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                  }}
-                >
-                  <LogOut size={13} />
-                  Sign Out
-                </button>
-              </div>
+              <div style={{ margin: '8px 20px 0', borderTop: '1px solid rgba(255,153,0,0.15)', paddingTop: 8 }} />
+              <Link
+                to="/profile"
+                className={`sidebar-link${isActive('/profile') ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ color: '#ffb050', fontWeight: 600 }}
+              >
+                <span className="sidebar-link-icon"><User size={16} /></span>
+                My Profile
+              </Link>
+              <button
+                onClick={handleUserLogout}
+                className="sidebar-link"
+                style={{
+                  background: 'none', border: 'none', width: '100%', textAlign: 'left',
+                  cursor: 'pointer', color: '#ef4444', fontFamily: 'inherit',
+                  fontWeight: 600, display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '11px 14px', fontSize: 14, borderRadius: 8,
+                }}
+              >
+                <span className="sidebar-link-icon"><LogOut size={16} /></span>
+                Sign Out
+              </button>
             </>
+          )}
+
+          {!isLoggedIn && (
+            <Link
+              to="/login"
+              className="sidebar-link"
+              onClick={() => setSidebarOpen(false)}
+              style={{ color: '#ffb050', fontWeight: 600 }}
+            >
+              <span className="sidebar-link-icon"><User size={16} /></span>
+              Sign In
+            </Link>
           )}
         </nav>
 
@@ -399,7 +330,7 @@ export default function Navbar() {
           <select
             className="nav-lang-select sidebar-lang"
             value={lang}
-            onChange={(e) => { changeLang(e.target.value); }}
+            onChange={(e) => changeLang(e.target.value)}
           >
             <option value="en">🌐 English</option>
             <option value="hi">🇮🇳 हिंदी</option>
@@ -407,40 +338,32 @@ export default function Navbar() {
             <option value="ta">🌺 தமிழ்</option>
           </select>
         </div>
-
       </aside>
 
+      {/* ── Floating AI Guide button ── */}
       <Link
         to="/spiritual-guide"
         style={{
           display: sidebarOpen ? 'none' : 'flex',
-          position: 'fixed',
-          bottom: 28,
-          right: 28,
-          zIndex: 9999,
-          alignItems: 'center',
-          gap: 8,
-          padding: '12px 20px',
-          borderRadius: 50,
-          fontSize: 14,
-          fontWeight: 700,
-          textDecoration: 'none',
-          whiteSpace: 'nowrap',
-          border: '2px solid #FF6B00',
+          position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
+          alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 50,
+          fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap',
+          border: '2px solid #C8520A',
           background: isActive('/spiritual-guide')
-            ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
+            ? 'linear-gradient(135deg,#E06B25,#9A3C05)'
             : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-          color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
-          boxShadow: '0 4px 20px rgba(255,107,0,0.35)',
+          color: isActive('/spiritual-guide') ? '#fff' : '#C8520A',
+          boxShadow: '0 4px 20px rgba(200,82,10,0.32)',
           transition: 'all .2s',
+          fontFamily: "'DM Sans', sans-serif",
         }}
         onMouseEnter={e => {
           e.currentTarget.style.transform = 'scale(1.07)';
-          e.currentTarget.style.boxShadow = '0 6px 28px rgba(255,107,0,0.50)';
+          e.currentTarget.style.boxShadow = '0 6px 28px rgba(200,82,10,0.50)';
         }}
         onMouseLeave={e => {
           e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(255,107,0,0.35)';
+          e.currentTarget.style.boxShadow = '0 4px 20px rgba(200,82,10,0.32)';
         }}
       >
         {t('nav.floating_ai')}
