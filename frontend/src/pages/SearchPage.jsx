@@ -229,7 +229,7 @@ export default function SearchPage() {
             textShadow: '0 4px 40px rgba(0,0,0,0.3)',
             color: '#FFD580',
           }}>
-            🔍 Find Your Temple
+            🛕 Find Your Temple
           </h1>
 
           {/* Subtitle */}
