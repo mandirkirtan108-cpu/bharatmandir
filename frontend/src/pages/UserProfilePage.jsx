@@ -7,13 +7,13 @@ import Footer from '../components/Footer';
 const SAFFRON       = '#C8520A';
 const SAFFRON_LIGHT = '#E06B25';
 const SAFFRON_DARK  = '#9A3C05';
-const BROWN         = '#2C1500';
-const BROWN_MID     = '#5C3010';
+const BROWN         = '#C8520A';
+const BROWN_MID     = '#C8520A';
 const CREAM         = '#FAF6EE';
 const CREAM_DARK    = '#EDE3CE';
 const CREAM_MID     = '#F3EBD8';
-const TEXT_DARK     = '#1A0D00';
-const TEXT_MID      = '#4A2C10';
+const TEXT_DARK     = '#C8520A';
+const TEXT_MID      = '#C8520A';
 const TEXT_LIGHT    = '#7A5538';
 const TEXT_MUTED    = '#A07050';
 
