@@ -26,14 +26,13 @@ const INDIAN_STATES = [
   'Lakshadweep','Puducherry',
 ];
 
-/* ── tiny Avatar ── */
 function Avatar({ name, avatarUrl, size = 80 }) {
   const initials = (name || 'U').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   if (avatarUrl) {
     return (
       <img src={avatarUrl} alt={name}
         style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover',
-                 border: `3px solid rgba(255,220,140,0.5)`, flexShrink: 0 }} />
+                 border: '3px solid rgba(255,220,140,0.5)', flexShrink: 0 }} />
     );
   }
   return (
@@ -42,7 +41,7 @@ function Avatar({ name, avatarUrl, size = 80 }) {
       background: `linear-gradient(135deg, ${SAFFRON_LIGHT}, ${SAFFRON_DARK})`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.36, fontWeight: 700,
-      color: '#fff', border: `3px solid rgba(255,220,140,0.5)`,
+      color: '#fff', border: '3px solid rgba(255,220,140,0.5)',
       fontFamily: "'Cormorant Garamond', Georgia, serif",
       boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
     }}>
@@ -51,7 +50,6 @@ function Avatar({ name, avatarUrl, size = 80 }) {
   );
 }
 
-/* ── read-only field ── */
 function InfoField({ label, value }) {
   return (
     <div style={{ marginBottom: 18 }}>
@@ -59,25 +57,19 @@ function InfoField({ label, value }) {
         fontSize: 11, fontWeight: 600, letterSpacing: '0.12em',
         textTransform: 'uppercase', color: TEXT_MUTED,
         fontFamily: "'DM Sans', sans-serif", marginBottom: 4,
-      }}>
-        {label}
-      </div>
+      }}>{label}</div>
       <div style={{
         fontSize: 15, color: value ? TEXT_DARK : TEXT_MUTED,
         fontFamily: "'DM Sans', sans-serif", fontWeight: value ? 500 : 400,
-      }}>
-        {value || '—'}
-      </div>
+      }}>{value || '—'}</div>
     </div>
   );
 }
 
-/* ── card wrapper ── */
 function Card({ title, emoji, children }) {
   return (
     <div style={{
-      background: '#fff',
-      borderRadius: 16,
+      background: '#fff', borderRadius: 16,
       border: `1px solid ${CREAM_DARK}`,
       padding: '24px 28px',
       boxShadow: '0 2px 12px rgba(44,21,0,0.06)',
@@ -92,16 +84,13 @@ function Card({ title, emoji, children }) {
           margin: 0, fontSize: 12, fontWeight: 700, letterSpacing: '0.14em',
           textTransform: 'uppercase', color: SAFFRON,
           fontFamily: "'DM Sans', sans-serif",
-        }}>
-          {title}
-        </h3>
+        }}>{title}</h3>
       </div>
       {children}
     </div>
   );
 }
 
-/* ── styled input ── */
 function EditInput({ label, name, type = 'text', value, onChange, placeholder, children }) {
   return (
     <div style={{ marginBottom: 18 }}>
@@ -109,9 +98,7 @@ function EditInput({ label, name, type = 'text', value, onChange, placeholder, c
         display: 'block', fontSize: 12, fontWeight: 600,
         color: TEXT_LIGHT, marginBottom: 6, letterSpacing: '0.06em',
         fontFamily: "'DM Sans', sans-serif",
-      }}>
-        {label}
-      </label>
+      }}>{label}</label>
       {children || (
         <input
           type={type} name={name} value={value} onChange={onChange} placeholder={placeholder}
@@ -166,13 +153,13 @@ export default function UserProfilePage() {
   useEffect(() => {
     if (user) {
       setForm({
-        name:           user.name           || '',
-        phone:          user.phone          || '',
-        date_of_birth:  user.date_of_birth  || '',
-        gender:         user.gender         || '',
-        city:           user.city           || '',
-        state:          user.state          || '',
-        pincode:        user.pincode        || '',
+        name:          user.name          || '',
+        phone:         user.phone         || '',
+        date_of_birth: user.date_of_birth || '',
+        gender:        user.gender        || '',
+        city:          user.city          || '',
+        state:         user.state         || '',
+        pincode:       user.pincode       || '',
       });
     }
   }, [user]);
@@ -189,12 +176,8 @@ export default function UserProfilePage() {
     Object.entries(form).forEach(([k, v]) => { if (v !== '') payload[k] = v; });
     const res = await updateProfile(payload);
     setSaving(false);
-    if (res.success) {
-      setSuccess('Profile updated successfully!');
-      setEditing(false);
-    } else {
-      setErr(res.error || 'Something went wrong.');
-    }
+    if (res.success) { setSuccess('Profile updated successfully!'); setEditing(false); }
+    else { setErr(res.error || 'Something went wrong.'); }
   };
 
   const handleCancel = () => {
@@ -225,47 +208,62 @@ export default function UserProfilePage() {
   const genderLabel = { male: '♂ Male', female: '♀ Female', other: '⚧ Other' };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: CREAM,
-      fontFamily: "'DM Sans', system-ui, sans-serif",
-    }}>
+    <div style={{ minHeight: '100vh', background: CREAM, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <Navbar />
 
-      {/* ── Page header band ── */}
+      {/* ── Hero ── */}
       <div style={{
         position: 'relative',
         overflow: 'hidden',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
         padding: '40px 28px 52px',
       }}>
-        {/* ॐ watermark */}
+        {/* ॐ watermark — large, positioned right side */}
         <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 420, color: 'rgba(255,255,255,0.03)',
-          fontFamily: 'var(--font-hindi, serif)',
-          pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
+          position: 'absolute',
+          right: '-2%',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          fontSize: 'clamp(160px, 22vw, 280px)',
+          color: 'rgba(255,255,255,0.07)',
+          fontFamily: '"Noto Sans Devanagari", "Mangal", serif',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          lineHeight: 1,
+          letterSpacing: 0,
+        }}>ॐ</div>
+
+        {/* secondary watermark left */}
+        <div style={{
+          position: 'absolute',
+          left: '-3%',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          fontSize: 'clamp(100px, 14vw, 180px)',
+          color: 'rgba(255,255,255,0.04)',
+          fontFamily: '"Noto Sans Devanagari", "Mangal", serif',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          lineHeight: 1,
         }}>ॐ</div>
 
         {/* radial glow */}
         <div style={{
-          position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
-          width: 700, height: 320,
-          background: 'radial-gradient(ellipse, rgba(232,101,10,0.25) 0%, transparent 70%)',
+          position: 'absolute', top: -60, left: '50%', transform: 'translateX(-50%)',
+          width: 700, height: 300,
+          background: 'radial-gradient(ellipse, rgba(232,101,10,0.22) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
 
-        {/* ── original left-aligned layout ── */}
+        {/* content */}
         <div style={{ maxWidth: 860, margin: '0 auto', position: 'relative', zIndex: 1 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 20,
-            flexWrap: 'wrap',
+          <div className="profile-hero-inner" style={{
+            display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap',
           }}>
             <Avatar name={user.name} avatarUrl={user.avatar_url} size={80} />
-            <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
               <h1 style={{
-                margin: 0, fontSize: 28, fontWeight: 700,
+                margin: 0, fontSize: 'clamp(22px, 4vw, 30px)', fontWeight: 700,
                 color: '#FFD580',
                 fontFamily: "'Cormorant Garamond', Georgia, serif",
                 lineHeight: 1.2,
@@ -295,6 +293,7 @@ export default function UserProfilePage() {
                   cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
                   backdropFilter: 'blur(6px)',
                   transition: 'background 0.2s, border-color 0.2s',
+                  flexShrink: 0,
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = 'rgba(255,255,255,0.18)';
@@ -313,9 +312,9 @@ export default function UserProfilePage() {
       </div>
 
       {/* ── Main content ── */}
-      <div style={{ maxWidth: 860, margin: '-24px auto 0', padding: '0 28px 72px', position: 'relative', zIndex: 1 }}>
+      <div style={{ maxWidth: 860, margin: '-24px auto 0', padding: '0 16px 72px', position: 'relative', zIndex: 1 }}>
 
-        {/* ── Profile completion ── */}
+        {/* Profile completion */}
         <div style={{
           background: '#fff', borderRadius: 14, border: `1px solid ${CREAM_DARK}`,
           padding: '16px 22px', marginBottom: 24,
@@ -339,46 +338,39 @@ export default function UserProfilePage() {
           )}
         </div>
 
-        {/* ── Alerts ── */}
         {success && (
           <div style={{
             background: '#EBF7F0', border: '1px solid #A3D9BB',
             borderRadius: 10, padding: '12px 18px', marginBottom: 20,
             color: '#1A6B3A', fontSize: 14, fontWeight: 500,
-          }}>
-            ✅ {success}
-          </div>
+          }}>✅ {success}</div>
         )}
         {err && (
           <div style={{
             background: '#FEF2F2', border: '1px solid #FECACA',
             borderRadius: 10, padding: '12px 18px', marginBottom: 20,
             color: '#B91C1C', fontSize: 14, fontWeight: 500,
-          }}>
-            ⚠️ {err}
-          </div>
+          }}>⚠️ {err}</div>
         )}
 
         {/* ══ VIEW MODE ══ */}
         {!editing && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+            <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
               <Card title="Personal Info" emoji="👤">
                 <InfoField label="Full Name"     value={user.name} />
                 <InfoField label="Phone"         value={user.phone} />
                 <InfoField label="Date of Birth" value={user.date_of_birth} />
                 <InfoField label="Gender"        value={genderLabel[user.gender] || user.gender} />
               </Card>
-
               <Card title="Location" emoji="📍">
                 <InfoField label="City"    value={user.city} />
                 <InfoField label="State"   value={user.state} />
                 <InfoField label="Pincode" value={user.pincode} />
               </Card>
             </div>
-
             <Card title="Account" emoji="🔐">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+              <div className="account-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
                 <InfoField label="Email"        value={user.email} />
                 <InfoField label="Verified"     value={user.is_verified ? '✅ Verified' : '❌ Not verified'} />
                 <InfoField label="Member Since" value={joinedDate} />
@@ -391,9 +383,8 @@ export default function UserProfilePage() {
         {/* ══ EDIT MODE ══ */}
         {editing && (
           <form onSubmit={handleSave}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+            <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
 
-              {/* Personal */}
               <div style={{
                 background: '#fff', borderRadius: 16, border: `1px solid ${CREAM_DARK}`,
                 padding: '24px 28px', boxShadow: '0 2px 12px rgba(44,21,0,0.06)',
@@ -409,11 +400,9 @@ export default function UserProfilePage() {
                     fontFamily: "'DM Sans', sans-serif",
                   }}>Personal Info</h3>
                 </div>
-
                 <EditInput label="Full Name *" name="name" value={form.name} onChange={handleChange} placeholder="Your name" />
                 <EditInput label="Phone Number" name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="+91 98765 43210" />
                 <EditInput label="Date of Birth" name="date_of_birth" type="date" value={form.date_of_birth} onChange={handleChange} />
-
                 <EditInput label="Gender" name="gender" value={form.gender} onChange={handleChange}>
                   <select name="gender" value={form.gender} onChange={handleChange}
                     style={selectStyle}
@@ -428,7 +417,6 @@ export default function UserProfilePage() {
                 </EditInput>
               </div>
 
-              {/* Location */}
               <div style={{
                 background: '#fff', borderRadius: 16, border: `1px solid ${CREAM_DARK}`,
                 padding: '24px 28px', boxShadow: '0 2px 12px rgba(44,21,0,0.06)',
@@ -444,9 +432,7 @@ export default function UserProfilePage() {
                     fontFamily: "'DM Sans', sans-serif",
                   }}>Location</h3>
                 </div>
-
                 <EditInput label="City" name="city" value={form.city} onChange={handleChange} placeholder="e.g. Bhopal" />
-
                 <EditInput label="State" name="state" value={form.state} onChange={handleChange}>
                   <select name="state" value={form.state} onChange={handleChange}
                     style={selectStyle}
@@ -457,14 +443,12 @@ export default function UserProfilePage() {
                     {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </EditInput>
-
                 <EditInput label="Pincode" name="pincode" value={form.pincode} onChange={handleChange} placeholder="e.g. 462001" />
               </div>
             </div>
 
-            {/* ── Save / Cancel ── */}
             <div style={{
-              display: 'flex', gap: 12, justifyContent: 'flex-end',
+              display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap',
               background: '#fff', borderRadius: 14, padding: '18px 24px',
               border: `1px solid ${CREAM_DARK}`,
               boxShadow: '0 2px 12px rgba(44,21,0,0.06)',
@@ -481,16 +465,12 @@ export default function UserProfilePage() {
                 }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = BROWN_MID}
                 onMouseLeave={e => e.currentTarget.style.borderColor = CREAM_DARK}
-              >
-                Cancel
-              </button>
+              >Cancel</button>
               <button
                 type="submit" disabled={saving || loading}
                 style={{
                   padding: '10px 30px', borderRadius: 50, border: 'none',
-                  background: saving
-                    ? CREAM_DARK
-                    : `linear-gradient(135deg, ${SAFFRON_LIGHT}, ${SAFFRON_DARK})`,
+                  background: saving ? CREAM_DARK : `linear-gradient(135deg, ${SAFFRON_LIGHT}, ${SAFFRON_DARK})`,
                   color: saving ? TEXT_MUTED : '#fff',
                   fontWeight: 700, fontSize: 14,
                   cursor: saving ? 'not-allowed' : 'pointer',
@@ -498,13 +478,31 @@ export default function UserProfilePage() {
                   boxShadow: saving ? 'none' : '0 3px 14px rgba(200,82,10,0.32)',
                   transition: 'all 0.2s',
                 }}
-              >
-                {saving ? 'Saving…' : '💾 Save Changes'}
-              </button>
+              >{saving ? 'Saving…' : '💾 Save Changes'}</button>
             </div>
           </form>
         )}
       </div>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .profile-hero-inner {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 14px !important;
+          }
+          .profile-hero-inner button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .profile-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .account-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
 
       <Footer />
     </div>
