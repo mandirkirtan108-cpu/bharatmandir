@@ -185,14 +185,14 @@ export default function SearchPage() {
     setLocationError('');
   };
 
-  const hasFilters = selectedSects.length || selectedStates.length || jyotirlinga || shaktipeeth || freeEntry || query || nearbyMode;
+  const hasFilters = selectedSects.length || selectedStates.length || query || nearbyMode;
   const totalPages = Math.ceil(total / PER_PAGE);
 
   return (
     <div className="search-page">
       <Navbar />
 
-      {/* ══════════════ HERO — matches RoutePlannerPage design language ══════════════ */}
+      {/* ══════════════ HERO ══════════════ */}
       <section style={{
         position: 'relative',
         overflow: 'hidden',
@@ -219,7 +219,6 @@ export default function SearchPage() {
         }} />
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '0 auto' }}>
-          {/* Main heading */}
           <h1 style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 900,
@@ -232,7 +231,6 @@ export default function SearchPage() {
             🛕 Find Your Temple
           </h1>
 
-          {/* Subtitle */}
           <p style={{
             color: '#FFD580', opacity: 0.82,
             fontSize: 18, maxWidth: 560,
@@ -330,7 +328,7 @@ export default function SearchPage() {
           </div>
         </div>
       </section>
-      {/* ══════════════════════════════════════════════════════════════ */}
+      {/* ════════════════════════════════════ */}
 
       <div className="container">
         <div className="search-body">
@@ -476,21 +474,7 @@ export default function SearchPage() {
               )}
             </div>
 
-            <div className="search-filter-group">
-              <span className="search-filter-label">{t('search.special_categories')}</span>
-              <label className="search-filter-option">
-                <input type="checkbox" checked={jyotirlinga} onChange={e => setJyotirlinga(e.target.checked)} />
-                ⚡ {t('search.jyotirlinga_filter')}
-              </label>
-              <label className="search-filter-option">
-                <input type="checkbox" checked={shaktipeeth} onChange={e => setShaktipeeth(e.target.checked)} />
-                🌸 {t('search.shaktipeeth_filter')}
-              </label>
-              <label className="search-filter-option">
-                <input type="checkbox" checked={freeEntry} onChange={e => setFreeEntry(e.target.checked)} />
-                ✅ {t('search.free_entry')}
-              </label>
-            </div>
+            {/* Special Categories section removed */}
 
             <div className="search-filter-group">
               <span className="search-filter-label">{t('search.sect')}</span>
