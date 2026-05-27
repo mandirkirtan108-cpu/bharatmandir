@@ -171,7 +171,7 @@ export default function HomePage() {
                 letterSpacing: '.05em',
               }}
             >
-              {t('hero_search_label') || 'Search temples, deities, or cities'}
+              {t('') || 'Search temples, deities, or cities'}
             </label>
             <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <input
@@ -330,7 +330,7 @@ export default function HomePage() {
                     style={{ padding: '12px 36px', fontSize: 15 }}
                     onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
                   >
-                    {t('load_more') || 'Load More Temples'} ✦
+                    {t('load more') || 'Load More Temples'} ✦
                   </button>
                   <p style={{ marginTop: 10, fontSize: 13, color: 'var(--color-muted, #888)' }}>
                     {t('showing') || 'Showing'} {Math.min(visibleCount, displayTemples.length)} {t('of') || 'of'} {displayTemples.length}
