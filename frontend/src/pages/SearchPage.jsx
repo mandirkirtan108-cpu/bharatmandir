@@ -197,45 +197,39 @@ export default function SearchPage() {
         position: 'relative',
         overflow: 'hidden',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '88px 24px 96px',
+        padding: '50px 12px',
         textAlign: 'center',
-        color: '#FFD580',
+        color: 'white',
       }}>
-        {/* Decorative ॐ watermark */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 360, color: 'rgba(255,255,255,0.028)',
-          fontFamily: 'var(--font-hindi)',
-          pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
-        }}>ॐ</div>
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
 
-        {/* Radial glow */}
-        <div style={{
-          position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
-          width: 700, height: 340,
-          background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
+          {/* Badge pill — matches Panchang */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,213,128,0.35)',
+            borderRadius: 50, padding: '6px 20px', marginBottom: 22,
+            color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
+            fontWeight: 600, fontFamily: 'var(--font-display)',
+          }}>
+            🛕 {t('search.badge') || 'Temple Discovery'}
+          </div>
 
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '0 auto' }}>
           <h1 style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 900,
-            fontSize: 'clamp(38px, 6vw, 72px)',
-            lineHeight: 1.05,
-            marginBottom: 18,
-            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            fontSize: 'clamp(34px, 5.5vw, 66px)',
+            lineHeight: 1.08,
+            marginBottom: 16,
             color: '#FFD580',
           }}>
-            🛕 Find Your Temple
+            Find Your Temple
           </h1>
 
           <p style={{
-            color: '#FFD580', opacity: 0.82,
-            fontSize: 18, maxWidth: 560,
+            color: 'rgba(255,255,255,0.78)',
+            fontSize: 17, maxWidth: 500,
             margin: '0 auto 36px',
-            fontWeight: 300, lineHeight: 1.7,
+            lineHeight: 1.7,
           }}>
             Search by name, deity, city, or use filters to discover sacred temples
           </p>
@@ -250,8 +244,8 @@ export default function SearchPage() {
               background: 'rgba(255,255,255,0.97)',
               borderRadius: 16,
               overflow: 'hidden',
-              boxShadow: '0 12px 48px rgba(0,0,0,0.35)',
-              border: '2px solid rgba(255,213,128,0.25)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+              border: '1px solid rgba(255,213,128,0.25)',
             }}
           >
             <input
@@ -312,7 +306,7 @@ export default function SearchPage() {
                   background: 'rgba(255,255,255,0.1)',
                   border: '1px solid rgba(255,213,128,0.25)',
                   borderRadius: 50,
-                  color: '#FFD580',
+                  color: 'rgba(255,255,255,0.85)',
                   fontSize: 12,
                   cursor: 'pointer',
                   fontFamily: 'var(--font-body)',
