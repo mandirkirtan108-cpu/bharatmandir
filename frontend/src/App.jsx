@@ -1,31 +1,22 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { LangProvider } from './LangContext';
-import { useUserAuth } from './hooks/useUserAuth';
-import ProtectedRoute        from './components/ProtectedRoute';
-import HomePage              from './pages/HomePage';
-import TempleDetailPage      from './pages/TempleDetailPage';
-import TempleQRPage          from './pages/TempleQRPage';
-import MapPage               from './pages/MapPage';
-import SearchPage            from './pages/SearchPage';
-import RoutePlannerPage      from './pages/RoutePlannerPage';
-import AdminAddTemplePage    from './pages/AdminAddTemplePage';
-import PanchangPage          from './pages/PanchangPage';
-import SpiritualGuidePage    from './pages/SpiritualGuidePage';
-import FestivalCalendarPage  from './pages/FestivalCalendarPage';
-import AdminAddFestivalPage  from './pages/AdminAddFestivalPage';
-import AdminPanelPage        from './pages/AdminPanelPage';
-import AdminLoginPage        from './pages/AdminLoginPage';
-import SacredBooksPage       from './pages/SacredBooksPage';
-import LoginPage             from './pages/LoginPage';
-import SignupPage            from './pages/SignupPage';
-import UserProfilePage       from './pages/UserProfilePage';
-
-function RootRedirect() {
-  const { isLoggedIn } = useUserAuth();
-  return isLoggedIn
-    ? <HomePage />
-    : <Navigate to="/login" replace />;
-}
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { LangProvider }           from './LangContext';
+import ProtectedRoute             from './components/ProtectedRoute';
+import HomePage                   from './pages/HomePage';
+import TempleDetailPage           from './pages/TempleDetailPage';
+import TempleQRPage               from './pages/TempleQRPage';
+import MapPage                    from './pages/MapPage';
+import SearchPage                 from './pages/SearchPage';
+import RoutePlannerPage           from './pages/RoutePlannerPage';
+import AdminAddTemplePage         from './pages/AdminAddTemplePage';
+import PanchangPage               from './pages/PanchangPage';
+import SpiritualGuidePage         from './pages/SpiritualGuidePage';
+import FestivalCalendarPage       from './pages/FestivalCalendarPage';
+import AdminAddFestivalPage       from './pages/AdminAddFestivalPage';
+import AdminPanelPage             from './pages/AdminPanelPage';
+import AdminLoginPage             from './pages/AdminLoginPage';
+import SacredBooksPage            from './pages/SacredBooksPage';
+import LoginPage                  from './pages/LoginPage';
+import SignupPage                 from './pages/SignupPage';
 
 export default function App() {
   return (
@@ -33,10 +24,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
 
-          {/* ── Root — login check ──────────────────────────── */}
-          <Route path="/"                element={<RootRedirect />} />
-
-          {/* ── Public Routes ──────────────────────────────── */}
+          {/* ── Public Routes (no login required) ─────────────── */}
+          <Route path="/"                element={<HomePage />} />
           <Route path="/temple/:slug"    element={<TempleDetailPage />} />
           <Route path="/qr/:slug"        element={<TempleQRPage />} />
           <Route path="/map"             element={<MapPage />} />
@@ -47,17 +36,14 @@ export default function App() {
           <Route path="/festivals"       element={<FestivalCalendarPage />} />
           <Route path="/sacred-books"    element={<SacredBooksPage />} />
 
-          {/* ── User Auth ──────────────────────────────────── */}
+          {/* ── User Auth ──────────────────────────────────────── */}
           <Route path="/login"           element={<LoginPage />} />
           <Route path="/signup"          element={<SignupPage />} />
 
-          {/* ── User Profile (protected) ───────────────────── */}
-          <Route path="/profile"         element={<UserProfilePage />} />
-
-          {/* ── Admin Login — public ───────────────────────── */}
+          {/* ── Admin Login — public ───────────────────────────── */}
           <Route path="/admin/login"     element={<AdminLoginPage />} />
 
-          {/* ── Protected Admin Routes ─────────────────────── */}
+          {/* ── Protected Admin Routes ─────────────────────────── */}
           <Route path="/admin/add" element={
             <ProtectedRoute><AdminAddTemplePage /></ProtectedRoute>
           } />
