@@ -240,7 +240,7 @@ export default function UserProfilePage() {
         position: 'relative',
         overflow: 'hidden',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '40px 28px 52px',
+        padding: '20px 28px 30px',
         textAlign: 'center',
       }}>
         {/* ॐ watermark */}
@@ -267,7 +267,7 @@ export default function UserProfilePage() {
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
-            borderRadius: 50, padding: '6px 20px', marginBottom: 24,
+            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
             color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
             fontWeight: 500, backdropFilter: 'blur(8px)',
           }}>
@@ -275,13 +275,13 @@ export default function UserProfilePage() {
           </div>
 
           {/* avatar */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-            <Avatar name={user.name} avatarUrl={user.avatar_url} size={90} />
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+            <Avatar name={user.name} avatarUrl={user.avatar_url} size={70} />
           </div>
 
           {/* name */}
           <h1 style={{
-            margin: '0 0 8px',
+            margin: '0 0 4px',
             fontFamily: "'Cormorant Garamond', Georgia, serif",
             fontSize: 'clamp(32px, 5vw, 52px)', fontWeight: 700, lineHeight: 1.1,
             color: '#FFD580',
@@ -295,7 +295,7 @@ export default function UserProfilePage() {
           </p>
 
           {joinedDate && (
-            <p style={{ margin: '4px 0 28px', color: 'rgba(255,220,140,0.75)', fontSize: 13 }}>
+            <p style={{ margin: '2px 0 14px', color: 'rgba(255,220,140,0.75)', fontSize: 13 }}>
               🛕 Member since {joinedDate}
             </p>
           )}
@@ -305,7 +305,7 @@ export default function UserProfilePage() {
               onClick={() => setEditing(true)}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '11px 28px', borderRadius: 50,
+                padding: '9px 22px', borderRadius: 50,
                 border: '1.5px solid rgba(255,255,255,0.35)',
                 background: 'rgba(255,255,255,0.10)',
                 color: '#fff', fontWeight: 600, fontSize: 14,
