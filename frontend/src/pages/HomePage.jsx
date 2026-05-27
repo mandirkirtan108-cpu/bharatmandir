@@ -171,7 +171,7 @@ export default function HomePage() {
                 letterSpacing: '.05em',
               }}
             >
-              {t('') || 'Search temples, deities, or cities'}
+              {t('') || ''}
             </label>
             <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <input
