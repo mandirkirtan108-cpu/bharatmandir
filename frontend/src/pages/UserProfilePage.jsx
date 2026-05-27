@@ -216,7 +216,7 @@ export default function UserProfilePage() {
         position: 'relative',
         overflow: 'hidden',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '40px 28px 52px',
+        padding: '24px 28px 28px',
       }}>
         {/* radial glow */}
         <div style={{
@@ -283,7 +283,7 @@ export default function UserProfilePage() {
       </div>
 
       {/* ── Main content ── */}
-      <div style={{ maxWidth: 860, margin: '-24px auto 0', padding: '0 16px 72px', position: 'relative', zIndex: 1 }}>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: '24px 16px 72px', position: 'relative', zIndex: 1 }}>
 
         {/* Profile completion */}
         <div style={{
