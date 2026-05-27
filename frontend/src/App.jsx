@@ -5,7 +5,7 @@ import ProtectedRoute        from './components/ProtectedRoute';
 import HomePage              from './pages/HomePage';
 import TempleDetailPage      from './pages/TempleDetailPage';
 import TempleQRPage          from './pages/TempleQRPage';
-import MapPage               from './pages/MapPage';
+
 import SearchPage            from './pages/SearchPage';
 import RoutePlannerPage      from './pages/RoutePlannerPage';
 import AdminAddTemplePage    from './pages/AdminAddTemplePage';
@@ -39,7 +39,7 @@ export default function App() {
           {/* ── Public Routes ──────────────────────────────── */}
           <Route path="/temple/:slug"    element={<TempleDetailPage />} />
           <Route path="/qr/:slug"        element={<TempleQRPage />} />
-          <Route path="/map"             element={<MapPage />} />
+          
           <Route path="/search"          element={<SearchPage />} />
           <Route path="/route-planner"   element={<RoutePlannerPage />} />
           <Route path="/panchang"        element={<PanchangPage />} />
