@@ -34,7 +34,7 @@ function Avatar({ name, avatarUrl, size = 80 }) {
     return (
       <img src={avatarUrl} alt={name}
         style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover',
-                 border: `3px solid ${CREAM_DARK}`, flexShrink: 0 }} />
+                 border: `3px solid rgba(255,220,140,0.5)`, flexShrink: 0 }} />
     );
   }
   return (
@@ -43,8 +43,9 @@ function Avatar({ name, avatarUrl, size = 80 }) {
       background: `linear-gradient(135deg, ${SAFFRON_LIGHT}, ${SAFFRON_DARK})`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.36, fontWeight: 700,
-      color: '#fff', border: `3px solid ${CREAM_DARK}`,
+      color: '#fff', border: `3px solid rgba(255,220,140,0.5)`,
       fontFamily: "'Cormorant Garamond', Georgia, serif",
+      boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
     }}>
       {initials}
     </div>
@@ -236,59 +237,94 @@ export default function UserProfilePage() {
 
       {/* ── Page header band ── */}
       <div style={{
-        background: `linear-gradient(135deg, ${BROWN} 0%, ${BROWN_MID} 100%)`,
-        padding: '40px 28px 52px',
+        position: 'relative',
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '20px 28px 30px',
+        textAlign: 'center',
       }}>
-        <div style={{ maxWidth: 860, margin: '0 auto' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 20,
-            flexWrap: 'wrap',
-          }}>
-            <Avatar name={user.name} avatarUrl={user.avatar_url} size={80} />
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <h1 style={{
-                margin: 0, fontSize: 28, fontWeight: 700, color: '#fff',
-                fontFamily: "'Cormorant Garamond', Georgia, serif",
-                lineHeight: 1.2,
-              }}>
-                {user.name}
-              </h1>
-              <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: 14 }}>
-                {user.email}
-              </p>
-              {joinedDate && (
-                <p style={{ margin: '3px 0 0', color: 'rgba(255,220,140,0.75)', fontSize: 13 }}>
-                  🛕 Member since {joinedDate}
-                </p>
-              )}
-            </div>
+        {/* ॐ watermark */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 360, color: 'rgba(255,255,255,0.028)',
+          fontFamily: 'var(--font-hindi, serif)',
+          pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
+        }}>ॐ</div>
 
-            {!editing && (
-              <button
-                onClick={() => setEditing(true)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '10px 22px', borderRadius: 50,
-                  border: '1.5px solid rgba(255,255,255,0.35)',
-                  background: 'rgba(255,255,255,0.10)',
-                  color: '#fff', fontWeight: 600, fontSize: 14,
-                  cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
-                  backdropFilter: 'blur(6px)',
-                  transition: 'background 0.2s, border-color 0.2s',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.18)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.6)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.10)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)';
-                }}
-              >
-                ✏️ Edit Profile
-              </button>
-            )}
+        {/* radial glow */}
+        <div style={{
+          position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+          width: 600, height: 300,
+          background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+
+        {/* content */}
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 860, margin: '0 auto' }}>
+
+          {/* badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+            color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
+            fontWeight: 500, backdropFilter: 'blur(8px)',
+          }}>
+            👤 My Profile
           </div>
+
+          {/* avatar */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+            <Avatar name={user.name} avatarUrl={user.avatar_url} size={70} />
+          </div>
+
+          {/* name */}
+          <h1 style={{
+            margin: '0 0 4px',
+            fontFamily: "'Cormorant Garamond', Georgia, serif",
+            fontSize: 'clamp(32px, 5vw, 52px)', fontWeight: 700, lineHeight: 1.1,
+            color: '#FFD580',
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+          }}>
+            {user.name}
+          </h1>
+
+          <p style={{ margin: '0 0 4px', color: 'rgba(255,255,255,0.65)', fontSize: 15 }}>
+            {user.email}
+          </p>
+
+          {joinedDate && (
+            <p style={{ margin: '2px 0 14px', color: 'rgba(255,220,140,0.75)', fontSize: 13 }}>
+              🛕 Member since {joinedDate}
+            </p>
+          )}
+
+          {!editing && (
+            <button
+              onClick={() => setEditing(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '9px 22px', borderRadius: 50,
+                border: '1.5px solid rgba(255,255,255,0.35)',
+                background: 'rgba(255,255,255,0.10)',
+                color: '#fff', fontWeight: 600, fontSize: 14,
+                cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+                backdropFilter: 'blur(6px)',
+                transition: 'background 0.2s, border-color 0.2s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.18)';
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.6)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.10)';
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)';
+              }}
+            >
+              ✏️ Edit Profile
+            </button>
+          )}
         </div>
       </div>
 
