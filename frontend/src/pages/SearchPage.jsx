@@ -28,7 +28,6 @@ export default function SearchPage() {
   const [shaktipeeth,    setShaktipeeth]    = useState(false);
   const [freeEntry,      setFreeEntry]      = useState(false);
 
-  // ── Radius / Nearby state ──────────────────────────────────────────
   const [nearbyMode,     setNearbyMode]     = useState(false);
   const [radiusKm,       setRadiusKm]       = useState(10);
   const [userLocation,   setUserLocation]   = useState(null);
@@ -100,7 +99,6 @@ export default function SearchPage() {
         temples   = res.data || [];
         count     = temples.length;
       } else {
-        // Fetch ALL temples by paginating through backend (max 100 per call)
         const fetchAll = async (extraParams = {}) => {
           let all = [], pg = 1;
           while (true) {
@@ -114,7 +112,6 @@ export default function SearchPage() {
         };
 
         if (jyotirlinga && shaktipeeth) {
-          // OR logic: fetch both from backend, merge unique
           const [t1, t2] = await Promise.all([
             fetchAll({ jyotirlinga: true }),
             fetchAll({ shaktipeeth: true }),
@@ -129,11 +126,9 @@ export default function SearchPage() {
         } else if (shaktipeeth) {
           temples = await fetchAll({ shaktipeeth: true });
         } else {
-          // No special category filter — fetch all, then filter client-side
           temples = await fetchAll();
         }
 
-        // Client-side filters (state, sect, free entry)
         if (selectedStates.length > 0) temples = temples.filter(t => selectedStates.includes(t.state));
         if (selectedSects.length  > 0) temples = temples.filter(t => selectedSects.includes(t.sect));
         if (freeEntry) temples = temples.filter(t => t.entry_fee === 0 || t.entry_fee === null);
@@ -197,23 +192,161 @@ export default function SearchPage() {
     <div className="search-page">
       <Navbar />
 
-      <div className="search-hero">
-        <h1 className="search-hero-title">{t('search.title')}</h1>
-        <p className="search-hero-sub">{t('search.subtitle')}</p>
-        <form className="search-bar" onSubmit={handleSearch}>
-          <input
-            id="search-input"
-            name="search-query"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder={t('search.input_placeholder')}
-            autoFocus
-          />
-          <button type="submit" className="btn-primary">
-            <Search size={15} /> {t('search_btn')}
-          </button>
-        </form>
-      </div>
+      {/* ══════════════ HERO — matches RoutePlannerPage design language ══════════════ */}
+      <section style={{
+        position: 'relative',
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '88px 24px 96px',
+        textAlign: 'center',
+        color: '#FFD580',
+      }}>
+        {/* Decorative ॐ watermark */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 360, color: 'rgba(255,255,255,0.028)',
+          fontFamily: 'var(--font-hindi)',
+          pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
+        }}>ॐ</div>
+
+        {/* Radial glow */}
+        <div style={{
+          position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+          width: 700, height: 340,
+          background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '0 auto' }}>
+          {/* Badge pill */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '6px 20px', marginBottom: 22,
+            color: '#FFD580', fontSize: 12, letterSpacing: '.1em',
+            textTransform: 'uppercase', fontWeight: 500,
+            backdropFilter: 'blur(8px)',
+          }}>
+            🛕 Temple Discovery Platform
+          </div>
+
+          {/* Main heading */}
+          <h1 style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 900,
+            fontSize: 'clamp(38px, 6vw, 72px)',
+            lineHeight: 1.05,
+            marginBottom: 18,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#FFD580',
+          }}>
+            {t('search.title') || 'Find Your'}{' '}
+            <span style={{ color: '#FFD580', opacity: 0.9 }}>
+              {t('search.title_accent') || 'Temple'}
+            </span>
+          </h1>
+
+          {/* Subtitle */}
+          <p style={{
+            color: '#FFD580', opacity: 0.82,
+            fontSize: 18, maxWidth: 560,
+            margin: '0 auto 36px',
+            fontWeight: 300, lineHeight: 1.7,
+          }}>
+            {t('search.subtitle') || 'Search by name, deity, city, or use filters to discover sacred temples across India.'}
+          </p>
+
+          {/* Search bar */}
+          <form
+            onSubmit={handleSearch}
+            style={{
+              display: 'flex',
+              maxWidth: 640,
+              margin: '0 auto',
+              background: 'rgba(255,255,255,0.97)',
+              borderRadius: 16,
+              overflow: 'hidden',
+              boxShadow: '0 12px 48px rgba(0,0,0,0.35)',
+              border: '2px solid rgba(255,213,128,0.25)',
+            }}
+          >
+            <input
+              id="search-input"
+              name="search-query"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder={t('search.input_placeholder') || 'Type temple name, deity, city…'}
+              autoFocus
+              style={{
+                flex: 1,
+                border: 'none',
+                outline: 'none',
+                padding: '18px 20px',
+                fontSize: 16,
+                fontFamily: 'var(--font-body)',
+                color: '#1A0A00',
+                background: 'transparent',
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                padding: '18px 28px',
+                background: 'linear-gradient(135deg, #E8650A 0%, #B84D00 100%)',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 15,
+                fontWeight: 700,
+                fontFamily: 'var(--font-display)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                letterSpacing: '.04em',
+                whiteSpace: 'nowrap',
+                transition: 'opacity .2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              <Search size={16} />
+              {t('search_btn') || 'Search'}
+            </button>
+          </form>
+
+          {/* Quick hint tags */}
+          <div style={{
+            marginTop: 20, display: 'flex', gap: 8,
+            flexWrap: 'wrap', justifyContent: 'center',
+          }}>
+            {['Jyotirlinga', 'Shaktipeeth', 'Ujjain', 'Varanasi', 'Tirupati'].map(tag => (
+              <button
+                key={tag}
+                onClick={() => { setQuery(tag); setSearchParams({ q: tag }); fetchResults(true); }}
+                style={{
+                  padding: '5px 14px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,213,128,0.25)',
+                  borderRadius: 50,
+                  color: '#FFD580',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-body)',
+                  backdropFilter: 'blur(6px)',
+                  transition: 'background .2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.10)'}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+      {/* ══════════════════════════════════════════════════════════════ */}
 
       <div className="container">
         <div className="search-body">
@@ -232,9 +365,7 @@ export default function SearchPage() {
               )}
             </div>
 
-            {/* ══════════════════════════════════════════
-                NEARBY / RADIUS FILTER SECTION
-            ══════════════════════════════════════════ */}
+            {/* ── Nearby / Radius Filter ── */}
             <div style={{
               border: nearbyMode ? '2px solid var(--saffron)' : '2px dashed var(--border)',
               borderRadius: 12,
@@ -243,8 +374,6 @@ export default function SearchPage() {
               background: nearbyMode ? 'rgba(218,96,0,0.05)' : 'transparent',
               transition: 'all 0.3s ease',
             }}>
-
-              {/* Section heading */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <div style={{
                   width: 32, height: 32, borderRadius: '50%',
@@ -264,7 +393,6 @@ export default function SearchPage() {
                 </div>
               </div>
 
-              {/* Get location button */}
               {!userLocation && (
                 <button
                   onClick={getUserLocation}
@@ -295,111 +423,74 @@ export default function SearchPage() {
                 </button>
               )}
 
-              {/* Location error */}
               {locationError && (
                 <p style={{ marginTop: 8, fontSize: 12, color: '#c0392b', lineHeight: 1.5, background: '#fdecea', padding: '6px 10px', borderRadius: 6 }}>
                   ⚠️ {locationError}
                 </p>
               )}
 
-              {/* Active radius controls */}
               {nearbyMode && userLocation && (
                 <div>
-                  {/* Status badge */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, padding: '5px 10px', background: '#eafaf1', borderRadius: 20, width: 'fit-content' }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#27ae60', display: 'inline-block' }} />
                     <span style={{ fontSize: 11, color: '#27ae60', fontWeight: 600 }}>Location detected</span>
                   </div>
 
-                  {/* Radius label + badge */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)', fontFamily: 'var(--font-display)' }}>
                       Search Radius
                     </span>
                     <span style={{
-                      background: 'var(--saffron)',
-                      color: 'white',
-                      borderRadius: 20,
-                      padding: '3px 12px',
-                      fontSize: 13,
-                      fontWeight: 700,
+                      background: 'var(--saffron)', color: 'white',
+                      borderRadius: 20, padding: '3px 12px',
+                      fontSize: 13, fontWeight: 700,
                       fontFamily: 'var(--font-display)',
-                      minWidth: 58,
-                      textAlign: 'center',
+                      minWidth: 58, textAlign: 'center',
                       boxShadow: '0 2px 6px rgba(218,96,0,0.3)',
                     }}>
                       {radiusKm} km
                     </span>
                   </div>
 
-                  {/* Slider */}
                   <input
-                    type="range"
-                    min={1}
-                    max={100}
-                    step={1}
-                    value={radiusKm}
+                    type="range" min={1} max={100} step={1} value={radiusKm}
                     onChange={e => setRadiusKm(Number(e.target.value))}
                     style={{ width: '100%', accentColor: 'var(--saffron)', cursor: 'pointer', height: 4, marginBottom: 10 }}
                   />
 
-                  {/* Range labels */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-light)', marginBottom: 10, marginTop: -6 }}>
-                    <span>1 km</span>
-                    <span>50 km</span>
-                    <span>100 km</span>
+                    <span>1 km</span><span>50 km</span><span>100 km</span>
                   </div>
 
-                  {/* Quick preset pills */}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                     {[5, 10, 25, 50].map(km => (
-                      <button
-                        key={km}
-                        onClick={() => setRadiusKm(km)}
-                        style={{
-                          padding: '4px 12px',
-                          fontSize: 12,
-                          fontWeight: radiusKm === km ? 700 : 400,
-                          borderRadius: 20,
-                          border: `1.5px solid ${radiusKm === km ? 'var(--saffron)' : 'var(--border)'}`,
-                          background: radiusKm === km ? 'var(--saffron)' : 'white',
-                          color: radiusKm === km ? 'white' : 'var(--text-mid)',
-                          cursor: 'pointer',
-                          fontFamily: 'var(--font-display)',
-                          transition: 'all 0.15s',
-                          boxShadow: radiusKm === km ? '0 2px 6px rgba(218,96,0,0.25)' : 'none',
-                        }}
-                      >
+                      <button key={km} onClick={() => setRadiusKm(km)} style={{
+                        padding: '4px 12px', fontSize: 12,
+                        fontWeight: radiusKm === km ? 700 : 400,
+                        borderRadius: 20,
+                        border: `1.5px solid ${radiusKm === km ? 'var(--saffron)' : 'var(--border)'}`,
+                        background: radiusKm === km ? 'var(--saffron)' : 'white',
+                        color: radiusKm === km ? 'white' : 'var(--text-mid)',
+                        cursor: 'pointer', fontFamily: 'var(--font-display)', transition: 'all 0.15s',
+                        boxShadow: radiusKm === km ? '0 2px 6px rgba(218,96,0,0.25)' : 'none',
+                      }}>
                         {km} km
                       </button>
                     ))}
                   </div>
 
-                  {/* Disable button */}
-                  <button
-                    onClick={disableNearby}
-                    style={{
-                      width: '100%',
-                      padding: '7px 0',
-                      fontSize: 12,
-                      color: '#c0392b',
-                      background: '#fdecea',
-                      border: '1px solid #f5c6c6',
-                      borderRadius: 7,
-                      cursor: 'pointer',
-                      fontFamily: 'var(--font-display)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 5,
-                    }}
-                  >
+                  <button onClick={disableNearby} style={{
+                    width: '100%', padding: '7px 0', fontSize: 12,
+                    color: '#c0392b', background: '#fdecea',
+                    border: '1px solid #f5c6c6', borderRadius: 7,
+                    cursor: 'pointer', fontFamily: 'var(--font-display)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  }}>
                     <X size={12} /> Disable Nearby Search
                   </button>
                 </div>
               )}
             </div>
-            {/* ══════════════════════════════════════════ */}
 
             <div className="search-filter-group">
               <span className="search-filter-label">{t('search.special_categories')}</span>
