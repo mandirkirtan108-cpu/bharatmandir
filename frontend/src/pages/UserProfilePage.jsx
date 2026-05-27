@@ -240,7 +240,7 @@ export default function UserProfilePage() {
         position: 'relative',
         overflow: 'hidden',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '88px 28px 96px',
+        padding: '40px 28px 52px',
         textAlign: 'center',
       }}>
         {/* ॐ watermark */}
