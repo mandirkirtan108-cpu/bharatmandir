@@ -1,10 +1,21 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 /* ═══════════════════════════════════════════════════════════
-   STATIC SYSTEM PROMPT  —  BharatMandir AI Guide
-   (date/time injected dynamically per call, not rebuilt entirely)
+   SYSTEM PROMPT  —  BharatMandir AI Guide
    ═══════════════════════════════════════════════════════════ */
-const STATIC_PROMPT = `You are a compassionate Hindu spiritual guide for BharatMandir — a platform connecting devotees with India's sacred temples.
+function buildSystemPrompt() {
+  // Inject live IST date & time so Claude can answer "what is today / current time"
+  const now = new Date();
+  const istOptions = { timeZone: 'Asia/Kolkata', hour12: true };
+  const dateStr = now.toLocaleDateString('en-IN', { ...istOptions, weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('en-IN', { ...istOptions, hour: '2-digit', minute: '2-digit' });
+
+  return `You are a compassionate Hindu spiritual guide for BharatMandir — a platform connecting devotees with India's sacred temples.
+
+CURRENT DATE & TIME (India, IST):
+- Today is: ${dateStr}
+- Current time: ${timeStr} IST
+- If the user asks what day, date, or time it is, answer directly and accurately using the above values.
 
 LANGUAGE RULE (STRICT):
 - Detect the language of the user's message.
@@ -69,19 +80,6 @@ Suggested Questions:
 TONE:
 - Respectful, composed, and spiritually authentic — like a learned pandit or spiritual counsellor.
 - Never give medical, legal, or financial advice.`;
-
-function buildSystemPrompt() {
-  const now = new Date();
-  const istOptions = { timeZone: 'Asia/Kolkata', hour12: true };
-  const dateStr = now.toLocaleDateString('en-IN', { ...istOptions, weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-  const timeStr = now.toLocaleTimeString('en-IN', { ...istOptions, hour: '2-digit', minute: '2-digit' });
-
-  return `${STATIC_PROMPT}
-
-CURRENT DATE & TIME (India, IST):
-- Today is: ${dateStr}
-- Current time: ${timeStr} IST
-- If the user asks what day, date, or time it is, answer directly and accurately using the above values.`;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -96,33 +94,29 @@ const QUICK_PROMPTS = [
   { label: 'Grief & Loss',     text: 'I have experienced a significant loss and I am struggling to find solace.' },
 ];
 
-const MAX_CHARS = 600;
-const WELCOME_MSG = {
-  role: 'assistant',
-  content:
-    'Namaste. I am your BharatMandir Spiritual Guide.\n\nPlease share your concerns, questions, or spiritual needs — I will offer guidance through mantras, prayers, rituals, and temple recommendations.\n\nYou may write in Hindi or English — I will respond in the same language.',
-};
-
 /* ═══════════════════════════════════════════════════════════
-   API CALL  —  routed through /api/spiritual (server proxy)
-   so the Anthropic key is never exposed in the browser.
+   API CALL
    ═══════════════════════════════════════════════════════════ */
 async function callClaude(messages) {
-  const res = await fetch('/api/spiritual', {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY not set in frontend/.env');
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1600,                      // bumped from 1200 — Hindi uses more tokens
-      system: buildSystemPrompt(),
+      max_tokens: 1200,
+      system: buildSystemPrompt(),   // fresh system prompt with live IST time on every call
       messages,
     }),
   });
-
-  if (res.status === 429) throw new Error('RATE_LIMIT');
-  if (res.status === 401) throw new Error('AUTH');
-  if (!res.ok)            throw new Error(`API_${res.status}`);
-
+  if (!res.ok) throw new Error(`API error ${res.status}`);
   const data = await res.json();
   return data.content[0].text;
 }
@@ -147,22 +141,19 @@ function extractSuggestedQuestions(content) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BOT MESSAGE RENDERER
+   RICH TEXT HELPERS
    ═══════════════════════════════════════════════════════════ */
 const isDevanagari = (str) => /[\u0900-\u097F]/.test(str);
 
-function BotMessage({ content, isWelcome }) {
-  if (isWelcome) {
-    return (
-      <div style={S.welcomeContent}>
-        <div style={S.welcomeIcon}>🪔</div>
-        {content.split('\n\n').map((para, i) => (
-          <p key={i} style={{ margin: '6px 0', fontSize: 14, lineHeight: 1.75, color: '#3D1F00' }}>{para}</p>
-        ))}
-      </div>
-    );
-  }
+/* Plain text line renderer — no markdown parsing needed since AI won't send asterisks */
+function PlainLine({ text, style }) {
+  return <span style={style}>{text}</span>;
+}
 
+/* ═══════════════════════════════════════════════════════════
+   BOT MESSAGE RENDERER
+   ═══════════════════════════════════════════════════════════ */
+function BotMessage({ content }) {
   const lines = content.split('\n');
   const elements = [];
   let i = 0;
@@ -173,14 +164,21 @@ function BotMessage({ content, isWelcome }) {
 
     if (!trimmed) { elements.push(<div key={i} style={{ height: 6 }} />); i++; continue; }
     if (/^[-—]{2,}$/.test(trimmed)) { i++; continue; }
+
+    // Suggested questions header — stop rendering body lines here
     if (/suggested questions/i.test(trimmed) || /सुझाए गए प्रश्न/i.test(trimmed)) break;
 
+    // Section header — numbered OR ends with colon (catches both English and Hindi headers)
+    // Must be checked BEFORE the mantra check so Hindi headers like "देवी को समर्पित मंदिर:" don't get the mantra box
     const isSectionHeader = /^\d+\.\s/.test(trimmed) || trimmed.endsWith(':');
     if (isSectionHeader) {
-      elements.push(<div key={i} style={S.sectionHeader}>{trimmed}</div>);
+      elements.push(
+        <div key={i} style={S.sectionHeader}>{trimmed}</div>
+      );
       i++; continue;
     }
 
+    // Devanagari mantra line — only if NOT a section header (already handled above)
     const isMantra = isDevanagari(trimmed) && trimmed.length < 80 && !trimmed.endsWith(':');
     if (isMantra) {
       elements.push(
@@ -189,6 +187,7 @@ function BotMessage({ content, isWelcome }) {
         </div>
       );
       i++;
+      // Next line: transliteration starts with '('
       if (i < lines.length && lines[i].trim().startsWith('(')) {
         elements.push(
           <div key={`t${i}`} style={S.translitLine}><em>{lines[i].trim()}</em></div>
@@ -198,7 +197,10 @@ function BotMessage({ content, isWelcome }) {
       continue;
     }
 
-    elements.push(<div key={i} style={S.normalLine}>{trimmed}</div>);
+    // Normal paragraph line
+    elements.push(
+      <div key={i} style={S.normalLine}>{trimmed}</div>
+    );
     i++;
   }
 
@@ -220,50 +222,31 @@ function TypingDots() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ERROR MESSAGE helper
-   ═══════════════════════════════════════════════════════════ */
-function errorContent(code) {
-  if (code === 'RATE_LIMIT') return '⏳ Too many requests — please wait a moment and try again.\n\nॐ शान्तिः शान्तिः शान्तिः';
-  if (code === 'AUTH')       return '🔑 Authentication error — please contact support.\n\nॐ शान्तिः';
-  return '⚠️ Could not reach the spiritual guide right now. Please try again.\n\nॐ शान्तिः शान्तिः शान्तिः';
-}
-
-/* ═══════════════════════════════════════════════════════════
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════ */
 export default function SpiritualChat() {
-  const [messages, setMessages]   = useState([WELCOME_MSG]);
-  const [input, setInput]         = useState('');
-  const [loading, setLoading]     = useState(false);
-  const messagesAreaRef           = useRef(null);
-  const textareaRef               = useRef(null);
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      content:
+        'Namaste. I am your BharatMandir Spiritual Guide.\n\nPlease share your concerns, questions, or spiritual needs — I will offer guidance through mantras, prayers, rituals, and temple recommendations.\n\nYou may write in Hindi or English — I will respond in the same language.',
+    },
+  ]);
+  const [input, setInput]     = useState('');
+  const [loading, setLoading] = useState(false);
+  const messagesAreaRef       = useRef(null);
 
-  /* Scroll messages area on new content */
+  // Scroll only inside the messages box — never moves the outer page
   useEffect(() => {
     const el = messagesAreaRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
 
-  /* Auto-expand textarea height */
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
-  }, [input]);
-
   const lastBotMsg = [...messages].reverse().find(m => m.role === 'assistant');
   const suggestedQuestions = extractSuggestedQuestions(lastBotMsg?.content || '');
-  const charsLeft = MAX_CHARS - input.length;
 
-  /* Clear conversation */
-  const handleClear = useCallback(() => {
-    setMessages([WELCOME_MSG]);
-    setInput('');
-  }, []);
-
-  const sendMessage = useCallback(async (text) => {
+  const sendMessage = async (text) => {
     const userText = (text ?? input).trim();
     if (!userText || loading) return;
     setInput('');
@@ -274,19 +257,18 @@ export default function SpiritualChat() {
     setLoading(true);
 
     try {
-      /* Sliding window: only last 10 messages to keep token cost bounded */
-      const apiMessages = newHistory
-        .slice(-10)
-        .map(m => ({ role: m.role, content: m.content }));
-
-      const reply = await callClaude(apiMessages);
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: errorContent(err.message) }]);
+      const apiMessages = newHistory.map((m) => ({ role: m.role, content: m.content }));
+      const reply       = await callClaude(apiMessages);
+      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: '⚠️ Could not reach the spiritual guide right now. Please check your API key or try again later.\n\nॐ शान्तिः शान्तिः शान्तिः' },
+      ]);
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages]);
+  };
 
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -308,36 +290,18 @@ export default function SpiritualChat() {
             <div style={S.headerSub}>AI Spiritual Guide · BharatMandir</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
-          <div style={S.liveChip}>
-            <span style={S.liveDot} />
-            Online
-          </div>
-          {/* Clear / New session button */}
-          <button
-            style={S.clearBtn}
-            className="bm-clear-btn"
-            onClick={handleClear}
-            title="Start new conversation"
-            aria-label="Start new conversation"
-          >
-            ↺
-          </button>
+        <div style={S.liveChip}>
+          <span style={S.liveDot} />
+          Online
         </div>
       </div>
 
       {/* ── Quick Prompts ── */}
       <div style={S.quickBar}>
         <div style={S.quickLabel}>Quick Topics:</div>
-        <div style={S.quickScroll} className="bm-quick-scroll">
-          {QUICK_PROMPTS.map(p => (
-            <button
-              key={p.label}
-              style={S.quickBtn}
-              className="bm-quick-btn"
-              onClick={() => sendMessage(p.text)}
-              disabled={loading}
-            >
+        <div style={S.quickScroll}>
+          {QUICK_PROMPTS.map((p) => (
+            <button key={p.label} style={S.quickBtn} className="bm-quick-btn" onClick={() => sendMessage(p.text)} disabled={loading}>
               {p.label}
             </button>
           ))}
@@ -354,9 +318,7 @@ export default function SpiritualChat() {
             {msg.role === 'user' ? (
               <div style={S.bubbleUser}>{msg.content}</div>
             ) : (
-              <div style={i === 0 ? S.bubbleBotWelcome : S.bubbleBot}>
-                <BotMessage content={msg.content} isWelcome={i === 0} />
-              </div>
+              <div style={S.bubbleBot}><BotMessage content={msg.content} /></div>
             )}
             {msg.role === 'user' && (
               <div style={S.userAvatar}><span style={{ fontSize: 17 }}>🙏</span></div>
@@ -378,13 +340,7 @@ export default function SpiritualChat() {
           <div style={S.suggestLabel}>✦ Suggested Questions</div>
           <div style={S.suggestScroll}>
             {suggestedQuestions.map((q, i) => (
-              <button
-                key={i}
-                style={S.suggestChip}
-                className="bm-suggest-chip"
-                onClick={() => sendMessage(q)}
-                disabled={loading}
-              >
+              <button key={i} style={S.suggestChip} className="bm-suggest-chip" onClick={() => sendMessage(q)} disabled={loading}>
                 {q}
               </button>
             ))}
@@ -397,32 +353,16 @@ export default function SpiritualChat() {
 
       {/* ── Input ── */}
       <div style={S.inputArea}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <textarea
-            ref={textareaRef}
-            style={S.textarea}
-            className="bm-textarea"
-            placeholder="Share your concern or question... (Hindi or English)"
-            value={input}
-            onChange={e => {
-              if (e.target.value.length <= MAX_CHARS) setInput(e.target.value);
-            }}
-            onKeyDown={handleKey}
-            rows={3}
-            disabled={loading}
-            maxLength={MAX_CHARS}
-          />
-          {/* Character counter — only visible when nearing limit */}
-          {charsLeft <= 150 && (
-            <div style={{
-              position: 'absolute', bottom: 6, right: 10,
-              fontSize: 10, color: charsLeft < 50 ? '#E24B4A' : '#9A7150',
-              fontFamily: 'inherit', pointerEvents: 'none',
-            }}>
-              {charsLeft}
-            </div>
-          )}
-        </div>
+        <textarea
+          style={S.textarea}
+          className="bm-textarea"
+          placeholder="Share your concern or question... (Hindi or English)"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          rows={2}
+          disabled={loading}
+        />
         <button
           style={{ ...S.sendBtn, opacity: loading || !input.trim() ? 0.45 : 1 }}
           className="bm-send-btn"
@@ -430,7 +370,7 @@ export default function SpiritualChat() {
           disabled={loading || !input.trim()}
         >
           <span>🙏</span>
-          <span className="bm-send-label">Send</span>
+          <span>Send</span>
         </button>
       </div>
 
@@ -465,10 +405,6 @@ const CSS = `
     50%       { text-shadow: 0 0 24px rgba(255,213,128,1); }
   }
 
-  /* Hide scrollbar on quick prompts strip */
-  .bm-quick-scroll { scrollbar-width: none; -ms-overflow-style: none; }
-  .bm-quick-scroll::-webkit-scrollbar { display: none; }
-
   .bm-quick-btn:hover:not(:disabled) {
     background: rgba(255,213,128,0.15) !important;
     color: #FFD580 !important;
@@ -476,6 +412,7 @@ const CSS = `
     border-left-color: #E8650A !important;
   }
   .bm-send-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #ff8800, #7a3208) !important;
     box-shadow: 0 6px 20px rgba(232,101,10,0.45) !important;
     transform: translateY(-1px) scale(1.02) !important;
   }
@@ -490,46 +427,25 @@ const CSS = `
     color: #FFD580 !important;
     transform: translateY(-1px) !important;
   }
-  .bm-clear-btn {
-    background: rgba(255,213,128,0.08) !important;
-    border: 1px solid rgba(255,213,128,0.25) !important;
-    color: #FFD580 !important;
-    border-radius: 8px !important;
-    width: 32px; height: 32px;
-    font-size: 18px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.18s ease;
-  }
-  .bm-clear-btn:hover {
-    background: rgba(255,213,128,0.18) !important;
-    transform: rotate(-20deg);
-  }
-
-  /* Hide "Send" text on very narrow phones, show icon only */
-  @media (max-width: 420px) {
-    .bm-send-label { display: none; }
-  }
 `;
 
 /* ═══════════════════════════════════════════════════════════
    DESIGN TOKENS
    ═══════════════════════════════════════════════════════════ */
-const brown1  = '#3D1F00';
-const brown2  = '#7a3208';
-const orange  = '#E8650A';
-const gold    = '#FFD580';
-const goldMid = '#C8960C';
-const cream   = '#f8f4ef';
+const brown1   = '#3D1F00';
+const brown2   = '#7a3208';
+const orange   = '#E8650A';
+const gold     = '#FFD580';
+const goldMid  = '#C8960C';
+const cream    = '#f8f4ef';
 
 /* ═══════════════════════════════════════════════════════════
-   STYLES
+   STYLES OBJECT
    ═══════════════════════════════════════════════════════════ */
 const S = {
   wrapper: {
     display: 'flex', flexDirection: 'column',
-    height: '100%',
-    minHeight: 560,
-    maxHeight: 'min(760px, 85vh)',           /* was hard 760px — now screen-aware */
+    height: '100%', minHeight: 560, maxHeight: 760,
     background: 'white', borderRadius: 28, overflow: 'hidden',
     boxShadow: '0 20px 60px rgba(61,31,0,0.15)',
     border: '1px solid rgba(232,101,10,0.12)',
@@ -539,7 +455,7 @@ const S = {
   header: {
     position: 'relative',
     background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-    padding: '16px 20px', display: 'flex', alignItems: 'center',
+    padding: '18px 22px', display: 'flex', alignItems: 'center',
     justifyContent: 'space-between', color: gold, overflow: 'hidden', flexShrink: 0,
   },
   headerGlow: {
@@ -550,38 +466,34 @@ const S = {
   },
   headerInner: { display: 'flex', alignItems: 'center', gap: 12, position: 'relative' },
   omCircle: {
-    width: 44, height: 44, borderRadius: '50%',
+    width: 46, height: 46, borderRadius: '50%',
     background: 'rgba(255,213,128,0.12)',
     border: '1.5px solid rgba(255,213,128,0.35)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
+    backdropFilter: 'blur(4px)', flexShrink: 0,
   },
   omText: {
-    fontSize: 21, fontFamily: "'Tiro Devanagari Sanskrit', serif",
+    fontSize: 22, fontFamily: "'Tiro Devanagari Sanskrit', serif",
     color: gold, animation: 'bm-omGlow 3s ease-in-out infinite', lineHeight: 1,
   },
   headerTitle: {
     fontFamily: "'Crimson Pro', Georgia, serif",
-    fontWeight: 700, fontSize: 17, letterSpacing: '0.01em', lineHeight: 1.25, color: gold,
+    fontWeight: 700, fontSize: 18, letterSpacing: '0.01em', lineHeight: 1.25, color: gold,
   },
   headerSub: {
-    fontSize: 10, opacity: 0.65,
+    fontSize: 10.5, opacity: 0.65,
     letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 2, color: gold,
   },
   liveChip: {
     display: 'flex', alignItems: 'center', gap: 6,
     background: 'rgba(255,213,128,0.1)', border: '1px solid rgba(255,213,128,0.28)',
-    borderRadius: 20, padding: '5px 12px',
+    borderRadius: 20, padding: '5px 13px',
     fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
-    color: gold, flexShrink: 0,
+    color: gold, position: 'relative', flexShrink: 0,
   },
   liveDot: {
     width: 7, height: 7, borderRadius: '50%',
     background: '#4ade80', display: 'inline-block', animation: 'bm-pulse 2s infinite',
-  },
-  clearBtn: {
-    /* base styles in CSS class .bm-clear-btn */
-    flexShrink: 0,
   },
   quickBar: {
     background: '#fdf6ec',
@@ -640,17 +552,6 @@ const S = {
     border: '1px solid rgba(232,101,10,0.12)',
     boxShadow: '0 2px 12px rgba(61,31,0,0.07)',
   },
-  /* Welcome bubble — distinct dashed border and cream background */
-  bubbleBotWelcome: {
-    maxWidth: '90%', padding: '16px 20px',
-    borderRadius: 16,
-    background: '#fffdf8', color: brown1,
-    fontSize: 14, lineHeight: 1.72,
-    border: '1.5px dashed rgba(200,150,12,0.35)',
-    boxShadow: '0 2px 12px rgba(61,31,0,0.05)',
-  },
-  welcomeContent: { display: 'flex', flexDirection: 'column', gap: 4 },
-  welcomeIcon: { fontSize: 24, marginBottom: 6 },
   typingWrap: { display: 'flex', alignItems: 'center', gap: 5 },
   dot: {
     display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
@@ -673,9 +574,7 @@ const S = {
     fontSize: 12, fontWeight: 500, cursor: 'pointer',
     whiteSpace: 'normal', textAlign: 'left', lineHeight: 1.45,
     transition: 'all 0.18s ease', fontFamily: 'inherit',
-    letterSpacing: '0.01em',
-    maxWidth: '280px',                        /* prevent oversized chips */
-    overflow: 'hidden', textOverflow: 'ellipsis',
+    letterSpacing: '0.01em', maxWidth: '100%',
     boxShadow: '0 1px 4px rgba(61,31,0,0.06)',
   },
   divider: {
@@ -684,20 +583,15 @@ const S = {
     flexShrink: 0,
   },
   inputArea: {
-    display: 'flex', gap: 10, padding: '10px 14px',
+    display: 'flex', gap: 10, padding: '12px 14px',
     background: 'white', flexShrink: 0, alignItems: 'flex-end',
   },
   textarea: {
-    width: '100%', resize: 'none',
-    border: '2px solid #EDE0CC', borderRadius: 16,
-    padding: '11px 14px',
+    flex: 1, resize: 'none', border: '2px solid #EDE0CC',
+    borderRadius: 16, padding: '11px 14px',
     fontSize: 14, fontFamily: 'inherit', outline: 'none',
     color: brown1, background: cream, lineHeight: 1.55,
-    transition: 'border-color 0.2s, box-shadow 0.2s',
-    boxSizing: 'border-box',
-    minHeight: 72,                            /* taller default for Hindi */
-    maxHeight: 140,
-    overflowY: 'auto',
+    transition: 'border-color 0.2s, box-shadow 0.2s', boxSizing: 'border-box',
   },
   sendBtn: {
     padding: '12px 18px', borderRadius: 16, border: 'none',
@@ -707,7 +601,6 @@ const S = {
     display: 'flex', alignItems: 'center', gap: 6,
     boxShadow: '0 4px 16px rgba(184,77,0,0.3)',
     fontFamily: 'inherit', letterSpacing: '0.04em',
-    alignSelf: 'flex-end',                   /* pin to bottom of textarea */
   },
   footerNote: {
     textAlign: 'center', fontSize: 10, color: '#9A7150',
