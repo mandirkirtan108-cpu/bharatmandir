@@ -26,6 +26,8 @@ const STATES = [
   'Tamil Nadu', 'Gujarat', 'Karnataka', 'Rajasthan',
 ];
 
+const PAGE_SIZE = 12;
+
 export default function HomePage() {
   const [searchParams]                    = useSearchParams();
   const location                          = useLocation();
@@ -38,8 +40,10 @@ export default function HomePage() {
   const [activeState,   setActiveState]   = useState('All States');
   const [searchQuery,   setSearchQuery]   = useState(searchParams.get('search') || '');
   const [totalTemples,  setTotalTemples]  = useState(0);
+  const [visibleCount,  setVisibleCount]  = useState(PAGE_SIZE);
 
   const { translated: displayTemples, translating } = useTranslatedTemples(temples);
+  const visibleTemples = displayTemples.slice(0, visibleCount);
 
   const isActive = (path) => location.pathname === path;
 
@@ -53,6 +57,7 @@ export default function HomePage() {
     const fetchTemples = async () => {
       setLoading(true);
       setError(null);
+      setVisibleCount(PAGE_SIZE); // reset pagination on filter change
       try {
         let temples, count;
         if (searchQuery) {
@@ -108,12 +113,14 @@ export default function HomePage() {
       <section style={{
         position: 'relative', overflow: 'hidden', color: '#FFD580',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '88px 24px 120px', textAlign: 'center',
+        /* FIX: reduced vertical padding so temple cards are visible above the fold */
+        padding: '56px 24px 72px',
+        textAlign: 'center',
       }}>
         {/* Om watermark */}
         <div style={{
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 360, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
+          fontSize: 320, color: 'rgba(255,255,255,0.028)', fontFamily: 'var(--font-hindi)',
           pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
         }}>ॐ</div>
 
@@ -130,7 +137,7 @@ export default function HomePage() {
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
-            borderRadius: 50, padding: '6px 20px', marginBottom: 20,
+            borderRadius: 50, padding: '6px 20px', marginBottom: 16,
             color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
             fontWeight: 500, backdropFilter: 'blur(8px)',
           }}>
@@ -139,7 +146,7 @@ export default function HomePage() {
 
           <h1 style={{
             fontFamily: 'var(--font-display)', fontWeight: 900,
-            fontSize: 'clamp(38px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
+            fontSize: 'clamp(32px,5vw,62px)', lineHeight: 1.05, marginBottom: 14,
             textShadow: '0 4px 40px rgba(0,0,0,0.3)',
             color: '#FFD580',
           }}>
@@ -148,13 +155,24 @@ export default function HomePage() {
           </h1>
 
           <p style={{
-            color: '#FFD580', opacity: 0.82, fontSize: 18,
-            maxWidth: 540, margin: '0 auto 32px', fontWeight: 300, lineHeight: 1.7,
+            color: '#FFD580', opacity: 0.82, fontSize: 17,
+            maxWidth: 540, margin: '0 auto 28px', fontWeight: 300, lineHeight: 1.7,
           }}>
             {t('hero_desc')}
           </p>
 
+          {/* FIX: Search with visible label for accessibility */}
           <div className="hero-actions">
+            <label
+              htmlFor="hero-search"
+              style={{
+                display: 'block', marginBottom: 8,
+                fontSize: 13, color: 'rgba(255,213,128,0.75)',
+                letterSpacing: '.05em',
+              }}
+            >
+              {t('hero_search_label') || 'Search temples, deities, or cities'}
+            </label>
             <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <input
                 id="hero-search"
@@ -197,10 +215,18 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Filters ── */}
+      {/* ── Filters ── FIX: Split into two rows — deity row + state row */}
       <div className="filters-bar">
         <div className="container">
-          <div className="filters-inner">
+          {/* Row 1: Deity filters */}
+          <div className="filters-inner" style={{ marginBottom: 8 }}>
+            <span style={{
+              fontSize: 11, fontWeight: 600, color: 'var(--color-muted, #888)',
+              textTransform: 'uppercase', letterSpacing: '.08em',
+              alignSelf: 'center', marginRight: 4, whiteSpace: 'nowrap',
+            }}>
+              {t('filter.by_deity') || 'Deity'}
+            </span>
             {DEITY_FILTERS.map((f) => (
               <button
                 key={f.value}
@@ -210,7 +236,17 @@ export default function HomePage() {
                 {getFilterLabel(f)}
               </button>
             ))}
-            <div style={{ width: 1, height: 24, background: 'var(--cream-dark)', margin: '0 4px' }} />
+          </div>
+
+          {/* Row 2: State filters */}
+          <div className="filters-inner">
+            <span style={{
+              fontSize: 11, fontWeight: 600, color: 'var(--color-muted, #888)',
+              textTransform: 'uppercase', letterSpacing: '.08em',
+              alignSelf: 'center', marginRight: 4, whiteSpace: 'nowrap',
+            }}>
+              {t('filter.by_state') || 'State'}
+            </span>
             {STATES.map((s) => (
               <button
                 key={s}
@@ -274,36 +310,56 @@ export default function HomePage() {
             </div>
           )}
 
-          {!loading && !error && displayTemples.length > 0 && (
-            <div className="temples-grid">
-              {displayTemples.map((temple, i) => (
-                <TempleCard
-                  key={temple.id || i}
-                  temple={temple}
-                  style={{ animationDelay: `${i * 0.05}s` }}
-                />
-              ))}
-            </div>
+          {!loading && !error && visibleTemples.length > 0 && (
+            <>
+              <div className="temples-grid">
+                {visibleTemples.map((temple, i) => (
+                  <TempleCard
+                    key={temple.id || i}
+                    temple={temple}
+                    style={{ animationDelay: `${i * 0.05}s` }}
+                  />
+                ))}
+              </div>
+
+              {/* FIX: Load More button — replaces loading 50 at once */}
+              {visibleCount < displayTemples.length && (
+                <div style={{ textAlign: 'center', marginTop: 36, marginBottom: 16 }}>
+                  <button
+                    className="btn-primary"
+                    style={{ padding: '12px 36px', fontSize: 15 }}
+                    onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+                  >
+                    {t('load_more') || 'Load More Temples'} ✦
+                  </button>
+                  <p style={{ marginTop: 10, fontSize: 13, color: 'var(--color-muted, #888)' }}>
+                    {t('showing') || 'Showing'} {Math.min(visibleCount, displayTemples.length)} {t('of') || 'of'} {displayTemples.length}
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>
 
       <Footer />
 
-      {/* ── Floating AI Guide Button ── */}
+      {/* ── Floating AI Guide Button ──
+          FIX: raised bottom on mobile to avoid covering content,
+          smaller on mobile screens */}
       <Link
         to="/spiritual-guide"
         style={{
           position: 'fixed',
-          bottom: 28,
-          right: 28,
+          bottom: 'clamp(16px, 4vw, 28px)',
+          right: 'clamp(16px, 4vw, 28px)',
           zIndex: 9999,
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          padding: '12px 20px',
+          padding: 'clamp(10px, 2vw, 12px) clamp(14px, 3vw, 20px)',
           borderRadius: 50,
-          fontSize: 14,
+          fontSize: 'clamp(12px, 2vw, 14px)',
           fontWeight: 700,
           textDecoration: 'none',
           whiteSpace: 'nowrap',
