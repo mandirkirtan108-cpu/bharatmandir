@@ -388,7 +388,7 @@ export default function SacredBooksPage() {
 
         {/* ── Hero Banner ─────────────────────────────────────── */}
         <div style={{
-          background: 'linear-gradient(135deg, #1a0d00 0%, #3d1a00 50%, #2c1500 100%)',
+          background:'linear-gradient(135deg, #7a2e00 0%, #b84a00 40%, #c05500 60%, #7a2e00 100%)',
           padding: '0 28px 40px',
           textAlign: 'center',
           position: 'relative',
