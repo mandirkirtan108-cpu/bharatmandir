@@ -14,7 +14,6 @@ export function useUserAuth() {
     setLoading(true); setError('');
     try {
       await userAuthAPI.signup({ name, email, password, confirm_password: confirmPassword });
-      // ✅ Do NOT saveTokens or setUser here — user must verify email first
       return { success: true };
     } catch (err) {
       const msg = err.response?.data?.detail || err.message || 'Signup failed';
@@ -42,5 +41,30 @@ export function useUserAuth() {
     setUser(null);
   }, []);
 
-  return { user, isLoggedIn, isVerified, loading, error, signup, login, logout };
+  const updateProfile = useCallback(async (data) => {
+    setLoading(true); setError('');
+    try {
+      const res = await userAuthAPI.updateProfile(data);
+      const updatedUser = res.data.user;
+      userAuthAPI.saveUser(updatedUser);
+      setUser(updatedUser);
+      return { success: true, user: updatedUser };
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || 'Profile update failed';
+      setError(msg);
+      return { success: false, error: msg };
+    } finally { setLoading(false); }
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await userAuthAPI.me();
+      userAuthAPI.saveUser(res.data);
+      setUser(res.data);
+    } catch {
+      // silently fail
+    }
+  }, []);
+
+  return { user, isLoggedIn, isVerified, loading, error, signup, login, logout, updateProfile, refreshUser };
 }

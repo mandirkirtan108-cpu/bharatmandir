@@ -199,24 +199,31 @@ export default function Navbar() {
 
             <div className="nav-divider" />
 
-            {/* ── User logout button ── */}
+            {/* ── User avatar + profile link + logout ── */}
             {isLoggedIn && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '6px 12px', borderRadius: 50,
-                  background: 'rgba(255,153,0,0.10)',
-                  border: '1px solid rgba(255,153,0,0.25)',
-                  color: '#ff9900', fontSize: 12, fontWeight: 600,
-                }}>
+                <Link
+                  to="/profile"
+                  title="My Profile"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 12px', borderRadius: 50,
+                    background: isActive('/profile') ? 'rgba(255,153,0,0.20)' : 'rgba(255,153,0,0.10)',
+                    border: `1px solid ${isActive('/profile') ? 'rgba(255,153,0,0.60)' : 'rgba(255,153,0,0.25)'}`,
+                    color: '#ff9900', fontSize: 12, fontWeight: 600,
+                    textDecoration: 'none', transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,153,0,0.22)'}
+                  onMouseLeave={e => e.currentTarget.style.background = isActive('/profile') ? 'rgba(255,153,0,0.20)' : 'rgba(255,153,0,0.10)'}
+                >
                   <User size={13} />
                   <span style={{
                     maxWidth: 90, overflow: 'hidden',
                     textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
-                    {user?.name?.split(' ')[0] || 'User'}
+                    {user?.name?.split(' ')[0] || 'Profile'}
                   </span>
-                </div>
+                </Link>
                 <button
                   onClick={handleUserLogout}
                   title="Sign out"
@@ -359,7 +366,7 @@ export default function Navbar() {
             </Link>
           )}
 
-          {/* ── User logout in sidebar ── */}
+          {/* ── User profile + logout in sidebar ── */}
           {isLoggedIn && (
             <>
               <div style={{
@@ -367,15 +374,25 @@ export default function Navbar() {
                 borderTop: '1px solid rgba(255,153,0,0.15)',
                 paddingTop: 8,
               }} />
+
+              <Link
+                to="/profile"
+                className={`sidebar-link${isActive('/profile') ? ' active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ color: '#ff9900', fontWeight: 700 }}
+              >
+                <span className="sidebar-link-icon"><User size={17} /></span>
+                My Profile
+              </Link>
+
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '10px 20px',
               }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  color: '#ff9900', fontSize: 13, fontWeight: 600,
+                  color: 'rgba(255,255,255,0.5)', fontSize: 13,
                 }}>
-                  <User size={15} />
                   <span>{user?.name || 'User'}</span>
                 </div>
                 <button

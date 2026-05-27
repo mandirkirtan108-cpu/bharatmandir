@@ -5,7 +5,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const api = axios.create({ baseURL: API_BASE, timeout: 30000 });
 const adminApi = axios.create({ baseURL: API_BASE, timeout: 30000 });
 
-// ── Request interceptor: attach token ────────────────────────────────
+// ── Request interceptor: attach admin token ───────────────────────────
 adminApi.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('bm_access_token');
   if (token) config.headers['Authorization'] = `Bearer ${token}`;
@@ -120,6 +120,14 @@ const USER_ACCESS_KEY  = 'bm_user_access_token';
 const USER_REFRESH_KEY = 'bm_user_refresh_token';
 const USER_KEY         = 'bm_user';
 
+// Axios instance with user token auto-attach
+const userApi = axios.create({ baseURL: API_BASE, timeout: 30000 });
+userApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem(USER_ACCESS_KEY);
+  if (token) config.headers['Authorization'] = `Bearer ${token}`;
+  return config;
+});
+
 export const userAuthAPI = {
   signup:    (data)          => api.post('/api/auth/signup',     data),
   login:     (data)          => api.post('/api/auth/login',      data),
@@ -127,16 +135,16 @@ export const userAuthAPI = {
   verifyOTP: (email, otp)    => api.post('/api/auth/verify-otp', { email, otp }),
   resendOTP: (email)         => api.post('/api/auth/resend-otp', { email }),
 
-  me: () => {
-    const token = localStorage.getItem(USER_ACCESS_KEY);
-    return api.get('/api/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-  },
+  me:            ()       => userApi.get('/api/auth/me'),
+  updateProfile: (data)   => userApi.patch('/api/auth/profile', data),
+
   saveTokens(data) {
     localStorage.setItem(USER_ACCESS_KEY,  data.access_token);
     localStorage.setItem(USER_REFRESH_KEY, data.refresh_token);
     localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+  },
+  saveUser(user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
   },
   clearTokens() {
     localStorage.removeItem(USER_ACCESS_KEY);
