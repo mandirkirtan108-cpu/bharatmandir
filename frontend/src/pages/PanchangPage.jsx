@@ -204,7 +204,7 @@ export default function PanchangPage() {
         <section style={{
           position: 'relative', overflow: 'hidden', color: 'white',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '66px 20px', textAlign: 'center',
+          padding: '60px 16px', textAlign: 'center',
         }}>
           <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
             <div style={{
