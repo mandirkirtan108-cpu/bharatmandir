@@ -218,35 +218,6 @@ export default function UserProfilePage() {
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
         padding: '40px 28px 52px',
       }}>
-        {/* ॐ watermark — large, positioned right side */}
-        <div style={{
-          position: 'absolute',
-          right: '-2%',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          fontSize: 'clamp(160px, 22vw, 280px)',
-          color: 'rgba(255,255,255,0.07)',
-          fontFamily: '"Noto Sans Devanagari", "Mangal", serif',
-          pointerEvents: 'none',
-          userSelect: 'none',
-          lineHeight: 1,
-          letterSpacing: 0,
-        }}>ॐ</div>
-
-        {/* secondary watermark left */}
-        <div style={{
-          position: 'absolute',
-          left: '-3%',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          fontSize: 'clamp(100px, 14vw, 180px)',
-          color: 'rgba(255,255,255,0.04)',
-          fontFamily: '"Noto Sans Devanagari", "Mangal", serif',
-          pointerEvents: 'none',
-          userSelect: 'none',
-          lineHeight: 1,
-        }}>ॐ</div>
-
         {/* radial glow */}
         <div style={{
           position: 'absolute', top: -60, left: '50%', transform: 'translateX(-50%)',
