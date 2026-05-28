@@ -333,7 +333,7 @@ export default function Navbar() {
       <Link
         to="/spiritual-guide"
         style={{
-          display: sidebarOpen ? 'none' : 'flex',
+          display: sidebarOpen || isActive('/spiritual-guide') ? 'none' : 'flex',
           position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
           alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 50,
           fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap',
