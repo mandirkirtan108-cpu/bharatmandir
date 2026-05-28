@@ -191,11 +191,18 @@ function StepOTP({ email, onNext }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Invalid or expired code');
+      if (!res.ok) {
+        let msg = 'OTP has expired or is invalid. Please click "Resend code" to get a new one.';
+        try { const d = await res.json(); if (d.detail) msg = d.detail; } catch {}
+        throw new Error(msg);
+      }
       onNext(otp);
     } catch (e) {
-      setApiErr(e.message);
+      if (e.message === 'Failed to fetch') {
+        setApiErr('Unable to connect. Please check your internet and try again.');
+      } else {
+        setApiErr(e.message);
+      }
     } finally {
       setLoad(false);
     }
@@ -209,11 +216,18 @@ function StepOTP({ email, onNext }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to resend');
+      if (!res.ok) {
+        let msg = 'Failed to resend code. Please try again.';
+        try { const d = await res.json(); if (d.detail) msg = d.detail; } catch {}
+        throw new Error(msg);
+      }
       setResend('A new code has been sent to your email.');
     } catch (e) {
-      setApiErr(e.message);
+      if (e.message === 'Failed to fetch') {
+        setApiErr('Unable to connect. Please check your internet and try again.');
+      } else {
+        setApiErr(e.message);
+      }
     } finally {
       setRe(false);
     }
