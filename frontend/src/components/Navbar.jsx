@@ -56,12 +56,12 @@ export default function Navbar() {
   };
 
   const NAV_LINKS = [
-    { to: '/search',        label: '🛕 ' + 'Temples',        icon: <Search size={16} /> },
-    { to: '/route-planner', label: t('nav.route'),           icon: <Navigation size={16} /> },
-    { to: '/panchang',      label: t('nav.panchang'),        icon: <CalendarDays size={16} /> },
-    { to: '/festivals',     label: t('nav.festivals'),       icon: <Sparkles size={16} /> },
-    { to: '/sacred-books',  label: '📚 Library',             icon: <BookOpen size={16} /> },
-    { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'), icon: null, highlight: true },
+    { to: '/search',          label: '🛕 ' + 'Temples',              icon: <Search size={16} /> },
+    { to: '/route-planner',   label: t('nav.route'),                 icon: <Navigation size={16} /> },
+    { to: '/panchang',        label: t('nav.panchang'),              icon: <CalendarDays size={16} /> },
+    { to: '/festivals',       label: t('nav.festivals'),             icon: <Sparkles size={16} /> },
+    { to: '/sacred-books',    label: '📚 Library',                   icon: <BookOpen size={16} /> },
+    { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'),     icon: null },
   ];
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
@@ -109,16 +109,7 @@ export default function Navbar() {
               <Link
                 key={link.to}
                 to={link.to}
-                className={`nav-link${isActive(link.to) ? ' active' : ''}${link.highlight ? ' nav-add-btn' : ''}`}
-                style={link.highlight ? {
-                  background: isActive(link.to)
-                    ? 'linear-gradient(135deg,#E06B25,#9A3C05)'
-                    : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-                  color: isActive(link.to) ? '#fff' : '#C8520A',
-                  borderColor: '#C8520A',
-                  fontWeight: 700,
-                  marginLeft: 6,
-                } : {}}
+                className={`nav-link${isActive(link.to) ? ' active' : ''}`}
               >
                 {link.label}
               </Link>
@@ -157,7 +148,6 @@ export default function Navbar() {
                   onMouseEnter={e => { e.currentTarget.style.borderColor = '#C8520A'; }}
                   onMouseLeave={e => { if (!userMenuOpen) e.currentTarget.style.borderColor = '#EDE3CE'; }}
                 >
-                  {/* tiny avatar circle */}
                   <span style={{
                     width: 22, height: 22, borderRadius: '50%',
                     background: 'linear-gradient(135deg,#E06B25,#9A3C05)',
@@ -172,7 +162,7 @@ export default function Navbar() {
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                     style={{ opacity: 0.6, transition: 'transform 0.2s', transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                     <path d="M6 9l6 6 6-6"/>
-                  </svg> 
+                  </svg>
                 </button>
 
                 {/* Dropdown */}
@@ -277,7 +267,6 @@ export default function Navbar() {
               to={link.to}
               className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
               onClick={() => setSidebarOpen(false)}
-              style={link.highlight ? { color: '#FF6B00', fontWeight: 700 } : {}}
             >
               <span className="sidebar-link-icon">{link.icon || <span>{link.label.split(' ')[0]}</span>}</span>
               {link.label}
