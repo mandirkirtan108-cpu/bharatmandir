@@ -266,95 +266,97 @@ export default function FestivalCalendarPage() {
     <>
       <Navbar />
 
-      {/* ═══════════════════ HERO ═══════════════════ */}
-       <section
-        aria-label="Festival Calendar hero"
-        style={{
-          position: 'relative', overflow: 'hidden',
-          background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '50px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '100%',
-          boxSizing: 'border-box',
-        }}
-      >
-        <div style={{
-          position: 'relative', zIndex: 1,
-          width: '100%', maxWidth: 700,
-          padding: '0 24px',
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center',
-        }}>
-          {/* Badge */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
-            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
-            color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
-            textTransform: 'uppercase', fontWeight: 500,
+      {/* ── HERO ─────────────────────────────────────────────────────── */}
+<section style={{
+  position: 'relative',
+  overflow: 'hidden',
+  background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+  padding: '50px 12px',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '100%',
+  boxSizing: 'border-box',
+}}>
+  <div style={{
+    position: 'relative', zIndex: 1,
+    width: '100%', maxWidth: 700,
+    padding: '0 24px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
+  }}>
+
+    {/* Badge */}
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      background: 'rgba(255,255,255,0.08)',
+      border: '1px solid rgba(255,213,128,0.3)',
+      borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+      color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+      textTransform: 'uppercase', fontWeight: 500,
+      backdropFilter: 'blur(8px)',
+      whiteSpace: 'nowrap',
+    }}>✨ AI Route Planner</div>
+
+    {/* Title */}
+    <h1 style={{
+      fontFamily: 'var(--font-display)', fontWeight: 900,
+      fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+      marginBottom: 10, marginTop: 0,
+      textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+      color: '#ffffff',
+      width: '100%',
+    }}>
+      Your Journey,{' '}
+      <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
+    </h1>
+
+    {/* Subtitle */}
+    <p style={{
+      color: 'rgba(255,255,255,0.7)', fontSize: 14,
+      width: '100%', maxWidth: 520,
+      margin: '0 0 22px 0',
+      fontWeight: 300, lineHeight: 1.7,
+      textAlign: 'center',
+    }}>
+      Tell us where you're headed — we'll find every sacred temple along your spiritual path.
+    </p>
+
+    {/* Nav tabs */}
+    <div style={{
+      display: 'flex', justifyContent: 'center',
+      gap: 8, flexWrap: 'wrap',
+      width: '100%',
+    }}>
+      {[
+        { label: '📍 Plan Route',    action: () => {} },
+        { label: '📋 My Routes',     action: () => {} },
+        { label: '🛕 Saved Temples', action: () => {} },
+      ].map((tab, i) => (
+        <button
+          key={i}
+          onClick={tab.action}
+          style={{
+            padding: '8px 20px', borderRadius: 50,
+            cursor: 'pointer',
+            fontSize: 13, fontWeight: 600,
+            background: i === 0 ? '#FFD580' : 'rgba(255,255,255,0.1)',
+            color: i === 0 ? '#7a3208' : '#FFD580',
             backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,213,128,0.2)',
+            transition: 'all 0.18s',
             whiteSpace: 'nowrap',
-          }}>{t('festival.presents')}</div>
+          }}
+        >{tab.label}</button>
+      ))}
+    </div>
 
-          {/* Title */}
-          <h1 style={{
-            fontFamily: 'var(--font-display)', fontWeight: 900,
-            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
-            marginBottom: 10, marginTop: 0,
-            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-            color: '#ffffff',
-            width: '100%',
-          }}>
-            {t('festival.title')}
-          </h1>
-
-          {/* Subtitle */}
-          <p style={{
-            color: 'rgba(255,255,255,0.7)', fontSize: 14,
-            width: '100%', maxWidth: 520,
-            margin: '0 0 18px 0',
-            fontWeight: 300, lineHeight: 1.7,
-            textAlign: 'center',
-            fontFamily: 'var(--font-hindi)',
-          }}>{t('festival.subtitle')}</p>
-
-          {/* Stat pills */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {[
-              `${totalCount} ${t('festival.festivals')}`,
-              t('festival.months'),
-              String(CURRENT_YEAR),
-              ...(apiCount > 0 ? [`🛕 ${apiCount} ${t('festival.temple_festivals')}`] : []),
-            ].map((s, i) => (
-              <span key={i} style={{
-                fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.08em',
-                color: '#FFD580', background: 'rgba(255,255,255,0.08)',
-                padding: '5px 14px', borderRadius: 50, border: '1px solid rgba(200,150,12,.3)',
-                whiteSpace: 'nowrap',
-              }}>{s}</span>
-            ))}
-          </div>
-
-          {/* Loading indicator */}
-          {!initialLoadDone && (
-            <div role="status" aria-live="polite" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 14,
-              fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,213,128,0.7)',
-              background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
-              border: '1px solid rgba(255,255,255,0.12)',
-            }}>
-              <span aria-hidden="true" style={{ animation: 'floatDiya 1.5s ease-in-out infinite', display: 'inline-block' }}>✨</span>
-              {t('festival.loading')}
-            </div>
-          )}
-        </div>
-      </section>
+  </div>
+</section>
 
       {/* ═══════════════════ CONTROLS BAR ═══════════════════ */}
       <div
