@@ -438,11 +438,15 @@ export default function SacredBooksPage() {
         <div style={{
           position: 'relative',
           overflow: 'hidden',
-          color: '#FFD580',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '0 24px 32px',
           paddingTop: 96,
-          textAlign: 'center',
+          paddingBottom: 36,
+          /* Flexbox centering — works on all screen sizes */
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          width: '100%',
+          boxSizing: 'border-box',
         }}>
           {/* Radial glow */}
           <div style={{
@@ -461,7 +465,17 @@ export default function SacredBooksPage() {
             pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
           }}>ॐ</div>
 
-          <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+          {/* Inner content — strictly centered column */}
+          <div style={{
+            position: 'relative', zIndex: 1,
+            width: '100%', maxWidth: 680,
+            padding: '0 24px',
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+          }}>
             {/* Badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -471,33 +485,43 @@ export default function SacredBooksPage() {
               color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
               textTransform: 'uppercase', fontWeight: 500,
               backdropFilter: 'blur(8px)',
+              whiteSpace: 'nowrap',
             }}>📚 Sacred Scriptures of Bharat</div>
 
             {/* Title — white for contrast */}
             <h1 style={{
               fontFamily: 'var(--font-display)', fontWeight: 900,
-              fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1, marginBottom: 10,
+              fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+              marginBottom: 10, marginTop: 0,
               textShadow: '0 4px 40px rgba(0,0,0,0.3)',
               color: '#ffffff',
+              width: '100%',
             }}>
               Read the <span style={{ color: '#FFD580' }}>Sacred Books</span>
             </h1>
 
-            {/* Subtitle — lower opacity white */}
+            {/* Subtitle — single line, centered */}
             <p style={{
-              color: 'rgba(255,255,255,0.7)', fontSize: 15,
-              maxWidth: 480, margin: '0 auto 22px', fontWeight: 300, lineHeight: 1.6,
+              color: 'rgba(255,255,255,0.7)', fontSize: 14,
+              width: '100%', maxWidth: 520,
+              margin: '0 0 22px 0',
+              fontWeight: 300, lineHeight: 1.7,
+              textAlign: 'center',
             }}>
               Full text · Verse-by-verse · Sanskrit · Audio · Bookmarks · Reading progress
             </p>
 
             {/* Nav tabs */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'flex', justifyContent: 'center',
+              gap: 8, flexWrap: 'wrap',
+              width: '100%',
+            }}>
               {[
                 { id: 'library',   label: '🏛️ Library' },
-                { id: 'reader',    label: '📖 Reader',               disabled: !bk },
+                { id: 'reader',    label: '📖 Reader',      disabled: !bk },
                 { id: 'bookmarks', label: `🔖 Bookmarks (${bookmarks.length})` },
-                { id: 'search',    label: '🔍 Search',               disabled: !bk, tooltip: !bk ? 'Select a book first' : '' },
+                { id: 'search',    label: '🔍 Search',      disabled: !bk, tooltip: !bk ? 'Select a book first' : '' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -505,18 +529,17 @@ export default function SacredBooksPage() {
                   onClick={() => !tab.disabled && setView(tab.id)}
                   title={tab.tooltip || ''}
                   style={{
-                    padding: '8px 20px', borderRadius: 50, border: 'none',
+                    padding: '8px 20px', borderRadius: 50,
                     cursor: tab.disabled ? 'not-allowed' : 'pointer',
                     fontSize: 13, fontWeight: 600,
-                    background: view === tab.id
-                      ? '#FFD580'
-                      : 'rgba(255,255,255,0.1)',
+                    background: view === tab.id ? '#FFD580' : 'rgba(255,255,255,0.1)',
                     color: view === tab.id
                       ? '#7a3208'
                       : tab.disabled ? 'rgba(255,213,128,0.3)' : '#FFD580',
                     backdropFilter: 'blur(8px)',
                     border: '1px solid rgba(255,213,128,0.2)',
                     transition: 'all 0.18s',
+                    whiteSpace: 'nowrap',
                   }}
                 >{tab.label}</button>
               ))}
