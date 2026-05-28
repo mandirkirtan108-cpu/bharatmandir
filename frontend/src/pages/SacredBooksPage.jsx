@@ -434,41 +434,24 @@ export default function SacredBooksPage() {
         {/* ── Toast ───────────────────────────────────────────── */}
         <Toast message={toast.message} visible={toast.visible} />
 
-        {/* ── Hero Banner — compact ────────────────────────────── */}
+        {/* ── Hero Banner ────────────────────────────────────── */}
         <div style={{
           position: 'relative',
           overflow: 'hidden',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          paddingTop: 96,
-          paddingBottom: 36,
-          /* Flexbox centering — works on all screen sizes */
+          paddingTop: 56,
+          paddingBottom: 32,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          justifyContent: 'center',
           width: '100%',
           boxSizing: 'border-box',
         }}>
-          {/* Radial glow */}
-          <div style={{
-            position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
-            width: 600, height: 300,
-            background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
-            pointerEvents: 'none',
-          }} />
-
-          {/* OM watermark */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 300, color: 'rgba(255,255,255,0.028)',
-            fontFamily: 'var(--font-hindi)',
-            pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
-          }}>ॐ</div>
-
           {/* Inner content — strictly centered column */}
           <div style={{
             position: 'relative', zIndex: 1,
-            width: '100%', maxWidth: 680,
+            width: '100%', maxWidth: 700,
             padding: '0 24px',
             boxSizing: 'border-box',
             display: 'flex',
