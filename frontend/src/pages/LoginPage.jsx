@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom'; // ← useLocation add
 import { useUserAuth } from '../hooks/useUserAuth';
 
 const S  = '#ff9900';
@@ -32,13 +32,15 @@ function EyeOff() {
 export default function LoginPage() {
   const { login, isLoggedIn, loading, error } = useUserAuth();
   const navigate = useNavigate();
+  const location = useLocation();                                          // ← ADD
+  const from = location.state?.from?.pathname || '/';                     // ← ADD
   const [email,      setEmail]      = useState('');
   const [password,   setPassword]   = useState('');
   const [showPass,   setShowPass]   = useState(false);
   const [emailErr,   setEmailErr]   = useState('');
   const [passErr,    setPassErr]    = useState('');
 
-  useEffect(() => { if (isLoggedIn) navigate('/', { replace: true }); }, [isLoggedIn, navigate]);
+  useEffect(() => { if (isLoggedIn) navigate(from, { replace: true }); }, [isLoggedIn, navigate, from]); // ← from add
 
   const validateEmail = (val) => {
     if (!val) return setEmailErr('Email is required');
@@ -57,7 +59,7 @@ export default function LoginPage() {
     validatePassword(password);
     if (emailErr || passErr || !email || !password) return;
     const res = await login(email, password);
-    if (res.success) navigate('/', { replace: true });
+    if (res.success) navigate(from, { replace: true });                   // ← from add
   };
 
   return (
