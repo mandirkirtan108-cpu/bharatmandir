@@ -1,8 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { LangProvider }          from './LangContext';
-import { useUserAuth }           from './hooks/useUserAuth';
 import ProtectedRoute            from './components/ProtectedRoute';
-import UserProtectedRoute        from './components/UserProtectedRoute';  // ← NEW
+import UserProtectedRoute        from './components/UserProtectedRoute';
 import HomePage                  from './pages/HomePage';
 import TempleDetailPage          from './pages/TempleDetailPage';
 import TempleQRPage              from './pages/TempleQRPage';
@@ -21,21 +20,14 @@ import SignupPage                from './pages/SignupPage';
 import UserProfilePage           from './pages/UserProfilePage';
 import ForgotPasswordPage        from './pages/ForgotPasswordPage';
 
-function RootRedirect() {
-  const { isLoggedIn } = useUserAuth();
-  return isLoggedIn
-    ? <HomePage />
-    : <Navigate to="/login" replace />;
-}
-
 export default function App() {
   return (
     <LangProvider>
       <BrowserRouter>
         <Routes>
 
-          {/* ── Root — login check ──────────────────────────── */}
-          <Route path="/"                element={<RootRedirect />} />
+          {/* ── Root — seedha HomePage ──────────────────────── */}
+          <Route path="/"                element={<HomePage />} />
 
           {/* ── Fully Public Routes ─────────────────────────── */}
           <Route path="/qr/:slug"        element={<TempleQRPage />} />
