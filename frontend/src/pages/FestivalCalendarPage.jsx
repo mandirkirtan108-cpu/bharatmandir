@@ -267,65 +267,65 @@ export default function FestivalCalendarPage() {
       <Navbar />
 
       {/* ═══════════════════ HERO ═══════════════════ */}
-      <section
+       <section
         aria-label="Festival Calendar hero"
         style={{
-          position: 'relative', overflow: 'hidden', color: '#FFD580',
+          position: 'relative', overflow: 'hidden',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: 'clamp(56px, 10vw, 88px) 24px clamp(56px, 10vw, 92px)',
-          textAlign: 'center',
+          padding: '50px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          boxSizing: 'border-box',
         }}
       >
-        {/* Decorative OM watermark — hidden from screen readers */}
-        <div aria-hidden="true" style={{
-          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 'clamp(180px, 40vw, 360px)', color: 'rgba(255,255,255,0.028)',
-          fontFamily: 'var(--font-hindi)', pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
-        }}>ॐ</div>
-
-        <div aria-hidden="true" style={{
-          position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
-          width: 600, height: 300,
-          background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-
-        {/* Floating decorative emojis — hidden from screen readers */}
-        {['🪔','✨','🌸','🔱','🪁'].map((e, i) => (
-          <div aria-hidden="true" key={i} style={{
-            position: 'absolute', fontSize: 'clamp(16px,2.5vw,36px)', opacity: 0.18, pointerEvents: 'none',
-            animation: `floatDiya 6s ease-in-out ${[0,1.2,0.6,2,1.8][i]}s infinite`,
-            ...[
-              { top:'15%', left:'7%' }, { top:'60%', left:'15%' },
-              { top:'20%', right:'10%' }, { bottom:'20%', right:'6%' },
-              { top:'45%', left:'3%' },
-            ][i],
-          }}>{e}</div>
-        ))}
-
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+        <div style={{
+          position: 'relative', zIndex: 1,
+          width: '100%', maxWidth: 700,
+          padding: '0 24px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}>
+          {/* Badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
-            borderRadius: 50, padding: '6px 20px', marginBottom: 20,
-            color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
-            fontWeight: 500, backdropFilter: 'blur(8px)',
+            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+            color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+            textTransform: 'uppercase', fontWeight: 500,
+            backdropFilter: 'blur(8px)',
+            whiteSpace: 'nowrap',
           }}>{t('festival.presents')}</div>
 
+          {/* Title */}
           <h1 style={{
             fontFamily: 'var(--font-display)', fontWeight: 900,
-            fontSize: 'clamp(32px,6vw,72px)', lineHeight: 1.05, marginBottom: 18,
-            textShadow: '0 4px 40px rgba(0,0,0,0.3)', color: '#FFD580',
-          }}>{t('festival.title')}</h1>
+            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+            marginBottom: 10, marginTop: 0,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#ffffff',
+            width: '100%',
+          }}>
+            {t('festival.title')}
+          </h1>
 
+          {/* Subtitle */}
           <p style={{
-            color: '#FFD580', opacity: 0.82, fontSize: 'clamp(15px,2vw,18px)',
-            maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7,
+            color: 'rgba(255,255,255,0.7)', fontSize: 14,
+            width: '100%', maxWidth: 520,
+            margin: '0 0 18px 0',
+            fontWeight: 300, lineHeight: 1.7,
+            textAlign: 'center',
             fontFamily: 'var(--font-hindi)',
           }}>{t('festival.subtitle')}</p>
 
           {/* Stat pills */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginTop: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
             {[
               `${totalCount} ${t('festival.festivals')}`,
               t('festival.months'),
@@ -336,14 +336,15 @@ export default function FestivalCalendarPage() {
                 fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.08em',
                 color: '#FFD580', background: 'rgba(255,255,255,0.08)',
                 padding: '5px 14px', borderRadius: 50, border: '1px solid rgba(200,150,12,.3)',
+                whiteSpace: 'nowrap',
               }}>{s}</span>
             ))}
           </div>
 
-          {/* FIX: unified loading indicator — only shown during initial load */}
+          {/* Loading indicator */}
           {!initialLoadDone && (
             <div role="status" aria-live="polite" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
+              display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 14,
               fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(255,213,128,0.7)',
               background: 'rgba(255,255,255,0.07)', padding: '6px 16px', borderRadius: 50,
               border: '1px solid rgba(255,255,255,0.12)',
