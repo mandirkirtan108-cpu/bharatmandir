@@ -54,6 +54,27 @@ function ProgressBar({ percent, color }) {
   );
 }
 
+/* ── Toast notification ── */
+function Toast({ message, visible }) {
+  if (!visible) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: 24, left: '50%',
+      transform: 'translateX(-50%)',
+      background: 'rgba(30,20,10,0.92)',
+      color: '#FFD580',
+      padding: '10px 22px',
+      borderRadius: 99,
+      fontSize: 13, fontWeight: 600,
+      zIndex: 9999,
+      backdropFilter: 'blur(8px)',
+      boxShadow: '0 4px 24px rgba(0,0,0,0.25)',
+      animation: 'fadeDown 0.22s ease',
+      whiteSpace: 'nowrap',
+    }}>{message}</div>
+  );
+}
+
 /* ── BookCard in sidebar ── */
 function BookCard({ book, isSelected, onSelect, progress }) {
   const pct = progress?.percent_done ?? 0;
@@ -128,7 +149,7 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
         }}>
           {verse.chapter_number}.{verse.verse_number}
         </span>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {/* Sanskrit toggle */}
           <button
             onClick={() => setShowSanskrit(s => !s)}
@@ -153,7 +174,7 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
             }}
           >{isSpeaking ? '⏹ Stop' : '🔊 Listen'}</button>
 
-          {/* Bookmark */}
+          {/* Bookmark — different icons for bookmarked/not */}
           <button
             onClick={() => onBookmarkToggle(verse)}
             title={isBookmarked ? 'Remove bookmark' : 'Bookmark this verse'}
@@ -163,7 +184,7 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
               color: isBookmarked ? 'white' : bookColor,
               fontSize: 13, cursor: 'pointer', transition: 'all 0.15s',
             }}
-          >{isBookmarked ? '🔖' : '🔖'}</button>
+          >{isBookmarked ? '🔖' : '☆'}</button>
         </div>
       </div>
 
@@ -229,7 +250,6 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
    MAIN PAGE
 ═══════════════════════════════════════════════════════════════ */
 
-// Slugs jo sabse last mein aane chahiye
 const LAST_BOOKS = ['ramayana', 'mahabharata', 'ramayan', 'the-ramayana', 'the-mahabharata'];
 
 export default function SacredBooksPage() {
@@ -238,13 +258,20 @@ export default function SacredBooksPage() {
   const [selectedBook, setSelectedBook] = useState(null);
   const [chapters, setChapters] = useState([]);
   const [selectedChapter, setSelectedChapter] = useState(null);
-  const [chapterData, setChapterData] = useState(null);   // { verses, title, summary }
+  const [chapterData, setChapterData] = useState(null);
   const [bookmarks, setBookmarks] = useState([]);
   const [allProgress, setAllProgress] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [speakingVerse, setSpeakingVerse] = useState(null);
   const [bookFilter, setBookFilter] = useState('');
+
+  // Mobile sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Toast
+  const [toast, setToast] = useState({ message: '', visible: false });
+  const toastTimerRef = useRef(null);
 
   // Loading states
   const [loadingBooks, setLoadingBooks]       = useState(true);
@@ -253,9 +280,16 @@ export default function SacredBooksPage() {
   const [searching, setSearching]             = useState(false);
 
   // View mode
-  const [view, setView] = useState('library'); // 'library' | 'reader' | 'bookmarks' | 'search'
+  const [view, setView] = useState('library');
 
   const readerTopRef = useRef(null);
+
+  // ── Toast helper ─────────────────────────────────────────────
+  const showToast = useCallback((message) => {
+    clearTimeout(toastTimerRef.current);
+    setToast({ message, visible: true });
+    toastTimerRef.current = setTimeout(() => setToast(t => ({ ...t, visible: false })), 2200);
+  }, []);
 
   // ── Boot ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -269,6 +303,9 @@ export default function SacredBooksPage() {
       .finally(() => setLoadingBooks(false));
   }, []);
 
+  // Close sidebar on view change
+  useEffect(() => { setSidebarOpen(false); }, [view, selectedChapter]);
+
   // ── Select book ───────────────────────────────────────────────
   const handleSelectBook = useCallback(async (book) => {
     setSelectedBook(book);
@@ -277,6 +314,7 @@ export default function SacredBooksPage() {
     setChapterData(null);
     setView('reader');
     setLoadingChapters(true);
+    showToast(`Opening ${book.title}…`);
     try {
       const res = await fetchChapters(book.slug);
       setChapters(res.chapters || []);
@@ -285,23 +323,29 @@ export default function SacredBooksPage() {
     } finally {
       setLoadingChapters(false);
     }
-  }, []);
+  }, [showToast]);
 
   // ── Select chapter ────────────────────────────────────────────
   const handleSelectChapter = useCallback(async (chNum) => {
     if (!selectedBook) return;
+    // Stop audio when switching chapters
+    stopSpeaking();
+    setSpeakingVerse(null);
+
     setSelectedChapter(chNum);
     setChapterData(null);
     setLoadingVerses(true);
+    setSidebarOpen(false);
     readerTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
       const data = await fetchChapterVerses(selectedBook.slug, chNum);
       setChapterData(data);
-      // Save progress
+      // FIX: Calculate real percent_done
+      const pct = Math.round((chNum / selectedBook.total_chapters) * 100);
       await saveProgress(selectedBook.slug, chNum, 1);
       setAllProgress(prev => {
         const filtered = prev.filter(p => p.slug !== selectedBook.slug);
-        return [{ slug: selectedBook.slug, last_chapter: chNum, last_verse: 1, percent_done: 0 }, ...filtered];
+        return [{ slug: selectedBook.slug, last_chapter: chNum, last_verse: 1, percent_done: pct }, ...filtered];
       });
     } catch (e) {
       console.error(e);
@@ -321,6 +365,7 @@ export default function SacredBooksPage() {
     if (existing) {
       await deleteBookmark(existing.id);
       setBookmarks(prev => prev.filter(b => b.id !== existing.id));
+      showToast('Bookmark removed');
     } else {
       const res = await addBookmark(selectedBook.slug, verse.chapter_number, verse.verse_number);
       setBookmarks(prev => [{
@@ -331,8 +376,9 @@ export default function SacredBooksPage() {
         chapter_number: verse.chapter_number,
         verse_number: verse.verse_number,
       }, ...prev]);
+      showToast('Verse bookmarked 🔖');
     }
-  }, [selectedBook, bookmarks]);
+  }, [selectedBook, bookmarks, showToast]);
 
   // ── Search ────────────────────────────────────────────────────
   const handleSearch = useCallback(async (e) => {
@@ -365,7 +411,6 @@ export default function SacredBooksPage() {
   // ── Helpers ───────────────────────────────────────────────────
   const getProgress = (slug) => allProgress.find(p => p.slug === slug);
 
-  // ── Ramayana & Mahabharata ko last mein sort karo ─────────────
   const filteredBooks = books
     .filter(b =>
       !bookFilter || b.title.toLowerCase().includes(bookFilter.toLowerCase()) ||
@@ -386,93 +431,98 @@ export default function SacredBooksPage() {
       <Navbar />
       <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
 
-        {/* ── Hero Banner ─────────────────────────────────────── */}
-<div style={{
-  position: 'relative',
-  overflow: 'hidden',
-  color: '#FFD580',
-  background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-  padding: '0 24px 56px',
-  paddingTop: 144,   // 72px navbar + 72px content breathing room
-  textAlign: 'center',
-}}>
-  {/* Radial glow — same as Route Planner */}
-  <div style={{
-    position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
-    width: 600, height: 300,
-    background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
-    pointerEvents: 'none',
-  }} />
+        {/* ── Toast ───────────────────────────────────────────── */}
+        <Toast message={toast.message} visible={toast.visible} />
 
-  {/* OM watermark */}
-  <div style={{
-    position: 'absolute', inset: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 360, color: 'rgba(255,255,255,0.028)',
-    fontFamily: 'var(--font-hindi)',
-    pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
-  }}>ॐ</div>
+        {/* ── Hero Banner — compact ────────────────────────────── */}
+        <div style={{
+          position: 'relative',
+          overflow: 'hidden',
+          color: '#FFD580',
+          background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+          padding: '0 24px 32px',
+          paddingTop: 96,
+          textAlign: 'center',
+        }}>
+          {/* Radial glow */}
+          <div style={{
+            position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)',
+            width: 600, height: 300,
+            background: 'radial-gradient(ellipse, rgba(232,101,10,0.28) 0%, transparent 70%)',
+            pointerEvents: 'none',
+          }} />
 
-  <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
-    {/* Badge */}
-    <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 8,
-      background: 'rgba(255,255,255,0.08)',
-      border: '1px solid rgba(255,213,128,0.3)',
-      borderRadius: 50, padding: '6px 20px', marginBottom: 20,
-      color: '#FFD580', fontSize: 12, letterSpacing: '.1em',
-      textTransform: 'uppercase', fontWeight: 500,
-      backdropFilter: 'blur(8px)',
-    }}>📚 Sacred Scriptures of Bharat</div>
+          {/* OM watermark */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 300, color: 'rgba(255,255,255,0.028)',
+            fontFamily: 'var(--font-hindi)',
+            pointerEvents: 'none', userSelect: 'none', lineHeight: 1,
+          }}>ॐ</div>
 
-    {/* Title */}
-    <h1 style={{
-      fontFamily: 'var(--font-display)', fontWeight: 900,
-      fontSize: 'clamp(38px, 6vw, 72px)', lineHeight: 1.05, marginBottom: 18,
-      textShadow: '0 4px 40px rgba(0,0,0,0.3)', color: '#FFD580',
-    }}>
-      Read the <span style={{ color: '#FFD580' }}>Sacred Books</span>
-    </h1>
+          <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+            {/* Badge */}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,213,128,0.3)',
+              borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+              color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+              textTransform: 'uppercase', fontWeight: 500,
+              backdropFilter: 'blur(8px)',
+            }}>📚 Sacred Scriptures of Bharat</div>
 
-    {/* Subtitle */}
-    <p style={{
-      color: '#FFD580', opacity: 0.82, fontSize: 18,
-      maxWidth: 540, margin: '0 auto 28px', fontWeight: 300, lineHeight: 1.7,
-    }}>
-      Full text · Verse-by-verse · Sanskrit · Audio · Bookmarks · Reading progress
-    </p>
+            {/* Title — white for contrast */}
+            <h1 style={{
+              fontFamily: 'var(--font-display)', fontWeight: 900,
+              fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1, marginBottom: 10,
+              textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+              color: '#ffffff',
+            }}>
+              Read the <span style={{ color: '#FFD580' }}>Sacred Books</span>
+            </h1>
 
-    {/* Nav tabs */}
-    <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-      {[
-        { id: 'library',   label: '🏛️ Library' },
-        { id: 'reader',    label: '📖 Reader',               disabled: !bk },
-        { id: 'bookmarks', label: `🔖 Bookmarks (${bookmarks.length})` },
-        { id: 'search',    label: '🔍 Search',               disabled: !bk },
-      ].map(tab => (
-        <button
-          key={tab.id}
-          disabled={tab.disabled}
-          onClick={() => !tab.disabled && setView(tab.id)}
-          style={{
-            padding: '8px 20px', borderRadius: 50, border: 'none',
-            cursor: tab.disabled ? 'not-allowed' : 'pointer',
-            fontSize: 13, fontWeight: 600,
-            background: view === tab.id
-              ? '#FFD580'
-              : 'rgba(255,255,255,0.1)',
-            color: view === tab.id
-              ? '#7a3208'
-              : tab.disabled ? 'rgba(255,213,128,0.3)' : '#FFD580',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,213,128,0.2)',
-            transition: 'all 0.18s',
-          }}
-        >{tab.label}</button>
-      ))}
-    </div>
-  </div>
-</div>
+            {/* Subtitle — lower opacity white */}
+            <p style={{
+              color: 'rgba(255,255,255,0.7)', fontSize: 15,
+              maxWidth: 480, margin: '0 auto 22px', fontWeight: 300, lineHeight: 1.6,
+            }}>
+              Full text · Verse-by-verse · Sanskrit · Audio · Bookmarks · Reading progress
+            </p>
+
+            {/* Nav tabs */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {[
+                { id: 'library',   label: '🏛️ Library' },
+                { id: 'reader',    label: '📖 Reader',               disabled: !bk },
+                { id: 'bookmarks', label: `🔖 Bookmarks (${bookmarks.length})` },
+                { id: 'search',    label: '🔍 Search',               disabled: !bk, tooltip: !bk ? 'Select a book first' : '' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  disabled={tab.disabled}
+                  onClick={() => !tab.disabled && setView(tab.id)}
+                  title={tab.tooltip || ''}
+                  style={{
+                    padding: '8px 20px', borderRadius: 50, border: 'none',
+                    cursor: tab.disabled ? 'not-allowed' : 'pointer',
+                    fontSize: 13, fontWeight: 600,
+                    background: view === tab.id
+                      ? '#FFD580'
+                      : 'rgba(255,255,255,0.1)',
+                    color: view === tab.id
+                      ? '#7a3208'
+                      : tab.disabled ? 'rgba(255,213,128,0.3)' : '#FFD580',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,213,128,0.2)',
+                    transition: 'all 0.18s',
+                  }}
+                >{tab.label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* ── LIBRARY VIEW ────────────────────────────────────── */}
         {view === 'library' && (
@@ -507,6 +557,7 @@ export default function SacredBooksPage() {
                     <div
                       key={book.id}
                       onClick={() => handleSelectBook(book)}
+                      className="book-card"
                       style={{
                         background: 'white',
                         border: `2px solid var(--cream-dark)`,
@@ -551,7 +602,7 @@ export default function SacredBooksPage() {
                       </p>
 
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                        {[book.tradition, book.language, `${(book.total_verses||0).toLocaleString()} verses`].map(tag => (
+                        {[book.tradition, book.language, `${book.total_chapters} ch`, `${(book.total_verses||0).toLocaleString()} verses`].filter(Boolean).map(tag => (
                           <span key={tag} style={{
                             fontSize: 11, padding: '3px 9px', borderRadius: 99,
                             background: `${book.accent_color}18`, color: book.accent_color, fontWeight: 600,
@@ -562,7 +613,7 @@ export default function SacredBooksPage() {
                       {prog && prog.percent_done > 0 && (
                         <div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-                            Reading progress · Chapter {prog.last_chapter}
+                            Reading progress · Chapter {prog.last_chapter} · {prog.percent_done}%
                           </div>
                           <ProgressBar percent={prog.percent_done} color={book.accent_color} />
                         </div>
@@ -573,7 +624,7 @@ export default function SacredBooksPage() {
                         color: book.accent_color,
                         display: 'flex', alignItems: 'center', gap: 4,
                       }}>
-                        {prog ? 'Continue Reading ›' : 'Start Reading ›'}
+                        {prog && prog.percent_done > 0 ? 'Continue Reading ›' : 'Start Reading ›'}
                       </div>
                     </div>
                   );
@@ -587,234 +638,280 @@ export default function SacredBooksPage() {
         {view === 'reader' && bk && (
           <div style={{
             maxWidth: 1200, margin: '0 auto', padding: '24px 20px',
-            display: 'grid', gridTemplateColumns: '260px 1fr', gap: 20,
-            alignItems: 'start',
           }}>
 
-            {/* Chapter sidebar */}
-            <aside style={{
-              background: 'white',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--cream-dark)',
-              overflow: 'hidden',
-              position: 'sticky',
-              top: 84,
-              maxHeight: 'calc(100vh - 100px)',
-              display: 'flex',
-              flexDirection: 'column',
+            {/* Breadcrumb */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 13, color: 'var(--text-muted)',
+              marginBottom: 16, flexWrap: 'wrap',
             }}>
-              {/* Book header */}
-              <div style={{
-                padding: '16px',
-                background: bk.accent_color,
-                borderBottom: '1px solid rgba(0,0,0,0.1)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 22 }}>{bk.icon_emoji}</span>
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-display)', color: 'white', fontWeight: 700, fontSize: 15 }}>{bk.title}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>{bk.total_chapters} chapters</div>
+              <button
+                onClick={() => setView('library')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: bk.accent_color, fontSize: 13, fontWeight: 600, padding: 0 }}
+              >🏛️ Library</button>
+              <span>›</span>
+              <span style={{ color: 'var(--brown)', fontWeight: 600 }}>{bk.title}</span>
+              {selectedChapter && (
+                <>
+                  <span>›</span>
+                  <span>Chapter {selectedChapter}</span>
+                </>
+              )}
+            </div>
+
+            {/* Mobile: chapter toggle button */}
+            <div style={{ display: 'none' }} className="mobile-chapter-toggle">
+              <button
+                onClick={() => setSidebarOpen(o => !o)}
+                style={{
+                  width: '100%', padding: '12px 16px', marginBottom: 12,
+                  background: bk.accent_color, color: 'white',
+                  border: 'none', borderRadius: 'var(--radius)',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}
+              >
+                <span>📋 {selectedChapter ? `Chapter ${selectedChapter}` : 'Select Chapter'}</span>
+                <span>{sidebarOpen ? '▲' : '▼'}</span>
+              </button>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '260px 1fr',
+              gap: 20,
+              alignItems: 'start',
+            }} className="reader-grid">
+
+              {/* Chapter sidebar */}
+              <aside
+                className={`chapter-sidebar${sidebarOpen ? ' sidebar-open' : ''}`}
+                style={{
+                  background: 'white',
+                  borderRadius: 'var(--radius-lg)',
+                  border: '1px solid var(--cream-dark)',
+                  overflow: 'hidden',
+                  position: 'sticky',
+                  top: 84,
+                  maxHeight: 'calc(100vh - 100px)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {/* Book header */}
+                <div style={{
+                  padding: '16px',
+                  background: bk.accent_color,
+                  borderBottom: '1px solid rgba(0,0,0,0.1)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 22 }}>{bk.icon_emoji}</span>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-display)', color: 'white', fontWeight: 700, fontSize: 15 }}>{bk.title}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>{bk.total_chapters} chapters</div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Chapter list */}
-              <div style={{ overflowY: 'auto', flex: 1 }}>
-                {loadingChapters ? <Spinner color={bk.accent_color} /> : (
-                  chapters.map(ch => (
-                    <button
-                      key={ch.chapter_number}
-                      onClick={() => handleSelectChapter(ch.chapter_number)}
-                      style={{
-                        width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
-                        padding: '11px 14px',
-                        background: selectedChapter === ch.chapter_number ? `${bk.accent_color}18` : 'transparent',
-                        borderLeft: `3px solid ${selectedChapter === ch.chapter_number ? bk.accent_color : 'transparent'}`,
-                        borderBottom: '1px solid var(--cream-dark)',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{
-                          minWidth: 24, height: 24, borderRadius: 6,
-                          background: selectedChapter === ch.chapter_number ? bk.accent_color : 'var(--cream-mid)',
-                          color: selectedChapter === ch.chapter_number ? 'white' : 'var(--text-muted)',
-                          fontSize: 11, fontWeight: 700,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>{ch.chapter_number}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontSize: 12, fontWeight: 600,
-                            color: selectedChapter === ch.chapter_number ? bk.accent_color : 'var(--brown)',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>{ch.title || ch.name_translated || `Chapter ${ch.chapter_number}`}</div>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                            {ch.verse_count || ch.verses_count} verses
+                {/* Chapter list */}
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                  {loadingChapters ? <Spinner color={bk.accent_color} /> : (
+                    chapters.map(ch => (
+                      <button
+                        key={ch.chapter_number}
+                        onClick={() => handleSelectChapter(ch.chapter_number)}
+                        style={{
+                          width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
+                          padding: '11px 14px',
+                          background: selectedChapter === ch.chapter_number ? `${bk.accent_color}18` : 'transparent',
+                          borderLeft: `3px solid ${selectedChapter === ch.chapter_number ? bk.accent_color : 'transparent'}`,
+                          borderBottom: '1px solid var(--cream-dark)',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{
+                            minWidth: 24, height: 24, borderRadius: 6,
+                            background: selectedChapter === ch.chapter_number ? bk.accent_color : 'var(--cream-mid)',
+                            color: selectedChapter === ch.chapter_number ? 'white' : 'var(--text-muted)',
+                            fontSize: 11, fontWeight: 700,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>{ch.chapter_number}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: 12, fontWeight: 600,
+                              color: selectedChapter === ch.chapter_number ? bk.accent_color : 'var(--brown)',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>{ch.title || ch.name_translated || `Chapter ${ch.chapter_number}`}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                              {ch.verse_count || ch.verses_count} verses
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </aside>
-
-            {/* Verse reader */}
-            <main ref={readerTopRef}>
-              {!selectedChapter && (
-                <div style={{
-                  background: 'white', borderRadius: 'var(--radius-xl)',
-                  border: '1px solid var(--cream-dark)',
-                  padding: '48px 32px', textAlign: 'center',
-                }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>{bk.icon_emoji}</div>
-                  <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 10 }}>
-                    {bk.title}
-                  </h2>
-                  <p style={{ color: 'var(--text-light)', fontSize: 15, lineHeight: 1.7, maxWidth: 500, margin: '0 auto 20px' }}>
-                    {bk.description}
-                  </p>
-                  {getProgress(bk.slug)?.last_chapter && (
-                    <button
-                      onClick={() => handleSelectChapter(getProgress(bk.slug).last_chapter)}
-                      style={{
-                        padding: '12px 28px', borderRadius: 99,
-                        background: bk.accent_color, color: 'white',
-                        border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                      }}
-                    >Continue from Chapter {getProgress(bk.slug).last_chapter} ›</button>
+                      </button>
+                    ))
                   )}
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 16 }}>
-                    ← Select a chapter to begin reading
-                  </p>
                 </div>
-              )}
+              </aside>
 
-              {selectedChapter && loadingVerses && (
-                <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', border: '1px solid var(--cream-dark)', padding: 40 }}>
-                  <Spinner color={bk.accent_color} />
-                  <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>Loading verses…</p>
-                </div>
-              )}
-
-              {selectedChapter && chapterData && !loadingVerses && (
-                <div>
-                  {/* Chapter header */}
+              {/* Verse reader */}
+              <main ref={readerTopRef}>
+                {!selectedChapter && (
                   <div style={{
                     background: 'white', borderRadius: 'var(--radius-xl)',
-                    border: `1px solid ${bk.accent_color}33`,
-                    padding: '24px 28px', marginBottom: 20,
+                    border: '1px solid var(--cream-dark)',
+                    padding: '48px 32px', textAlign: 'center',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: bk.accent_color, letterSpacing: '0.07em', marginBottom: 6 }}>
-                          CHAPTER {selectedChapter}
-                        </div>
-                        <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 22, marginBottom: 8 }}>
-                          {chapterData.title || chapterData.name_translated}
-                        </h2>
-                        {chapterData.sanskrit_title && (
-                          <div style={{ fontFamily: 'var(--font-hindi)', color: 'var(--text-muted)', fontSize: 14, marginBottom: 10 }}>
-                            {chapterData.sanskrit_title}
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>{bk.icon_emoji}</div>
+                    <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 10 }}>
+                      {bk.title}
+                    </h2>
+                    <p style={{ color: 'var(--text-light)', fontSize: 15, lineHeight: 1.7, maxWidth: 500, margin: '0 auto 20px' }}>
+                      {bk.description}
+                    </p>
+                    {getProgress(bk.slug)?.last_chapter && (
+                      <button
+                        onClick={() => handleSelectChapter(getProgress(bk.slug).last_chapter)}
+                        style={{
+                          padding: '12px 28px', borderRadius: 99,
+                          background: bk.accent_color, color: 'white',
+                          border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                        }}
+                      >Continue from Chapter {getProgress(bk.slug).last_chapter} ›</button>
+                    )}
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 16 }}>
+                      ← Select a chapter to begin reading
+                    </p>
+                  </div>
+                )}
+
+                {selectedChapter && loadingVerses && (
+                  <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', border: '1px solid var(--cream-dark)', padding: 40 }}>
+                    <Spinner color={bk.accent_color} />
+                    <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>Loading verses…</p>
+                  </div>
+                )}
+
+                {selectedChapter && chapterData && !loadingVerses && (
+                  <div>
+                    {/* Chapter header */}
+                    <div style={{
+                      background: 'white', borderRadius: 'var(--radius-xl)',
+                      border: `1px solid ${bk.accent_color}33`,
+                      padding: '24px 28px', marginBottom: 20,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: bk.accent_color, letterSpacing: '0.07em', marginBottom: 6 }}>
+                            CHAPTER {selectedChapter}
                           </div>
-                        )}
-                        {chapterData.summary && (
-                          <p style={{ fontSize: 14, color: 'var(--text-light)', lineHeight: 1.75, maxWidth: 600, margin: 0 }}>
-                            {chapterData.summary}
-                          </p>
-                        )}
+                          <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 22, marginBottom: 8 }}>
+                            {chapterData.title || chapterData.name_translated}
+                          </h2>
+                          {chapterData.sanskrit_title && (
+                            <div style={{ fontFamily: 'var(--font-hindi)', color: 'var(--text-muted)', fontSize: 14, marginBottom: 10 }}>
+                              {chapterData.sanskrit_title}
+                            </div>
+                          )}
+                          {chapterData.summary && (
+                            <p style={{ fontSize: 14, color: 'var(--text-light)', lineHeight: 1.75, maxWidth: 600, margin: 0 }}>
+                              {chapterData.summary}
+                            </p>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{
+                            background: `${bk.accent_color}15`, borderRadius: 'var(--radius)',
+                            padding: '10px 16px', textAlign: 'center',
+                          }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: bk.accent_color, fontFamily: 'var(--font-display)' }}>
+                              {chapterData.verse_count || chapterData.verses?.length || 0}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Verses</div>
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{
-                          background: `${bk.accent_color}15`, borderRadius: 'var(--radius)',
-                          padding: '10px 16px', textAlign: 'center',
-                        }}>
-                          <div style={{ fontSize: 22, fontWeight: 700, color: bk.accent_color, fontFamily: 'var(--font-display)' }}>
-                            {chapterData.verse_count || chapterData.verses?.length || 0}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Verses</div>
-                        </div>
+
+                      {/* Prev / Next navigation */}
+                      <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                        {selectedChapter > 1 && (
+                          <button onClick={() => handleSelectChapter(selectedChapter - 1)} style={{
+                            padding: '8px 16px', borderRadius: 99, border: `1px solid ${bk.accent_color}44`,
+                            background: 'transparent', color: bk.accent_color, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          }}>‹ Previous Chapter</button>
+                        )}
+                        {selectedChapter < bk.total_chapters && (
+                          <button onClick={() => handleSelectChapter(selectedChapter + 1)} style={{
+                            padding: '8px 16px', borderRadius: 99, border: 'none',
+                            background: bk.accent_color, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          }}>Next Chapter ›</button>
+                        )}
                       </div>
                     </div>
 
-                    {/* Prev / Next navigation */}
-                    <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                    {/* Search bar within reader */}
+                    <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                      <input
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder={`Search in ${bk.title}…`}
+                        style={{
+                          flex: 1, padding: '10px 16px', borderRadius: 99,
+                          border: '2px solid var(--cream-dark)', background: 'white',
+                          fontSize: 13, fontFamily: 'var(--font-body)', outline: 'none',
+                        }}
+                      />
+                      <button type="submit" style={{
+                        padding: '10px 20px', borderRadius: 99, border: 'none',
+                        background: bk.accent_color, color: 'white',
+                        fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      }}>Search</button>
+                    </form>
+
+                    {/* Note if no full text */}
+                    {chapterData.note && (
+                      <div style={{
+                        background: 'var(--cream-mid)', borderRadius: 'var(--radius)',
+                        padding: '14px 18px', marginBottom: 20,
+                        fontSize: 13, color: 'var(--text-light)',
+                      }}>ℹ️ {chapterData.note}</div>
+                    )}
+
+                    {/* Verse list */}
+                    {(chapterData.verses || []).map(verse => (
+                      <VerseCard
+                        key={`${verse.chapter_number}-${verse.verse_number}`}
+                        verse={verse}
+                        bookSlug={bk.slug}
+                        bookColor={bk.accent_color}
+                        bookmarks={bookmarks}
+                        onBookmarkToggle={handleBookmarkToggle}
+                        speakingVerse={speakingVerse}
+                        onSpeak={handleSpeak}
+                      />
+                    ))}
+
+                    {/* Bottom navigation */}
+                    <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
                       {selectedChapter > 1 && (
                         <button onClick={() => handleSelectChapter(selectedChapter - 1)} style={{
-                          padding: '8px 16px', borderRadius: 99, border: `1px solid ${bk.accent_color}44`,
-                          background: 'transparent', color: bk.accent_color, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          padding: '12px 24px', borderRadius: 99, border: `1px solid ${bk.accent_color}44`,
+                          background: 'transparent', color: bk.accent_color, cursor: 'pointer', fontSize: 14, fontWeight: 700,
                         }}>‹ Previous Chapter</button>
                       )}
                       {selectedChapter < bk.total_chapters && (
                         <button onClick={() => handleSelectChapter(selectedChapter + 1)} style={{
-                          padding: '8px 16px', borderRadius: 99, border: 'none',
-                          background: bk.accent_color, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                          padding: '12px 24px', borderRadius: 99, border: 'none',
+                          background: bk.accent_color, color: 'white', cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                          marginLeft: 'auto',
                         }}>Next Chapter ›</button>
                       )}
                     </div>
                   </div>
-
-                  {/* Search bar within reader */}
-                  <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-                    <input
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      placeholder={`Search in ${bk.title}…`}
-                      style={{
-                        flex: 1, padding: '10px 16px', borderRadius: 99,
-                        border: '2px solid var(--cream-dark)', background: 'white',
-                        fontSize: 13, fontFamily: 'var(--font-body)', outline: 'none',
-                      }}
-                    />
-                    <button type="submit" style={{
-                      padding: '10px 20px', borderRadius: 99, border: 'none',
-                      background: bk.accent_color, color: 'white',
-                      fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                    }}>Search</button>
-                  </form>
-
-                  {/* Note if no full text */}
-                  {chapterData.note && (
-                    <div style={{
-                      background: 'var(--cream-mid)', borderRadius: 'var(--radius)',
-                      padding: '14px 18px', marginBottom: 20,
-                      fontSize: 13, color: 'var(--text-light)',
-                    }}>ℹ️ {chapterData.note}</div>
-                  )}
-
-                  {/* Verse list */}
-                  {(chapterData.verses || []).map(verse => (
-                    <VerseCard
-                      key={`${verse.chapter_number}-${verse.verse_number}`}
-                      verse={verse}
-                      bookSlug={bk.slug}
-                      bookColor={bk.accent_color}
-                      bookmarks={bookmarks}
-                      onBookmarkToggle={handleBookmarkToggle}
-                      speakingVerse={speakingVerse}
-                      onSpeak={handleSpeak}
-                    />
-                  ))}
-
-                  {/* Bottom navigation */}
-                  <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-                    {selectedChapter > 1 && (
-                      <button onClick={() => handleSelectChapter(selectedChapter - 1)} style={{
-                        padding: '12px 24px', borderRadius: 99, border: `1px solid ${bk.accent_color}44`,
-                        background: 'transparent', color: bk.accent_color, cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                      }}>‹ Previous Chapter</button>
-                    )}
-                    {selectedChapter < bk.total_chapters && (
-                      <button onClick={() => handleSelectChapter(selectedChapter + 1)} style={{
-                        padding: '12px 24px', borderRadius: 99, border: 'none',
-                        background: bk.accent_color, color: 'white', cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                        marginLeft: 'auto',
-                      }}>Next Chapter ›</button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </main>
+                )}
+              </main>
+            </div>
           </div>
         )}
 
@@ -831,7 +928,7 @@ export default function SacredBooksPage() {
                 textAlign: 'center', color: 'var(--text-muted)',
               }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>🔖</div>
-                <p>No bookmarks yet. Open a book and tap 🔖 on any verse.</p>
+                <p>No bookmarks yet. Open a book and tap ☆ on any verse to save it.</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -846,10 +943,11 @@ export default function SacredBooksPage() {
                         border: `1px solid ${color}33`,
                         padding: '16px 20px',
                         display: 'flex', alignItems: 'center', gap: 14,
+                        flexWrap: 'wrap',
                       }}
                     >
                       <span style={{ fontSize: 24 }}>{bm.icon_emoji}</span>
-                      <div style={{ flex: 1 }}>
+                      <div style={{ flex: 1, minWidth: 160 }}>
                         <div style={{ fontWeight: 700, color: 'var(--brown)', fontSize: 14, marginBottom: 2 }}>
                           {bm.title} · Ch {bm.chapter_number}, Verse {bm.verse_number}
                         </div>
@@ -857,7 +955,7 @@ export default function SacredBooksPage() {
                           <div style={{ fontSize: 12, color: 'var(--text-light)', fontStyle: 'italic' }}>{bm.note}</div>
                         )}
                       </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
+                      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                         <button
                           onClick={async () => {
                             const book = books.find(b => b.slug === bm.slug);
@@ -880,6 +978,7 @@ export default function SacredBooksPage() {
                           onClick={async () => {
                             await deleteBookmark(bm.id);
                             setBookmarks(prev => prev.filter(b => b.id !== bm.id));
+                            showToast('Bookmark removed');
                           }}
                           style={{
                             padding: '6px 10px', borderRadius: 99,
@@ -964,11 +1063,26 @@ export default function SacredBooksPage() {
       </div>
       <Footer />
 
-      {/* Responsive */}
       <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+        /* ── Mobile responsive ── */
         @media (max-width: 768px) {
-          div[style*="grid-template-columns: 260px"] {
+          .reader-grid {
             grid-template-columns: 1fr !important;
+          }
+          .chapter-sidebar {
+            display: none !important;
+            position: static !important;
+            max-height: 280px !important;
+          }
+          .chapter-sidebar.sidebar-open {
+            display: flex !important;
+            margin-bottom: 16px;
+          }
+          .mobile-chapter-toggle {
+            display: block !important;
           }
         }
       `}</style>
