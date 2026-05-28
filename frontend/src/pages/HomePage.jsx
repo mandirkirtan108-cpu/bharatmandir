@@ -45,8 +45,6 @@ export default function HomePage() {
   const { translated: displayTemples, translating } = useTranslatedTemples(temples);
   const visibleTemples = displayTemples.slice(0, visibleCount);
 
-  const isActive = (path) => location.pathname === path;
-
   useEffect(() => {
     templeAPI.health()
       .then(res => setTotalTemples(res.data.total_temples || 0))
@@ -57,7 +55,7 @@ export default function HomePage() {
     const fetchTemples = async () => {
       setLoading(true);
       setError(null);
-      setVisibleCount(PAGE_SIZE); // reset pagination on filter change
+      setVisibleCount(PAGE_SIZE);
       try {
         let temples, count;
         if (searchQuery) {
@@ -113,7 +111,6 @@ export default function HomePage() {
       <section style={{
         position: 'relative', overflow: 'hidden', color: '#FFD580',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        /* FIX: reduced vertical padding so temple cards are visible above the fold */
         padding: '56px 24px 72px',
         textAlign: 'center',
       }}>
@@ -161,7 +158,6 @@ export default function HomePage() {
             {t('hero_desc')}
           </p>
 
-          {/* FIX: Search with visible label for accessibility */}
           <div className="hero-actions">
             <label
               htmlFor="hero-search"
@@ -215,7 +211,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Filters ── FIX: Split into two rows — deity row + state row */}
+      {/* ── Filters ── */}
       <div className="filters-bar">
         <div className="container">
           {/* Row 1: Deity filters */}
@@ -322,7 +318,6 @@ export default function HomePage() {
                 ))}
               </div>
 
-              {/* FIX: Load More button — replaces loading 50 at once */}
               {visibleCount < displayTemples.length && (
                 <div style={{ textAlign: 'center', marginTop: 36, marginBottom: 16 }}>
                   <button
@@ -343,45 +338,6 @@ export default function HomePage() {
       </section>
 
       <Footer />
-
-      {/* ── Floating AI Guide Button ──
-          FIX: raised bottom on mobile to avoid covering content,
-          smaller on mobile screens */}
-      <Link
-        to="/spiritual-guide"
-        style={{
-          position: 'fixed',
-          bottom: 'clamp(16px, 4vw, 28px)',
-          right: 'clamp(16px, 4vw, 28px)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: 'clamp(10px, 2vw, 12px) clamp(14px, 3vw, 20px)',
-          borderRadius: 50,
-          fontSize: 'clamp(12px, 2vw, 14px)',
-          fontWeight: 700,
-          textDecoration: 'none',
-          whiteSpace: 'nowrap',
-          border: '2px solid #FF6B00',
-          background: isActive('/spiritual-guide')
-            ? 'linear-gradient(135deg,#FF6B00,#c84b00)'
-            : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
-          color: isActive('/spiritual-guide') ? 'white' : '#FF6B00',
-          boxShadow: '0 4px 20px rgba(255,107,0,0.35)',
-          transition: 'all .2s',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.transform = 'scale(1.07)';
-          e.currentTarget.style.boxShadow = '0 6px 28px rgba(255,107,0,0.50)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(255,107,0,0.35)';
-        }}
-      >
-        🕉️ AI Guide
-      </Link>
     </div>
   );
 }
