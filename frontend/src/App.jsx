@@ -18,6 +18,7 @@ import SacredBooksPage       from './pages/SacredBooksPage';
 import LoginPage             from './pages/LoginPage';
 import SignupPage            from './pages/SignupPage';
 import UserProfilePage       from './pages/UserProfilePage';
+import ForgotPasswordPage    from './pages/ForgotPasswordPage';   // ← ADD THIS
 
 function RootRedirect() {
   const { isLoggedIn } = useUserAuth();
@@ -48,6 +49,7 @@ export default function App() {
           {/* ── User Auth ──────────────────────────────────── */}
           <Route path="/login"           element={<LoginPage />} />
           <Route path="/signup"          element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />  {/* ← ADD THIS */}
 
           {/* ── User Profile (protected) ───────────────────── */}
           <Route path="/profile"         element={<UserProfilePage />} />

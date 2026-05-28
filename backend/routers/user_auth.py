@@ -61,6 +61,20 @@ class UpdateProfileRequest(BaseModel):
     bio:            Optional[str]   = None
     avatar_url:     Optional[str]   = None
 
+# ── NEW: Password-reset models ───────────────────────────────────────
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class VerifyResetOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: str
+    confirm_password: str
+
 
 # ── Token helpers ────────────────────────────────────────────────────
 def create_token(data: dict, expires_delta: timedelta) -> str:
@@ -80,7 +94,7 @@ def generate_otp() -> str:
     return str(random.randint(100000, 999999))
 
 
-# ── Email helper ─────────────────────────────────────────────────────
+# ── Email helper — signup OTP ────────────────────────────────────────
 def send_otp_email(to_email: str, name: str, otp: str):
     try:
         resend.Emails.send({
@@ -115,6 +129,43 @@ def send_otp_email(to_email: str, name: str, otp: str):
         })
     except Exception as e:
         print(f"⚠️ OTP email send failed: {e}")
+
+
+# ── NEW: Email helper — password reset OTP ───────────────────────────
+def send_reset_otp_email(to_email: str, name: str, otp: str):
+    try:
+        resend.Emails.send({
+            "from": "BluQQ <noreply@bluqq.com>",
+            "to": [to_email],
+            "subject": "🛕 BharatMandir — Password Reset Code",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;
+                        background: #1a0a00; color: #fff; border-radius: 12px; padding: 40px;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <h1 style="font-size: 32px; margin: 0;">🛕</h1>
+                    <h2 style="color: #ff9900; margin: 8px 0;">BharatMandir</h2>
+                </div>
+                <p style="font-size: 16px;">Namaste <strong>{name}</strong>,</p>
+                <p style="color: #ccc;">
+                    We received a request to reset your password.
+                    Use the code below to proceed. If you didn't request this, ignore this email.
+                </p>
+                <div style="text-align: center; margin: 32px 0;">
+                    <div style="background: #ff9900; color: #1a0a00; padding: 20px 40px;
+                                border-radius: 12px; display: inline-block;">
+                        <p style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 2px;">RESET CODE</p>
+                        <p style="margin: 8px 0 0; font-size: 42px; font-weight: 900;
+                                  letter-spacing: 10px;">{otp}</p>
+                    </div>
+                </div>
+                <p style="color: #888; font-size: 13px; text-align: center;">
+                    This code will expire in <strong>10 minutes</strong>.
+                </p>
+            </div>
+            """
+        })
+    except Exception as e:
+        print(f"⚠️ Reset OTP email send failed: {e}")
 
 
 # ── DB helpers ───────────────────────────────────────────────────────
@@ -303,7 +354,6 @@ async def login(body: LoginRequest):
     except Exception:
         pass
 
-    # Return full profile with tokens
     full_user = get_user_by_id(user["id"])
     return {
         "access_token": access_token,
@@ -337,18 +387,15 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     if not updates:
         raise HTTPException(status_code=400, detail="No fields provided to update.")
 
-    # Validate gender if provided
     if "gender" in updates and updates["gender"] not in ("male", "female", "other"):
         raise HTTPException(status_code=400, detail="Gender must be 'male', 'female', or 'other'.")
 
-    # Validate phone if provided (simple check)
     if "phone" in updates:
         phone = updates["phone"].strip()
         if phone and (len(phone) < 7 or len(phone) > 15):
             raise HTTPException(status_code=400, detail="Invalid phone number.")
         updates["phone"] = phone
 
-    # Validate name if provided
     if "name" in updates and len(updates["name"].strip()) < 2:
         raise HTTPException(status_code=400, detail="Name must be at least 2 characters.")
 
@@ -366,3 +413,99 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
 
     updated_user = get_user_by_id(user["id"])
     return {"message": "Profile updated successfully.", "user": updated_user}
+
+
+# ════════════════════════════════════════════════════════════════════
+# NEW: Password Reset Flow
+# ════════════════════════════════════════════════════════════════════
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest):
+    """
+    Step 1: User submits email.
+    We silently succeed even if email isn't registered (security best practice).
+    If registered, send a 6-digit reset OTP stored in pwd_reset_token / pwd_reset_expires.
+    """
+    user = get_user_by_email(body.email.lower())
+    if not user:
+        # Don't reveal whether the email exists
+        return {"message": "If that email is registered, a reset code has been sent."}
+
+    otp         = generate_otp()
+    otp_expires = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE users
+                   SET pwd_reset_token = %s, pwd_reset_expires = %s
+                   WHERE email = %s""",
+                (otp, otp_expires, body.email.lower())
+            )
+
+    send_reset_otp_email(body.email.lower(), user["name"], otp)
+    return {"message": "If that email is registered, a reset code has been sent."}
+
+
+@router.post("/verify-reset-otp")
+async def verify_reset_otp(body: VerifyResetOTPRequest):
+    """
+    Step 2: Verify the reset OTP without changing the password yet.
+    Returns success so the frontend can proceed to the new-password step.
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id FROM users
+                   WHERE email = %s
+                     AND pwd_reset_token = %s
+                     AND pwd_reset_expires > NOW()""",
+                (body.email.lower(), body.otp)
+            )
+            row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code. Please try again.")
+
+    return {"message": "Code verified. You may now set a new password."}
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest):
+    """
+    Step 3: Verify OTP again and set the new password atomically.
+    Clears the reset token after success.
+    """
+    if body.new_password != body.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # Re-verify OTP to prevent replay if user refreshed
+            cur.execute(
+                """SELECT id FROM users
+                   WHERE email = %s
+                     AND pwd_reset_token = %s
+                     AND pwd_reset_expires > NOW()""",
+                (body.email.lower(), body.otp)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=400, detail="Reset code is invalid or has expired.")
+
+            new_hash = bcrypt.hashpw(
+                body.new_password.encode('utf-8'), bcrypt.gensalt(rounds=12)
+            ).decode('utf-8')
+
+            cur.execute(
+                """UPDATE users
+                   SET password_hash = %s,
+                       pwd_reset_token = NULL,
+                       pwd_reset_expires = NULL
+                   WHERE id = %s""",
+                (new_hash, row[0])
+            )
+
+    return {"message": "Password reset successfully. You can now sign in with your new password."}
