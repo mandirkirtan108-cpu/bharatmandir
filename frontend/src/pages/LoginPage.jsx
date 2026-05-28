@@ -8,6 +8,27 @@ const S4 = 'rgba(255,153,0,0.50)';
 const W6 = 'rgba(255,255,255,0.60)';
 const W9 = 'rgba(255,255,255,0.90)';
 
+/* ── SVG Eye icons ─────────────────────────────────────────────── */
+function EyeOpen() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  );
+}
+function EyeOff() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const { login, isLoggedIn, loading, error } = useUserAuth();
   const navigate = useNavigate();
@@ -19,7 +40,6 @@ export default function LoginPage() {
 
   useEffect(() => { if (isLoggedIn) navigate('/', { replace: true }); }, [isLoggedIn, navigate]);
 
-  // FIX: Inline validation on blur
   const validateEmail = (val) => {
     if (!val) return setEmailErr('Email is required');
     if (!/\S+@\S+\.\S+/.test(val)) return setEmailErr('Enter a valid email address');
@@ -57,7 +77,6 @@ export default function LoginPage() {
         ))}
       </div>
 
-      {/* FIX: ← Home moved ABOVE the card, not absolutely positioned inside it */}
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 420, marginBottom: 12 }}>
         <Link to="/" style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -96,7 +115,6 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} noValidate>
 
-          {/* FIX: Clean label — no emoji in label text */}
           <div style={{ marginBottom: 16 }}>
             <label htmlFor="login-email" style={lbl}>Email address</label>
             <input
@@ -111,14 +129,12 @@ export default function LoginPage() {
               style={{ ...inp, borderColor: emailErr ? 'rgba(255,80,80,0.6)' : S2 }}
               onFocus={e => e.target.style.borderColor = emailErr ? 'rgba(255,80,80,0.8)' : S4}
             />
-            {/* FIX: Inline validation message */}
             {emailErr && <p style={errMsg}>{emailErr}</p>}
           </div>
 
           <div style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <label htmlFor="login-password" style={{ ...lbl, marginBottom: 0 }}>Password</label>
-              {/* FIX: Forgot password link */}
               <Link to="/forgot-password" style={{
                 fontSize: 12, color: S, textDecoration: 'none', fontWeight: 500,
               }}>
@@ -144,13 +160,12 @@ export default function LoginPage() {
                 aria-label={showPass ? 'Hide password' : 'Show password'}
                 style={eye}
               >
-                {showPass ? '🙈' : '👁️'}
+                {showPass ? <EyeOff /> : <EyeOpen />}
               </button>
             </div>
             {passErr && <p style={errMsg}>{passErr}</p>}
           </div>
 
-          {/* FIX: Loading state has readable text — using solid color not semi-transparent */}
           <button
             type="submit"
             disabled={loading}
@@ -205,7 +220,8 @@ const inp = {
 };
 const eye = {
   position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-  background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16, padding: 4,
+  background: 'transparent', border: 'none', cursor: 'pointer', padding: 4,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
 };
 const errMsg = {
   margin: '5px 0 0', fontSize: 12, color: '#ff8888', lineHeight: 1.4,
