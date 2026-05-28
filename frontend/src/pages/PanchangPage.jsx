@@ -204,26 +204,60 @@ export default function PanchangPage() {
         <section style={{
           position: 'relative', overflow: 'hidden', color: 'white',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '50px 12px', textAlign: 'center',
+          padding: '50px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          boxSizing: 'border-box',
         }}>
-          <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
+          <div style={{
+            position: 'relative', zIndex: 1,
+            width: '100%', maxWidth: 700,
+            padding: '0 24px',
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+          }}>
+            {/* Badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,213,128,0.35)',
-              borderRadius: 50, padding: '6px 20px', marginBottom: 22,
-              color: '#FFD580', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase',
-              fontWeight: 600, fontFamily: UI_FONT,
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+              borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+              color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+              textTransform: 'uppercase', fontWeight: 500,
+              backdropFilter: 'blur(8px)',
+              whiteSpace: 'nowrap',
+              fontFamily: UI_FONT,
             }}>
-              <Sun size={13} /> {t('panchang.badge')}
+              <Sun size={11} /> {t('panchang.badge')}
             </div>
+
+            {/* Title */}
             <h1 style={{
               fontFamily: 'var(--font-display)', fontWeight: 900,
-              fontSize: 'clamp(34px,5.5vw,66px)', lineHeight: 1.08, marginBottom: 16,
-              color: '#FFD580',
+              fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+              marginBottom: 10, marginTop: 0,
+              textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+              color: '#ffffff',
+              width: '100%',
             }}>
-              AI Pandit Ji —<br />Panchang &amp; Muhurat
+              AI Pandit Ji —{' '}
+              <span style={{ color: '#FFD580' }}>Panchang &amp; Muhurat</span>
             </h1>
-            <p style={{ color: 'rgba(255,255,255,0.78)', fontSize: 17, maxWidth: 500, margin: '0 auto', lineHeight: 1.7 }}>
+
+            {/* Subtitle */}
+            <p style={{
+              color: 'rgba(255,255,255,0.7)', fontSize: 14,
+              width: '100%', maxWidth: 520,
+              margin: '0 0 0 0',
+              fontWeight: 300, lineHeight: 1.7,
+              textAlign: 'center',
+              fontFamily: UI_FONT,
+            }}>
               {t('panchang.subtitle')}
             </p>
           </div>
