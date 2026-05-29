@@ -1,13 +1,10 @@
 import { useState, useRef, Fragment } from 'react';
-import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { adminAPI } from '../services/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SECTS = ['','Shaiva','Vaishnava','Shakta','Smartha','Jain','Buddhist','Sikh','Other'];
-const TYPES = ['','Mandir','Devasthan','Peeth','Mutt','Shrine','Other'];
-
 const STATES_IN = [
   'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi',
   'Goa','Gujarat','Haryana','Himachal Pradesh','Jammu & Kashmir','Jharkhand',
@@ -16,21 +13,16 @@ const STATES_IN = [
   'Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal',
 ];
 const SETTINGS = ['','Riverbank / Ghats','Hilltop / Mountain','Forest / Jungle','Urban / City','Cave / Underground','Island','Roadside / Highway','Village common'];
-
-// Architecture styles — multi-select
 const ARCH_STYLES = ['Nagara (North Indian)','Dravidian (South Indian)','Vesara (Mixed)','Kalinga (Odisha)','Hemadpanthi','Modern / Other'];
-
 const BUILDING_CONDITIONS = ['','Excellent — well maintained','Good — minor maintenance needed','Fair — needs renovation','Poor — urgent repair needed'];
 const WEEKDAYS = ['None / All days equal','Monday (Shiva)','Tuesday (Hanuman / Devi)','Wednesday (Ganesha)','Thursday (Vishnu / Guru)','Friday (Lakshmi / Devi)','Saturday (Saturn / Hanuman)','Sunday (Surya)'];
 const SAMPRADAYAS = ['','Shaiva','Vaishnava','Shakta','Smarta','Ramanandi','Madhva','ISKCON / Vaishnava','Other'];
 const APPT_TYPES = ['','Hereditary family priest','Trust-appointed','Government / Endowment Board appointed','Community elected'];
-
 const STATUS_OPTS = ['draft','review','published','flagged','archived'];
 const SOURCE_OPTS = ['manual','wikidata','wikipedia','google_places','openstreetmap','government','ai_enriched','csv_import'];
 const ROLES = ['admin','temple_representative','volunteer','data_entry'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-// Special designations
 const DESIGNATIONS = [
   { key:'is_jyotirlinga',     label:'⚡ Jyotirlinga' },
   { key:'is_shaktipeeth',     label:'🌸 Shaktipeeth' },
@@ -81,7 +73,7 @@ const PROGRAMS = [
   { key:'prog_free_food',       label:'🍛 Free Food (Annadanam)' },
   { key:'prog_medical_camps',   label:'💉 Medical Camps' },
   { key:'prog_scholarship_edu', label:'🎓 Scholarships / Education' },
-  { key:'prog_womens_selfhelp', label:'👩 Women\'s Self-Help' },
+  { key:'prog_womens_selfhelp', label:"👩 Women's Self-Help" },
   { key:'prog_bhajan_kirtan',   label:'🎵 Bhajan / Kirtan' },
   { key:'prog_disaster_relief', label:'🌊 Disaster Relief' },
 ];
@@ -102,8 +94,6 @@ const STEP_LABELS = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Convert "HH:MM" (24h) → "H:MM AM/PM" */
 function to12h(val) {
   if (!val) return '';
   const [hStr, mStr] = val.split(':');
@@ -114,7 +104,6 @@ function to12h(val) {
   return `${h}:${m} ${ampm}`;
 }
 
-/** Convert "H:MM AM/PM" → "HH:MM" (24h) for storage */
 function to24h(val) {
   if (!val) return '';
   const match = val.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -127,17 +116,14 @@ function to24h(val) {
   return `${String(h).padStart(2, '0')}:${m}`;
 }
 
-/** AM/PM time input component */
 function TimeInput({ value, onChange, placeholder = '9:00 AM' }) {
   const [raw, setRaw] = useState(value ? to12h(value) : '');
-
   const handleChange = (e) => {
     const v = e.target.value;
     setRaw(v);
     const match = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
     if (match) onChange(to24h(v));
   };
-
   const handleBlur = () => {
     let v = raw.trim();
     if (v && !/AM|PM/i.test(v)) {
@@ -152,16 +138,7 @@ function TimeInput({ value, onChange, placeholder = '9:00 AM' }) {
     const match = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
     if (match) onChange(to24h(v));
   };
-
-  return (
-    <input
-      type="text"
-      value={raw}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      placeholder={placeholder}
-    />
-  );
+  return <input type="text" value={raw} onChange={handleChange} onBlur={handleBlur} placeholder={placeholder} />;
 }
 
 function initialForm() {
@@ -174,16 +151,14 @@ function initialForm() {
   ];
   const base = {
     name:'', name_hindi:'', name_local:'', temple_type:'', sect:'', managing_authority:'',
-    managing_authority_custom:'',
-    trust_name:'', trust_registration_no:'', primary_deity:'', secondary_deities:'',
-    category_tags:'', google_place_id:'', wikidata_id:'', osm_id:'', wikipedia_url:'',
-    status:'draft', source:'manual',
+    managing_authority_custom:'', trust_name:'', trust_registration_no:'',
+    primary_deity:'', secondary_deities:'', category_tags:'', google_place_id:'',
+    wikidata_id:'', osm_id:'', wikipedia_url:'', status:'draft', source:'manual',
     address:'', city:'', district:'', pincode:'', state:'', setting_environment:'',
     latitude:'', longitude:'', google_maps_link:'', nearest_railway:'', nearest_airport:'',
     nearest_bus_stand:'', local_landmark:'',
     history:'', history_hindi:'', sthala_purana:'', significance:'', puranic_stories:'',
-    estimated_year_built:'', founded_by:'', last_renovation_year:'',
-    building_condition:'',
+    estimated_year_built:'', founded_by:'', last_renovation_year:'', building_condition:'',
     opening_time:'', closing_time:'', afternoon_closure_start:'', afternoon_closure_end:'',
     entry_fee:'', weekly_special_day:'None / All days equal', prasad_type:'', dress_code:'',
     best_time_to_visit:'', phone:'', whatsapp_number:'', official_email:'', best_time_to_call:'',
@@ -191,41 +166,24 @@ function initialForm() {
     online_puja_available:'no', live_darshan_available:'no', live_stream_url:'',
     video_aarti_url:'', video_intro_url:'', video_360_url:'',
     chairman_name:'', chairman_contact:'', committee_count:'', election_cycle:'',
-    election_cycle_custom:'',
-    accept_online_donations:false, upi_id:'', certificate_80g_no:'',
+    election_cycle_custom:'', accept_online_donations:false, upi_id:'', certificate_80g_no:'',
     bank_account_name:'', bank_name_branch:'', bank_account_number:'', bank_ifsc:'',
     submitter_name:'', submitter_role:'admin', submitter_phone:'',
-    custom_designation:'',
-    custom_facility:'',
+    custom_designation:'', custom_facility:'',
   };
   bools.forEach(k => base[k] = false);
   return base;
 }
 
-function initPriest() {
-  return { name:'', title:'', phone:'', sampradaya:'', appt_type:'', years:'', is_head:false, id: Math.random().toString(36).slice(2) };
-}
-
-function initSched() {
-  return { name:'', time:'', type:'Aarti', id: Math.random().toString(36).slice(2) };
-}
-
-function initPujaOffering() {
-  return { name:'', timing:'', id: Math.random().toString(36).slice(2) };
-}
-
-function initMantra() {
-  return { title:'', deity:'', sanskrit:'', transliteration:'', meaning:'', audio:'', id: Math.random().toString(36).slice(2) };
-}
-
-function initFestival() {
-  return { name:'', hmonth:'', month:'', desc:'', days:'', major:false, id: Math.random().toString(36).slice(2) };
-}
+const initPriest  = () => ({ name:'', title:'', phone:'', sampradaya:'', appt_type:'', years:'', is_head:false, id: Math.random().toString(36).slice(2) });
+const initSched   = () => ({ name:'', time:'', type:'Aarti', id: Math.random().toString(36).slice(2) });
+const initOffering= () => ({ name:'', timing:'', id: Math.random().toString(36).slice(2) });
+const initMantra  = () => ({ title:'', deity:'', sanskrit:'', transliteration:'', meaning:'', audio:'', id: Math.random().toString(36).slice(2) });
+const initFestival= () => ({ name:'', hmonth:'', month:'', desc:'', days:'', major:false, id: Math.random().toString(36).slice(2) });
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const css = `
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,400&family=Noto+Sans+Devanagari:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap');
-
 :root{
   --s1:#B84D00;--s2:#D4600A;--s3:#E8720F;--sl:#FFF5EB;--slm:#FFE8D0;
   --g1:#8B6800;--g2:#B8900A;--g3:#D4A820;--gl:#FDF7E0;
@@ -234,12 +192,9 @@ const css = `
   --bd1:#DDD0B0;--bd2:#EAE0C8;--bd3:#F0EAD8;
   --green:#1A5C30;--greenl:#E8F4EE;--red:#B91C1C;--redl:#FEE2E2;
   --blue:#1D4ED8;--bluel:#EFF6FF;
-  --sh1:0 1px 12px rgba(100,50,10,.07);
-  --sh2:0 4px 28px rgba(100,50,10,.11);
-  --ff-h:'Cinzel',Georgia,serif;
-  --ff-b:'Crimson Pro',Georgia,serif;
-  --ff-u:'DM Sans',system-ui,sans-serif;
-  --ff-hi:'Noto Sans Devanagari',sans-serif;
+  --sh1:0 1px 12px rgba(100,50,10,.07);--sh2:0 4px 28px rgba(100,50,10,.11);
+  --ff-h:'Cinzel',Georgia,serif;--ff-b:'Crimson Pro',Georgia,serif;
+  --ff-u:'DM Sans',system-ui,sans-serif;--ff-hi:'Noto Sans Devanagari',sans-serif;
 }
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
 html{scroll-behavior:smooth;}
@@ -273,7 +228,6 @@ body{font-family:var(--ff-u);background:var(--cream);color:var(--ink);-webkit-fo
 .step-div{width:1px;height:18px;background:var(--bd2);flex-shrink:0;}
 
 .page{max-width:900px;margin:0 auto;padding:36px 24px 80px;}
-
 .fsec{background:var(--white);border:1px solid var(--bd2);border-radius:16px;padding:26px 30px;margin-bottom:18px;box-shadow:var(--sh1);}
 .fsec-hdr{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--bd3);}
 .fsec-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:var(--sl);}
@@ -292,22 +246,53 @@ input[type=text],input[type=email],input[type=tel],input[type=number],input[type
 input[type=time],input[type=date],select,textarea{
   width:100%;padding:10px 13px;border:1.5px solid var(--bd2);border-radius:9px;
   font-family:var(--ff-u);font-size:13px;color:var(--ink);background:var(--parch);
-  outline:none;transition:border-color .18s,background .18s;appearance:none;-webkit-appearance:none;
+  outline:none;transition:border-color .18s,background .18s,box-shadow .18s;
+  appearance:none;-webkit-appearance:none;
 }
 input:focus,select:focus,textarea:focus{border-color:var(--s2);background:var(--white);box-shadow:0 0 0 3px rgba(212,96,10,.08);}
 input::placeholder,textarea::placeholder{color:var(--inkx);}
 textarea{resize:vertical;min-height:90px;line-height:1.65;}
 select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23B09070' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;padding-right:30px;}
-.field-hint{font-size:11px;color:var(--inkll);margin-top:4px;font-style:italic;}
-.field-err{font-size:11px;color:var(--red);margin-top:4px;}
 
-/* CHIP TOGGLE */
+.field-hint{font-size:11px;color:var(--inkll);margin-top:4px;font-style:italic;}
+.field-err{font-size:11.5px;color:var(--red);margin-top:5px;font-weight:500;display:flex;align-items:center;gap:5px;}
+.field-err::before{content:'⚠';font-size:11px;}
+
+/* ── ERROR STATE: red border + tint on every input type inside .has-error ── */
+.fg.has-error > input[type=text],
+.fg.has-error > input[type=email],
+.fg.has-error > input[type=tel],
+.fg.has-error > input[type=number],
+.fg.has-error > input[type=url],
+.fg.has-error > select,
+.fg.has-error > textarea{
+  border-color:var(--red) !important;
+  background:var(--redl) !important;
+  box-shadow:0 0 0 3px rgba(185,28,28,.10);
+}
+/* also target inputs that are direct children of wrappers inside .has-error */
+.fg.has-error input[type=text]:not(.sched-row input):not(.offering-row input),
+.fg.has-error input[type=email],
+.fg.has-error input[type=tel],
+.fg.has-error input[type=number],
+.fg.has-error input[type=url],
+.fg.has-error select,
+.fg.has-error textarea{
+  border-color:var(--red) !important;
+  background:var(--redl) !important;
+  box-shadow:0 0 0 3px rgba(185,28,28,.10);
+}
+.fg.has-error input:focus,
+.fg.has-error select:focus,
+.fg.has-error textarea:focus{
+  box-shadow:0 0 0 3px rgba(185,28,28,.18);
+}
+
 .chip-group{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
 .chip{padding:7px 15px;border-radius:50px;border:1.5px solid var(--bd2);background:var(--white);font-family:var(--ff-u);font-size:12.5px;color:var(--inkm);cursor:pointer;transition:all .15s;user-select:none;}
 .chip:hover{border-color:var(--s3);color:var(--s2);}
 .chip.on{border-color:var(--s2);background:var(--sl);color:var(--s1);font-weight:500;}
 
-/* WHOLE-BOX CLICKABLE GRID — puja / facility / program */
 .puja-grid,.fac-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px;}
 .fac-grid{grid-template-columns:repeat(auto-fill,minmax(185px,1fr));}
 .puja-item,.fac-item{border:1.5px solid var(--bd2);border-radius:9px;padding:9px 12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:8px;user-select:none;}
@@ -315,7 +300,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .puja-item.on,.fac-item.on{border-color:var(--s2);background:var(--sl);}
 .puja-name,.fac-name{font-size:12.5px;color:var(--inkm);}
 
-/* SCHEDULE BUILDER */
 .sched-builder{border:1px solid var(--bd2);border-radius:10px;overflow:hidden;}
 .sched-hdr{background:var(--parch);padding:10px 14px;font-size:10.5px;font-weight:500;color:var(--inkl);text-transform:uppercase;letter-spacing:.06em;display:grid;grid-template-columns:1fr 130px 100px 34px;gap:10px;}
 .sched-row{display:grid;grid-template-columns:1fr 130px 100px 34px;gap:10px;padding:8px 14px;border-top:1px solid var(--bd3);align-items:center;}
@@ -325,14 +309,12 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .add-sched-btn,.add-btn{padding:8px 16px;border:1px dashed var(--bd1);border-radius:8px;background:transparent;font-size:12px;color:var(--inkl);cursor:pointer;transition:all .15s;margin-top:8px;display:flex;align-items:center;gap:6px;}
 .add-sched-btn:hover,.add-btn:hover{border-color:var(--s2);color:var(--s2);}
 
-/* PRIEST CARD */
 .priest-card{border:1.5px solid var(--bd2);border-radius:12px;padding:16px 18px;margin-bottom:12px;position:relative;background:var(--parch);}
 .priest-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
 .priest-card-title{font-family:var(--ff-h);font-size:13px;color:var(--inkm);}
 .remove-priest{border:1px solid var(--bd2);border-radius:7px;background:var(--white);color:var(--red);cursor:pointer;font-size:12px;padding:4px 10px;}
 .remove-priest:hover{background:var(--redl);}
 
-/* PHOTO UPLOAD */
 .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:12px;}
 .photo-slot{aspect-ratio:1;border:2px dashed var(--bd1);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;background:var(--parch);position:relative;overflow:hidden;}
 .photo-slot:hover{border-color:var(--s2);background:var(--sl);}
@@ -343,34 +325,27 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .ps-preview{position:absolute;inset:0;background-size:cover!important;background-position:center!important;}
 .ps-remove{position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:rgba(185,28,28,.8);color:#fff;border:none;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 
-/* VIDEO FIELD */
 .video-field{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--bd2);border-radius:9px;background:var(--parch);}
 .video-field-icon{font-size:18px;flex-shrink:0;}
 .video-field input{border:none;background:transparent;padding:0;font-size:13px;flex:1;}
 .video-field input:focus{box-shadow:none;border:none;}
 
-/* DONATION BOX */
 .donation-box{background:var(--gl);border:1.5px solid #e0cc8a;border-radius:12px;padding:18px 20px;margin-bottom:14px;}
 .donation-box-title{font-family:var(--ff-h);font-size:13px;color:var(--g1);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
 
-/* SUMMARY */
 .summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
 .s-item{background:rgba(255,255,255,.08);border-radius:9px;padding:10px 13px;}
 .si-l{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.5);margin-bottom:3px;}
 .si-v{font-size:12.5px;font-weight:500;color:#fff;}
 .si-v.empty{color:rgba(255,255,255,.4);font-style:italic;font-weight:400;}
 
-/* REVIEW CARD */
 .review-card{background:linear-gradient(135deg,rgba(24,15,6,.96),rgba(107,58,16,.94));border-radius:16px;padding:26px 30px;color:#fff;margin-bottom:18px;}
 .review-card-title{font-family:var(--ff-h);font-size:15px;letter-spacing:.06em;color:#F0C040;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
 
-/* CONSENT */
-.consent-box{background:var(--parch);border:1px solid var(--bd2);border-radius:12px;padding:18px 20px;}
 .consent-title{font-family:var(--ff-h);font-size:15px;font-weight:700;color:var(--ink);margin-bottom:10px;}
 .consent-check{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--inkm);line-height:1.55;margin-bottom:8px;cursor:pointer;}
 .consent-check input{accent-color:var(--s2);width:14px;height:14px;flex-shrink:0;margin-top:3px;}
 
-/* NAV BUTTONS */
 .form-nav{display:flex;align-items:center;justify-content:space-between;margin-top:22px;gap:12px;flex-wrap:wrap;}
 .step-indicator{font-size:12px;color:var(--inkl);}
 .btn-back{padding:11px 22px;border:1.5px solid var(--bd1);border-radius:9px;font-size:13px;color:var(--inkm);background:var(--white);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;}
@@ -381,7 +356,10 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .btn-submit:hover:not(:disabled){background:#145A25;transform:translateY(-1px);}
 .btn-submit:disabled{opacity:.6;cursor:not-allowed;}
 
-/* SUCCESS */
+/* Shake animation for nav buttons on failed validation */
+@keyframes shake{0%,100%{transform:translateX(0);}15%{transform:translateX(-5px);}30%{transform:translateX(5px);}45%{transform:translateX(-4px);}60%{transform:translateX(4px);}75%{transform:translateX(-2px);}90%{transform:translateX(2px);}}
+.shake{animation:shake .4s ease;}
+
 .success-page{text-align:center;padding:60px 20px;}
 .success-icon{font-size:60px;margin-bottom:16px;}
 .success-title{font-family:var(--ff-h);font-size:30px;font-weight:700;color:var(--green);margin-bottom:8px;}
@@ -397,47 +375,30 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .btn-home{padding:11px 26px;background:var(--s2);color:#fff;border:none;border-radius:9px;font-size:13.5px;font-weight:500;cursor:pointer;box-shadow:0 3px 12px rgba(212,96,10,.28);transition:all .2s;}
 .btn-home:hover{background:var(--s1);}
 
-/* SECTION LABEL */
 .sec-label{font-family:var(--ff-h);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--s2);margin-bottom:12px;margin-top:22px;display:flex;align-items:center;gap:8px;}
 .sec-label::after{content:'';flex:1;height:1px;background:var(--bd3);}
 .sec-label:first-child{margin-top:0;}
 
-/* RADIO GROUP */
-.radio-group{display:flex;flex-wrap:wrap;gap:8px;}
-.radio-opt{display:flex;align-items:center;gap:6px;padding:7px 13px;border:1.5px solid var(--bd2);border-radius:9px;cursor:pointer;font-size:12.5px;color:var(--inkm);transition:all .15s;user-select:none;}
-.radio-opt:hover{border-color:var(--s2);color:var(--s2);background:var(--sl);}
-.radio-opt.selected{border-color:var(--s2);background:var(--sl);color:var(--s2);}
-.radio-opt input{accent-color:var(--s2);width:13px;height:13px;flex-shrink:0;}
-
-/* MULTI-SELECT chips for arch style */
 .arch-chip{padding:7px 14px;border-radius:50px;border:1.5px solid var(--bd2);background:var(--white);font-family:var(--ff-u);font-size:12.5px;color:var(--inkm);cursor:pointer;transition:all .15s;user-select:none;}
 .arch-chip:hover{border-color:var(--s3);color:var(--s2);}
 .arch-chip.on{border-color:var(--s2);background:var(--sl);color:var(--s1);font-weight:500;}
 
-/* PUJA OFFERING BUILDER */
 .offering-builder{border:1px solid var(--bd2);border-radius:10px;overflow:hidden;margin-top:8px;}
 .offering-hdr{background:var(--parch);padding:9px 14px;font-size:10.5px;font-weight:500;color:var(--inkl);text-transform:uppercase;letter-spacing:.06em;display:grid;grid-template-columns:1fr 160px 34px;gap:10px;}
 .offering-row{display:grid;grid-template-columns:1fr 160px 34px;gap:10px;padding:8px 14px;border-top:1px solid var(--bd3);align-items:center;}
 .offering-row input{padding:6px 10px;border-radius:7px;font-size:12px;}
 
-/* BANNERS */
 .info-banner{background:var(--bluel);border:1px solid #93C5FD;border-radius:9px;padding:11px 15px;font-size:12.5px;color:#1e40af;display:flex;align-items:flex-start;gap:9px;margin-bottom:14px;}
 .warn-banner{background:#FEF9C3;border:1px solid #FDE047;border-radius:9px;padding:11px 15px;font-size:12.5px;color:#713f12;display:flex;align-items:flex-start;gap:9px;margin-bottom:14px;}
 
-/* MANTRA / FESTIVAL CARDS */
 .sub-card{border:1.5px solid var(--bd2);border-radius:10px;padding:14px 16px;margin-bottom:10px;position:relative;}
-
-/* Festival major — whole row clickable */
 .festival-major-row{display:flex;align-items:center;gap:10px;padding:9px 13px;border:1.5px solid var(--bd2);border-radius:9px;cursor:pointer;transition:all .15s;user-select:none;margin-top:8px;}
 .festival-major-row:hover{border-color:var(--s2);background:var(--sl);}
 .festival-major-row.on{border-color:var(--s2);background:var(--sl);}
 .festival-major-row input{accent-color:var(--s2);width:14px;height:14px;flex-shrink:0;}
 
-/* Custom input row */
 .custom-input-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
 .custom-input-row input{flex:1;}
-
-/* Time input hint badge */
 .time-badge{display:inline-flex;align-items:center;gap:4px;background:var(--sl);border:1px solid var(--slm);border-radius:6px;padding:3px 8px;font-size:10px;color:var(--s1);font-weight:500;margin-top:4px;}
 
 @keyframes fadein{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -455,25 +416,35 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 `;
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-
 function SectionCard({ icon, title, sub, children }) {
   return (
     <div className="fsec">
       <div className="fsec-hdr">
         <div className="fsec-icon">{icon}</div>
-        <div><div className="fsec-title">{title}</div>{sub && <div className="fsec-sub">{sub}</div>}</div>
+        <div>
+          <div className="fsec-title">{title}</div>
+          {sub && <div className="fsec-sub">{sub}</div>}
+        </div>
       </div>
       {children}
     </div>
   );
 }
 
+// KEY CHANGE: Field adds `has-error` class when `err` is truthy — CSS drives the red border
 function Field({ label, req, opt, hint, err, children }) {
   return (
-    <div className="fg">
-      {label && <label className="fl">{label}{req && <span className="req"> ✶</span>}{opt && <span className="opt"> (optional)</span>}</label>}
+    <div className={`fg${err ? ' has-error' : ''}`}>
+      {label && (
+        <label className="fl">
+          {label}
+          {req && <span className="req"> ✶</span>}
+          {opt && <span className="opt"> (optional)</span>}
+        </label>
+      )}
       {children}
-      {hint && <div className="field-hint">{hint}</div>}
+      {/* Show hint only when no error; show error when present */}
+      {hint && !err && <div className="field-hint">{hint}</div>}
       {err  && <div className="field-err">{err}</div>}
     </div>
   );
@@ -482,7 +453,6 @@ function Field({ label, req, opt, hint, err, children }) {
 function Inp({ id, value, onChange, ...rest }) {
   return <input id={id} value={value} onChange={e => onChange(e.target.value)} {...rest} />;
 }
-
 function Sel({ id, value, onChange, options, children }) {
   return (
     <select id={id} value={value} onChange={e => onChange(e.target.value)}>
@@ -490,26 +460,18 @@ function Sel({ id, value, onChange, options, children }) {
     </select>
   );
 }
-
 function Txt({ id, value, onChange, rows = 3, ...rest }) {
   return <textarea id={id} value={value} rows={rows} onChange={e => onChange(e.target.value)} {...rest} />;
 }
-
 function SecLabel({ children }) {
   return <div className="sec-label">{children}</div>;
 }
-
-/** Whole-box-clickable check grid — used for Pujas, Facilities, Programs, Donations */
 function CheckGrid({ items, form, toggle, className = 'puja-grid', itemClass = 'puja-item', nameClass = 'puja-name' }) {
   return (
     <div className={className}>
       {items.map(({ key, label }) => (
-        <div
-          key={key}
-          className={`${itemClass}${form[key] ? ' on' : ''}`}
-          onClick={() => toggle(key)}
-        >
-          <input type="checkbox" checked={form[key]} onChange={() => {}} style={{ accentColor: 'var(--s2)', flexShrink: 0 }} />
+        <div key={key} className={`${itemClass}${form[key] ? ' on' : ''}`} onClick={() => toggle(key)}>
+          <input type="checkbox" checked={form[key]} onChange={() => {}} style={{ accentColor:'var(--s2)', flexShrink:0 }} />
           <span className={nameClass}>{label}</span>
         </div>
       ))}
@@ -519,25 +481,23 @@ function CheckGrid({ items, form, toggle, className = 'puja-grid', itemClass = '
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function AdminAddTemplePage() {
-  const [form, setForm]     = useState(initialForm());
-  const [step, setStep]     = useState(1);
-  const [errors, setErrors] = useState({});
-  const [priests, setPriests]         = useState([initPriest()]);
-  const [scheds, setScheds]           = useState([initSched(), initSched()]);
+  const [form, setForm]       = useState(initialForm());
+  const [step, setStep]       = useState(1);
+  const [errors, setErrors]   = useState({});
+  const [priests, setPriests] = useState([initPriest()]);
+  const [scheds, setScheds]   = useState([initSched(), initSched()]);
   const [pujaOfferings, setPujaOfferings] = useState([]);
-  const [mantras, setMantras]         = useState([initMantra()]);
-  const [festivals, setFestivs]       = useState([initFestival()]);
-  const [photos, setPhotos]           = useState(Array(6).fill(null));
-  const [consents, setConsents]       = useState([false,false,false,false,false]);
-  const [archStyles, setArchStyles]   = useState([]);
-  const [submitted, setSubmitted]     = useState(false);
-  const [qrId, setQrId]               = useState('');
+  const [mantras, setMantras] = useState([initMantra()]);
+  const [festivals, setFestivs] = useState([initFestival()]);
+  const [photos, setPhotos]   = useState(Array(6).fill(null));
+  const [consents, setConsents] = useState([false,false,false,false,false]);
+  const [archStyles, setArchStyles] = useState([]);
+  const [submitted, setSubmitted] = useState(false);
+  const [qrId, setQrId]       = useState('');
+  const [btnShake, setBtnShake] = useState(false);
 
-  // Custom designation (Page 1)
   const [showCustomDesignation, setShowCustomDesignation] = useState(false);
   const [customDesignationText, setCustomDesignationText] = useState('');
-
-  // Custom facility (Page 4)
   const [showCustomFacility, setShowCustomFacility] = useState(false);
   const [customFacilityText, setCustomFacilityText] = useState('');
 
@@ -545,41 +505,52 @@ export default function AdminAddTemplePage() {
 
   const set    = (k, v) => { setForm(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: undefined })); };
   const toggle = k       => setForm(p => ({ ...p, [k]: !p[k] }));
+  const toggleArchStyle = s => setArchStyles(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
 
-  // Architecture style multi-select
-  const toggleArchStyle = (s) =>
-    setArchStyles(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
-
-  // Managing authority helpers
   const isCustomAuthority = form.managing_authority === '__custom__';
   const effectiveAuthority = isCustomAuthority ? form.managing_authority_custom : form.managing_authority;
-
-  // Election cycle helpers
   const isCustomCycle = form.election_cycle === '__custom__';
   const effectiveCycle = isCustomCycle ? form.election_cycle_custom : form.election_cycle;
 
-  // ── Validation ──────────────────────────────────────────────────────────────
+  // ── Validation — enforces required fields and blocks navigation ─────────────
   function validate(s) {
     const e = {};
+
     if (s === 1) {
-      if (!form.name.trim())          e.name = 'Temple name is required';
+      if (!form.name.trim())          e.name          = 'Temple name is required';
       if (!form.primary_deity.trim()) e.primary_deity = 'Primary deity is required';
     }
+
     if (s === 2) {
       if (!form.address.trim()) e.address = 'Address is required';
       if (!form.city.trim())    e.city    = 'City is required';
       if (!form.state)          e.state   = 'State is required';
-      if (form.latitude  && isNaN(parseFloat(form.latitude)))  e.latitude  = 'Invalid latitude';
-      if (form.longitude && isNaN(parseFloat(form.longitude))) e.longitude = 'Invalid longitude';
+      if (form.latitude  && isNaN(parseFloat(form.latitude)))  e.latitude  = 'Invalid latitude value';
+      if (form.longitude && isNaN(parseFloat(form.longitude))) e.longitude = 'Invalid longitude value';
     }
+
+    if (s === 9) {
+      if (!form.submitter_name.trim()) e.submitter_name = 'Your name is required to submit';
+    }
+
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
+  // Shake the button and scroll to the first error field
+  function triggerErrorFeedback() {
+    setBtnShake(true);
+    setTimeout(() => setBtnShake(false), 450);
+    setTimeout(() => {
+      const firstErr = document.querySelector('.fg.has-error');
+      if (firstErr) firstErr.scrollIntoView({ behavior:'smooth', block:'center' });
+    }, 60);
+  }
+
   function nextStep(from) {
-    if (!validate(from)) return;
+    if (!validate(from)) { triggerErrorFeedback(); return; }
     setStep(from + 1);
-    setTimeout(() => progressRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    setTimeout(() => progressRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 50);
   }
   function prevStep(from) { setStep(from - 1); }
   function goStep(n) { if (n <= step) setStep(n); }
@@ -593,18 +564,18 @@ export default function AdminAddTemplePage() {
   }
   function removePhoto(idx) { setPhotos(prev => { const a=[...prev]; a[idx]=null; return a; }); }
 
-  // ── Priests ─────────────────────────────────────────────────────────────────
+  // ── Priests ──────────────────────────────────────────────────────────────────
   const addPriest    = () => setPriests(p => [...p, initPriest()]);
   const removePriest = id => setPriests(p => p.filter(x => x.id !== id));
-  const setPriest    = (id, k, v) => setPriests(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+  const setPriest    = (id,k,v) => setPriests(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
 
   // ── Schedule ─────────────────────────────────────────────────────────────────
-  const addSched  = () => setScheds(p => [...p, initSched()]);
-  const delSched  = id => setScheds(p => p.length > 1 ? p.filter(x=>x.id!==id) : p);
-  const setSched  = (id,k,v) => setScheds(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+  const addSched = () => setScheds(p => [...p, initSched()]);
+  const delSched = id => setScheds(p => p.length > 1 ? p.filter(x=>x.id!==id) : p);
+  const setSched = (id,k,v) => setScheds(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
 
-  // ── Custom Puja Offerings ────────────────────────────────────────────────────
-  const addOffering = () => setPujaOfferings(p => [...p, initPujaOffering()]);
+  // ── Puja Offerings ───────────────────────────────────────────────────────────
+  const addOffering = () => setPujaOfferings(p => [...p, initOffering()]);
   const delOffering = id => setPujaOfferings(p => p.filter(x=>x.id!==id));
   const setOffering = (id,k,v) => setPujaOfferings(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
 
@@ -623,7 +594,8 @@ export default function AdminAddTemplePage() {
 
   // ── Submit ────────────────────────────────────────────────────────────────────
   async function submitForm() {
-    if (!consents.every(Boolean)) return;
+    if (!validate(9)) { triggerErrorFeedback(); return; }
+    if (!allConsents) return;
     const fd = new FormData();
     fd.append('name', form.name);
     fd.append('city', form.city);
@@ -635,65 +607,51 @@ export default function AdminAddTemplePage() {
     if (archStyles.length)  fd.append('architecture_style', archStyles.join(', '));
     if (customDesignationText) fd.append('custom_designation', customDesignationText);
     if (customFacilityText)    fd.append('custom_facility', customFacilityText);
-
     const strFields = [
-      'name_hindi','name_local','temple_type','sect',
-      'trust_name','trust_registration_no','primary_deity','secondary_deities',
-      'address','district','pincode','setting_environment','google_maps_link',
-      'nearest_railway','nearest_airport','nearest_bus_stand','local_landmark',
+      'name_hindi','name_local','temple_type','sect','trust_name','trust_registration_no',
+      'primary_deity','secondary_deities','address','district','pincode','setting_environment',
+      'google_maps_link','nearest_railway','nearest_airport','nearest_bus_stand','local_landmark',
       'history','history_hindi','sthala_purana','significance','puranic_stories',
       'estimated_year_built','founded_by','last_renovation_year','building_condition',
       'opening_time','closing_time','afternoon_closure_start','afternoon_closure_end',
-      'weekly_special_day','online_puja_available','live_darshan_available',
-      'live_stream_url','prasad_type','dress_code','best_time_to_visit',
-      'phone','whatsapp_number','official_email','website_url','facebook_page',
-      'youtube_channel','instagram_handle','best_time_to_call',
-      'video_aarti_url','video_intro_url','video_360_url',
-      'upi_id','certificate_80g_no','bank_account_name','bank_name_branch',
-      'bank_account_number','bank_ifsc','hero_image_url',
+      'weekly_special_day','online_puja_available','live_darshan_available','live_stream_url',
+      'prasad_type','dress_code','best_time_to_visit','phone','whatsapp_number','official_email',
+      'website_url','facebook_page','youtube_channel','instagram_handle','best_time_to_call',
+      'video_aarti_url','video_intro_url','video_360_url','upi_id','certificate_80g_no',
+      'bank_account_name','bank_name_branch','bank_account_number','bank_ifsc','hero_image_url',
     ];
     strFields.forEach(k => { if (form[k]) fd.append(k, form[k]); });
     if (form.latitude)  fd.append('latitude',  form.latitude);
     if (form.longitude) fd.append('longitude', form.longitude);
     if (form.entry_fee) fd.append('entry_fee', form.entry_fee);
-
     const boolFields = [
-      ...DESIGNATIONS.map(d => d.key), ...PUJAS.map(p => p.key),
-      ...FACILITIES.map(f => f.key),   ...PROGRAMS.map(p => p.key),
-      ...DONATION_CATS.map(d => d.key), 'accept_online_donations',
+      ...DESIGNATIONS.map(d=>d.key),...PUJAS.map(p=>p.key),
+      ...FACILITIES.map(f=>f.key),...PROGRAMS.map(p=>p.key),
+      ...DONATION_CATS.map(d=>d.key),'accept_online_donations',
     ];
     boolFields.forEach(k => fd.append(k, form[k] ? 'true' : 'false'));
-
     try {
       const res = await adminAPI.createTemple(fd);
       setQrId(res.data.mkt_id);
       setSubmitted(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top:0, behavior:'smooth' });
     } catch (err) {
-      const msg = err.response?.data?.detail || err.message || 'Failed to save temple';
-      alert('Error saving temple: ' + msg);
+      alert('Error saving temple: ' + (err.response?.data?.detail || err.message || 'Unknown error'));
     }
   }
 
   const summaryItems = [
-    ['Temple Name',    form.name || '—'],
-    ['Name (Hindi)',   form.name_hindi || '—'],
-    ['City',          form.city || '—'],
-    ['State',         form.state || '—'],
-    ['Primary Deity', form.primary_deity || '—'],
-    ['Temple Type',   form.temple_type || '—'],
-    ['Sect',          form.sect || '—'],
-    ['Managing Auth', effectiveAuthority || '—'],
-    ['Architecture',  archStyles.join(', ') || '—'],
-    ['GPS',           form.latitude ? `${form.latitude}, ${form.longitude}` : '—'],
-    ['Status',        form.status || '—'],
-    ['Online Puja',   form.online_puja_available],
-    ['Live Darshan',  form.live_darshan_available],
-    ['Weekly Special',form.weekly_special_day || '—'],
-    ['Opening Time',  form.opening_time ? to12h(form.opening_time) : '—'],
-    ['Entry Fee',     form.entry_fee ? `₹${form.entry_fee}` : '—'],
-    ['Donations',     form.accept_online_donations ? 'Yes' : 'No'],
-    ['Source',        form.source || '—'],
+    ['Temple Name', form.name||'—'], ['Name (Hindi)', form.name_hindi||'—'],
+    ['City', form.city||'—'], ['State', form.state||'—'],
+    ['Primary Deity', form.primary_deity||'—'], ['Temple Type', form.temple_type||'—'],
+    ['Sect', form.sect||'—'], ['Managing Auth', effectiveAuthority||'—'],
+    ['Architecture', archStyles.join(', ')||'—'],
+    ['GPS', form.latitude ? `${form.latitude}, ${form.longitude}` : '—'],
+    ['Status', form.status||'—'], ['Online Puja', form.online_puja_available],
+    ['Live Darshan', form.live_darshan_available], ['Weekly Special', form.weekly_special_day||'—'],
+    ['Opening Time', form.opening_time ? to12h(form.opening_time) : '—'],
+    ['Entry Fee', form.entry_fee ? `₹${form.entry_fee}` : '—'],
+    ['Donations', form.accept_online_donations ? 'Yes' : 'No'], ['Source', form.source||'—'],
   ];
 
   // ── RENDER ────────────────────────────────────────────────────────────────────
@@ -702,12 +660,9 @@ export default function AdminAddTemplePage() {
       <style>{css}</style>
       <Navbar />
 
-      {/* ── HERO ── */}
       <div className="hero">
         <div className="hero-bg">
-          {['🛕','🪔','✨','🔱','🌸'].map((e, i) => (
-            <div key={i} className="hero-float">{e}</div>
-          ))}
+          {['🛕','🪔','✨','🔱','🌸'].map((e,i) => <div key={i} className="hero-float">{e}</div>)}
         </div>
         <div className="hero-inner">
           <div className="hero-chip">⚙️ ADMIN PANEL</div>
@@ -716,18 +671,17 @@ export default function AdminAddTemplePage() {
         </div>
       </div>
 
-      {/* ── STEP PROGRESS ── */}
       <div className="progress-wrap" ref={progressRef}>
         <div className="progress">
           {STEP_LABELS.map((label, i) => {
             const n = i + 1;
-            const cls = `step-btn${step === n ? ' active' : step > n ? ' done' : ''}`;
+            const cls = `step-btn${step===n?' active':step>n?' done':''}`;
             return (
               <Fragment key={n}>
                 {i > 0 && <div className="step-div" />}
                 <div className="step">
                   <button className={cls} onClick={() => goStep(n)}>
-                    <span className="step-num">{step > n ? '✓' : n}</span>
+                    <span className="step-num">{step>n ? '✓' : n}</span>
                     {label}
                   </button>
                 </div>
@@ -739,7 +693,6 @@ export default function AdminAddTemplePage() {
 
       <div className="page">
         {submitted ? (
-          /* ── SUCCESS ── */
           <div className="success-page">
             <div className="success-icon">🕉️</div>
             <div className="success-title">Jai Shri Ram! Temple Added!</div>
@@ -750,21 +703,17 @@ export default function AdminAddTemplePage() {
               <div className="qr-note">System QR ID (final code after verification)</div>
             </div>
             <div className="success-steps">
-              {[['24h','Admin team reviews and verifies'],['QR','Unique QR code generated and sent'],['🔴','Temple profile goes live'],['💰','Donations & bookings enabled']].map(([n,t])=>(
+              {[['24h','Admin team reviews and verifies'],['QR','Unique QR code generated and sent'],['🔴','Temple profile goes live'],['💰','Donations & bookings enabled']].map(([n,t]) => (
                 <div key={n} className="ss-item"><div className="ss-num">{n}</div><div className="ss-text">{t}</div></div>
               ))}
             </div>
-            <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' }}>
-              <button className="btn-home" onClick={() => { setSubmitted(false); setForm(initialForm()); setStep(1); setArchStyles([]); setPujaOfferings([]); }}>
-                + Add Another Temple
-              </button>
-            </div>
+            <button className="btn-home" onClick={() => { setSubmitted(false); setForm(initialForm()); setStep(1); setArchStyles([]); setPujaOfferings([]); }}>
+              + Add Another Temple
+            </button>
           </div>
         ) : (
           <>
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 1 — TEMPLE IDENTITY
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 1 — TEMPLE IDENTITY ══ */}
             {step === 1 && (
               <div className="form-section">
                 <SectionCard icon="🏛️" title="Temple Identity" sub="Core identification information">
@@ -796,14 +745,8 @@ export default function AdminAddTemplePage() {
                     <Field label="Sect / Tradition">
                       <Sel id="sect" value={form.sect} onChange={v=>set('sect',v)} options={SECTS} />
                     </Field>
-
-                    {/* ── Managing Authority with Custom ── */}
                     <Field label="Managing Authority">
-                      <Sel
-                        id="managing_authority"
-                        value={form.managing_authority}
-                        onChange={v => set('managing_authority', v)}
-                      >
+                      <Sel id="managing_authority" value={form.managing_authority} onChange={v=>set('managing_authority',v)}>
                         <option value="">Select</option>
                         <option value="Private / Family Trust">Private / Family Trust</option>
                         <option value="Community / Village Trust">Community / Village Trust</option>
@@ -813,12 +756,7 @@ export default function AdminAddTemplePage() {
                       </Sel>
                       {isCustomAuthority && (
                         <div className="custom-input-row">
-                          <Inp
-                            type="text"
-                            value={form.managing_authority_custom}
-                            onChange={v => set('managing_authority_custom', v)}
-                            placeholder="Enter custom managing authority…"
-                          />
+                          <Inp type="text" value={form.managing_authority_custom} onChange={v=>set('managing_authority_custom',v)} placeholder="Enter custom managing authority…" />
                         </div>
                       )}
                     </Field>
@@ -844,49 +782,31 @@ export default function AdminAddTemplePage() {
                   </div>
                 </SectionCard>
 
-                {/* ── Special Designations with Custom chip ── */}
                 <SectionCard icon="⭐" title="Special Designations" sub="Sacred classifications this temple belongs to">
                   <div className="chip-group">
                     {DESIGNATIONS.map(({ key, label }) => (
-                      <span
-                        key={key}
-                        className={`chip${form[key] ? ' on' : ''}`}
-                        onClick={() => toggle(key)}
-                      >
-                        {label}
-                      </span>
+                      <span key={key} className={`chip${form[key]?' on':''}`} onClick={() => toggle(key)}>{label}</span>
                     ))}
-                    {/* Custom designation toggle chip */}
-                    <span
-                      className={`chip${showCustomDesignation ? ' on' : ''}`}
-                      onClick={() => setShowCustomDesignation(p => !p)}
-                    >
-                      ✏️ Custom…
-                    </span>
+                    <span className={`chip${showCustomDesignation?' on':''}`} onClick={() => setShowCustomDesignation(p=>!p)}>✏️ Custom…</span>
                   </div>
                   {showCustomDesignation && (
-                    <div className="custom-input-row" style={{ marginTop: 12 }}>
-                      <Inp
-                        type="text"
-                        value={customDesignationText}
-                        onChange={setCustomDesignationText}
-                        placeholder="Enter custom designation (e.g. Pancha Dravida Peeth)…"
-                      />
+                    <div className="custom-input-row" style={{ marginTop:12 }}>
+                      <Inp type="text" value={customDesignationText} onChange={setCustomDesignationText} placeholder="Enter custom designation…" />
                     </div>
                   )}
                 </SectionCard>
 
                 <SectionCard icon="🏷️" title="Category Tags & External IDs" sub="For discovery and data linking">
-                  <Field label="Category Tags" opt hint="Separate tags with | (pipe). Used for filtering and discovery.">
+                  <Field label="Category Tags" opt hint="Separate tags with | (pipe).">
                     <Inp id="category_tags" type="text" value={form.category_tags} onChange={v=>set('category_tags',v)} placeholder="e.g. ancient|riverside|pilgrimage|shiva" />
                   </Field>
                   <div className="fg-3">
-                    <Field label="Google Place ID" opt><Inp id="google_place_id" type="text" value={form.google_place_id} onChange={v=>set('google_place_id',v)} placeholder="ChIJ..." /></Field>
-                    <Field label="Wikidata ID" opt><Inp id="wikidata_id" type="text" value={form.wikidata_id} onChange={v=>set('wikidata_id',v)} placeholder="Q12345" /></Field>
-                    <Field label="OSM ID" opt><Inp id="osm_id" type="text" value={form.osm_id} onChange={v=>set('osm_id',v)} placeholder="node/12345678" /></Field>
+                    <Field label="Google Place ID" opt><Inp type="text" value={form.google_place_id} onChange={v=>set('google_place_id',v)} placeholder="ChIJ..." /></Field>
+                    <Field label="Wikidata ID" opt><Inp type="text" value={form.wikidata_id} onChange={v=>set('wikidata_id',v)} placeholder="Q12345" /></Field>
+                    <Field label="OSM ID" opt><Inp type="text" value={form.osm_id} onChange={v=>set('osm_id',v)} placeholder="node/12345678" /></Field>
                   </div>
                   <Field label="Wikipedia URL" opt>
-                    <Inp id="wikipedia_url" type="url" value={form.wikipedia_url} onChange={v=>set('wikipedia_url',v)} placeholder="https://en.wikipedia.org/wiki/..." />
+                    <Inp type="url" value={form.wikipedia_url} onChange={v=>set('wikipedia_url',v)} placeholder="https://en.wikipedia.org/wiki/..." />
                   </Field>
                   <div className="fg-2">
                     <Field label="Status">
@@ -904,14 +824,12 @@ export default function AdminAddTemplePage() {
 
                 <div className="form-nav">
                   <div className="step-indicator">Step 1 of 9</div>
-                  <button className="btn-next" onClick={() => nextStep(1)}>Next: Location →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={() => nextStep(1)}>Next: Location →</button>
                 </div>
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 2 — LOCATION
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 2 — LOCATION ══ */}
             {step === 2 && (
               <div className="form-section">
                 <SectionCard icon="📍" title="Address & Location" sub="Physical location for maps and pilgrims">
@@ -923,10 +841,10 @@ export default function AdminAddTemplePage() {
                       <Inp id="city" type="text" value={form.city} onChange={v=>set('city',v)} placeholder="e.g. Ujjain" />
                     </Field>
                     <Field label="District">
-                      <Inp id="district" type="text" value={form.district} onChange={v=>set('district',v)} placeholder="e.g. Ujjain" />
+                      <Inp type="text" value={form.district} onChange={v=>set('district',v)} placeholder="e.g. Ujjain" />
                     </Field>
                     <Field label="PIN Code">
-                      <Inp id="pincode" type="text" value={form.pincode} onChange={v=>set('pincode',v)} placeholder="e.g. 456010" maxLength={6} />
+                      <Inp type="text" value={form.pincode} onChange={v=>set('pincode',v)} placeholder="e.g. 456010" maxLength={6} />
                     </Field>
                   </div>
                   <div className="fg-2">
@@ -937,19 +855,19 @@ export default function AdminAddTemplePage() {
                       </Sel>
                     </Field>
                     <Field label="Setting / Environment">
-                      <Sel id="setting_environment" value={form.setting_environment} onChange={v=>set('setting_environment',v)} options={SETTINGS} />
+                      <Sel value={form.setting_environment} onChange={v=>set('setting_environment',v)} options={SETTINGS} />
                     </Field>
                   </div>
                   <div className="fg-2">
                     <Field label="GPS Latitude" err={errors.latitude} hint="💡 Google Maps → Long press on temple → copy coordinates">
-                      <Inp id="latitude" type="number" step="any" value={form.latitude} onChange={v=>set('latitude',v)} placeholder="e.g. 23.1828" />
+                      <Inp type="number" step="any" value={form.latitude} onChange={v=>set('latitude',v)} placeholder="e.g. 23.1828" />
                     </Field>
                     <Field label="GPS Longitude" err={errors.longitude}>
-                      <Inp id="longitude" type="number" step="any" value={form.longitude} onChange={v=>set('longitude',v)} placeholder="e.g. 75.7682" />
+                      <Inp type="number" step="any" value={form.longitude} onChange={v=>set('longitude',v)} placeholder="e.g. 75.7682" />
                     </Field>
                   </div>
                   <Field label="Google Maps Link" opt>
-                    <Inp id="google_maps_link" type="url" value={form.google_maps_link} onChange={v=>set('google_maps_link',v)} placeholder="https://maps.google.com/..." />
+                    <Inp type="url" value={form.google_maps_link} onChange={v=>set('google_maps_link',v)} placeholder="https://maps.google.com/..." />
                   </Field>
                   <div className="fg-3">
                     <Field label="Nearest Railway Station">
@@ -969,57 +887,44 @@ export default function AdminAddTemplePage() {
                 <div className="form-nav">
                   <button className="btn-back" onClick={() => prevStep(2)}>← Back</button>
                   <div className="step-indicator">Step 2 of 9</div>
-                  <button className="btn-next" onClick={() => nextStep(2)}>Next: History →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={() => nextStep(2)}>Next: History →</button>
                 </div>
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 3 — HISTORY & ARCHITECTURE
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 3 — HISTORY ══ */}
             {step === 3 && (
               <div className="form-section">
                 <SectionCard icon="📜" title="History & Significance" sub="Cultural and religious background">
                   <SecLabel>History</SecLabel>
                   <Field label="History (English)">
-                    <Txt id="history" value={form.history} onChange={v=>set('history',v)} rows={4} placeholder="Brief history of the temple — founding, major events, renovations…" />
+                    <Txt value={form.history} onChange={v=>set('history',v)} rows={4} placeholder="Brief history of the temple…" />
                   </Field>
                   <Field label="History (Hindi)" opt>
-                    <Txt id="history_hindi" value={form.history_hindi} onChange={v=>set('history_hindi',v)} rows={3} placeholder="इस मंदिर का इतिहास हिंदी में लिखें…" />
+                    <Txt value={form.history_hindi} onChange={v=>set('history_hindi',v)} rows={3} placeholder="इस मंदिर का इतिहास हिंदी में लिखें…" />
                   </Field>
                   <SecLabel>Spiritual Context</SecLabel>
                   <Field label="Sthala Purana" opt>
-                    <Txt id="sthala_purana" value={form.sthala_purana} onChange={v=>set('sthala_purana',v)} rows={3} placeholder="The divine legend or story associated with this sacred place…" />
+                    <Txt value={form.sthala_purana} onChange={v=>set('sthala_purana',v)} rows={3} placeholder="The divine legend or story associated with this sacred place…" />
                   </Field>
                   <Field label="Significance">
-                    <Txt id="significance" value={form.significance} onChange={v=>set('significance',v)} rows={3} placeholder="Why is this temple important?" />
+                    <Txt value={form.significance} onChange={v=>set('significance',v)} rows={3} placeholder="Why is this temple important?" />
                   </Field>
                   <Field label="Puranic Stories" opt>
-                    <Txt id="puranic_stories" value={form.puranic_stories} onChange={v=>set('puranic_stories',v)} rows={3} placeholder="Relevant stories from the Puranas or scriptures…" />
+                    <Txt value={form.puranic_stories} onChange={v=>set('puranic_stories',v)} rows={3} placeholder="Relevant stories from the Puranas or scriptures…" />
                   </Field>
-
-                  {/* ── Architecture Style — MULTI SELECT ── */}
                   <SecLabel>Architecture & Construction</SecLabel>
                   <Field label="Architecture Style" hint="Click to select — multiple styles can be chosen">
-                    <div className="chip-group" style={{ marginTop: 4 }}>
+                    <div className="chip-group" style={{ marginTop:4 }}>
                       {ARCH_STYLES.map(s => (
-                        <span
-                          key={s}
-                          className={`arch-chip${archStyles.includes(s) ? ' on' : ''}`}
-                          onClick={() => toggleArchStyle(s)}
-                        >
-                          {archStyles.includes(s) ? '✓ ' : ''}{s}
+                        <span key={s} className={`arch-chip${archStyles.includes(s)?' on':''}`} onClick={() => toggleArchStyle(s)}>
+                          {archStyles.includes(s)?'✓ ':''}{s}
                         </span>
                       ))}
                     </div>
-                    {archStyles.length > 0 && (
-                      <div className="field-hint" style={{ marginTop: 8 }}>
-                        ✅ Selected: {archStyles.join(' · ')}
-                      </div>
-                    )}
+                    {archStyles.length > 0 && <div className="field-hint" style={{ marginTop:8 }}>✅ Selected: {archStyles.join(' · ')}</div>}
                   </Field>
-
-                  <div className="fg-3" style={{ marginTop: 14 }}>
+                  <div className="fg-3" style={{ marginTop:14 }}>
                     <Field label="Estimated Year Built">
                       <Inp type="text" value={form.estimated_year_built} onChange={v=>set('estimated_year_built',v)} placeholder="e.g. 7th century, 1234 AD" />
                     </Field>
@@ -1037,72 +942,40 @@ export default function AdminAddTemplePage() {
                 <div className="form-nav">
                   <button className="btn-back" onClick={() => prevStep(3)}>← Back</button>
                   <div className="step-indicator">Step 3 of 9</div>
-                  <button className="btn-next" onClick={() => nextStep(3)}>Next: Visit Info →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={() => nextStep(3)}>Next: Visit Info →</button>
                 </div>
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 4 — VISIT INFO (Timings, Pujas, Facilities)
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 4 — VISIT INFO ══ */}
             {step === 4 && (
               <div className="form-section">
-                {/* ── Timings ── */}
                 <SectionCard icon="🕐" title="Timings & Entry" sub="When and how pilgrims can visit">
                   <div className="info-banner">
                     <span>🕐</span>
-                    <span>Enter times in <strong>AM / PM format</strong> — e.g. <strong>5:30 AM</strong>, <strong>9:00 PM</strong>. Type the time and the field will auto-format on exit.</span>
+                    <span>Enter times in <strong>AM / PM format</strong> — e.g. <strong>5:30 AM</strong>, <strong>9:00 PM</strong>.</span>
                   </div>
-
-                  {/* Opening & Closing */}
-                  <div className="fg-2" style={{ marginBottom: 14 }}>
+                  <div className="fg-2" style={{ marginBottom:14 }}>
                     <Field label="Opening Time" hint="e.g. 5:30 AM">
-                      <TimeInput
-                        value={form.opening_time}
-                        onChange={v => set('opening_time', v)}
-                        placeholder="5:30 AM"
-                      />
-                      {form.opening_time && (
-                        <div className="time-badge">🕐 {to12h(form.opening_time)}</div>
-                      )}
+                      <TimeInput value={form.opening_time} onChange={v=>set('opening_time',v)} placeholder="5:30 AM" />
+                      {form.opening_time && <div className="time-badge">🕐 {to12h(form.opening_time)}</div>}
                     </Field>
                     <Field label="Closing Time" hint="e.g. 9:00 PM">
-                      <TimeInput
-                        value={form.closing_time}
-                        onChange={v => set('closing_time', v)}
-                        placeholder="9:00 PM"
-                      />
-                      {form.closing_time && (
-                        <div className="time-badge">🕐 {to12h(form.closing_time)}</div>
-                      )}
+                      <TimeInput value={form.closing_time} onChange={v=>set('closing_time',v)} placeholder="9:00 PM" />
+                      {form.closing_time && <div className="time-badge">🕐 {to12h(form.closing_time)}</div>}
                     </Field>
                   </div>
-
-                  {/* Afternoon Closure */}
                   <SecLabel>Afternoon Closure (optional)</SecLabel>
-                  <div className="fg-2" style={{ marginBottom: 14 }}>
+                  <div className="fg-2" style={{ marginBottom:14 }}>
                     <Field label="Closure Start" hint="e.g. 12:00 PM" opt>
-                      <TimeInput
-                        value={form.afternoon_closure_start}
-                        onChange={v => set('afternoon_closure_start', v)}
-                        placeholder="12:00 PM"
-                      />
-                      {form.afternoon_closure_start && (
-                        <div className="time-badge">🕐 {to12h(form.afternoon_closure_start)}</div>
-                      )}
+                      <TimeInput value={form.afternoon_closure_start} onChange={v=>set('afternoon_closure_start',v)} placeholder="12:00 PM" />
+                      {form.afternoon_closure_start && <div className="time-badge">🕐 {to12h(form.afternoon_closure_start)}</div>}
                     </Field>
                     <Field label="Closure End" hint="e.g. 4:00 PM" opt>
-                      <TimeInput
-                        value={form.afternoon_closure_end}
-                        onChange={v => set('afternoon_closure_end', v)}
-                        placeholder="4:00 PM"
-                      />
-                      {form.afternoon_closure_end && (
-                        <div className="time-badge">🕐 {to12h(form.afternoon_closure_end)}</div>
-                      )}
+                      <TimeInput value={form.afternoon_closure_end} onChange={v=>set('afternoon_closure_end',v)} placeholder="4:00 PM" />
+                      {form.afternoon_closure_end && <div className="time-badge">🕐 {to12h(form.afternoon_closure_end)}</div>}
                     </Field>
                   </div>
-
                   <div className="fg-3">
                     <Field label="Entry Fee (₹)">
                       <Inp type="number" min={0} step={0.5} value={form.entry_fee} onChange={v=>set('entry_fee',v)} placeholder="0 = Free" />
@@ -1122,7 +995,6 @@ export default function AdminAddTemplePage() {
                   </Field>
                 </SectionCard>
 
-                {/* ── Contact & Social ── */}
                 <SectionCard icon="📞" title="Contact & Social Media" sub="How pilgrims and devotees can reach the temple">
                   <div className="fg-2">
                     <Field label="Temple Phone"><Inp type="tel" value={form.phone} onChange={v=>set('phone',v)} placeholder="+91 XXXXX XXXXX" /></Field>
@@ -1143,62 +1015,25 @@ export default function AdminAddTemplePage() {
                   </div>
                 </SectionCard>
 
-                {/* ── Puja Offerings — checkbox grid + custom timing builder ── */}
-                <SectionCard icon="🙏" title="Puja Offerings Available" sub="Select offered pujas, then optionally set timings for each">
-                  {/* Whole-box clickable grid */}
-                  <CheckGrid
-                    items={PUJAS}
-                    form={form}
-                    toggle={toggle}
-                    className="puja-grid"
-                    itemClass="puja-item"
-                    nameClass="puja-name"
-                  />
-
-                  {/* Custom puja timings builder */}
-                  <div style={{ marginTop: 22 }}>
+                <SectionCard icon="🙏" title="Puja Offerings Available" sub="Select offered pujas, then optionally set timings">
+                  <CheckGrid items={PUJAS} form={form} toggle={toggle} />
+                  <div style={{ marginTop:22 }}>
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                      <div>
-                        <span style={{ fontFamily:'var(--ff-h)', fontSize:13, color:'var(--inkm)', fontWeight:600 }}>
-                          Custom Puja Timings
-                        </span>
-                        <span style={{ fontFamily:'var(--ff-u)', fontWeight:400, fontSize:11, color:'var(--inkll)', marginLeft:8 }}>
-                          (optional — set AM/PM timings for specific pujas)
-                        </span>
-                      </div>
-                      <button className="add-btn" style={{ margin:0 }} onClick={addOffering}>
-                        + Add Puja Timing
-                      </button>
+                      <span style={{ fontFamily:'var(--ff-h)', fontSize:13, color:'var(--inkm)', fontWeight:600 }}>Custom Puja Timings <span style={{ fontWeight:400, fontSize:11, color:'var(--inkll)' }}>(optional)</span></span>
+                      <button className="add-btn" style={{ margin:0 }} onClick={addOffering}>+ Add Puja Timing</button>
                     </div>
-
-                    {pujaOfferings.length > 0 && (
+                    {pujaOfferings.length > 0 ? (
                       <div className="offering-builder">
-                        <div className="offering-hdr">
-                          <span>Puja / Seva Name</span>
-                          <span>Timing (e.g. 6:00 AM)</span>
-                          <span></span>
-                        </div>
+                        <div className="offering-hdr"><span>Puja / Seva Name</span><span>Timing (e.g. 6:00 AM)</span><span></span></div>
                         {pujaOfferings.map(o => (
                           <div className="offering-row" key={o.id}>
-                            <input
-                              type="text"
-                              value={o.name}
-                              onChange={e => setOffering(o.id, 'name', e.target.value)}
-                              placeholder="e.g. Rudrabhishek"
-                            />
-                            <input
-                              type="text"
-                              value={o.timing}
-                              onChange={e => setOffering(o.id, 'timing', e.target.value)}
-                              placeholder="e.g. 6:00 AM"
-                            />
-                            <button className="sched-del" onClick={() => delOffering(o.id)} title="Remove">×</button>
+                            <input type="text" value={o.name} onChange={e=>setOffering(o.id,'name',e.target.value)} placeholder="e.g. Rudrabhishek" />
+                            <input type="text" value={o.timing} onChange={e=>setOffering(o.id,'timing',e.target.value)} placeholder="e.g. 6:00 AM" />
+                            <button className="sched-del" onClick={()=>delOffering(o.id)}>×</button>
                           </div>
                         ))}
                       </div>
-                    )}
-
-                    {pujaOfferings.length === 0 && (
+                    ) : (
                       <div style={{ padding:'12px 14px', background:'var(--parch)', borderRadius:9, border:'1px dashed var(--bd1)', fontSize:12, color:'var(--inkll)', textAlign:'center' }}>
                         Click "+ Add Puja Timing" to specify timings for individual pujas
                       </div>
@@ -1206,80 +1041,46 @@ export default function AdminAddTemplePage() {
                   </div>
                 </SectionCard>
 
-                {/* ── Facilities — whole box clickable + custom option ── */}
-                <SectionCard icon="✅" title="Facilities Available" sub="Infrastructure and amenities — click anywhere on the box to toggle">
-                  <CheckGrid
-                    items={FACILITIES}
-                    form={form}
-                    toggle={toggle}
-                    className="fac-grid"
-                    itemClass="fac-item"
-                    nameClass="fac-name"
-                  />
-
-                  {/* Custom facility — whole box clickable */}
-                  <div style={{ marginTop: 10 }}>
-                    <div
-                      className={`fac-item${showCustomFacility ? ' on' : ''}`}
-                      style={{ display:'inline-flex', cursor:'pointer', minWidth:200, marginBottom: showCustomFacility ? 0 : 0 }}
-                      onClick={() => setShowCustomFacility(p => !p)}
-                    >
-                      <input type="checkbox" checked={showCustomFacility} onChange={() => {}} style={{ accentColor:'var(--s2)', flexShrink:0 }} />
+                <SectionCard icon="✅" title="Facilities Available" sub="Click anywhere on a box to toggle">
+                  <CheckGrid items={FACILITIES} form={form} toggle={toggle} className="fac-grid" itemClass="fac-item" nameClass="fac-name" />
+                  <div style={{ marginTop:10 }}>
+                    <div className={`fac-item${showCustomFacility?' on':''}`} style={{ display:'inline-flex', cursor:'pointer', minWidth:200 }} onClick={()=>setShowCustomFacility(p=>!p)}>
+                      <input type="checkbox" checked={showCustomFacility} onChange={()=>{}} style={{ accentColor:'var(--s2)', flexShrink:0 }} />
                       <span className="fac-name">✏️ Other / Custom Facility</span>
                     </div>
                     {showCustomFacility && (
                       <div className="custom-input-row">
-                        <Inp
-                          type="text"
-                          value={customFacilityText}
-                          onChange={setCustomFacilityText}
-                          placeholder="Describe the custom facility (e.g. Helicopter pad, Annadanam Hall)…"
-                        />
+                        <Inp type="text" value={customFacilityText} onChange={setCustomFacilityText} placeholder="Describe the custom facility…" />
                       </div>
                     )}
                   </div>
-
-                  {/* Community Programs — whole box clickable */}
-                  <div style={{ marginTop: 24 }}>
+                  <div style={{ marginTop:24 }}>
                     <SecLabel>Community Programs</SecLabel>
-                    <CheckGrid
-                      items={PROGRAMS}
-                      form={form}
-                      toggle={toggle}
-                      className="fac-grid"
-                      itemClass="fac-item"
-                      nameClass="fac-name"
-                    />
+                    <CheckGrid items={PROGRAMS} form={form} toggle={toggle} className="fac-grid" itemClass="fac-item" nameClass="fac-name" />
                   </div>
                 </SectionCard>
 
                 <div className="form-nav">
-                  <button className="btn-back" onClick={() => prevStep(4)}>← Back</button>
+                  <button className="btn-back" onClick={()=>prevStep(4)}>← Back</button>
                   <div className="step-indicator">Step 4 of 9</div>
-                  <button className="btn-next" onClick={() => nextStep(4)}>Next: Digital & Seva →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={()=>nextStep(4)}>Next: Digital & Seva →</button>
                 </div>
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 5 — DIGITAL & SEVA
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 5 — DIGITAL & SEVA ══ */}
             {step === 5 && (
               <div className="form-section">
                 <SectionCard icon="📺" title="Digital & Live Services" sub="Online puja, live darshan and streaming">
                   <div className="fg-2">
                     <Field label="Online Puja Available">
                       <Sel value={form.online_puja_available} onChange={v=>set('online_puja_available',v)}>
-                        <option value="no">No</option>
-                        <option value="yes">Yes</option>
-                        <option value="soon">Coming Soon</option>
+                        <option value="no">No</option><option value="yes">Yes</option><option value="soon">Coming Soon</option>
                       </Sel>
                     </Field>
                     <Field label="Live Darshan Available">
                       <Sel value={form.live_darshan_available} onChange={v=>set('live_darshan_available',v)}>
-                        <option value="no">No</option>
-                        <option value="yes">Yes</option>
-                        <option value="planning">Planning</option>
+                        <option value="no">No</option><option value="yes">Yes</option><option value="planning">Planning</option>
                       </Sel>
                     </Field>
                   </div>
@@ -1287,12 +1088,11 @@ export default function AdminAddTemplePage() {
                     <Inp type="url" value={form.live_stream_url} onChange={v=>set('live_stream_url',v)} placeholder="https://youtube.com/live/..." />
                   </Field>
                 </SectionCard>
-
                 <SectionCard icon="🎬" title="Video Content" sub="Aarti, intro, and 360° videos">
                   {[
-                    { icon:'🪔', label:'Aarti Video URL',          key:'video_aarti_url', ph:'YouTube / Vimeo URL for Aarti video' },
+                    { icon:'🪔', label:'Aarti Video URL', key:'video_aarti_url', ph:'YouTube / Vimeo URL for Aarti video' },
                     { icon:'🎥', label:'Intro / Overview Video URL', key:'video_intro_url', ph:'YouTube / Vimeo URL for temple intro' },
-                    { icon:'🔄', label:'360° Tour Video URL',        key:'video_360_url',  ph:'YouTube 360° URL for virtual darshan' },
+                    { icon:'🔄', label:'360° Tour Video URL', key:'video_360_url', ph:'YouTube 360° URL for virtual darshan' },
                   ].map(({ icon, label, key, ph }) => (
                     <Field key={key} label={label} opt>
                       <div className="video-field">
@@ -1302,29 +1102,23 @@ export default function AdminAddTemplePage() {
                     </Field>
                   ))}
                 </SectionCard>
-
                 <div className="form-nav">
-                  <button className="btn-back" onClick={() => prevStep(5)}>← Back</button>
+                  <button className="btn-back" onClick={()=>prevStep(5)}>← Back</button>
                   <div className="step-indicator">Step 5 of 9</div>
-                  <button className="btn-next" onClick={() => nextStep(5)}>Next: Priests & Schedule →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={()=>nextStep(5)}>Next: Priests & Schedule →</button>
                 </div>
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 6 — PRIESTS & SCHEDULE
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 6 — PRIESTS & SCHEDULE ══ */}
             {step === 6 && (
               <div className="form-section">
-                {/* ── Priests ── */}
                 <SectionCard icon="👳" title="Temple Priests" sub="Priests serving at this temple">
                   {priests.map((p, idx) => (
                     <div className="priest-card" key={p.id}>
                       <div className="priest-card-hdr">
-                        <div className="priest-card-title">👳 Priest #{idx + 1}</div>
-                        {idx > 0 && (
-                          <button className="remove-priest" onClick={() => removePriest(p.id)}>× Remove</button>
-                        )}
+                        <div className="priest-card-title">👳 Priest #{idx+1}</div>
+                        {idx > 0 && <button className="remove-priest" onClick={()=>removePriest(p.id)}>× Remove</button>}
                       </div>
                       <div className="fg-3">
                         <Field label="Full Name" req>
@@ -1348,33 +1142,23 @@ export default function AdminAddTemplePage() {
                             {APPT_TYPES.map(a=><option key={a} value={a}>{a||'Select'}</option>)}
                           </select>
                         </Field>
-                        {/* ── Years Serving: 0–100 only, no negatives ── */}
                         <Field label="Years Serving" hint="Enter 0 – 100 years only">
-                          <Inp
-                            type="number"
-                            min={0}
-                            max={100}
-                            value={p.years}
+                          <Inp type="number" min={0} max={100} value={p.years}
                             onChange={v => {
-                              if (v === '') { setPriest(p.id, 'years', ''); return; }
-                              const n = parseInt(v, 10);
-                              if (!isNaN(n) && n >= 0 && n <= 100) setPriest(p.id, 'years', String(n));
+                              if (v==='') { setPriest(p.id,'years',''); return; }
+                              const n=parseInt(v,10);
+                              if (!isNaN(n)&&n>=0&&n<=100) setPriest(p.id,'years',String(n));
                             }}
                             onBlur={e => {
-                              const n = parseInt(e.target.value, 10);
-                              if (isNaN(n) || n < 0) setPriest(p.id, 'years', '0');
-                              else if (n > 100)       setPriest(p.id, 'years', '100');
+                              const n=parseInt(e.target.value,10);
+                              if (isNaN(n)||n<0) setPriest(p.id,'years','0');
+                              else if (n>100) setPriest(p.id,'years','100');
                             }}
                             placeholder="e.g. 15"
                           />
                         </Field>
                       </div>
-                      {/* Head Priest toggle — whole box clickable */}
-                      <div
-                        className={`fac-item${p.is_head ? ' on' : ''}`}
-                        style={{ display:'inline-flex', cursor:'pointer', minWidth:200 }}
-                        onClick={() => setPriest(p.id,'is_head',!p.is_head)}
-                      >
+                      <div className={`fac-item${p.is_head?' on':''}`} style={{ display:'inline-flex', cursor:'pointer', minWidth:200 }} onClick={()=>setPriest(p.id,'is_head',!p.is_head)}>
                         <input type="checkbox" checked={p.is_head} onChange={()=>{}} style={{ accentColor:'var(--s2)', marginRight:6 }} />
                         Head / Chief Priest
                       </div>
@@ -1383,45 +1167,27 @@ export default function AdminAddTemplePage() {
                   <button className="add-btn" onClick={addPriest}>+ Add Another Priest</button>
                 </SectionCard>
 
-                {/* ── Daily Puja Schedule — AM/PM time format ── */}
-                <SectionCard icon="⏰" title="Daily Puja Schedule" sub="Timings of regular pujas and aartis — enter in AM / PM format (e.g. 5:30 AM)">
+                <SectionCard icon="⏰" title="Daily Puja Schedule" sub="Timings of regular pujas and aartis">
                   <div className="info-banner" style={{ marginBottom:14 }}>
                     <span>🕐</span>
                     <span>Enter times in <strong>AM / PM format</strong> — e.g. <strong>5:30 AM</strong>, <strong>12:00 PM</strong>, <strong>7:30 PM</strong></span>
                   </div>
                   <div className="sched-builder">
-                    <div className="sched-hdr">
-                      <span>Puja / Aarti Name</span>
-                      <span>Time (AM / PM)</span>
-                      <span>Type</span>
-                      <span></span>
-                    </div>
+                    <div className="sched-hdr"><span>Puja / Aarti Name</span><span>Time (AM / PM)</span><span>Type</span><span></span></div>
                     {scheds.map(s => (
                       <div className="sched-row" key={s.id}>
-                        <input
-                          type="text"
-                          value={s.name}
-                          onChange={e => setSched(s.id,'name',e.target.value)}
-                          placeholder="e.g. Mangal Aarti"
-                        />
-                        {/* AM/PM free-text time input */}
-                        <input
-                          type="text"
-                          value={s.time}
-                          onChange={e => setSched(s.id,'time',e.target.value)}
-                          placeholder="5:30 AM"
-                        />
+                        <input type="text" value={s.name} onChange={e=>setSched(s.id,'name',e.target.value)} placeholder="e.g. Mangal Aarti" />
+                        <input type="text" value={s.time} onChange={e=>setSched(s.id,'time',e.target.value)} placeholder="5:30 AM" />
                         <select value={s.type} onChange={e=>setSched(s.id,'type',e.target.value)}>
                           {['Aarti','Puja','Abhishek','Bhog','Other'].map(t=><option key={t}>{t}</option>)}
                         </select>
-                        <button className="sched-del" onClick={() => delSched(s.id)} title="Remove row">×</button>
+                        <button className="sched-del" onClick={()=>delSched(s.id)}>×</button>
                       </div>
                     ))}
                   </div>
                   <button className="add-sched-btn" onClick={addSched}>+ Add Puja Row</button>
                 </SectionCard>
 
-                {/* ── Temple Committee ── */}
                 <SectionCard icon="🎉" title="Temple Committee" sub="Governing committee details">
                   <div className="fg-2">
                     <Field label="Chairman Name" opt>
@@ -1435,8 +1201,6 @@ export default function AdminAddTemplePage() {
                     <Field label="Committee Member Count" opt>
                       <Inp type="number" min={1} value={form.committee_count} onChange={v=>set('committee_count',v)} placeholder="e.g. 11" />
                     </Field>
-
-                    {/* ── Election Cycle with Custom option ── */}
                     <Field label="Election Cycle">
                       <Sel value={form.election_cycle} onChange={v=>set('election_cycle',v)}>
                         <option value="">Select</option>
@@ -1449,12 +1213,7 @@ export default function AdminAddTemplePage() {
                       </Sel>
                       {isCustomCycle && (
                         <div className="custom-input-row">
-                          <Inp
-                            type="text"
-                            value={form.election_cycle_custom}
-                            onChange={v => set('election_cycle_custom', v)}
-                            placeholder="Enter custom election cycle (e.g. Every 5 years)…"
-                          />
+                          <Inp type="text" value={form.election_cycle_custom} onChange={v=>set('election_cycle_custom',v)} placeholder="Enter custom election cycle…" />
                         </div>
                       )}
                     </Field>
@@ -1462,43 +1221,35 @@ export default function AdminAddTemplePage() {
                 </SectionCard>
 
                 <div className="form-nav">
-                  <button className="btn-back" onClick={() => prevStep(6)}>← Back</button>
+                  <button className="btn-back" onClick={()=>prevStep(6)}>← Back</button>
                   <div className="step-indicator">Step 6 of 9</div>
-                  <button className="btn-next" onClick={() => nextStep(6)}>Next: Media →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={()=>nextStep(6)}>Next: Media →</button>
                 </div>
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 7 — MEDIA (Photos, Mantras, Festivals)
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 7 — MEDIA ══ */}
             {step === 7 && (
               <div className="form-section">
-                {/* ── Photos ── */}
                 <SectionCard icon="🖼️" title="Temple Photos" sub="Upload photos for the temple gallery">
                   <div className="info-banner">
                     <span>ℹ️</span>
-                    <span>First photo will be set as the <strong>hero/cover image</strong>. Upload high-quality JPG or PNG photos (max 10MB each). Minimum 1 photo required.</span>
+                    <span>First photo will be set as the <strong>hero/cover image</strong>. Upload high-quality JPG or PNG photos (max 10MB each).</span>
                   </div>
                   <div className="photo-grid">
                     {photos.map((url, idx) => (
-                      <div key={idx} className={`photo-slot${url ? ' has-img' : ''}`}>
+                      <div key={idx} className={`photo-slot${url?' has-img':''}`}>
                         {url ? (
                           <>
                             <div className="ps-preview" style={{ background:`url(${url}) center/cover` }} />
-                            <button className="ps-remove" onClick={() => removePhoto(idx)}>×</button>
+                            <button className="ps-remove" onClick={()=>removePhoto(idx)}>×</button>
                           </>
                         ) : (
                           <>
                             <div className="ps-icon">📸</div>
-                            <div className="ps-label">{idx === 0 ? 'Hero Image' : `Gallery Photo ${idx+1}`}</div>
-                            {idx === 0 && <div className="ps-req">Required</div>}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ position:'absolute', inset:0, opacity:0, cursor:'pointer' }}
-                              onChange={e => handlePhotoChange(e, idx)}
-                            />
+                            <div className="ps-label">{idx===0 ? 'Hero Image' : `Gallery Photo ${idx+1}`}</div>
+                            {idx===0 && <div className="ps-req">Required</div>}
+                            <input type="file" accept="image/*" style={{ position:'absolute', inset:0, opacity:0, cursor:'pointer' }} onChange={e=>handlePhotoChange(e,idx)} />
                           </>
                         )}
                       </div>
@@ -1507,47 +1258,27 @@ export default function AdminAddTemplePage() {
                   <div className="field-hint" style={{ marginTop:10 }}>Accepted: JPG, PNG, WebP · Max 10MB per photo</div>
                 </SectionCard>
 
-                {/* ── Mantras ── */}
                 <SectionCard icon="🎵" title="Mantras" sub="Add mantras associated with this temple's deity">
                   {mantras.map((m, idx) => (
                     <div className="sub-card" key={m.id}>
-                      {idx > 0 && (
-                        <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={() => removeMantra(m.id)}>× Remove</button>
-                      )}
+                      {idx > 0 && <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={()=>removeMantra(m.id)}>× Remove</button>}
                       <div className="fg-2">
-                        <Field label="Mantra Title">
-                          <Inp type="text" value={m.title} onChange={v=>setMantra(m.id,'title',v)} placeholder="e.g. Maha Mrityunjaya Mantra" />
-                        </Field>
-                        <Field label="Deity">
-                          <Inp type="text" value={m.deity} onChange={v=>setMantra(m.id,'deity',v)} placeholder="e.g. Lord Shiva" />
-                        </Field>
+                        <Field label="Mantra Title"><Inp type="text" value={m.title} onChange={v=>setMantra(m.id,'title',v)} placeholder="e.g. Maha Mrityunjaya Mantra" /></Field>
+                        <Field label="Deity"><Inp type="text" value={m.deity} onChange={v=>setMantra(m.id,'deity',v)} placeholder="e.g. Lord Shiva" /></Field>
                       </div>
-                      <Field label="Sanskrit Text">
-                        <Txt value={m.sanskrit} onChange={v=>setMantra(m.id,'sanskrit',v)} rows={2} placeholder="ॐ त्र्यम्बकं यजामहे…" />
-                      </Field>
-                      <Field label="Transliteration">
-                        <Inp type="text" value={m.transliteration} onChange={v=>setMantra(m.id,'transliteration',v)} placeholder="Om Tryambakam Yajamahe…" />
-                      </Field>
-                      <Field label="Meaning / Benefits">
-                        <Txt value={m.meaning} onChange={v=>setMantra(m.id,'meaning',v)} rows={2} placeholder="Meaning and spiritual benefits…" />
-                      </Field>
-                      <Field label="Audio URL" opt>
-                        <Inp type="url" value={m.audio} onChange={v=>setMantra(m.id,'audio',v)} placeholder="https://...mp3" />
-                      </Field>
+                      <Field label="Sanskrit Text"><Txt value={m.sanskrit} onChange={v=>setMantra(m.id,'sanskrit',v)} rows={2} placeholder="ॐ त्र्यम्बकं यजामहे…" /></Field>
+                      <Field label="Transliteration"><Inp type="text" value={m.transliteration} onChange={v=>setMantra(m.id,'transliteration',v)} placeholder="Om Tryambakam Yajamahe…" /></Field>
+                      <Field label="Meaning / Benefits"><Txt value={m.meaning} onChange={v=>setMantra(m.id,'meaning',v)} rows={2} placeholder="Meaning and spiritual benefits…" /></Field>
+                      <Field label="Audio URL" opt><Inp type="url" value={m.audio} onChange={v=>setMantra(m.id,'audio',v)} placeholder="https://...mp3" /></Field>
                     </div>
                   ))}
                   <button className="add-btn" onClick={addMantra}>+ Add Another Mantra</button>
                 </SectionCard>
 
-                {/* ── Festivals — Major Festival: WHOLE ROW clickable ── */}
                 <SectionCard icon="🎊" title="Festivals" sub="Major festivals celebrated at this temple">
                   {festivals.map((f, idx) => (
                     <div className="sub-card" key={f.id}>
-                      {idx > 0 && (
-                        <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={() => removeFest(f.id)}>
-                          × Remove
-                        </button>
-                      )}
+                      {idx > 0 && <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={()=>removeFest(f.id)}>× Remove</button>}
                       <div className="fg-3">
                         <Field label="Festival Name" req>
                           <Inp type="text" value={f.name} onChange={v=>setFest(f.id,'name',v)} placeholder="e.g. Mahashivratri" />
@@ -1570,25 +1301,10 @@ export default function AdminAddTemplePage() {
                           <Field label="Duration (days)">
                             <Inp type="number" min={1} value={f.days} onChange={v=>setFest(f.id,'days',v)} placeholder="e.g. 3" />
                           </Field>
-                          {/* ── Major Festival — ENTIRE ROW is clickable ── */}
-                          <div
-                            className={`festival-major-row${f.major ? ' on' : ''}`}
-                            onClick={() => setFest(f.id,'major',!f.major)}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={f.major}
-                              onChange={() => {}}
-                              style={{ accentColor:'var(--s2)' }}
-                            />
-                            <span style={{ fontSize:13, color:'var(--inkm)', fontWeight: f.major ? 600 : 400 }}>
-                              ⭐ Mark as Major Festival
-                            </span>
-                            {f.major && (
-                              <span style={{ marginLeft:'auto', fontSize:11, color:'var(--s2)', fontWeight:600, background:'var(--slm)', padding:'2px 8px', borderRadius:20 }}>
-                                MAJOR ✓
-                              </span>
-                            )}
+                          <div className={`festival-major-row${f.major?' on':''}`} onClick={()=>setFest(f.id,'major',!f.major)}>
+                            <input type="checkbox" checked={f.major} onChange={()=>{}} style={{ accentColor:'var(--s2)' }} />
+                            <span style={{ fontSize:13, color:'var(--inkm)', fontWeight:f.major?600:400 }}>⭐ Mark as Major Festival</span>
+                            {f.major && <span style={{ marginLeft:'auto', fontSize:11, color:'var(--s2)', fontWeight:600, background:'var(--slm)', padding:'2px 8px', borderRadius:20 }}>MAJOR ✓</span>}
                           </div>
                         </div>
                       </div>
@@ -1598,16 +1314,14 @@ export default function AdminAddTemplePage() {
                 </SectionCard>
 
                 <div className="form-nav">
-                  <button className="btn-back" onClick={() => prevStep(7)}>← Back</button>
+                  <button className="btn-back" onClick={()=>prevStep(7)}>← Back</button>
                   <div className="step-indicator">Step 7 of 9</div>
-                  <button className="btn-next" onClick={() => nextStep(7)}>Next: Donations →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={()=>nextStep(7)}>Next: Donations →</button>
                 </div>
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 8 — DONATIONS
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 8 — DONATIONS ══ */}
             {step === 8 && (
               <div className="form-section">
                 <SectionCard icon="💰" title="Online Donations" sub="Payment details for accepting donations">
@@ -1615,70 +1329,42 @@ export default function AdminAddTemplePage() {
                     <span>⚠️</span>
                     <span><strong>Security Notice:</strong> Bank account number will be encrypted in production. Ensure HTTPS is enabled before collecting banking data.</span>
                   </div>
-
-                  {/* Accept donations — whole box clickable */}
-                  <div
-                    className={`fac-item${form.accept_online_donations ? ' on' : ''}`}
-                    style={{ display:'inline-flex', cursor:'pointer', minWidth:300 }}
-                    onClick={() => set('accept_online_donations', !form.accept_online_donations)}
-                  >
+                  <div className={`fac-item${form.accept_online_donations?' on':''}`} style={{ display:'inline-flex', cursor:'pointer', minWidth:300 }} onClick={()=>set('accept_online_donations',!form.accept_online_donations)}>
                     <input type="checkbox" checked={form.accept_online_donations} onChange={()=>{}} style={{ accentColor:'var(--s2)', marginRight:6 }} />
                     ✅ &nbsp; This temple accepts online donations
                   </div>
-
                   {form.accept_online_donations && (
                     <div style={{ marginTop:16 }}>
                       <div className="fg-2">
-                        <Field label="UPI ID" opt>
-                          <Inp type="text" value={form.upi_id} onChange={v=>set('upi_id',v)} placeholder="e.g. temple@upi or 9876543210@paytm" />
-                        </Field>
-                        <Field label="80G Certificate No." opt>
-                          <Inp type="text" value={form.certificate_80g_no} onChange={v=>set('certificate_80g_no',v)} placeholder="e.g. AAACT1234C2024001" />
-                        </Field>
+                        <Field label="UPI ID" opt><Inp type="text" value={form.upi_id} onChange={v=>set('upi_id',v)} placeholder="e.g. temple@upi" /></Field>
+                        <Field label="80G Certificate No." opt><Inp type="text" value={form.certificate_80g_no} onChange={v=>set('certificate_80g_no',v)} placeholder="e.g. AAACT1234C2024001" /></Field>
                       </div>
                       <SecLabel>Bank Details</SecLabel>
                       <div className="fg-2">
-                        <Field label="Account Holder Name">
-                          <Inp type="text" value={form.bank_account_name} onChange={v=>set('bank_account_name',v)} placeholder="e.g. Shri Mahakaleshwar Temple Trust" />
-                        </Field>
-                        <Field label="Bank & Branch Name">
-                          <Inp type="text" value={form.bank_name_branch} onChange={v=>set('bank_name_branch',v)} placeholder="e.g. SBI, Ujjain Main Branch" />
-                        </Field>
+                        <Field label="Account Holder Name"><Inp type="text" value={form.bank_account_name} onChange={v=>set('bank_account_name',v)} placeholder="e.g. Shri Mahakaleshwar Temple Trust" /></Field>
+                        <Field label="Bank & Branch Name"><Inp type="text" value={form.bank_name_branch} onChange={v=>set('bank_name_branch',v)} placeholder="e.g. SBI, Ujjain Main Branch" /></Field>
                       </div>
                       <div className="fg-2">
-                        <Field label="Account Number">
-                          <Inp type="text" value={form.bank_account_number} onChange={v=>set('bank_account_number',v)} placeholder="XXXXXXXXXXXX" />
-                        </Field>
-                        <Field label="IFSC Code">
-                          <Inp type="text" value={form.bank_ifsc} onChange={v=>set('bank_ifsc',v)} placeholder="e.g. SBIN0001234" maxLength={11} />
-                        </Field>
+                        <Field label="Account Number"><Inp type="text" value={form.bank_account_number} onChange={v=>set('bank_account_number',v)} placeholder="XXXXXXXXXXXX" /></Field>
+                        <Field label="IFSC Code"><Inp type="text" value={form.bank_ifsc} onChange={v=>set('bank_ifsc',v)} placeholder="e.g. SBIN0001234" maxLength={11} /></Field>
                       </div>
                       <SecLabel>Donation Categories</SecLabel>
                       <div className="donation-box">
                         <div className="donation-box-title">📋 What can devotees donate for?</div>
-                        <CheckGrid
-                          items={DONATION_CATS}
-                          form={form}
-                          toggle={toggle}
-                          className="fac-grid"
-                          itemClass="fac-item"
-                          nameClass="fac-name"
-                        />
+                        <CheckGrid items={DONATION_CATS} form={form} toggle={toggle} className="fac-grid" itemClass="fac-item" nameClass="fac-name" />
                       </div>
                     </div>
                   )}
                 </SectionCard>
                 <div className="form-nav">
-                  <button className="btn-back" onClick={() => prevStep(8)}>← Back</button>
+                  <button className="btn-back" onClick={()=>prevStep(8)}>← Back</button>
                   <div className="step-indicator">Step 8 of 9</div>
-                  <button className="btn-next" onClick={() => nextStep(8)}>Review & Submit →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={()=>nextStep(8)}>Review & Submit →</button>
                 </div>
               </div>
             )}
 
-            {/* ══════════════════════════════════════════════════════════════════
-                STEP 9 — REVIEW & SUBMIT
-            ══════════════════════════════════════════════════════════════════ */}
+            {/* ══ STEP 9 — REVIEW & SUBMIT ══ */}
             {step === 9 && (
               <div className="form-section">
                 <div className="review-card">
@@ -1695,7 +1381,7 @@ export default function AdminAddTemplePage() {
 
                 <SectionCard icon="✍️" title="Admin Confirmation" sub="Confirm the submission details">
                   <div className="fg-3">
-                    <Field label="Submitted By" req>
+                    <Field label="Submitted By" req err={errors.submitter_name}>
                       <Inp type="text" value={form.submitter_name} onChange={v=>set('submitter_name',v)} placeholder="Admin name" />
                     </Field>
                     <Field label="Role">
@@ -1707,17 +1393,16 @@ export default function AdminAddTemplePage() {
                       <Inp type="tel" value={form.submitter_phone} onChange={v=>set('submitter_phone',v)} placeholder="+91 XXXXX XXXXX" />
                     </Field>
                   </div>
-
-                  <div style={{ marginTop: 6 }}>
+                  <div style={{ marginTop:6 }}>
                     <div className="consent-title">Consent & Compliance</div>
                     {[
-                      'I confirm I am authorised to submit this temple\'s information to BharatMandir.',
+                      "I confirm I am authorised to submit this temple's information to BharatMandir.",
                       'All information provided is accurate and verified to the best of my knowledge.',
                       'I grant BharatMandir permission to publish this temple\'s profile publicly.',
                       'The temple agrees to comply with BharatMandir\'s listing guidelines and bylaws.',
                       'Donation and financial information disclosed will be maintained transparently.',
                     ].map((text, i) => (
-                      <label key={i} className="consent-check" onClick={() => toggleConsent(i)}>
+                      <label key={i} className="consent-check" onClick={()=>toggleConsent(i)}>
                         <input type="checkbox" checked={consents[i]} onChange={()=>{}} style={{ accentColor:'var(--s2)' }} />
                         {text}
                       </label>
@@ -1726,9 +1411,9 @@ export default function AdminAddTemplePage() {
                 </SectionCard>
 
                 <div className="form-nav">
-                  <button className="btn-back" onClick={() => prevStep(9)}>← Back</button>
+                  <button className="btn-back" onClick={()=>prevStep(9)}>← Back</button>
                   <div className="step-indicator">Step 9 of 9</div>
-                  <button className="btn-submit" disabled={!allConsents} onClick={submitForm}>
+                  <button className={`btn-submit${btnShake?' shake':''}`} disabled={!allConsents} onClick={submitForm}>
                     🕉️ Save Temple to BharatMandir
                   </button>
                 </div>
