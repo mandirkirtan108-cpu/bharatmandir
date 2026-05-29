@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { LangProvider }          from './LangContext';
 import ProtectedRoute            from './components/ProtectedRoute';
-import UserProtectedRoute        from './components/UserProtectedRoute';
 import HomePage                  from './pages/HomePage';
 import TempleDetailPage          from './pages/TempleDetailPage';
 import TempleQRPage              from './pages/TempleQRPage';
@@ -26,7 +25,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
 
-          {/* ── Root — seedha HomePage ──────────────────────── */}
+          {/* ── Root ────────────────────────────────────────── */}
           <Route path="/"                element={<HomePage />} />
 
           {/* ── Fully Public Routes ─────────────────────────── */}
@@ -38,15 +37,15 @@ export default function App() {
           {/* ── Admin Login — public ────────────────────────── */}
           <Route path="/admin/login"     element={<AdminLoginPage />} />
 
-          {/* ── Protected User Routes ───────────────────────── */}
-          <Route path="/temple/:slug"    element={<UserProtectedRoute><TempleDetailPage /></UserProtectedRoute>} />
-          <Route path="/search"          element={<UserProtectedRoute><SearchPage /></UserProtectedRoute>} />
-          <Route path="/route-planner"   element={<UserProtectedRoute><RoutePlannerPage /></UserProtectedRoute>} />
-          <Route path="/panchang"        element={<UserProtectedRoute><PanchangPage /></UserProtectedRoute>} />
-          <Route path="/spiritual-guide" element={<UserProtectedRoute><SpiritualGuidePage /></UserProtectedRoute>} />
-          <Route path="/festivals"       element={<UserProtectedRoute><FestivalCalendarPage /></UserProtectedRoute>} />
-          <Route path="/sacred-books"    element={<UserProtectedRoute><SacredBooksPage /></UserProtectedRoute>} />
-          <Route path="/profile"         element={<UserProtectedRoute><UserProfilePage /></UserProtectedRoute>} />
+          {/* ── User Routes — public (no login required) ────── */}
+          <Route path="/temple/:slug"    element={<TempleDetailPage />} />
+          <Route path="/search"          element={<SearchPage />} />
+          <Route path="/route-planner"   element={<RoutePlannerPage />} />
+          <Route path="/panchang"        element={<PanchangPage />} />
+          <Route path="/spiritual-guide" element={<SpiritualGuidePage />} />
+          <Route path="/festivals"       element={<FestivalCalendarPage />} />
+          <Route path="/sacred-books"    element={<SacredBooksPage />} />
+          <Route path="/profile"         element={<UserProfilePage />} />
 
           {/* ── Protected Admin Routes ──────────────────────── */}
           <Route path="/admin/add" element={
