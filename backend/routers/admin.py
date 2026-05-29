@@ -419,7 +419,7 @@ async def create_temple(
                 %s,%s,%s,%s,%s,%s,%s,
                 %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
                 %s,%s,%s,%s,%s,%s,
-                %s,%s,%s,%s,%s,%s,%s,%s,
+                %s,%s,%s,%s,%s,%s,%s,%s,%s,
                 %s,%s,%s,
                 %s,%s,%s,
                 %s,%s,
