@@ -111,9 +111,14 @@ HIGHWAY_CORRIDORS = {
     # Mandsaur → Neemuch: NH-52 going south-west
     frozenset(["mandsaur", "neemuch"]): {
         "highway": "NH-52",
-        "towns": ["Mandsaur", "Sitamau", "Neemuch"],
+        "towns": ["Mandsaur", "Neemuch"],
         "direction": "south-west",
-        "exclude_note": "Do NOT include temples in Suwasra, Rampura, Shamgarh, or Jawra — these are east of Mandsaur on a different road.",
+        "exclude_note": (
+            "This is a SHORT 45 km direct highway — only 2 cities: Mandsaur and Neemuch. "
+            "Do NOT include temples from Sitamau, Suwasra, Rampura, Shamgarh, or Jawra — "
+            "none of these are on the Mandsaur–Neemuch NH-52 road. "
+            "Only suggest temples physically located IN Mandsaur city or IN Neemuch city."
+        ),
     },
     # Mandsaur → Ujjain: via Jawra, Ratlam, Nagda
     frozenset(["mandsaur", "ujjain"]): {
@@ -232,7 +237,7 @@ TASK: Plan a temple route from {req.start} to {req.destination} for a spiritual 
    - Use your knowledge of famous, historically significant, and spiritually important
      temples ONLY in the towns listed in the corridor above.
    - Do NOT suggest temples in towns that are off this highway/road.
-   - Suggest MINIMUM 6 temples, maximum 10.
+   - Suggest as many REAL temples as genuinely exist on this route — do NOT invent or stretch. For short routes (under 60 km) with only 2 cities, 3-5 temples is fine. For longer routes (100+ km) with many towns, aim for 6-8 temples. Quality over quantity — only real, significant temples.
    - Priority order: Jyotirlinga > Shaktipeeth > Ancient/Famous > Local significant temples.
    - Every temple must be REAL and must actually exist on or near this exact route.
 
