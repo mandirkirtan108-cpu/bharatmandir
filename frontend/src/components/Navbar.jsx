@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useUserAuth } from '../hooks/useUserAuth';
 
-export default function Navbar() {
+// Pass hideAuth={true} from admin pages to suppress the Sign In / user pill
+export default function Navbar({ hideAuth = false }) {
   const [query, setQuery]         = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -77,18 +78,25 @@ export default function Navbar() {
 
       {/* ── Navbar ── */}
       <nav className="navbar">
+        {/*
+          KEY RESPONSIVE FIX:
+          Instead of using position:absolute for centre links (which causes overlap at high zoom),
+          we use a flex row with three zones:
+            [logo (flex:0)] [centre links (flex:1, centred)] [right controls (flex:0)]
+          This gracefully collapses without overlap.
+        */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          padding: '11px 28px',
-          maxWidth: 1200,
+          padding: '11px 20px',
+          maxWidth: 1280,
           margin: '0 auto',
-          gap: 0,
-          position: 'relative',
+          gap: 8,
+          minWidth: 0,
         }}>
 
-          {/* Logo — left */}
-          <Link to="/" className="nav-logo" style={{ flexShrink: 0, marginRight: 'auto' }}>
+          {/* ── Logo — left, never shrinks below its natural size ── */}
+          <Link to="/" className="nav-logo" style={{ flexShrink: 0, marginRight: 8 }}>
             <span className="nav-logo-icon">🛕</span>
             <div>
               <span className="nav-logo-name">BharatMandir</span>
@@ -96,138 +104,154 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* ── Desktop centre links ── */}
-          <div className="nav-actions-desktop" style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            position: 'absolute',
-            left: '50%',
-            transform: 'translateX(-50%)',
-          }}>
+          {/* ── Desktop centre links — flex:1 with overflow:hidden so links wrap-hide, not overlap ── */}
+          <div
+            className="nav-actions-desktop"
+            style={{
+              flex: '1 1 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 0,
+              minWidth: 0,
+              overflow: 'hidden',
+            }}
+          >
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.to}
                 to={link.to}
                 className={`nav-link${isActive(link.to) ? ' active' : ''}`}
+                style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
               >
                 {link.label}
               </Link>
             ))}
           </div>
 
-          {/* ── Right side: lang + user ── */}
-          <div className="nav-actions-desktop" style={{
-            display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto',
-          }}>
+          {/* ── Right side: lang + user / auth ── */}
+          <div
+            className="nav-actions-desktop"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexShrink: 0,
+              marginLeft: 8,
+            }}
+          >
             <select
               className="nav-lang-select"
               value={lang}
               onChange={(e) => changeLang(e.target.value)}
             >
-              <option value="en">🌐 English</option>
+              <option value="en">🌐 EN</option>
               <option value="hi">🇮🇳 हिंदी</option>
               <option value="mr">🟠 मराठी</option>
               <option value="ta">🌺 தமிழ்</option>
             </select>
 
-            {isLoggedIn ? (
-              /* ── User pill with dropdown ── */
-              <div ref={userMenuRef} style={{ position: 'relative' }}>
-                <button
-                  onClick={() => setUserMenuOpen(v => !v)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 7,
-                    padding: '7px 14px', borderRadius: 50,
-                    border: '1.5px solid #EDE3CE',
-                    background: userMenuOpen ? '#FAF6EE' : '#fff',
-                    color: '#5C3010', fontWeight: 600, fontSize: 13,
-                    cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
-                    transition: 'background 0.15s, border-color 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#C8520A'; }}
-                  onMouseLeave={e => { if (!userMenuOpen) e.currentTarget.style.borderColor = '#EDE3CE'; }}
-                >
-                  <span style={{
-                    width: 22, height: 22, borderRadius: '50%',
-                    background: 'linear-gradient(135deg,#E06B25,#9A3C05)',
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
-                  }}>
-                    {(user?.name || 'U')[0].toUpperCase()}
-                  </span>
-                  <span style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user?.name?.split(' ')[0] || 'Profile'}
-                  </span>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                    style={{ opacity: 0.6, transition: 'transform 0.2s', transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                    <path d="M6 9l6 6 6-6"/>
-                  </svg>
-                </button>
+            {/* Auth section — hidden when hideAuth=true (admin pages) */}
+            {!hideAuth && (
+              isLoggedIn ? (
+                /* ── User pill with dropdown ── */
+                <div ref={userMenuRef} style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setUserMenuOpen(v => !v)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      padding: '7px 14px', borderRadius: 50,
+                      border: '1.5px solid #EDE3CE',
+                      background: userMenuOpen ? '#FAF6EE' : '#fff',
+                      color: '#5C3010', fontWeight: 600, fontSize: 13,
+                      cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+                      transition: 'background 0.15s, border-color 0.15s',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#C8520A'; }}
+                    onMouseLeave={e => { if (!userMenuOpen) e.currentTarget.style.borderColor = '#EDE3CE'; }}
+                  >
+                    <span style={{
+                      width: 22, height: 22, borderRadius: '50%',
+                      background: 'linear-gradient(135deg,#E06B25,#9A3C05)',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0,
+                    }}>
+                      {(user?.name || 'U')[0].toUpperCase()}
+                    </span>
+                    <span style={{ maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user?.name?.split(' ')[0] || 'Profile'}
+                    </span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                      style={{ opacity: 0.6, transition: 'transform 0.2s', transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', flexShrink: 0 }}>
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
 
-                {/* Dropdown */}
-                {userMenuOpen && (
-                  <div style={{
-                    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                    background: '#fff', borderRadius: 14, minWidth: 180,
-                    border: '1px solid #EDE3CE',
-                    boxShadow: '0 8px 32px rgba(44,21,0,0.14)',
-                    overflow: 'hidden', zIndex: 500,
-                    animation: 'fadeDown 0.16s ease',
-                  }}>
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #EDE3CE' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#2C1500' }}>{user?.name}</div>
-                      <div style={{ fontSize: 12, color: '#A07050', marginTop: 2 }}>{user?.email}</div>
+                  {/* Dropdown */}
+                  {userMenuOpen && (
+                    <div style={{
+                      position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                      background: '#fff', borderRadius: 14, minWidth: 180,
+                      border: '1px solid #EDE3CE',
+                      boxShadow: '0 8px 32px rgba(44,21,0,0.14)',
+                      overflow: 'hidden', zIndex: 500,
+                      animation: 'fadeDown 0.16s ease',
+                    }}>
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid #EDE3CE' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#2C1500' }}>{user?.name}</div>
+                        <div style={{ fontSize: 12, color: '#A07050', marginTop: 2 }}>{user?.email}</div>
+                      </div>
+                      <Link
+                        to="/profile"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '11px 16px', color: '#4A2C10', fontSize: 14,
+                          fontWeight: 500, textDecoration: 'none',
+                          transition: 'background 0.15s',
+                          background: isActive('/profile') ? '#FAF6EE' : 'transparent',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#FAF6EE'}
+                        onMouseLeave={e => e.currentTarget.style.background = isActive('/profile') ? '#FAF6EE' : 'transparent'}
+                      >
+                        <User size={15} style={{ color: '#C8520A' }} />
+                        My Profile
+                      </Link>
+                      <button
+                        onClick={handleUserLogout}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                          padding: '11px 16px', border: 'none', background: 'transparent',
+                          color: '#B91C1C', fontSize: 14, fontWeight: 500,
+                          cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+                          borderTop: '1px solid #EDE3CE',
+                          transition: 'background 0.15s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <LogOut size={15} />
+                        Sign Out
+                      </button>
                     </div>
-                    <Link
-                      to="/profile"
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '11px 16px', color: '#4A2C10', fontSize: 14,
-                        fontWeight: 500, textDecoration: 'none',
-                        transition: 'background 0.15s',
-                        background: isActive('/profile') ? '#FAF6EE' : 'transparent',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#FAF6EE'}
-                      onMouseLeave={e => e.currentTarget.style.background = isActive('/profile') ? '#FAF6EE' : 'transparent'}
-                    >
-                      <User size={15} style={{ color: '#C8520A' }} />
-                      My Profile
-                    </Link>
-                    <button
-                      onClick={handleUserLogout}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                        padding: '11px 16px', border: 'none', background: 'transparent',
-                        color: '#B91C1C', fontSize: 14, fontWeight: 500,
-                        cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
-                        borderTop: '1px solid #EDE3CE',
-                        transition: 'background 0.15s',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <LogOut size={15} />
-                      Sign Out
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Link
-                to="/login"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '8px 18px', borderRadius: 50,
-                  background: 'linear-gradient(135deg,#E06B25,#9A3C05)',
-                  color: '#fff', fontWeight: 600, fontSize: 13,
-                  textDecoration: 'none',
-                  boxShadow: '0 3px 12px rgba(200,82,10,0.28)',
-                  fontFamily: "'DM Sans', sans-serif",
-                }}
-              >
-                Sign In
-              </Link>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  to="/login"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '8px 18px', borderRadius: 50,
+                    background: 'linear-gradient(135deg,#E06B25,#9A3C05)',
+                    color: '#fff', fontWeight: 600, fontSize: 13,
+                    textDecoration: 'none', whiteSpace: 'nowrap',
+                    boxShadow: '0 3px 12px rgba(200,82,10,0.28)',
+                    fontFamily: "'DM Sans', sans-serif",
+                  }}
+                >
+                  Sign In
+                </Link>
+              )
             )}
           </div>
 
@@ -236,7 +260,7 @@ export default function Navbar() {
             className="nav-hamburger"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            style={{ marginLeft: 12 }}
+            style={{ marginLeft: 4, flexShrink: 0 }}
           >
             <Menu size={24} />
           </button>
@@ -273,45 +297,45 @@ export default function Navbar() {
             </Link>
           ))}
 
-          {/* User section in sidebar */}
-          {isLoggedIn && (
-            <>
-              <div style={{ margin: '8px 20px 0', borderTop: '1px solid rgba(255,153,0,0.15)', paddingTop: 8 }} />
+          {/* Auth section in sidebar — hidden on admin pages */}
+          {!hideAuth && (
+            isLoggedIn ? (
+              <>
+                <div style={{ margin: '8px 20px 0', borderTop: '1px solid rgba(255,153,0,0.15)', paddingTop: 8 }} />
+                <Link
+                  to="/profile"
+                  className={`sidebar-link${isActive('/profile') ? ' active' : ''}`}
+                  onClick={() => setSidebarOpen(false)}
+                  style={{ color: '#ffb050', fontWeight: 600 }}
+                >
+                  <span className="sidebar-link-icon"><User size={16} /></span>
+                  My Profile
+                </Link>
+                <button
+                  onClick={handleUserLogout}
+                  className="sidebar-link"
+                  style={{
+                    background: 'none', border: 'none', width: '100%', textAlign: 'left',
+                    cursor: 'pointer', color: '#ef4444', fontFamily: 'inherit',
+                    fontWeight: 600, display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '11px 14px', fontSize: 14, borderRadius: 8,
+                  }}
+                >
+                  <span className="sidebar-link-icon"><LogOut size={16} /></span>
+                  Sign Out
+                </button>
+              </>
+            ) : (
               <Link
-                to="/profile"
-                className={`sidebar-link${isActive('/profile') ? ' active' : ''}`}
+                to="/login"
+                className="sidebar-link"
                 onClick={() => setSidebarOpen(false)}
                 style={{ color: '#ffb050', fontWeight: 600 }}
               >
                 <span className="sidebar-link-icon"><User size={16} /></span>
-                My Profile
+                Sign In
               </Link>
-              <button
-                onClick={handleUserLogout}
-                className="sidebar-link"
-                style={{
-                  background: 'none', border: 'none', width: '100%', textAlign: 'left',
-                  cursor: 'pointer', color: '#ef4444', fontFamily: 'inherit',
-                  fontWeight: 600, display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '11px 14px', fontSize: 14, borderRadius: 8,
-                }}
-              >
-                <span className="sidebar-link-icon"><LogOut size={16} /></span>
-                Sign Out
-              </button>
-            </>
-          )}
-
-          {!isLoggedIn && (
-            <Link
-              to="/login"
-              className="sidebar-link"
-              onClick={() => setSidebarOpen(false)}
-              style={{ color: '#ffb050', fontWeight: 600 }}
-            >
-              <span className="sidebar-link-icon"><User size={16} /></span>
-              Sign In
-            </Link>
+            )
           )}
         </nav>
 
