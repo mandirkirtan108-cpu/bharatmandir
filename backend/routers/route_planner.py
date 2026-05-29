@@ -103,6 +103,75 @@ def get_known_distance(start: str, destination: str):
 
 
 # ─────────────────────────────────────────────
+# Known highway corridors — exact towns on the road
+# Prevents GPT from suggesting temples on parallel/wrong roads
+# ─────────────────────────────────────────────
+
+HIGHWAY_CORRIDORS = {
+    # Mandsaur → Neemuch: NH-52 going south-west
+    frozenset(["mandsaur", "neemuch"]): {
+        "highway": "NH-52",
+        "towns": ["Mandsaur", "Sitamau", "Neemuch"],
+        "direction": "south-west",
+        "exclude_note": "Do NOT include temples in Suwasra, Rampura, Shamgarh, or Jawra — these are east of Mandsaur on a different road.",
+    },
+    # Mandsaur → Ujjain: via Jawra, Ratlam, Nagda
+    frozenset(["mandsaur", "ujjain"]): {
+        "highway": "NH-52 / SH-31",
+        "towns": ["Mandsaur", "Shamgarh", "Jawra", "Ratlam", "Nagda", "Khachrod", "Ujjain"],
+        "direction": "east then south",
+        "exclude_note": "Do NOT include temples far off this highway corridor.",
+    },
+    # Indore → Ujjain: NH-52
+    frozenset(["indore", "ujjain"]): {
+        "highway": "NH-52",
+        "towns": ["Indore", "Dewas", "Ujjain"],
+        "direction": "north-east",
+        "exclude_note": "Only temples in Indore, Dewas, or Ujjain. Do not suggest temples in other districts.",
+    },
+    # Bhopal → Ujjain
+    frozenset(["bhopal", "ujjain"]): {
+        "highway": "SH-18",
+        "towns": ["Bhopal", "Sehore", "Shajapur", "Ujjain"],
+        "direction": "west",
+        "exclude_note": "Only temples along Bhopal–Sehore–Shajapur–Ujjain corridor.",
+    },
+    # Ratlam → Ujjain
+    frozenset(["ratlam", "ujjain"]): {
+        "highway": "NH-52",
+        "towns": ["Ratlam", "Nagda", "Khachrod", "Ujjain"],
+        "direction": "east",
+        "exclude_note": "Only temples along Ratlam–Nagda–Ujjain corridor.",
+    },
+    # Varanasi → Prayagraj
+    frozenset(["varanasi", "prayagraj"]): {
+        "highway": "NH-19",
+        "towns": ["Varanasi", "Mirzapur", "Prayagraj"],
+        "direction": "west",
+        "exclude_note": "Only temples along the NH-19 corridor.",
+    },
+    # Delhi → Mathura
+    frozenset(["delhi", "mathura"]): {
+        "highway": "NH-19 / Yamuna Expressway",
+        "towns": ["Delhi", "Faridabad", "Palwal", "Mathura"],
+        "direction": "south",
+        "exclude_note": "Only temples along Delhi–Mathura Yamuna Expressway corridor.",
+    },
+    # Mumbai → Shirdi
+    frozenset(["mumbai", "shirdi"]): {
+        "highway": "Mumbai-Nashik Expressway / NH-60",
+        "towns": ["Mumbai", "Thane", "Nashik", "Shirdi"],
+        "direction": "north-east",
+        "exclude_note": "Only temples along Mumbai–Nashik–Shirdi corridor.",
+    },
+}
+
+def get_highway_corridor(start: str, destination: str):
+    key = frozenset([start.strip().lower(), destination.strip().lower()])
+    return HIGHWAY_CORRIDORS.get(key)
+
+
+# ─────────────────────────────────────────────
 # POST /api/route/plan
 # ─────────────────────────────────────────────
 
@@ -113,6 +182,22 @@ async def plan_route(req: RoutePlanRequest):
         raise HTTPException(status_code=500, detail="VITE_OPENAI_API_KEY not configured on server.")
 
     known_distance_km = get_known_distance(req.start, req.destination)
+    corridor          = get_highway_corridor(req.start, req.destination)
+
+    # Build corridor instruction for prompt
+    if corridor:
+        corridor_instruction = (
+            f"HIGHWAY CORRIDOR: This route follows {corridor['highway']} going {corridor['direction']}.\n"
+            f"Towns on this road: {' → '.join(corridor['towns'])}\n"
+            f"STRICT RULE: {corridor['exclude_note']}\n"
+            f"Only suggest temples that are physically on or within 10 km of this highway corridor."
+        )
+    else:
+        corridor_instruction = (
+            f"Only suggest temples that are physically on or within 10 km of the actual road "
+            f"from {req.start} to {req.destination}. Do NOT suggest temples in towns that require "
+            f"a significant detour off the main route."
+        )
 
     if known_distance_km:
         realistic_hrs = realistic_hours(known_distance_km, req.travel_mode)
@@ -140,27 +225,30 @@ TASK: Plan a temple route from {req.start} to {req.destination} for a spiritual 
    - For train: 70-75 km/h. For bus: 50 km/h.
    - Add 25% buffer for real-world conditions.
 
-2. TEMPLES — USE YOUR OWN KNOWLEDGE ONLY:
+2. HIGHWAY CORRIDOR — STRICT:
+   {corridor_instruction}
+
+3. TEMPLES — USE YOUR OWN KNOWLEDGE ONLY:
    - Use your knowledge of famous, historically significant, and spiritually important
-     temples along the {req.start} → {req.destination} corridor.
-   - Include temples in ALL towns and cities along the entire route, not just start and end.
+     temples ONLY in the towns listed in the corridor above.
+   - Do NOT suggest temples in towns that are off this highway/road.
    - Suggest MINIMUM 6 temples, maximum 10.
    - Priority order: Jyotirlinga > Shaktipeeth > Ancient/Famous > Local significant temples.
-   - Every temple must be REAL and must actually exist on or near this route.
+   - Every temple must be REAL and must actually exist on or near this exact route.
 
-3. TEMPLE QUALITY — only valuable temples:
+4. TEMPLE QUALITY — only valuable temples:
    - Include temples that are historically significant, architecturally notable,
      or spiritually powerful (major festivals, ancient origin, high footfall).
    - Each temple should have a compelling, specific reason to visit.
 
-4. PREFERENCES: {', '.join(req.preferences) if req.preferences else 'All types of temples welcome'}
+5. PREFERENCES: {', '.join(req.preferences) if req.preferences else 'All types of temples welcome'}
 
-5. TIME PLANNING:
+6. TIME PLANNING:
    - User has {req.time_available} hours total.
    - If drive time alone exceeds this, set travel_time_warning with a friendly message.
    - Mark temples "high" importance only if they are truly exceptional or Jyotirlinga/Shaktipeeth level.
 
-6. Return ONLY valid JSON — no markdown, no explanation, no extra text.
+7. Return ONLY valid JSON — no markdown, no explanation, no extra text.
 
 ═══ ROUTE ═══
 From:        {req.start}
