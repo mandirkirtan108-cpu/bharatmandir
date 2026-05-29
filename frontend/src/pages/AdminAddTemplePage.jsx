@@ -168,7 +168,7 @@ function initialForm() {
     chairman_name:'', chairman_contact:'', committee_count:'', election_cycle:'',
     election_cycle_custom:'', accept_online_donations:false, upi_id:'', certificate_80g_no:'',
     bank_account_name:'', bank_name_branch:'', bank_account_number:'', bank_ifsc:'',
-    submitter_name:'', submitter_role:'admin', submitter_phone:'',
+    submitter_name:'', submitter_role:'admin', submitter_phone:'', submitter_email:'',
     custom_designation:'', custom_facility:'',
   };
   bools.forEach(k => base[k] = false);
@@ -258,7 +258,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .field-err{font-size:11.5px;color:var(--red);margin-top:5px;font-weight:500;display:flex;align-items:center;gap:5px;}
 .field-err::before{content:'⚠';font-size:11px;}
 
-/* ── ERROR STATE: red border + tint on every input type inside .has-error ── */
 .fg.has-error > input[type=text],
 .fg.has-error > input[type=email],
 .fg.has-error > input[type=tel],
@@ -270,7 +269,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   background:var(--redl) !important;
   box-shadow:0 0 0 3px rgba(185,28,28,.10);
 }
-/* also target inputs that are direct children of wrappers inside .has-error */
 .fg.has-error input[type=text]:not(.sched-row input):not(.offering-row input),
 .fg.has-error input[type=email],
 .fg.has-error input[type=tel],
@@ -356,7 +354,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .btn-submit:hover:not(:disabled){background:#145A25;transform:translateY(-1px);}
 .btn-submit:disabled{opacity:.6;cursor:not-allowed;}
 
-/* Shake animation for nav buttons on failed validation */
 @keyframes shake{0%,100%{transform:translateX(0);}15%{transform:translateX(-5px);}30%{transform:translateX(5px);}45%{transform:translateX(-4px);}60%{transform:translateX(4px);}75%{transform:translateX(-2px);}90%{transform:translateX(2px);}}
 .shake{animation:shake .4s ease;}
 
@@ -404,6 +401,18 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 @keyframes fadein{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 .form-section{animation:fadein .32s ease;}
 
+/* Priest error highlight */
+.priest-field-err{font-size:11px;color:var(--red);margin-top:3px;display:flex;align-items:center;gap:4px;}
+.priest-field-err::before{content:'⚠';font-size:10px;}
+.priest-input-err{border-color:var(--red) !important;background:var(--redl) !important;}
+
+/* Festival error highlight */
+.festival-err-banner{background:var(--redl);border:1px solid #FCA5A5;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--red);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+
+/* Sched error highlight */
+.sched-err-row{border-left:3px solid var(--red) !important;}
+.sched-err-input{border-color:var(--red) !important;background:var(--redl) !important;}
+
 @media(max-width:700px){
   .fg-2,.fg-3,.fg-4{grid-template-columns:1fr;}
   .page{padding:24px 14px 60px;}
@@ -431,7 +440,6 @@ function SectionCard({ icon, title, sub, children }) {
   );
 }
 
-// KEY CHANGE: Field adds `has-error` class when `err` is truthy — CSS drives the red border
 function Field({ label, req, opt, hint, err, children }) {
   return (
     <div className={`fg${err ? ' has-error' : ''}`}>
@@ -443,7 +451,6 @@ function Field({ label, req, opt, hint, err, children }) {
         </label>
       )}
       {children}
-      {/* Show hint only when no error; show error when present */}
       {hint && !err && <div className="field-hint">{hint}</div>}
       {err  && <div className="field-err">{err}</div>}
     </div>
@@ -485,10 +492,13 @@ export default function AdminAddTemplePage() {
   const [step, setStep]       = useState(1);
   const [errors, setErrors]   = useState({});
   const [priests, setPriests] = useState([initPriest()]);
+  const [priestErrors, setPriestErrors] = useState({});
   const [scheds, setScheds]   = useState([initSched(), initSched()]);
+  const [schedErrors, setSchedErrors] = useState({});
   const [pujaOfferings, setPujaOfferings] = useState([]);
   const [mantras, setMantras] = useState([initMantra()]);
   const [festivals, setFestivs] = useState([initFestival()]);
+  const [festivalErrors, setFestivalErrors] = useState({});
   const [photos, setPhotos]   = useState(Array(6).fill(null));
   const [consents, setConsents] = useState([false,false,false,false,false]);
   const [archStyles, setArchStyles] = useState([]);
@@ -512,37 +522,121 @@ export default function AdminAddTemplePage() {
   const isCustomCycle = form.election_cycle === '__custom__';
   const effectiveCycle = isCustomCycle ? form.election_cycle_custom : form.election_cycle;
 
-  // ── Validation — enforces required fields and blocks navigation ─────────────
+  // ── Validation ────────────────────────────────────────────────────────────────
   function validate(s) {
     const e = {};
 
     if (s === 1) {
-      if (!form.name.trim())          e.name          = 'Temple name is required';
-      if (!form.primary_deity.trim()) e.primary_deity = 'Primary deity is required';
+      if (!form.name.trim())          e.name          = 'This field is required';
+      if (!form.primary_deity.trim()) e.primary_deity = 'This field is required';
+      // NEW required on step 1
+      if (!form.sect)                 e.sect           = 'This field is required';
+      if (!form.managing_authority)   e.managing_authority = 'This field is required';
+      if (isCustomAuthority && !form.managing_authority_custom.trim())
+        e.managing_authority_custom = 'Please enter the custom managing authority';
     }
 
     if (s === 2) {
-      if (!form.address.trim()) e.address = 'Address is required';
-      if (!form.city.trim())    e.city    = 'City is required';
-      if (!form.state)          e.state   = 'State is required';
-      if (form.latitude  && isNaN(parseFloat(form.latitude)))  e.latitude  = 'Invalid latitude value';
-      if (form.longitude && isNaN(parseFloat(form.longitude))) e.longitude = 'Invalid longitude value';
+      if (!form.address.trim()) e.address = 'This field is required';
+      if (!form.city.trim())    e.city    = 'This field is required';
+      if (!form.state)          e.state   = 'This field is required';
+      // NEW required on step 2
+      if (!form.pincode.trim()) e.pincode = 'This field is required';
+      if (!form.district.trim()) e.district = 'This field is required';
+      if (!form.latitude.trim() || isNaN(parseFloat(form.latitude)))  e.latitude  = 'Valid GPS latitude is required';
+      if (!form.longitude.trim() || isNaN(parseFloat(form.longitude))) e.longitude = 'Valid GPS longitude is required';
+      if (!form.nearest_railway.trim()) e.nearest_railway = 'This field is required';
+      if (!form.nearest_airport.trim()) e.nearest_airport = 'This field is required';
+      if (!form.nearest_bus_stand.trim()) e.nearest_bus_stand = 'This field is required';
+    }
+
+    if (s === 3) {
+      // NEW required on step 3
+      if (!form.history.trim())          e.history          = 'This field is required';
+      if (!form.history_hindi.trim())    e.history_hindi    = 'This field is required';
+      if (!form.sthala_purana.trim())    e.sthala_purana    = 'This field is required';
+      if (!form.significance.trim())     e.significance     = 'This field is required';
+      if (!form.puranic_stories.trim())  e.puranic_stories  = 'This field is required';
+    }
+
+    if (s === 4) {
+      // NEW required on step 4
+      if (!form.opening_time) e.opening_time = 'This field is required';
+      if (!form.closing_time) e.closing_time = 'This field is required';
+      if (!form.afternoon_closure_start) e.afternoon_closure_start = 'This field is required';
+      if (!form.afternoon_closure_end)   e.afternoon_closure_end   = 'This field is required';
+      if (!form.dress_code.trim())       e.dress_code              = 'This field is required';
+    }
+
+    if (s === 6) {
+      // Priest validation — each priest needs name, phone, sampradaya, appt_type, years
+      const pErrs = {};
+      priests.forEach(p => {
+        const pe = {};
+        if (!p.name.trim())       pe.name       = 'This field is required';
+        if (!p.phone.trim())      pe.phone      = 'This field is required';
+        if (!p.sampradaya)        pe.sampradaya = 'This field is required';
+        if (!p.appt_type)         pe.appt_type  = 'This field is required';
+        if (p.years === '')       pe.years      = 'This field is required';
+        if (Object.keys(pe).length) pErrs[p.id] = pe;
+      });
+      if (Object.keys(pErrs).length) {
+        setPriestErrors(pErrs);
+        e._priestErrors = true;
+      } else {
+        setPriestErrors({});
+      }
+
+      // Schedule validation — each schedule needs name and time
+      const sErrs = {};
+      scheds.forEach(s2 => {
+        const se = {};
+        if (!s2.name.trim()) se.name = true;
+        if (!s2.time.trim()) se.time = true;
+        if (Object.keys(se).length) sErrs[s2.id] = se;
+      });
+      if (Object.keys(sErrs).length) {
+        setSchedErrors(sErrs);
+        e._schedErrors = true;
+      } else {
+        setSchedErrors({});
+      }
+    }
+
+    if (s === 7) {
+      // Festival validation — each festival needs name, month, desc, days
+      const fErrs = {};
+      festivals.forEach(f => {
+        const fe = {};
+        if (!f.name.trim()) fe.name = 'This field is required';
+        if (!f.month)       fe.month = 'This field is required';
+        if (!f.desc.trim()) fe.desc  = 'This field is required';
+        if (!f.days)        fe.days  = 'This field is required';
+        if (Object.keys(fe).length) fErrs[f.id] = fe;
+      });
+      if (Object.keys(fErrs).length) {
+        setFestivalErrors(fErrs);
+        e._festivalErrors = true;
+      } else {
+        setFestivalErrors({});
+      }
     }
 
     if (s === 9) {
-      if (!form.submitter_name.trim()) e.submitter_name = 'Your name is required to submit';
+      if (!form.submitter_name.trim())  e.submitter_name  = 'This field is required';
+      if (!form.submitter_phone.trim()) e.submitter_phone = 'This field is required';
+      if (!form.submitter_email.trim()) e.submitter_email = 'This field is required';
     }
 
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
-  // Shake the button and scroll to the first error field
   function triggerErrorFeedback() {
     setBtnShake(true);
     setTimeout(() => setBtnShake(false), 450);
     setTimeout(() => {
-      const firstErr = document.querySelector('.fg.has-error');
+      const firstErr = document.querySelector('.fg.has-error, .priest-input-err, .sched-err-input, .festival-err-banner');
       if (firstErr) firstErr.scrollIntoView({ behavior:'smooth', block:'center' });
     }, 60);
   }
@@ -555,7 +649,7 @@ export default function AdminAddTemplePage() {
   function prevStep(from) { setStep(from - 1); }
   function goStep(n) { if (n <= step) setStep(n); }
 
-  // ── Photos ──────────────────────────────────────────────────────────────────
+  // ── Photos ────────────────────────────────────────────────────────────────────
   function handlePhotoChange(e, idx) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -564,30 +658,39 @@ export default function AdminAddTemplePage() {
   }
   function removePhoto(idx) { setPhotos(prev => { const a=[...prev]; a[idx]=null; return a; }); }
 
-  // ── Priests ──────────────────────────────────────────────────────────────────
+  // ── Priests ───────────────────────────────────────────────────────────────────
   const addPriest    = () => setPriests(p => [...p, initPriest()]);
-  const removePriest = id => setPriests(p => p.filter(x => x.id !== id));
-  const setPriest    = (id,k,v) => setPriests(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+  const removePriest = id => { setPriests(p => p.filter(x => x.id !== id)); setPriestErrors(e => { const n={...e}; delete n[id]; return n; }); };
+  const setPriest    = (id,k,v) => {
+    setPriests(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+    if (priestErrors[id]?.[k]) setPriestErrors(e => ({ ...e, [id]: { ...e[id], [k]: undefined } }));
+  };
 
-  // ── Schedule ─────────────────────────────────────────────────────────────────
+  // ── Schedule ──────────────────────────────────────────────────────────────────
   const addSched = () => setScheds(p => [...p, initSched()]);
-  const delSched = id => setScheds(p => p.length > 1 ? p.filter(x=>x.id!==id) : p);
-  const setSched = (id,k,v) => setScheds(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+  const delSched = id => { setScheds(p => p.length > 1 ? p.filter(x=>x.id!==id) : p); setSchedErrors(e => { const n={...e}; delete n[id]; return n; }); };
+  const setSched = (id,k,v) => {
+    setScheds(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
+    if (schedErrors[id]?.[k]) setSchedErrors(e => ({ ...e, [id]: { ...e[id], [k]: undefined } }));
+  };
 
-  // ── Puja Offerings ───────────────────────────────────────────────────────────
+  // ── Puja Offerings ────────────────────────────────────────────────────────────
   const addOffering = () => setPujaOfferings(p => [...p, initOffering()]);
   const delOffering = id => setPujaOfferings(p => p.filter(x=>x.id!==id));
   const setOffering = (id,k,v) => setPujaOfferings(p => p.map(x => x.id===id ? {...x,[k]:v} : x));
 
-  // ── Mantras ──────────────────────────────────────────────────────────────────
+  // ── Mantras ───────────────────────────────────────────────────────────────────
   const addMantra    = () => setMantras(p => [...p, initMantra()]);
   const removeMantra = id => setMantras(p => p.filter(x=>x.id!==id));
   const setMantra    = (id,k,v) => setMantras(p => p.map(x=>x.id===id ? {...x,[k]:v} : x));
 
   // ── Festivals ─────────────────────────────────────────────────────────────────
   const addFest    = () => setFestivs(p => [...p, initFestival()]);
-  const removeFest = id => setFestivs(p => p.filter(x=>x.id!==id));
-  const setFest    = (id,k,v) => setFestivs(p => p.map(x=>x.id===id ? {...x,[k]:v} : x));
+  const removeFest = id => { setFestivs(p => p.filter(x=>x.id!==id)); setFestivalErrors(e => { const n={...e}; delete n[id]; return n; }); };
+  const setFest    = (id,k,v) => {
+    setFestivs(p => p.map(x=>x.id===id ? {...x,[k]:v} : x));
+    if (festivalErrors[id]?.[k]) setFestivalErrors(e => ({ ...e, [id]: { ...e[id], [k]: undefined } }));
+  };
 
   const allConsents = consents.every(Boolean);
   const toggleConsent = i => setConsents(c => { const a=[...c]; a[i]=!a[i]; return a; });
@@ -619,6 +722,7 @@ export default function AdminAddTemplePage() {
       'website_url','facebook_page','youtube_channel','instagram_handle','best_time_to_call',
       'video_aarti_url','video_intro_url','video_360_url','upi_id','certificate_80g_no',
       'bank_account_name','bank_name_branch','bank_account_number','bank_ifsc','hero_image_url',
+      'submitter_name','submitter_role','submitter_phone','submitter_email',
     ];
     strFields.forEach(k => { if (form[k]) fd.append(k, form[k]); });
     if (form.latitude)  fd.append('latitude',  form.latitude);
@@ -654,11 +758,23 @@ export default function AdminAddTemplePage() {
     ['Donations', form.accept_online_donations ? 'Yes' : 'No'], ['Source', form.source||'—'],
   ];
 
+  // ── Helper: priest field with inline error ────────────────────────────────────
+  function PriestField({ priestId, fieldKey, label, children }) {
+    const err = priestErrors[priestId]?.[fieldKey];
+    return (
+      <div className={`fg${err ? ' has-error' : ''}`}>
+        <label className="fl">{label} <span className="req"> ✶</span></label>
+        {children}
+        {err && <div className="field-err">{err}</div>}
+      </div>
+    );
+  }
+
   // ── RENDER ────────────────────────────────────────────────────────────────────
   return (
     <>
       <style>{css}</style>
-      <Navbar />
+      <Navbar hideAuth />
 
       <div className="hero">
         <div className="hero-bg">
@@ -742,10 +858,10 @@ export default function AdminAddTemplePage() {
                     </Field>
                   </div>
                   <div className="fg-2">
-                    <Field label="Sect / Tradition">
+                    <Field label="Sect / Tradition" req err={errors.sect}>
                       <Sel id="sect" value={form.sect} onChange={v=>set('sect',v)} options={SECTS} />
                     </Field>
-                    <Field label="Managing Authority">
+                    <Field label="Managing Authority" req err={errors.managing_authority}>
                       <Sel id="managing_authority" value={form.managing_authority} onChange={v=>set('managing_authority',v)}>
                         <option value="">Select</option>
                         <option value="Private / Family Trust">Private / Family Trust</option>
@@ -756,7 +872,9 @@ export default function AdminAddTemplePage() {
                       </Sel>
                       {isCustomAuthority && (
                         <div className="custom-input-row">
-                          <Inp type="text" value={form.managing_authority_custom} onChange={v=>set('managing_authority_custom',v)} placeholder="Enter custom managing authority…" />
+                          <Field label="" err={errors.managing_authority_custom}>
+                            <Inp type="text" value={form.managing_authority_custom} onChange={v=>set('managing_authority_custom',v)} placeholder="Enter custom managing authority…" />
+                          </Field>
                         </div>
                       )}
                     </Field>
@@ -840,10 +958,10 @@ export default function AdminAddTemplePage() {
                     <Field label="City / Town" req err={errors.city}>
                       <Inp id="city" type="text" value={form.city} onChange={v=>set('city',v)} placeholder="e.g. Ujjain" />
                     </Field>
-                    <Field label="District">
+                    <Field label="District" req err={errors.district}>
                       <Inp type="text" value={form.district} onChange={v=>set('district',v)} placeholder="e.g. Ujjain" />
                     </Field>
-                    <Field label="PIN Code">
+                    <Field label="PIN Code" req err={errors.pincode}>
                       <Inp type="text" value={form.pincode} onChange={v=>set('pincode',v)} placeholder="e.g. 456010" maxLength={6} />
                     </Field>
                   </div>
@@ -859,10 +977,10 @@ export default function AdminAddTemplePage() {
                     </Field>
                   </div>
                   <div className="fg-2">
-                    <Field label="GPS Latitude" err={errors.latitude} hint="💡 Google Maps → Long press on temple → copy coordinates">
+                    <Field label="GPS Latitude" req err={errors.latitude} hint="💡 Google Maps → Long press on temple → copy coordinates">
                       <Inp type="number" step="any" value={form.latitude} onChange={v=>set('latitude',v)} placeholder="e.g. 23.1828" />
                     </Field>
-                    <Field label="GPS Longitude" err={errors.longitude}>
+                    <Field label="GPS Longitude" req err={errors.longitude}>
                       <Inp type="number" step="any" value={form.longitude} onChange={v=>set('longitude',v)} placeholder="e.g. 75.7682" />
                     </Field>
                   </div>
@@ -870,17 +988,17 @@ export default function AdminAddTemplePage() {
                     <Inp type="url" value={form.google_maps_link} onChange={v=>set('google_maps_link',v)} placeholder="https://maps.google.com/..." />
                   </Field>
                   <div className="fg-3">
-                    <Field label="Nearest Railway Station">
+                    <Field label="Nearest Railway Station" req err={errors.nearest_railway}>
                       <Inp type="text" value={form.nearest_railway} onChange={v=>set('nearest_railway',v)} placeholder="Name — distance e.g. 3 km" />
                     </Field>
-                    <Field label="Nearest Airport">
+                    <Field label="Nearest Airport" req err={errors.nearest_airport}>
                       <Inp type="text" value={form.nearest_airport} onChange={v=>set('nearest_airport',v)} placeholder="Name — distance e.g. 55 km" />
                     </Field>
-                    <Field label="Nearest Bus Stand">
+                    <Field label="Nearest Bus Stand" req err={errors.nearest_bus_stand}>
                       <Inp type="text" value={form.nearest_bus_stand} onChange={v=>set('nearest_bus_stand',v)} placeholder="Name — distance e.g. 1 km" />
                     </Field>
                   </div>
-                  <Field label="Local Landmark / Directions">
+                  <Field label="Local Landmark / Directions" opt>
                     <Inp type="text" value={form.local_landmark} onChange={v=>set('local_landmark',v)} placeholder="e.g. Near Dashashwamedh Ghat, opposite State Bank" />
                   </Field>
                 </SectionCard>
@@ -897,20 +1015,20 @@ export default function AdminAddTemplePage() {
               <div className="form-section">
                 <SectionCard icon="📜" title="History & Significance" sub="Cultural and religious background">
                   <SecLabel>History</SecLabel>
-                  <Field label="History (English)">
+                  <Field label="History (English)" req err={errors.history}>
                     <Txt value={form.history} onChange={v=>set('history',v)} rows={4} placeholder="Brief history of the temple…" />
                   </Field>
-                  <Field label="History (Hindi)" opt>
+                  <Field label="History (Hindi)" req err={errors.history_hindi}>
                     <Txt value={form.history_hindi} onChange={v=>set('history_hindi',v)} rows={3} placeholder="इस मंदिर का इतिहास हिंदी में लिखें…" />
                   </Field>
                   <SecLabel>Spiritual Context</SecLabel>
-                  <Field label="Sthala Purana" opt>
+                  <Field label="Sthala Purana" req err={errors.sthala_purana}>
                     <Txt value={form.sthala_purana} onChange={v=>set('sthala_purana',v)} rows={3} placeholder="The divine legend or story associated with this sacred place…" />
                   </Field>
-                  <Field label="Significance">
+                  <Field label="Significance" req err={errors.significance}>
                     <Txt value={form.significance} onChange={v=>set('significance',v)} rows={3} placeholder="Why is this temple important?" />
                   </Field>
-                  <Field label="Puranic Stories" opt>
+                  <Field label="Puranic Stories" req err={errors.puranic_stories}>
                     <Txt value={form.puranic_stories} onChange={v=>set('puranic_stories',v)} rows={3} placeholder="Relevant stories from the Puranas or scriptures…" />
                   </Field>
                   <SecLabel>Architecture & Construction</SecLabel>
@@ -956,22 +1074,22 @@ export default function AdminAddTemplePage() {
                     <span>Enter times in <strong>AM / PM format</strong> — e.g. <strong>5:30 AM</strong>, <strong>9:00 PM</strong>.</span>
                   </div>
                   <div className="fg-2" style={{ marginBottom:14 }}>
-                    <Field label="Opening Time" hint="e.g. 5:30 AM">
+                    <Field label="Opening Time" req err={errors.opening_time} hint="e.g. 5:30 AM">
                       <TimeInput value={form.opening_time} onChange={v=>set('opening_time',v)} placeholder="5:30 AM" />
                       {form.opening_time && <div className="time-badge">🕐 {to12h(form.opening_time)}</div>}
                     </Field>
-                    <Field label="Closing Time" hint="e.g. 9:00 PM">
+                    <Field label="Closing Time" req err={errors.closing_time} hint="e.g. 9:00 PM">
                       <TimeInput value={form.closing_time} onChange={v=>set('closing_time',v)} placeholder="9:00 PM" />
                       {form.closing_time && <div className="time-badge">🕐 {to12h(form.closing_time)}</div>}
                     </Field>
                   </div>
-                  <SecLabel>Afternoon Closure (optional)</SecLabel>
+                  <SecLabel>Afternoon Closure</SecLabel>
                   <div className="fg-2" style={{ marginBottom:14 }}>
-                    <Field label="Closure Start" hint="e.g. 12:00 PM" opt>
+                    <Field label="Closure Start" req err={errors.afternoon_closure_start} hint="e.g. 12:00 PM">
                       <TimeInput value={form.afternoon_closure_start} onChange={v=>set('afternoon_closure_start',v)} placeholder="12:00 PM" />
                       {form.afternoon_closure_start && <div className="time-badge">🕐 {to12h(form.afternoon_closure_start)}</div>}
                     </Field>
-                    <Field label="Closure End" hint="e.g. 4:00 PM" opt>
+                    <Field label="Closure End" req err={errors.afternoon_closure_end} hint="e.g. 4:00 PM">
                       <TimeInput value={form.afternoon_closure_end} onChange={v=>set('afternoon_closure_end',v)} placeholder="4:00 PM" />
                       {form.afternoon_closure_end && <div className="time-badge">🕐 {to12h(form.afternoon_closure_end)}</div>}
                     </Field>
@@ -987,10 +1105,10 @@ export default function AdminAddTemplePage() {
                       <Inp type="text" value={form.prasad_type} onChange={v=>set('prasad_type',v)} placeholder="e.g. Ladoo, Panchamrit" />
                     </Field>
                   </div>
-                  <Field label="Dress Code" opt>
+                  <Field label="Dress Code" req err={errors.dress_code}>
                     <Inp type="text" value={form.dress_code} onChange={v=>set('dress_code',v)} placeholder="e.g. Traditional attire required, no leather" />
                   </Field>
-                  <Field label="Best Time to Visit">
+                  <Field label="Best Time to Visit" opt>
                     <Inp type="text" value={form.best_time_to_visit} onChange={v=>set('best_time_to_visit',v)} placeholder="e.g. October to March, during Mahashivratri" />
                   </Field>
                 </SectionCard>
@@ -1113,77 +1231,105 @@ export default function AdminAddTemplePage() {
             {/* ══ STEP 6 — PRIESTS & SCHEDULE ══ */}
             {step === 6 && (
               <div className="form-section">
-                <SectionCard icon="👳" title="Temple Priests" sub="Priests serving at this temple">
-                  {priests.map((p, idx) => (
-                    <div className="priest-card" key={p.id}>
-                      <div className="priest-card-hdr">
-                        <div className="priest-card-title">👳 Priest #{idx+1}</div>
-                        {idx > 0 && <button className="remove-priest" onClick={()=>removePriest(p.id)}>× Remove</button>}
+                <SectionCard icon="👳" title="Temple Priests" sub="Priests serving at this temple — all fields required">
+                  {priests.map((p, idx) => {
+                    const pe = priestErrors[p.id] || {};
+                    return (
+                      <div className="priest-card" key={p.id} style={{ borderColor: Object.keys(pe).length ? 'var(--red)' : 'var(--bd2)' }}>
+                        <div className="priest-card-hdr">
+                          <div className="priest-card-title">👳 Priest #{idx+1}</div>
+                          {idx > 0 && <button className="remove-priest" onClick={()=>removePriest(p.id)}>× Remove</button>}
+                        </div>
+                        {Object.keys(pe).length > 0 && (
+                          <div className="festival-err-banner">⚠ Please fill in all required priest fields</div>
+                        )}
+                        <div className="fg-3">
+                          <div className={`fg${pe.name ? ' has-error' : ''}`}>
+                            <label className="fl">Full Name <span className="req"> ✶</span></label>
+                            <input type="text" value={p.name} onChange={e=>setPriest(p.id,'name',e.target.value)} placeholder="e.g. Pandit Ram Sharma" className={pe.name ? 'priest-input-err' : ''} />
+                            {pe.name && <div className="field-err">{pe.name}</div>}
+                          </div>
+                          <div className="fg">
+                            <label className="fl">Title / Designation</label>
+                            <input type="text" value={p.title} onChange={e=>setPriest(p.id,'title',e.target.value)} placeholder="e.g. Head Priest, Pujari" />
+                          </div>
+                          <div className={`fg${pe.phone ? ' has-error' : ''}`}>
+                            <label className="fl">Phone <span className="req"> ✶</span></label>
+                            <input type="tel" value={p.phone} onChange={e=>setPriest(p.id,'phone',e.target.value)} placeholder="+91 XXXXX XXXXX" className={pe.phone ? 'priest-input-err' : ''} />
+                            {pe.phone && <div className="field-err">{pe.phone}</div>}
+                          </div>
+                        </div>
+                        <div className="fg-3">
+                          <div className={`fg${pe.sampradaya ? ' has-error' : ''}`}>
+                            <label className="fl">Sampradaya <span className="req"> ✶</span></label>
+                            <select value={p.sampradaya} onChange={e=>setPriest(p.id,'sampradaya',e.target.value)} className={pe.sampradaya ? 'priest-input-err' : ''}>
+                              {SAMPRADAYAS.map(s=><option key={s} value={s}>{s||'Select'}</option>)}
+                            </select>
+                            {pe.sampradaya && <div className="field-err">{pe.sampradaya}</div>}
+                          </div>
+                          <div className={`fg${pe.appt_type ? ' has-error' : ''}`}>
+                            <label className="fl">Appointment Type <span className="req"> ✶</span></label>
+                            <select value={p.appt_type} onChange={e=>setPriest(p.id,'appt_type',e.target.value)} className={pe.appt_type ? 'priest-input-err' : ''}>
+                              {APPT_TYPES.map(a=><option key={a} value={a}>{a||'Select'}</option>)}
+                            </select>
+                            {pe.appt_type && <div className="field-err">{pe.appt_type}</div>}
+                          </div>
+                          <div className={`fg${pe.years ? ' has-error' : ''}`}>
+                            <label className="fl">Years Serving <span className="req"> ✶</span></label>
+                            <input type="number" min={0} max={100} value={p.years}
+                              onChange={e => {
+                                const v = e.target.value;
+                                if (v==='') { setPriest(p.id,'years',''); return; }
+                                const n=parseInt(v,10);
+                                if (!isNaN(n)&&n>=0&&n<=100) setPriest(p.id,'years',String(n));
+                              }}
+                              onBlur={e => {
+                                const n=parseInt(e.target.value,10);
+                                if (isNaN(n)||n<0) setPriest(p.id,'years','0');
+                                else if (n>100) setPriest(p.id,'years','100');
+                              }}
+                              placeholder="e.g. 15"
+                              className={pe.years ? 'priest-input-err' : ''}
+                            />
+                            {pe.years && <div className="field-err">{pe.years}</div>}
+                          </div>
+                        </div>
+                        <div className={`fac-item${p.is_head?' on':''}`} style={{ display:'inline-flex', cursor:'pointer', minWidth:200 }} onClick={()=>setPriest(p.id,'is_head',!p.is_head)}>
+                          <input type="checkbox" checked={p.is_head} onChange={()=>{}} style={{ accentColor:'var(--s2)', marginRight:6 }} />
+                          Head / Chief Priest
+                        </div>
                       </div>
-                      <div className="fg-3">
-                        <Field label="Full Name" req>
-                          <Inp type="text" value={p.name} onChange={v=>setPriest(p.id,'name',v)} placeholder="e.g. Pandit Ram Sharma" />
-                        </Field>
-                        <Field label="Title / Designation">
-                          <Inp type="text" value={p.title} onChange={v=>setPriest(p.id,'title',v)} placeholder="e.g. Head Priest, Pujari" />
-                        </Field>
-                        <Field label="Phone" req>
-                          <Inp type="tel" value={p.phone} onChange={v=>setPriest(p.id,'phone',v)} placeholder="+91 XXXXX XXXXX" />
-                        </Field>
-                      </div>
-                      <div className="fg-3">
-                        <Field label="Sampradaya">
-                          <select value={p.sampradaya} onChange={e=>setPriest(p.id,'sampradaya',e.target.value)}>
-                            {SAMPRADAYAS.map(s=><option key={s} value={s}>{s||'Select'}</option>)}
-                          </select>
-                        </Field>
-                        <Field label="Appointment Type">
-                          <select value={p.appt_type} onChange={e=>setPriest(p.id,'appt_type',e.target.value)}>
-                            {APPT_TYPES.map(a=><option key={a} value={a}>{a||'Select'}</option>)}
-                          </select>
-                        </Field>
-                        <Field label="Years Serving" hint="Enter 0 – 100 years only">
-                          <Inp type="number" min={0} max={100} value={p.years}
-                            onChange={v => {
-                              if (v==='') { setPriest(p.id,'years',''); return; }
-                              const n=parseInt(v,10);
-                              if (!isNaN(n)&&n>=0&&n<=100) setPriest(p.id,'years',String(n));
-                            }}
-                            onBlur={e => {
-                              const n=parseInt(e.target.value,10);
-                              if (isNaN(n)||n<0) setPriest(p.id,'years','0');
-                              else if (n>100) setPriest(p.id,'years','100');
-                            }}
-                            placeholder="e.g. 15"
-                          />
-                        </Field>
-                      </div>
-                      <div className={`fac-item${p.is_head?' on':''}`} style={{ display:'inline-flex', cursor:'pointer', minWidth:200 }} onClick={()=>setPriest(p.id,'is_head',!p.is_head)}>
-                        <input type="checkbox" checked={p.is_head} onChange={()=>{}} style={{ accentColor:'var(--s2)', marginRight:6 }} />
-                        Head / Chief Priest
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <button className="add-btn" onClick={addPriest}>+ Add Another Priest</button>
                 </SectionCard>
 
-                <SectionCard icon="⏰" title="Daily Puja Schedule" sub="Timings of regular pujas and aartis">
+                <SectionCard icon="⏰" title="Daily Puja Schedule" sub="Timings of regular pujas and aartis — Name and Time required">
                   <div className="info-banner" style={{ marginBottom:14 }}>
                     <span>🕐</span>
                     <span>Enter times in <strong>AM / PM format</strong> — e.g. <strong>5:30 AM</strong>, <strong>12:00 PM</strong>, <strong>7:30 PM</strong></span>
                   </div>
                   <div className="sched-builder">
-                    <div className="sched-hdr"><span>Puja / Aarti Name</span><span>Time (AM / PM)</span><span>Type</span><span></span></div>
-                    {scheds.map(s => (
-                      <div className="sched-row" key={s.id}>
-                        <input type="text" value={s.name} onChange={e=>setSched(s.id,'name',e.target.value)} placeholder="e.g. Mangal Aarti" />
-                        <input type="text" value={s.time} onChange={e=>setSched(s.id,'time',e.target.value)} placeholder="5:30 AM" />
-                        <select value={s.type} onChange={e=>setSched(s.id,'type',e.target.value)}>
-                          {['Aarti','Puja','Abhishek','Bhog','Other'].map(t=><option key={t}>{t}</option>)}
-                        </select>
-                        <button className="sched-del" onClick={()=>delSched(s.id)}>×</button>
-                      </div>
-                    ))}
+                    <div className="sched-hdr"><span>Puja / Aarti Name ✶</span><span>Time (AM / PM) ✶</span><span>Type</span><span></span></div>
+                    {scheds.map(s => {
+                      const se = schedErrors[s.id] || {};
+                      return (
+                        <div className={`sched-row${Object.keys(se).length?' sched-err-row':''}`} key={s.id}>
+                          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                            <input type="text" value={s.name} onChange={e=>setSched(s.id,'name',e.target.value)} placeholder="e.g. Mangal Aarti" className={se.name ? 'sched-err-input' : ''} />
+                            {se.name && <span style={{ fontSize:10, color:'var(--red)' }}>⚠ Required</span>}
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                            <input type="text" value={s.time} onChange={e=>setSched(s.id,'time',e.target.value)} placeholder="5:30 AM" className={se.time ? 'sched-err-input' : ''} />
+                            {se.time && <span style={{ fontSize:10, color:'var(--red)' }}>⚠ Required</span>}
+                          </div>
+                          <select value={s.type} onChange={e=>setSched(s.id,'type',e.target.value)}>
+                            {['Aarti','Puja','Abhishek','Bhog','Other'].map(t=><option key={t}>{t}</option>)}
+                          </select>
+                          <button className="sched-del" onClick={()=>delSched(s.id)}>×</button>
+                        </div>
+                      );
+                    })}
                   </div>
                   <button className="add-sched-btn" onClick={addSched}>+ Add Puja Row</button>
                 </SectionCard>
@@ -1275,41 +1421,55 @@ export default function AdminAddTemplePage() {
                   <button className="add-btn" onClick={addMantra}>+ Add Another Mantra</button>
                 </SectionCard>
 
-                <SectionCard icon="🎊" title="Festivals" sub="Major festivals celebrated at this temple">
-                  {festivals.map((f, idx) => (
-                    <div className="sub-card" key={f.id}>
-                      {idx > 0 && <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={()=>removeFest(f.id)}>× Remove</button>}
-                      <div className="fg-3">
-                        <Field label="Festival Name" req>
-                          <Inp type="text" value={f.name} onChange={v=>setFest(f.id,'name',v)} placeholder="e.g. Mahashivratri" />
-                        </Field>
-                        <Field label="Hindu Month">
-                          <Inp type="text" value={f.hmonth} onChange={v=>setFest(f.id,'hmonth',v)} placeholder="e.g. Phalguna" />
-                        </Field>
-                        <Field label="Calendar Month">
-                          <select value={f.month} onChange={e=>setFest(f.id,'month',e.target.value)}>
-                            <option value="">Select</option>
-                            {MONTHS.map((m,i)=><option key={m} value={i+1}>{m}</option>)}
-                          </select>
-                        </Field>
-                      </div>
-                      <div className="fg-2">
-                        <Field label="Description">
-                          <Txt value={f.desc} onChange={v=>setFest(f.id,'desc',v)} rows={2} placeholder="How is this festival celebrated here?" />
-                        </Field>
-                        <div>
-                          <Field label="Duration (days)">
-                            <Inp type="number" min={1} value={f.days} onChange={v=>setFest(f.id,'days',v)} placeholder="e.g. 3" />
+                <SectionCard icon="🎊" title="Festivals" sub="Major festivals celebrated at this temple — Name, Month, Description and Duration are required">
+                  {festivals.map((f, idx) => {
+                    const fe = festivalErrors[f.id] || {};
+                    return (
+                      <div className="sub-card" key={f.id} style={{ borderColor: Object.keys(fe).length ? 'var(--red)' : 'var(--bd2)' }}>
+                        {idx > 0 && <button className="remove-priest" style={{ position:'absolute', top:10, right:12 }} onClick={()=>removeFest(f.id)}>× Remove</button>}
+                        {Object.keys(fe).length > 0 && (
+                          <div className="festival-err-banner">⚠ Please fill in all required festival fields</div>
+                        )}
+                        <div className="fg-3">
+                          <div className={`fg${fe.name ? ' has-error' : ''}`}>
+                            <label className="fl">Festival Name <span className="req"> ✶</span></label>
+                            <input type="text" value={f.name} onChange={e=>setFest(f.id,'name',e.target.value)} placeholder="e.g. Mahashivratri" />
+                            {fe.name && <div className="field-err">{fe.name}</div>}
+                          </div>
+                          <Field label="Hindu Month" opt>
+                            <Inp type="text" value={f.hmonth} onChange={v=>setFest(f.id,'hmonth',v)} placeholder="e.g. Phalguna" />
                           </Field>
-                          <div className={`festival-major-row${f.major?' on':''}`} onClick={()=>setFest(f.id,'major',!f.major)}>
-                            <input type="checkbox" checked={f.major} onChange={()=>{}} style={{ accentColor:'var(--s2)' }} />
-                            <span style={{ fontSize:13, color:'var(--inkm)', fontWeight:f.major?600:400 }}>⭐ Mark as Major Festival</span>
-                            {f.major && <span style={{ marginLeft:'auto', fontSize:11, color:'var(--s2)', fontWeight:600, background:'var(--slm)', padding:'2px 8px', borderRadius:20 }}>MAJOR ✓</span>}
+                          <div className={`fg${fe.month ? ' has-error' : ''}`}>
+                            <label className="fl">Calendar Month <span className="req"> ✶</span></label>
+                            <select value={f.month} onChange={e=>setFest(f.id,'month',e.target.value)}>
+                              <option value="">Select</option>
+                              {MONTHS.map((m,i)=><option key={m} value={i+1}>{m}</option>)}
+                            </select>
+                            {fe.month && <div className="field-err">{fe.month}</div>}
+                          </div>
+                        </div>
+                        <div className="fg-2">
+                          <div className={`fg${fe.desc ? ' has-error' : ''}`}>
+                            <label className="fl">Description <span className="req"> ✶</span></label>
+                            <textarea rows={2} value={f.desc} onChange={e=>setFest(f.id,'desc',e.target.value)} placeholder="How is this festival celebrated here?" />
+                            {fe.desc && <div className="field-err">{fe.desc}</div>}
+                          </div>
+                          <div>
+                            <div className={`fg${fe.days ? ' has-error' : ''}`}>
+                              <label className="fl">Duration (days) <span className="req"> ✶</span></label>
+                              <input type="number" min={1} value={f.days} onChange={e=>setFest(f.id,'days',e.target.value)} placeholder="e.g. 3" />
+                              {fe.days && <div className="field-err">{fe.days}</div>}
+                            </div>
+                            <div className={`festival-major-row${f.major?' on':''}`} onClick={()=>setFest(f.id,'major',!f.major)}>
+                              <input type="checkbox" checked={f.major} onChange={()=>{}} style={{ accentColor:'var(--s2)' }} />
+                              <span style={{ fontSize:13, color:'var(--inkm)', fontWeight:f.major?600:400 }}>⭐ Mark as Major Festival</span>
+                              {f.major && <span style={{ marginLeft:'auto', fontSize:11, color:'var(--s2)', fontWeight:600, background:'var(--slm)', padding:'2px 8px', borderRadius:20 }}>MAJOR ✓</span>}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <button className="add-btn" onClick={addFest}>+ Add Another Festival</button>
                 </SectionCard>
 
@@ -1379,7 +1539,7 @@ export default function AdminAddTemplePage() {
                   </div>
                 </div>
 
-                <SectionCard icon="✍️" title="Admin Confirmation" sub="Confirm the submission details">
+                <SectionCard icon="✍️" title="Admin Confirmation" sub="All fields are required to submit">
                   <div className="fg-3">
                     <Field label="Submitted By" req err={errors.submitter_name}>
                       <Inp type="text" value={form.submitter_name} onChange={v=>set('submitter_name',v)} placeholder="Admin name" />
@@ -1389,11 +1549,14 @@ export default function AdminAddTemplePage() {
                         {ROLES.map(r=><option key={r} value={r}>{r.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</option>)}
                       </Sel>
                     </Field>
-                    <Field label="Contact Phone">
+                    <Field label="Contact Phone" req err={errors.submitter_phone}>
                       <Inp type="tel" value={form.submitter_phone} onChange={v=>set('submitter_phone',v)} placeholder="+91 XXXXX XXXXX" />
                     </Field>
                   </div>
-                  <div style={{ marginTop:6 }}>
+                  <Field label="Contact Email" req err={errors.submitter_email}>
+                    <Inp type="email" value={form.submitter_email} onChange={v=>set('submitter_email',v)} placeholder="admin@example.com" />
+                  </Field>
+                  <div style={{ marginTop:12 }}>
                     <div className="consent-title">Consent & Compliance</div>
                     {[
                       "I confirm I am authorised to submit this temple's information to BharatMandir.",
@@ -1407,6 +1570,11 @@ export default function AdminAddTemplePage() {
                         {text}
                       </label>
                     ))}
+                    {!allConsents && (
+                      <div style={{ fontSize:12, color:'var(--inkll)', marginTop:8, fontStyle:'italic' }}>
+                        ☝️ Please check all consent boxes above to enable submission.
+                      </div>
+                    )}
                   </div>
                 </SectionCard>
 
