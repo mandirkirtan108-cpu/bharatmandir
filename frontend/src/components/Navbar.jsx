@@ -84,11 +84,11 @@ export default function Navbar() {
           maxWidth: 1200,
           margin: '0 auto',
           gap: 0,
-          position: 'relative',
+          // REMOVED: position: 'relative' — no longer needed since links are in-flow
         }}>
 
-          {/* Logo — left */}
-          <Link to="/" className="nav-logo" style={{ flexShrink: 0, marginRight: 'auto' }}>
+          {/* Logo — left, fixed width so centre links truly center */}
+          <Link to="/" className="nav-logo" style={{ flexShrink: 0 }}>
             <span className="nav-logo-icon">🛕</span>
             <div>
               <span className="nav-logo-name">BharatMandir</span>
@@ -97,13 +97,16 @@ export default function Navbar() {
           </Link>
 
           {/* ── Desktop centre links ── */}
+          {/* FIX: was position:absolute which caused overlap + height jump.
+              Now flex:1 + justifyContent:center keeps links in-flow so the
+              navbar height is stable and nothing overlaps the logo or right controls. */}
           <div className="nav-actions-desktop" style={{
             display: 'flex',
             alignItems: 'center',
             gap: 2,
-            position: 'absolute',
-            left: '50%',
-            transform: 'translateX(-50%)',
+            flex: 1,                    // ← fills remaining horizontal space
+            justifyContent: 'center',   // ← centers within that space
+            // REMOVED: position, left, transform
           }}>
             {NAV_LINKS.map((link) => (
               <Link
@@ -117,8 +120,14 @@ export default function Navbar() {
           </div>
 
           {/* ── Right side: lang + user ── */}
+          {/* FIX: removed marginLeft:'auto' — flex:1 on centre div already pushes
+              this block to the right. flexShrink:0 prevents it from squishing. */}
           <div className="nav-actions-desktop" style={{
-            display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexShrink: 0,             // ← never shrink; links shrink first
+            // REMOVED: marginLeft: 'auto'
           }}>
             <select
               className="nav-lang-select"
