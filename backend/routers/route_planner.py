@@ -1,6 +1,7 @@
 """
 Route Planner API for BharatMandir.
-POST /api/route/plan — AI-powered temple route suggestion
+POST /api/route/plan   — AI-powered temple route suggestion
+POST /api/route/cities — AI-powered city autocomplete (all Indian cities)
 Pure OpenAI knowledge — no DB dependency.
 """
 
@@ -28,6 +29,14 @@ class RoutePlanRequest(BaseModel):
     travel_mode:    str                 = "car"
     time_available: int                 = 6
     preferences:    Optional[List[str]] = []
+
+
+class CitySearchRequest(BaseModel):
+    query: str
+
+
+class CitySearchResponse(BaseModel):
+    cities: List[str]
 
 
 class TempleStop(BaseModel):
@@ -104,11 +113,9 @@ def get_known_distance(start: str, destination: str):
 
 # ─────────────────────────────────────────────
 # Known highway corridors — exact towns on the road
-# Prevents GPT from suggesting temples on parallel/wrong roads
 # ─────────────────────────────────────────────
 
 HIGHWAY_CORRIDORS = {
-    # Mandsaur → Neemuch: NH-52 going south-west
     frozenset(["mandsaur", "neemuch"]): {
         "highway": "NH-52",
         "towns": ["Mandsaur", "Neemuch"],
@@ -120,49 +127,42 @@ HIGHWAY_CORRIDORS = {
             "Only suggest temples physically located IN Mandsaur city or IN Neemuch city."
         ),
     },
-    # Mandsaur → Ujjain: via Jawra, Ratlam, Nagda
     frozenset(["mandsaur", "ujjain"]): {
         "highway": "NH-52 / SH-31",
         "towns": ["Mandsaur", "Shamgarh", "Jawra", "Ratlam", "Nagda", "Khachrod", "Ujjain"],
         "direction": "east then south",
         "exclude_note": "Do NOT include temples far off this highway corridor.",
     },
-    # Indore → Ujjain: NH-52
     frozenset(["indore", "ujjain"]): {
         "highway": "NH-52",
         "towns": ["Indore", "Dewas", "Ujjain"],
         "direction": "north-east",
         "exclude_note": "Only temples in Indore, Dewas, or Ujjain. Do not suggest temples in other districts.",
     },
-    # Bhopal → Ujjain
     frozenset(["bhopal", "ujjain"]): {
         "highway": "SH-18",
         "towns": ["Bhopal", "Sehore", "Shajapur", "Ujjain"],
         "direction": "west",
         "exclude_note": "Only temples along Bhopal–Sehore–Shajapur–Ujjain corridor.",
     },
-    # Ratlam → Ujjain
     frozenset(["ratlam", "ujjain"]): {
         "highway": "NH-52",
         "towns": ["Ratlam", "Nagda", "Khachrod", "Ujjain"],
         "direction": "east",
         "exclude_note": "Only temples along Ratlam–Nagda–Ujjain corridor.",
     },
-    # Varanasi → Prayagraj
     frozenset(["varanasi", "prayagraj"]): {
         "highway": "NH-19",
         "towns": ["Varanasi", "Mirzapur", "Prayagraj"],
         "direction": "west",
         "exclude_note": "Only temples along the NH-19 corridor.",
     },
-    # Delhi → Mathura
     frozenset(["delhi", "mathura"]): {
         "highway": "NH-19 / Yamuna Expressway",
         "towns": ["Delhi", "Faridabad", "Palwal", "Mathura"],
         "direction": "south",
         "exclude_note": "Only temples along Delhi–Mathura Yamuna Expressway corridor.",
     },
-    # Mumbai → Shirdi
     frozenset(["mumbai", "shirdi"]): {
         "highway": "Mumbai-Nashik Expressway / NH-60",
         "towns": ["Mumbai", "Thane", "Nashik", "Shirdi"],
@@ -176,20 +176,96 @@ def get_highway_corridor(start: str, destination: str):
     return HIGHWAY_CORRIDORS.get(key)
 
 
+def get_openai_client() -> OpenAI:
+    api_key = os.environ.get("VITE_OPENAI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="VITE_OPENAI_API_KEY not configured on server.")
+    return OpenAI(api_key=api_key)
+
+
+# ─────────────────────────────────────────────
+# POST /api/route/cities  — AI city autocomplete
+# ─────────────────────────────────────────────
+
+@router.post("/cities", response_model=CitySearchResponse)
+async def search_cities(req: CitySearchRequest):
+    """
+    Returns up to 10 Indian city/town names that match the given query string.
+    Covers all cities — metros, tier-2, tier-3, pilgrimage towns, and more.
+    """
+    query = req.query.strip()
+    if not query:
+        return CitySearchResponse(cities=[])
+
+    client = get_openai_client()
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",       # fast + cheap for autocomplete
+            max_tokens=300,
+            temperature=0,             # deterministic results
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a comprehensive database of every city, town, and village in India. "
+                        "You know all metros, tier-2, tier-3 cities, pilgrimage towns, district headquarters, "
+                        "tehsil towns, and well-known villages across all 28 states and 8 UTs. "
+                        "Always respond with valid JSON only."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f'List up to 10 Indian city or town names that contain or start with "{query}". '
+                        f"Include all city types: metros, tier-2, tier-3, pilgrimage cities, district towns. "
+                        f"Sort results: names that START with '{query}' first, then names that CONTAIN it. "
+                        f'Return ONLY a JSON object with a single key "cities" containing an array of strings. '
+                        f'Example: {{"cities": ["Agra", "Ahmedabad", "Akola"]}}'
+                    ),
+                },
+            ],
+        )
+
+        raw = response.choices[0].message.content
+        parsed = json.loads(raw)
+        cities = parsed.get("cities", [])
+
+        # Sanitize: keep only strings, strip whitespace, remove duplicates
+        seen = set()
+        clean = []
+        for c in cities:
+            if isinstance(c, str):
+                c = c.strip()
+                lower = c.lower()
+                if c and lower not in seen:
+                    seen.add(lower)
+                    clean.append(c)
+
+        return CitySearchResponse(cities=clean[:10])
+
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {e}")
+    except openai_lib.APIError as e:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─────────────────────────────────────────────
 # POST /api/route/plan
 # ─────────────────────────────────────────────
 
 @router.post("/plan", response_model=RoutePlanResponse)
 async def plan_route(req: RoutePlanRequest):
-    api_key = os.environ.get("VITE_OPENAI_API_KEY", "")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="VITE_OPENAI_API_KEY not configured on server.")
+    client = get_openai_client()
 
     known_distance_km = get_known_distance(req.start, req.destination)
     corridor          = get_highway_corridor(req.start, req.destination)
 
-    # Build corridor instruction for prompt
     if corridor:
         corridor_instruction = (
             f"HIGHWAY CORRIDOR: This route follows {corridor['highway']} going {corridor['direction']}.\n"
@@ -297,7 +373,6 @@ Time budget: {req.time_available} hours
 }}"""
 
     try:
-        client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
             model="gpt-4o",
             max_tokens=3500,
