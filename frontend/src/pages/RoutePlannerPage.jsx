@@ -43,7 +43,9 @@ const BOOKING_META = {
   bike:  { icon: '🗺️', label: 'Open in Google Maps',     provider: 'Google Maps',  color: '#E8650A' },
 };
 
-// ── AI-powered City Autocomplete Component ──────────────────────────────────
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// ── Google Places-powered City Autocomplete ─────────────────────────────────
 function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
   const [open, setOpen]               = useState(false);
   const [suggestions, setSuggestions] = useState([]);
@@ -52,11 +54,9 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
   const containerRef                  = useRef(null);
   const inputRef                      = useRef(null);
   const debounceTimer                 = useRef(null);
-  const currentQuery                  = useRef('');   // stale-response guard
+  const currentQuery                  = useRef('');
 
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-  // Fetch city suggestions from the backend (which calls OpenAI)
+  // Call our backend which proxies to Google Places Autocomplete
   const fetchCities = useCallback(async (query) => {
     if (!query || query.length < 1) {
       setSuggestions([]);
@@ -68,13 +68,12 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
     setFetching(true);
 
     try {
-      const res = await fetch(`${API_BASE}/api/route/cities`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
+      const res = await fetch(
+        `${API_BASE}/api/route/cities?q=${encodeURIComponent(query)}`,
+        { method: 'GET' }
+      );
 
-      // Discard if user has already typed something else
+      // Discard stale responses
       if (currentQuery.current !== query) return;
 
       if (!res.ok) throw new Error('City search failed');
@@ -90,12 +89,11 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
     } finally {
       if (currentQuery.current === query) setFetching(false);
     }
-  }, [API_BASE]);
+  }, []);
 
   const handleInput = (e) => {
     const val = e.target.value;
     onChange(val);
-
     clearTimeout(debounceTimer.current);
 
     if (!val.trim()) {
@@ -105,9 +103,8 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
       return;
     }
 
-    // Show "searching…" immediately, then debounce the actual API call
     setFetching(true);
-    debounceTimer.current = setTimeout(() => fetchCities(val.trim()), 400);
+    debounceTimer.current = setTimeout(() => fetchCities(val.trim()), 300);
   };
 
   const handleSelect = (city) => {
@@ -129,7 +126,6 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
     setTimeout(() => setOpen(false), 180);
   };
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -140,7 +136,6 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Cleanup debounce on unmount
   useEffect(() => () => clearTimeout(debounceTimer.current), []);
 
   const isDropdownOpen = open || (fetching && value.length > 0);
@@ -229,17 +224,17 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
             </div>
           )}
 
-          {/* Suggestions */}
+          {/* Suggestions list */}
           {suggestions.map((city, i) => {
-            const lower = value.toLowerCase();
-            const idx   = city.toLowerCase().indexOf(lower);
+            const lower  = value.toLowerCase();
+            const idx    = city.toLowerCase().indexOf(lower);
             const before = idx >= 0 ? city.slice(0, idx) : city;
             const match  = idx >= 0 ? city.slice(idx, idx + value.length) : '';
             const after  = idx >= 0 ? city.slice(idx + value.length) : '';
 
             return (
               <div
-                key={city}
+                key={city + i}
                 onMouseDown={(e) => { e.preventDefault(); handleSelect(city); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
@@ -253,7 +248,10 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
                 onMouseEnter={e => e.currentTarget.style.background = '#FDF6EC'}
                 onMouseLeave={e => e.currentTarget.style.background = 'white'}
               >
-                <span style={{ color: '#BBA080', fontSize: 13, flexShrink: 0 }}>📍</span>
+                {/* Google Maps pin icon */}
+                <svg width="13" height="16" viewBox="0 0 13 16" fill="none" style={{ flexShrink: 0 }}>
+                  <path d="M6.5 0C2.91 0 0 2.91 0 6.5c0 4.5 6.5 9.5 6.5 9.5S13 11 13 6.5C13 2.91 10.09 0 6.5 0zm0 8.75A2.25 2.25 0 1 1 6.5 4.25a2.25 2.25 0 0 1 0 4.5z" fill="#E8650A"/>
+                </svg>
                 <span style={{ fontSize: 14, color: '#3D1F00' }}>
                   {before}
                   {match && <strong style={{ color: '#E8650A' }}>{match}</strong>}
@@ -262,6 +260,22 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
               </div>
             );
           })}
+
+          {/* Google branding — required by Google's ToS */}
+          {suggestions.length > 0 && (
+            <div style={{
+              padding: '6px 14px 8px',
+              display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+              borderTop: '1px solid #F5EDE0',
+            }}>
+              <span style={{ fontFamily: UI_FONT, fontSize: 10, color: '#BBA080', marginRight: 4 }}>powered by</span>
+              <svg height="12" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg">
+                <text y="15" fontSize="13" fontFamily="Arial" fontWeight="bold">
+                  <tspan fill="#4285F4">G</tspan><tspan fill="#EA4335">o</tspan><tspan fill="#FBBC05">o</tspan><tspan fill="#4285F4">g</tspan><tspan fill="#34A853">l</tspan><tspan fill="#EA4335">e</tspan>
+                </text>
+              </svg>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -292,7 +306,6 @@ export default function RoutePlannerPage() {
       setError('Please enter both start and destination.'); return;
     }
     setLoading(true); setError(null); setResult(null);
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     try {
       const res = await fetch(`${API_BASE}/api/route/plan`, {
         method: 'POST',
@@ -343,97 +356,67 @@ export default function RoutePlannerPage() {
     <>
       <Navbar />
 
-      {/* ── HERO ─────────────────────────────────────────────────────── */}
+      {/* ── HERO ── */}
       <section style={{
-        position: 'relative',
-        overflow: 'hidden',
+        position: 'relative', overflow: 'hidden',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
         padding: '50px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '100%',
-        boxSizing: 'border-box',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        width: '100%', boxSizing: 'border-box',
       }}>
         <div style={{
-          position: 'relative', zIndex: 1,
-          width: '100%', maxWidth: 700,
-          padding: '0 24px',
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center',
+          position: 'relative', zIndex: 1, width: '100%', maxWidth: 700,
+          padding: '0 24px', boxSizing: 'border-box',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
         }}>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,213,128,0.3)',
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
             borderRadius: 50, padding: '5px 16px', marginBottom: 14,
             color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
-            textTransform: 'uppercase', fontWeight: 500,
-            backdropFilter: 'blur(8px)',
-            whiteSpace: 'nowrap',
+            textTransform: 'uppercase', fontWeight: 500, backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
           }}>✨ AI Route Planner</div>
 
           <h1 style={{
             fontFamily: 'var(--font-display)', fontWeight: 900,
             fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
-            marginBottom: 10, marginTop: 0,
-            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-            color: '#ffffff',
-            width: '100%',
+            marginBottom: 10, marginTop: 0, textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#ffffff', width: '100%',
           }}>
             Your Journey,{' '}
             <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
           </h1>
 
           <p style={{
-            color: 'rgba(255,255,255,0.7)', fontSize: 14,
-            width: '100%', maxWidth: 520,
-            margin: '0 0 22px 0',
-            fontWeight: 300, lineHeight: 1.7,
-            textAlign: 'center',
+            color: 'rgba(255,255,255,0.7)', fontSize: 14, width: '100%', maxWidth: 520,
+            margin: '0 0 22px 0', fontWeight: 300, lineHeight: 1.7, textAlign: 'center',
           }}>
             Tell us where you're headed — we'll find every sacred temple along your spiritual path.
           </p>
 
-          <div style={{
-            display: 'flex', justifyContent: 'center',
-            gap: 8, flexWrap: 'wrap',
-            width: '100%',
-          }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', width: '100%' }}>
             {[
               { label: '📍 Plan Route',    action: () => {} },
               { label: '📋 My Routes',     action: () => {} },
               { label: '🛕 Saved Temples', action: () => {} },
             ].map((tab, i) => (
-              <button
-                key={i}
-                onClick={tab.action}
-                style={{
-                  padding: '8px 20px', borderRadius: 50,
-                  cursor: 'pointer',
-                  fontSize: 13, fontWeight: 600,
-                  background: i === 0 ? '#FFD580' : 'rgba(255,255,255,0.1)',
-                  color: i === 0 ? '#7a3208' : '#FFD580',
-                  backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,213,128,0.2)',
-                  transition: 'all 0.18s',
-                  whiteSpace: 'nowrap',
-                }}
-              >{tab.label}</button>
+              <button key={i} onClick={tab.action} style={{
+                padding: '8px 20px', borderRadius: 50, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                background: i === 0 ? '#FFD580' : 'rgba(255,255,255,0.1)',
+                color: i === 0 ? '#7a3208' : '#FFD580',
+                backdropFilter: 'blur(8px)', border: '1px solid rgba(255,213,128,0.2)',
+                transition: 'all 0.18s', whiteSpace: 'nowrap',
+              }}>{tab.label}</button>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── BODY ─────────────────────────────────────────────────────── */}
+      {/* ── BODY ── */}
       <section style={{ background: '#f8f4ef', paddingBottom: 80, paddingTop: 48 }}>
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 20px' }}>
 
-          {/* ── PLANNER CARD ── */}
+          {/* PLANNER CARD */}
           <div style={{
             background: 'white', borderRadius: 24,
             boxShadow: '0 8px 40px rgba(61,31,0,0.13)',
@@ -442,10 +425,8 @@ export default function RoutePlannerPage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
               <div style={{
-                width: 48, height: 48, borderRadius: 14,
-                background: 'rgba(232,101,10,0.10)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 22, flexShrink: 0,
+                width: 48, height: 48, borderRadius: 14, background: 'rgba(232,101,10,0.10)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0,
               }}>📍</div>
               <div>
                 <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: '#7a3208', marginBottom: 2 }}>
@@ -457,7 +438,7 @@ export default function RoutePlannerPage() {
               </div>
             </div>
 
-            {/* FROM / TO — AI autocomplete */}
+            {/* FROM / TO */}
             <div className="route-form-inner" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 26 }}>
               <CityAutocomplete
                 label="From"
@@ -484,19 +465,15 @@ export default function RoutePlannerPage() {
                 {TRAVEL_MODES.map(m => {
                   const active = form.travel_mode === m.value;
                   return (
-                    <button
-                      key={m.value}
-                      onClick={() => setForm(f => ({ ...f, travel_mode: m.value }))}
-                      style={{
-                        border: `2px solid ${active ? '#E8650A' : '#EDE0CC'}`,
-                        borderRadius: 14, padding: '13px 8px',
-                        background: active ? 'linear-gradient(135deg, #E8650A, #FF8C2A)' : 'white',
-                        color: active ? 'white' : '#5C3D1E',
-                        cursor: 'pointer', textAlign: 'center', transition: 'all .2s',
-                        boxShadow: active ? '0 4px 16px rgba(232,101,10,0.28)' : 'none',
-                        fontFamily: UI_FONT,
-                      }}
-                    >
+                    <button key={m.value} onClick={() => setForm(f => ({ ...f, travel_mode: m.value }))} style={{
+                      border: `2px solid ${active ? '#E8650A' : '#EDE0CC'}`,
+                      borderRadius: 14, padding: '13px 8px',
+                      background: active ? 'linear-gradient(135deg, #E8650A, #FF8C2A)' : 'white',
+                      color: active ? 'white' : '#5C3D1E',
+                      cursor: 'pointer', textAlign: 'center', transition: 'all .2s',
+                      boxShadow: active ? '0 4px 16px rgba(232,101,10,0.28)' : 'none',
+                      fontFamily: UI_FONT,
+                    }}>
                       <div style={{ fontSize: 22, marginBottom: 5 }}>{m.icon}</div>
                       <div style={{ fontSize: 12, fontWeight: 600 }}>{m.label}</div>
                     </button>
@@ -505,7 +482,7 @@ export default function RoutePlannerPage() {
               </div>
             </div>
 
-            {/* TEMPLE PREFERENCES */}
+            {/* PREFERENCES */}
             <div style={{ marginBottom: 28 }}>
               <h3 style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 12 }}>
                 Temple Preferences{' '}
@@ -515,40 +492,30 @@ export default function RoutePlannerPage() {
                 {PREF_OPTIONS.map(p => {
                   const active = form.preferences.includes(p);
                   return (
-                    <button
-                      key={p}
-                      onClick={() => togglePref(p)}
-                      style={{
-                        padding: '8px 16px', borderRadius: 50, fontFamily: UI_FONT,
-                        border: `2px solid ${active ? '#E8650A' : '#EDE0CC'}`,
-                        background: active ? 'linear-gradient(135deg, #E8650A, #FF8C2A)' : '#FDF6EC',
-                        color: active ? 'white' : '#5C3D1E',
-                        cursor: 'pointer', fontSize: 13, fontWeight: 500, transition: 'all .2s',
-                        boxShadow: active ? '0 3px 10px rgba(232,101,10,0.28)' : 'none',
-                      }}
-                    >
-                      {p}
-                    </button>
+                    <button key={p} onClick={() => togglePref(p)} style={{
+                      padding: '8px 16px', borderRadius: 50, fontFamily: UI_FONT,
+                      border: `2px solid ${active ? '#E8650A' : '#EDE0CC'}`,
+                      background: active ? 'linear-gradient(135deg, #E8650A, #FF8C2A)' : '#FDF6EC',
+                      color: active ? 'white' : '#5C3D1E',
+                      cursor: 'pointer', fontSize: 13, fontWeight: 500, transition: 'all .2s',
+                      boxShadow: active ? '0 3px 10px rgba(232,101,10,0.28)' : 'none',
+                    }}>{p}</button>
                   );
                 })}
               </div>
             </div>
 
             {/* CTA */}
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              style={{
-                width: '100%', padding: '16px', borderRadius: 50, border: 'none',
-                background: 'linear-gradient(135deg, #3D1F00 0%, #B84D00 50%, #E8650A 100%)',
-                color: 'white', fontSize: 16, fontWeight: 700,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                fontFamily: 'var(--font-display)', letterSpacing: '.04em',
-                boxShadow: '0 6px 22px rgba(184,77,0,0.32)',
-                transition: 'all .25s', opacity: loading ? 0.75 : 1,
-              }}
-            >
+            <button onClick={handleSubmit} disabled={loading} style={{
+              width: '100%', padding: '16px', borderRadius: 50, border: 'none',
+              background: 'linear-gradient(135deg, #3D1F00 0%, #B84D00 50%, #E8650A 100%)',
+              color: 'white', fontSize: 16, fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              fontFamily: 'var(--font-display)', letterSpacing: '.04em',
+              boxShadow: '0 6px 22px rgba(184,77,0,0.32)',
+              transition: 'all .25s', opacity: loading ? 0.75 : 1,
+            }}>
               {loading
                 ? <><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Sacred Stops…</>
                 : <>✨ Plan My Spiritual Route</>}
@@ -566,7 +533,7 @@ export default function RoutePlannerPage() {
             )}
           </div>
 
-          {/* ── LOADING ── */}
+          {/* LOADING */}
           {loading && (
             <div style={{ textAlign: 'center', padding: '60px 20px' }}>
               <div style={{ fontSize: 52, marginBottom: 16, animation: 'float 2.5s ease-in-out infinite' }}>🛕</div>
@@ -579,7 +546,7 @@ export default function RoutePlannerPage() {
             </div>
           )}
 
-          {/* ── RESULTS ── */}
+          {/* RESULTS */}
           {result && !loading && (
             <div style={{ marginTop: 32, animation: 'fadeDown .6s ease both' }}>
 
@@ -605,9 +572,7 @@ export default function RoutePlannerPage() {
               }}>
                 <div className="route-summary-inner" style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontFamily: UI_FONT, fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 8, fontWeight: 700 }}>
-                      Your Route
-                    </p>
+                    <p style={{ fontFamily: UI_FONT, fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 8, fontWeight: 700 }}>Your Route</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'white' }}>
                       {result.route_summary.start}
                       <span style={{ color: '#FFD580' }}>→</span>
@@ -630,7 +595,6 @@ export default function RoutePlannerPage() {
               </div>
 
               <div className="route-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 22, alignItems: 'start' }}>
-
                 <div>
                   <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 800, color: '#7a3208', marginBottom: 14 }}>
                     🛕 Temples Along Your Route
@@ -640,19 +604,16 @@ export default function RoutePlannerPage() {
                       <div key={i} style={{
                         background: 'white', borderRadius: 16,
                         border: `2px solid ${t.importance === 'high' ? '#E8650A' : '#EDE0CC'}`,
-                        padding: '18px 20px',
-                        boxShadow: '0 2px 10px rgba(61,31,0,0.06)',
-                        transition: 'all .2s',
+                        padding: '18px 20px', boxShadow: '0 2px 10px rgba(61,31,0,0.06)', transition: 'all .2s',
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 10, flexWrap: 'wrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00' }}>{t.name}</h3>
                             {t.importance === 'high' && (
                               <span style={{
-                                background: '#E8650A', color: 'white',
-                                fontFamily: UI_FONT, fontSize: 9, fontWeight: 700,
-                                letterSpacing: '.07em', padding: '3px 9px',
-                                borderRadius: 50, whiteSpace: 'nowrap', flexShrink: 0,
+                                background: '#E8650A', color: 'white', fontFamily: UI_FONT,
+                                fontSize: 9, fontWeight: 700, letterSpacing: '.07em',
+                                padding: '3px 9px', borderRadius: 50, whiteSpace: 'nowrap', flexShrink: 0,
                               }}>⭐ MUST VISIT</span>
                             )}
                           </div>
@@ -676,23 +637,17 @@ export default function RoutePlannerPage() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div style={{ background: 'white', borderRadius: 16, border: '1px solid #EDE0CC', padding: '20px', boxShadow: '0 2px 10px rgba(61,31,0,0.06)' }}>
-                    <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00', marginBottom: 16 }}>
-                      🗺️ Optimized Itinerary
-                    </h3>
+                    <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00', marginBottom: 16 }}>🗺️ Optimized Itinerary</h3>
                     {(result.optimized_plan || []).map((stop, i) => (
                       <div key={i} style={{ display: 'flex', gap: 12, position: 'relative' }}>
                         {i < result.optimized_plan.length - 1 && (
                           <div style={{ position: 'absolute', left: 14, top: 28, bottom: 0, width: 2, background: '#EDE0CC', zIndex: 0 }} />
                         )}
                         <div style={{
-                          width: 28, height: 28, borderRadius: '50%',
-                          background: '#E8650A', color: 'white',
+                          width: 28, height: 28, borderRadius: '50%', background: '#E8650A', color: 'white',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontFamily: UI_FONT, fontWeight: 700, fontSize: 12,
-                          flexShrink: 0, zIndex: 1,
-                        }}>
-                          {stop.stop_number}
-                        </div>
+                          fontFamily: UI_FONT, fontWeight: 700, fontSize: 12, flexShrink: 0, zIndex: 1,
+                        }}>{stop.stop_number}</div>
                         <div style={{ paddingBottom: 18 }}>
                           <p style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: '#3D1F00' }}>{stop.temple_name}</p>
                           {stop.arrival_time_hint && (
@@ -705,13 +660,8 @@ export default function RoutePlannerPage() {
                   </div>
 
                   {result.insights?.length > 0 && (
-                    <div style={{
-                      background: 'rgba(200,150,12,0.06)',
-                      borderRadius: 16, border: '1px solid rgba(200,150,12,0.2)', padding: '20px',
-                    }}>
-                      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00', marginBottom: 12 }}>
-                        💡 Pandit's Tips
-                      </h3>
+                    <div style={{ background: 'rgba(200,150,12,0.06)', borderRadius: 16, border: '1px solid rgba(200,150,12,0.2)', padding: '20px' }}>
+                      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00', marginBottom: 12 }}>💡 Pandit's Tips</h3>
                       {result.insights.map((tip, i) => (
                         <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 10 }}>
                           <Star size={12} color="#C8960C" style={{ marginTop: 4, flexShrink: 0 }} />
@@ -721,18 +671,15 @@ export default function RoutePlannerPage() {
                     </div>
                   )}
 
-                  <button
-                    onClick={handleCopy}
-                    style={{
-                      width: '100%', padding: '12px', borderRadius: 50,
-                      border: `2px solid ${copied ? '#16a34a' : '#EDE0CC'}`,
-                      background: copied ? '#f0fdf4' : '#FDF6EC',
-                      color: copied ? '#15803d' : '#5C3D1E',
-                      fontFamily: UI_FONT, fontSize: 13, fontWeight: 600,
-                      cursor: 'pointer', transition: 'all .2s',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    }}
-                  >
+                  <button onClick={handleCopy} style={{
+                    width: '100%', padding: '12px', borderRadius: 50,
+                    border: `2px solid ${copied ? '#16a34a' : '#EDE0CC'}`,
+                    background: copied ? '#f0fdf4' : '#FDF6EC',
+                    color: copied ? '#15803d' : '#5C3D1E',
+                    fontFamily: UI_FONT, fontSize: 13, fontWeight: 600,
+                    cursor: 'pointer', transition: 'all .2s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}>
                     {copied ? '✅ Copied!' : '📋 Copy Route Summary'}
                   </button>
                 </div>
@@ -740,26 +687,18 @@ export default function RoutePlannerPage() {
             </div>
           )}
 
-          {/* ── BOOKING CARD ── */}
+          {/* BOOKING CARD */}
           <div style={{
-            marginTop: result ? 32 : 24,
-            background: 'white', borderRadius: 24,
-            border: '1px solid rgba(232,101,10,0.14)',
-            boxShadow: '0 4px 20px rgba(61,31,0,0.08)',
-            padding: '24px 28px',
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 20, flexWrap: 'wrap',
+            marginTop: result ? 32 : 24, background: 'white', borderRadius: 24,
+            border: '1px solid rgba(232,101,10,0.14)', boxShadow: '0 4px 20px rgba(61,31,0,0.08)',
+            padding: '24px 28px', display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', gap: 20, flexWrap: 'wrap',
           }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
               <div style={{
-                width: 52, height: 52, borderRadius: 14,
-                background: `${bookingMeta.color}15`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 24, flexShrink: 0,
-              }}>
-                {bookingMeta.icon}
-              </div>
+                width: 52, height: 52, borderRadius: 14, background: `${bookingMeta.color}15`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0,
+              }}>{bookingMeta.icon}</div>
               <div>
                 <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: '#7a3208', marginBottom: 4 }}>
                   Already know your route?
@@ -796,9 +735,7 @@ export default function RoutePlannerPage() {
         @keyframes spin     { to { transform: rotate(360deg); } }
         @keyframes float    { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
         @keyframes fadeDown { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
-        @media (max-width: 860px) {
-          .route-results-grid  { grid-template-columns: 1fr !important; }
-        }
+        @media (max-width: 860px) { .route-results-grid  { grid-template-columns: 1fr !important; } }
         @media (max-width: 720px) {
           .route-form-inner    { grid-template-columns: 1fr !important; }
           .mode-grid           { grid-template-columns: repeat(2,1fr) !important; }
