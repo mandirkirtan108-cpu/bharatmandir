@@ -22,10 +22,8 @@ function speakVerse(text) {
 function stopSpeaking() { window.speechSynthesis?.cancel(); }
 
 /* ═══════════════════════════════════════════════════════════════
-   BOOK ICON — Matches screenshot exactly:
-   • ॐ symbol large on top
-   • Open book with two pages below
-   • Clean, bold, clearly visible at all sizes
+   BOOK ICON — Sacred book with OM printed on the cover,
+   like a physical scripture (matches the uploaded reference image)
 ═══════════════════════════════════════════════════════════════ */
 function BookIcon({ size = 48, color = '#c2410c', style = {} }) {
   return (
@@ -37,50 +35,38 @@ function BookIcon({ size = 48, color = '#c2410c', style = {} }) {
       xmlns="http://www.w3.org/2000/svg"
       style={{ flexShrink: 0, display: 'block', ...style }}
     >
-      {/* ॐ — large, bold, centered top */}
+      {/* Book spine (left edge) */}
+      <rect x="4" y="6" width="6" height="36" rx="2"
+        fill={color} opacity="0.85" />
+
+      {/* Book cover (front face) */}
+      <rect x="10" y="6" width="34" height="36" rx="2"
+        fill={`${color}18`}
+        stroke={color}
+        strokeWidth="1.8" />
+
+      {/* Cover border decoration (inner frame) */}
+      <rect x="13" y="9" width="28" height="30" rx="1.5"
+        fill="none"
+        stroke={color}
+        strokeWidth="0.9"
+        opacity="0.5" />
+
+      {/* ॐ symbol large and centered on the cover */}
       <text
-        x="24"
-        y="15"
+        x="27"
+        y="30"
         textAnchor="middle"
-        fontSize="14"
+        fontSize="20"
         fontWeight="900"
         fill={color}
-        fontFamily="Georgia, serif"
+        fontFamily="Georgia, 'Noto Serif Devanagari', serif"
+        opacity="0.9"
       >ॐ</text>
 
-      {/* LEFT page — solid fill + border */}
-      <path
-        d="M4 20 C4 19 5 18 6 18 L22 18 L22 42 L6 42 C5 42 4 41 4 40 Z"
-        fill={`${color}20`}
-        stroke={color}
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-
-      {/* RIGHT page */}
-      <path
-        d="M26 18 L42 18 C43 18 44 19 44 20 L44 40 C44 41 43 42 42 42 L26 42 Z"
-        fill={`${color}10`}
-        stroke={color}
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-
-      {/* Center spine crease */}
-      <line x1="24" y1="18" x2="24" y2="42" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
-
-      {/* Slight curve at top of spine */}
-      <path d="M22 18 Q24 15 26 18" stroke={color} strokeWidth="2" fill="none" strokeLinecap="round"/>
-
-      {/* Text lines — LEFT page */}
-      <line x1="8"  y1="25" x2="20" y2="25" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
-      <line x1="8"  y1="30" x2="20" y2="30" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
-      <line x1="8"  y1="35" x2="16" y2="35" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.6"/>
-
-      {/* Text lines — RIGHT page */}
-      <line x1="28" y1="25" x2="40" y2="25" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.4"/>
-      <line x1="28" y1="30" x2="40" y2="30" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.4"/>
-      <line x1="28" y1="35" x2="36" y2="35" stroke={color} strokeWidth="1.5" strokeLinecap="round" opacity="0.4"/>
+      {/* Subtle horizontal line above OM (like a title bar) */}
+      <line x1="15" y1="14" x2="39" y2="14"
+        stroke={color} strokeWidth="0.8" opacity="0.4" />
     </svg>
   );
 }
@@ -557,8 +543,8 @@ export default function SacredBooksPage() {
                       className="book-card"
                       style={{
                         background: 'white',
+                        /* ── Hanuman Chalisa style: uniform accent border, no thick top ── */
                         border: `2px solid ${book.accent_color}`,
-                        borderTop: `5px solid ${book.accent_color}`,
                         borderRadius: 16,
                         padding: '22px 24px 24px',
                         cursor: 'pointer',
@@ -575,7 +561,7 @@ export default function SacredBooksPage() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-                        {/* Open book + OM icon in rounded square — matches screenshot */}
+                        {/* Sacred book icon with OM on cover */}
                         <div style={{
                           width: 54, height: 54,
                           borderRadius: 12,
