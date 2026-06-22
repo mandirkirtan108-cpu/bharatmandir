@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { MapPin, Navigation, Star, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
@@ -23,6 +23,56 @@ const PREF_OPTIONS = [
   '🌿 Peaceful & Serene',
 ];
 
+// ── Comprehensive list of Indian pilgrimage cities ──────────────────────────
+const INDIAN_PILGRIMAGE_CITIES = [
+  // Uttar Pradesh
+  'Varanasi', 'Prayagraj', 'Mathura', 'Vrindavan', 'Ayodhya', 'Lucknow', 'Agra', 'Allahabad',
+  'Chitrakoot', 'Vindhyachal', 'Naimisharanya',
+  // Madhya Pradesh
+  'Ujjain', 'Indore', 'Bhopal', 'Mandsaur', 'Ratlam', 'Dewas', 'Omkareshwar', 'Maheshwar',
+  'Orchha', 'Khajuraho', 'Amarkantak', 'Maihar', 'Sehore', 'Shajapur', 'Nagda', 'Neemuch',
+  'Rampura', 'Jawra', 'Shamgarh',
+  // Rajasthan
+  'Jaipur', 'Jodhpur', 'Udaipur', 'Pushkar', 'Ajmer', 'Nathdwara', 'Bikaner', 'Kota',
+  'Mount Abu', 'Sawai Madhopur',
+  // Gujarat
+  'Ahmedabad', 'Somnath', 'Dwarka', 'Palitana', 'Ambaji', 'Surat', 'Vadodara', 'Rajkot',
+  'Dakor', 'Pavagadh',
+  // Maharashtra
+  'Mumbai', 'Pune', 'Nashik', 'Shirdi', 'Pandharpur', 'Tuljapur', 'Kolhapur', 'Aurangabad',
+  'Nagpur', 'Trimbakeshwar', 'Bhimashankar',
+  // Uttarakhand
+  'Haridwar', 'Rishikesh', 'Dehradun', 'Kedarnath', 'Badrinath', 'Gangotri', 'Yamunotri',
+  'Chardham', 'Omkareshwar',
+  // Himachal Pradesh
+  'Shimla', 'Dharamshala', 'Mandi', 'Rewalsar', 'Vashisht', 'Manali',
+  // Punjab & Haryana
+  'Amritsar', 'Anandpur Sahib', 'Kurukshetra', 'Chandigarh',
+  // Delhi NCR
+  'Delhi', 'New Delhi', 'Noida', 'Gurugram', 'Faridabad',
+  // Bihar & Jharkhand
+  'Patna', 'Bodh Gaya', 'Rajgir', 'Nalanda', 'Vaishali', 'Deoghar', 'Parasnath',
+  // West Bengal
+  'Kolkata', 'Tarapith', 'Navadwip', 'Mayapur', 'Kalighat',
+  // Odisha
+  'Puri', 'Bhubaneswar', 'Cuttack', 'Konark',
+  // Tamil Nadu
+  'Chennai', 'Madurai', 'Tirupati', 'Rameswaram', 'Kanchipuram', 'Chidambaram', 'Mahabalipuram',
+  'Thanjavur', 'Srirangam', 'Tiruvannamalai',
+  // Andhra Pradesh / Telangana
+  'Srikalahasti', 'Vijayawada', 'Hyderabad', 'Srisailam', 'Yadagirigutta',
+  // Karnataka
+  'Bengaluru', 'Mysuru', 'Hampi', 'Udupi', 'Dharmasthala', 'Gokarna', 'Kukke Subramanya',
+  // Kerala
+  'Thiruvananthapuram', 'Guruvayur', 'Sabarimala', 'Thrissur',
+  // Goa
+  'Panaji', 'Margao',
+  // Assam & Northeast
+  'Guwahati', 'Kamakhya',
+  // Jammu & Kashmir
+  'Jammu', 'Vaishno Devi', 'Amarnath',
+];
+
 function toHyphen(city) {
   return city.trim().toLowerCase().replace(/\s+/g, '-');
 }
@@ -44,6 +94,164 @@ const BOOKING_META = {
   bike:  { icon: '🗺️', label: 'Open in Google Maps',     provider: 'Google Maps',  color: '#E8650A' },
 };
 
+// ── CityAutocomplete Component ──────────────────────────────────────────────
+function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
+  const [open, setOpen]           = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [focused, setFocused]     = useState(false);
+  const containerRef              = useRef(null);
+  const inputRef                  = useRef(null);
+
+  const getSuggestions = useCallback((text) => {
+    if (!text || text.length < 1) return [];
+    const lower = text.toLowerCase();
+    return INDIAN_PILGRIMAGE_CITIES
+      .filter(c => c.toLowerCase().includes(lower))
+      .sort((a, b) => {
+        // Prioritize starts-with matches
+        const aStarts = a.toLowerCase().startsWith(lower);
+        const bStarts = b.toLowerCase().startsWith(lower);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, 8);
+  }, []);
+
+  const handleInput = (e) => {
+    const val = e.target.value;
+    onChange(val);
+    const s = getSuggestions(val);
+    setSuggestions(s);
+    setOpen(s.length > 0);
+  };
+
+  const handleSelect = (city) => {
+    onChange(city);
+    setOpen(false);
+    setSuggestions([]);
+    inputRef.current?.blur();
+  };
+
+  const handleFocus = () => {
+    setFocused(true);
+    if (value) {
+      const s = getSuggestions(value);
+      setSuggestions(s);
+      setOpen(s.length > 0);
+    }
+  };
+
+  const handleBlur = () => {
+    setFocused(false);
+    // Delay to allow click on suggestion
+    setTimeout(() => setOpen(false), 150);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <label style={{
+        display: 'block', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700,
+        letterSpacing: '.09em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 8,
+      }}>{label}</label>
+
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        border: `2px solid ${focused ? '#E8650A' : '#EDE0CC'}`,
+        borderRadius: open ? '14px 14px 0 0' : 14,
+        padding: '13px 16px',
+        background: 'white',
+        transition: 'border-color .2s, border-radius .15s',
+      }}>
+        {icon}
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={handleInput}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          placeholder={placeholder}
+          autoComplete="off"
+          style={{
+            width: '100%', border: 'none', outline: 'none',
+            background: 'transparent', fontSize: 15,
+            color: '#1A0A00', fontFamily: UI_FONT,
+          }}
+        />
+        {value && (
+          <button
+            onMouseDown={(e) => { e.preventDefault(); onChange(''); setSuggestions([]); setOpen(false); }}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#BBA080', fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0,
+            }}
+          >×</button>
+        )}
+      </div>
+
+      {/* Dropdown */}
+      {open && suggestions.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999,
+          background: 'white',
+          border: '2px solid #E8650A',
+          borderTop: '1px solid #EDE0CC',
+          borderRadius: '0 0 14px 14px',
+          boxShadow: '0 8px 24px rgba(61,31,0,0.14)',
+          overflow: 'hidden',
+          maxHeight: 260,
+          overflowY: 'auto',
+        }}>
+          {suggestions.map((city, i) => {
+            const lower = value.toLowerCase();
+            const idx   = city.toLowerCase().indexOf(lower);
+            const before = city.slice(0, idx);
+            const match  = city.slice(idx, idx + value.length);
+            const after  = city.slice(idx + value.length);
+            return (
+              <div
+                key={city}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(city); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '11px 16px',
+                  cursor: 'pointer',
+                  borderBottom: i < suggestions.length - 1 ? '1px solid #FDF6EC' : 'none',
+                  background: 'white',
+                  transition: 'background .12s',
+                  fontFamily: UI_FONT,
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#FDF6EC'}
+                onMouseLeave={e => e.currentTarget.style.background = 'white'}
+              >
+                <span style={{ color: '#BBA080', fontSize: 13, flexShrink: 0 }}>📍</span>
+                <span style={{ fontSize: 14, color: '#3D1F00' }}>
+                  {before}
+                  <strong style={{ color: '#E8650A' }}>{match}</strong>
+                  {after}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ───────────────────────────────────────────────────────────────
 export default function RoutePlannerPage() {
   const [form, setForm] = useState({
     start: '', destination: '', travel_mode: 'car',
@@ -113,12 +321,6 @@ export default function RoutePlannerPage() {
   const bookingSubtitle = form.start.trim() && form.destination.trim()
     ? `${form.start} → ${form.destination} via ${form.travel_mode}`
     : 'Enter your route above to get a direct booking link.';
-
-  /* ── shared label style ── */
-  const labelStyle = {
-    display: 'block', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700,
-    letterSpacing: '.09em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 8,
-  };
 
   return (
     <>
@@ -245,36 +447,22 @@ export default function RoutePlannerPage() {
               </div>
             </div>
 
-            {/* FROM / TO */}
+            {/* FROM / TO — with autocomplete */}
             <div className="route-form-inner" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 26 }}>
-              {[
-                { label: 'From', icon: <MapPin size={16} color="#E8650A" style={{ flexShrink: 0 }} />, key: 'start', ph: 'e.g. Indore' },
-                { label: 'To', icon: <Navigation size={16} color="#6B3A1F" style={{ flexShrink: 0 }} />, key: 'destination', ph: 'e.g. Ujjain' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label style={labelStyle}>{f.label}</label>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    border: '2px solid #EDE0CC', borderRadius: 14, padding: '13px 16px',
-                    background: 'white', transition: 'border-color .2s',
-                  }}>
-                    {f.icon}
-                    <input
-                      type="text"
-                      value={form[f.key]}
-                      onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                      placeholder={f.ph}
-                      style={{
-                        width: '100%', border: 'none', outline: 'none',
-                        background: 'transparent', fontSize: 15,
-                        color: '#1A0A00', fontFamily: UI_FONT,
-                      }}
-                      onFocus={e => e.target.closest('div').style.borderColor = '#E8650A'}
-                      onBlur={e  => e.target.closest('div').style.borderColor = '#EDE0CC'}
-                    />
-                  </div>
-                </div>
-              ))}
+              <CityAutocomplete
+                label="From"
+                placeholder="e.g. Indore"
+                value={form.start}
+                onChange={val => setForm(prev => ({ ...prev, start: val }))}
+                icon={<MapPin size={16} color="#E8650A" style={{ flexShrink: 0 }} />}
+              />
+              <CityAutocomplete
+                label="To"
+                placeholder="e.g. Ujjain"
+                value={form.destination}
+                onChange={val => setForm(prev => ({ ...prev, destination: val }))}
+                icon={<Navigation size={16} color="#6B3A1F" style={{ flexShrink: 0 }} />}
+              />
             </div>
 
             {/* TRAVEL MODE */}
@@ -533,7 +721,7 @@ export default function RoutePlannerPage() {
                     </div>
                   )}
 
-                  {/* Copy Route — inline toast, no alert() */}
+                  {/* Copy Route */}
                   <button
                     onClick={handleCopy}
                     style={{
@@ -553,7 +741,7 @@ export default function RoutePlannerPage() {
             </div>
           )}
 
-          {/* ── BOOKING CARD — below results ── */}
+          {/* ── BOOKING CARD ── */}
           <div style={{
             marginTop: result ? 32 : 24,
             background: 'white', borderRadius: 24,
