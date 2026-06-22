@@ -26,18 +26,18 @@ export default function Footer() {
     <footer style={{
       background: 'linear-gradient(180deg, #3d1504 0%, #2a0d02 100%)',
       color: '#e8d5b8',
-      paddingTop: 56,
+      paddingTop: 28,
       paddingBottom: 0,
       fontFamily: 'var(--font-body, system-ui, sans-serif)',
     }}>
 
       {/* ── Top section ── */}
       <div style={{
-        maxWidth: 1100, margin: '0 auto',
-        padding: '0 24px 48px',
+        maxWidth: 780, margin: '0 auto',
+        padding: '0 24px 24px',
         display: 'grid',
-        gridTemplateColumns: '1.6fr 1fr 1fr 1fr',
-        gap: 40,
+        gridTemplateColumns: '1.5fr 0.9fr 0.9fr 0.9fr',
+        gap: 24,
       }}
         className="footer-grid"
       >
@@ -63,7 +63,7 @@ export default function Footer() {
           <p style={{
             fontSize: 13, lineHeight: 1.8,
             color: 'rgba(232,213,184,0.72)',
-            marginBottom: 22, marginTop: 0, maxWidth: 260,
+            marginBottom: 22, marginTop: 0, maxWidth: 220,
           }}>
             Connecting devotees with the sacred temples and scriptures of Bharat — preserving our spiritual heritage for generations.
           </p>
@@ -118,9 +118,9 @@ export default function Footer() {
 
       {/* ── Divider ── */}
       <div style={{
-        maxWidth: 1100, margin: '0 auto',
+        maxWidth: 780, margin: '0 auto',
         borderTop: '1px solid rgba(255,213,128,0.1)',
-        padding: '18px 24px',
+        padding: '14px 24px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
