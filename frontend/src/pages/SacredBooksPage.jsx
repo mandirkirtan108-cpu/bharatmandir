@@ -531,8 +531,8 @@ export default function SacredBooksPage() {
             {loadingBooks ? <Spinner /> : (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                gap: 20,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                gap: 18,
               }}>
                 {filteredBooks.map(book => {
                   const prog = getProgress(book.slug);
@@ -542,78 +542,107 @@ export default function SacredBooksPage() {
                       onClick={() => handleSelectBook(book)}
                       className="book-card"
                       style={{
-                        background: 'white',
-                        /* ── Hanuman Chalisa style: uniform accent border, no thick top ── */
-                        border: `2px solid ${book.accent_color}`,
-                        borderRadius: 16,
-                        padding: '22px 24px 24px',
+                        background: '#fffdf9',
+                        border: '1px solid #e8ddd0',
+                        borderRadius: 14,
+                        overflow: 'hidden',
                         cursor: 'pointer',
-                        transition: 'transform 0.22s, box-shadow 0.22s',
+                        transition: 'transform 0.2s, box-shadow 0.2s, border-color 0.2s',
+                        boxShadow: '0 1px 4px rgba(90,50,20,0.07)',
                         position: 'relative',
                       }}
                       onMouseEnter={e => {
-                        e.currentTarget.style.transform = 'translateY(-3px)';
-                        e.currentTarget.style.boxShadow = `0 8px 28px ${book.accent_color}40`;
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 8px 28px rgba(90,50,20,0.13)';
+                        e.currentTarget.style.borderColor = '#c2824a';
                       }}
                       onMouseLeave={e => {
                         e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.boxShadow = '0 1px 4px rgba(90,50,20,0.07)';
+                        e.currentTarget.style.borderColor = '#e8ddd0';
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-                        {/* Sacred book icon with OM on cover */}
+                      {/* Dark header strip matching the hero banner */}
+                      <div style={{
+                        background: 'linear-gradient(135deg, #5c2208 0%, #8b3a15 100%)',
+                        padding: '15px 18px',
+                        display: 'flex', alignItems: 'center', gap: 13,
+                      }}>
                         <div style={{
-                          width: 54, height: 54,
-                          borderRadius: 12,
-                          background: `${book.accent_color}15`,
-                          border: `1.5px solid ${book.accent_color}35`,
+                          width: 46, height: 46,
+                          borderRadius: 9,
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1.5px solid rgba(255,213,128,0.3)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0,
                         }}>
-                          <BookIcon size={38} color={book.accent_color} />
+                          <BookIcon size={32} color="#FFD580" />
                         </div>
-                        <div>
-                          <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 18, marginBottom: 3, marginTop: 0 }}>
-                            {book.title}
-                          </h3>
-                          <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: 'var(--text-muted)' }}>
-                            {book.sanskrit_title}
-                          </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h3 style={{
+                            fontFamily: 'var(--font-display)',
+                            color: '#ffffff',
+                            fontSize: 15, fontWeight: 700,
+                            margin: 0, marginBottom: 2,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>{book.title}</h3>
+                          <div style={{
+                            fontFamily: 'var(--font-hindi)',
+                            fontSize: 12, color: 'rgba(255,213,128,0.8)',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>{book.sanskrit_title}</div>
                         </div>
                       </div>
 
-                      <p style={{ fontSize: 13, color: 'var(--text-light)', lineHeight: 1.7, marginBottom: 14 }}>
-                        {book.description?.slice(0, 120)}…
-                      </p>
+                      {/* Card body — warm parchment */}
+                      <div style={{ padding: '15px 18px 18px' }}>
+                        <p style={{
+                          fontSize: 13, color: '#6b5744',
+                          lineHeight: 1.72, marginBottom: 13, marginTop: 0,
+                        }}>
+                          {book.description?.slice(0, 110)}…
+                        </p>
 
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                        {[book.tradition, book.language, `${book.total_chapters} ch`, `${(book.total_verses||0).toLocaleString()} verses`]
-                          .filter(Boolean).map(tag => (
-                          <span key={tag} style={{
-                            fontSize: 11, padding: '3px 10px', borderRadius: 99,
-                            background: `${book.accent_color}15`,
-                            color: book.accent_color,
-                            fontWeight: 600,
-                            border: `1px solid ${book.accent_color}30`,
-                          }}>{tag}</span>
-                        ))}
-                      </div>
-
-                      {prog && prog.percent_done > 0 && (
-                        <div style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-                            Reading progress · Chapter {prog.last_chapter} · {prog.percent_done}%
-                          </div>
-                          <ProgressBar percent={prog.percent_done} color={book.accent_color} />
+                        {/* Meta tags — warm neutral */}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                          {[book.tradition, book.language, `${book.total_chapters} ch`, `${(book.total_verses||0).toLocaleString()} verses`]
+                            .filter(Boolean).map(tag => (
+                            <span key={tag} style={{
+                              fontSize: 11, padding: '3px 9px', borderRadius: 99,
+                              background: '#f4ede4',
+                              color: '#7a4a2a',
+                              fontWeight: 600,
+                              border: '1px solid #e2d0be',
+                            }}>{tag}</span>
+                          ))}
                         </div>
-                      )}
 
-                      <div style={{
-                        fontSize: 13, fontWeight: 700,
-                        color: book.accent_color,
-                        display: 'flex', alignItems: 'center', gap: 4,
-                      }}>
-                        {prog && prog.percent_done > 0 ? 'Continue Reading ›' : 'Start Reading ›'}
+                        {/* Hairline divider */}
+                        <div style={{ height: 1, background: '#eee5d9', marginBottom: 13 }} />
+
+                        {/* Progress */}
+                        {prog && prog.percent_done > 0 && (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ fontSize: 11, color: '#9a7a62', marginBottom: 5 }}>
+                              Chapter {prog.last_chapter} · {prog.percent_done}% read
+                            </div>
+                            <ProgressBar percent={prog.percent_done} color="#8b3a15" />
+                          </div>
+                        )}
+
+                        {/* Footer row */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#8b3a15' }}>
+                            {prog && prog.percent_done > 0 ? 'Continue Reading ›' : 'Start Reading ›'}
+                          </span>
+                          {book.tradition && (
+                            <span style={{
+                              fontSize: 10, color: '#a07860',
+                              background: '#f4ede4', padding: '2px 8px',
+                              borderRadius: 99, border: '1px solid #e2d0be',
+                            }}>{book.tradition}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
