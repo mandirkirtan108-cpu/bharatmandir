@@ -22,6 +22,54 @@ function speakVerse(text) {
 function stopSpeaking() { window.speechSynthesis?.cancel(); }
 
 /* ═══════════════════════════════════════════════════════════════
+   BOOK ICON — SVG book with ॐ symbol, replaces all emojis
+   size: pixel size (default 48), color: accent color
+═══════════════════════════════════════════════════════════════ */
+function BookIcon({ size = 48, color = '#c2410c', style = {} }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ flexShrink: 0, ...style }}
+    >
+      {/* OM symbol above the book */}
+      <text
+        x="24"
+        y="16"
+        textAnchor="middle"
+        fontSize="15"
+        fontWeight="bold"
+        fill={color}
+        fontFamily="serif"
+        style={{ userSelect: 'none' }}
+      >ॐ</text>
+
+      {/* Book spine */}
+      <rect x="10" y="18" width="4" height="24" rx="1.5" fill={color} opacity="0.85" />
+
+      {/* Book cover */}
+      <rect x="13" y="18" width="25" height="24" rx="2" fill={color} opacity="0.15" stroke={color} strokeWidth="1.5" />
+
+      {/* Book pages (right side lines) */}
+      <line x1="17" y1="24" x2="34" y2="24" stroke={color} strokeWidth="1" opacity="0.5" />
+      <line x1="17" y1="28" x2="34" y2="28" stroke={color} strokeWidth="1" opacity="0.5" />
+      <line x1="17" y1="32" x2="34" y2="32" stroke={color} strokeWidth="1" opacity="0.5" />
+      <line x1="17" y1="36" x2="28" y2="36" stroke={color} strokeWidth="1" opacity="0.5" />
+
+      {/* Bookmark ribbon on top-right */}
+      <path
+        d="M33 18 L37 18 L37 26 L35 24 L33 26 Z"
+        fill={color}
+        opacity="0.8"
+      />
+    </svg>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    SMALL COMPONENTS
 ═══════════════════════════════════════════════════════════════ */
 
@@ -91,7 +139,7 @@ function BookCard({ book, isSelected, onSelect, progress }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-        <span style={{ fontSize: 20 }}>{book.icon_emoji}</span>
+        <BookIcon size={28} color={book.accent_color} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontFamily: 'var(--font-display)',
@@ -174,7 +222,7 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
             }}
           >{isSpeaking ? '⏹ Stop' : '🔊 Listen'}</button>
 
-          {/* Bookmark — different icons for bookmarked/not */}
+          {/* Bookmark */}
           <button
             onClick={() => onBookmarkToggle(verse)}
             title={isBookmarked ? 'Remove bookmark' : 'Bookmark this verse'}
@@ -328,7 +376,6 @@ export default function SacredBooksPage() {
   // ── Select chapter ────────────────────────────────────────────
   const handleSelectChapter = useCallback(async (chNum) => {
     if (!selectedBook) return;
-    // Stop audio when switching chapters
     stopSpeaking();
     setSpeakingVerse(null);
 
@@ -340,7 +387,6 @@ export default function SacredBooksPage() {
     try {
       const data = await fetchChapterVerses(selectedBook.slug, chNum);
       setChapterData(data);
-      // FIX: Calculate real percent_done
       const pct = Math.round((chNum / selectedBook.total_chapters) * 100);
       await saveProgress(selectedBook.slug, chNum, 1);
       setAllProgress(prev => {
@@ -372,11 +418,10 @@ export default function SacredBooksPage() {
         id: res.bookmark_id,
         slug: selectedBook.slug,
         title: selectedBook.title,
-        icon_emoji: selectedBook.icon_emoji,
         chapter_number: verse.chapter_number,
         verse_number: verse.verse_number,
       }, ...prev]);
-      showToast('Verse bookmarked 🔖');
+      showToast('Verse bookmarked');
     }
   }, [selectedBook, bookmarks, showToast]);
 
@@ -447,7 +492,6 @@ export default function SacredBooksPage() {
           width: '100%',
           boxSizing: 'border-box',
         }}>
-          {/* Inner content — strictly centered column */}
           <div style={{
             position: 'relative', zIndex: 1,
             width: '100%', maxWidth: 700,
@@ -468,9 +512,12 @@ export default function SacredBooksPage() {
               textTransform: 'uppercase', fontWeight: 500,
               backdropFilter: 'blur(8px)',
               whiteSpace: 'nowrap',
-            }}>📚 Sacred Scriptures of Bharat</div>
+            }}>
+              <BookIcon size={16} color="rgba(255,213,128,0.85)" />
+              Sacred Scriptures of Bharat
+            </div>
 
-            {/* Title — white for contrast */}
+            {/* Title */}
             <h1 style={{
               fontFamily: 'var(--font-display)', fontWeight: 900,
               fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
@@ -482,7 +529,7 @@ export default function SacredBooksPage() {
               Read the <span style={{ color: '#FFD580' }}>Sacred Books</span>
             </h1>
 
-            {/* Subtitle — single line, centered */}
+            {/* Subtitle */}
             <p style={{
               color: 'rgba(255,255,255,0.7)', fontSize: 14,
               width: '100%', maxWidth: 520,
@@ -500,10 +547,10 @@ export default function SacredBooksPage() {
               width: '100%',
             }}>
               {[
-                { id: 'library',   label: '🏛️ Library' },
-                { id: 'reader',    label: '📖 Reader',      disabled: !bk },
-                { id: 'bookmarks', label: `🔖 Bookmarks (${bookmarks.length})` },
-                { id: 'search',    label: '🔍 Search',      disabled: !bk, tooltip: !bk ? 'Select a book first' : '' },
+                { id: 'library',   label: 'Library' },
+                { id: 'reader',    label: 'Reader',      disabled: !bk },
+                { id: 'bookmarks', label: `Bookmarks (${bookmarks.length})` },
+                { id: 'search',    label: 'Search',      disabled: !bk, tooltip: !bk ? 'Select a book first' : '' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -591,7 +638,16 @@ export default function SacredBooksPage() {
                       }} />
 
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-                        <span style={{ fontSize: 36 }}>{book.icon_emoji}</span>
+                        {/* BookIcon replacing emoji */}
+                        <div style={{
+                          width: 52, height: 52, borderRadius: 12,
+                          background: `${book.accent_color}12`,
+                          border: `1.5px solid ${book.accent_color}30`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          <BookIcon size={36} color={book.accent_color} />
+                        </div>
                         <div>
                           <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 18, marginBottom: 2 }}>
                             {book.title}
@@ -654,7 +710,7 @@ export default function SacredBooksPage() {
               <button
                 onClick={() => setView('library')}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: bk.accent_color, fontSize: 13, fontWeight: 600, padding: 0 }}
-              >🏛️ Library</button>
+              >Library</button>
               <span>›</span>
               <span style={{ color: 'var(--brown)', fontWeight: 600 }}>{bk.title}</span>
               {selectedChapter && (
@@ -677,7 +733,7 @@ export default function SacredBooksPage() {
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}
               >
-                <span>📋 {selectedChapter ? `Chapter ${selectedChapter}` : 'Select Chapter'}</span>
+                <span>{selectedChapter ? `Chapter ${selectedChapter}` : 'Select Chapter'}</span>
                 <span>{sidebarOpen ? '▲' : '▼'}</span>
               </button>
             </div>
@@ -710,8 +766,8 @@ export default function SacredBooksPage() {
                   background: bk.accent_color,
                   borderBottom: '1px solid rgba(0,0,0,0.1)',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 22 }}>{bk.icon_emoji}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <BookIcon size={28} color="rgba(255,255,255,0.95)" />
                     <div>
                       <div style={{ fontFamily: 'var(--font-display)', color: 'white', fontWeight: 700, fontSize: 15 }}>{bk.title}</div>
                       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>{bk.total_chapters} chapters</div>
@@ -768,7 +824,16 @@ export default function SacredBooksPage() {
                     border: '1px solid var(--cream-dark)',
                     padding: '48px 32px', textAlign: 'center',
                   }}>
-                    <div style={{ fontSize: 48, marginBottom: 16 }}>{bk.icon_emoji}</div>
+                    {/* Large book icon replacing emoji */}
+                    <div style={{
+                      width: 80, height: 80, borderRadius: 20,
+                      background: `${bk.accent_color}12`,
+                      border: `2px solid ${bk.accent_color}25`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      margin: '0 auto 20px',
+                    }}>
+                      <BookIcon size={52} color={bk.accent_color} />
+                    </div>
                     <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 10 }}>
                       {bk.title}
                     </h2>
@@ -924,7 +989,7 @@ export default function SacredBooksPage() {
         {view === 'bookmarks' && (
           <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 20px' }}>
             <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 20, fontSize: 22 }}>
-              🔖 Your Bookmarks ({bookmarks.length})
+              Your Bookmarks ({bookmarks.length})
             </h2>
             {bookmarks.length === 0 ? (
               <div style={{
@@ -932,7 +997,14 @@ export default function SacredBooksPage() {
                 border: '1px solid var(--cream-dark)', padding: '48px',
                 textAlign: 'center', color: 'var(--text-muted)',
               }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>🔖</div>
+                <div style={{
+                  width: 64, height: 64, borderRadius: 16,
+                  background: 'var(--cream-mid)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 16px',
+                }}>
+                  <BookIcon size={40} color="var(--text-muted)" />
+                </div>
                 <p>No bookmarks yet. Open a book and tap ☆ on any verse to save it.</p>
               </div>
             ) : (
@@ -951,7 +1023,16 @@ export default function SacredBooksPage() {
                         flexWrap: 'wrap',
                       }}
                     >
-                      <span style={{ fontSize: 24 }}>{bm.icon_emoji}</span>
+                      {/* BookIcon replacing emoji */}
+                      <div style={{
+                        width: 40, height: 40, borderRadius: 10,
+                        background: `${color}12`,
+                        border: `1px solid ${color}25`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        <BookIcon size={26} color={color} />
+                      </div>
                       <div style={{ flex: 1, minWidth: 160 }}>
                         <div style={{ fontWeight: 700, color: 'var(--brown)', fontSize: 14, marginBottom: 2 }}>
                           {bm.title} · Ch {bm.chapter_number}, Verse {bm.verse_number}
