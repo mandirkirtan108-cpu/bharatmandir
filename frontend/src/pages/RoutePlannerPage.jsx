@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { MapPin, Navigation, Star, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -21,56 +20,6 @@ const PREF_OPTIONS = [
   '🐘 Ganesh Temples',
   '🏛 Famous & Historic',
   '🌿 Peaceful & Serene',
-];
-
-// ── Comprehensive list of Indian pilgrimage cities ──────────────────────────
-const INDIAN_PILGRIMAGE_CITIES = [
-  // Uttar Pradesh
-  'Varanasi', 'Prayagraj', 'Mathura', 'Vrindavan', 'Ayodhya', 'Lucknow', 'Agra', 'Allahabad',
-  'Chitrakoot', 'Vindhyachal', 'Naimisharanya',
-  // Madhya Pradesh
-  'Ujjain', 'Indore', 'Bhopal', 'Mandsaur', 'Ratlam', 'Dewas', 'Omkareshwar', 'Maheshwar',
-  'Orchha', 'Khajuraho', 'Amarkantak', 'Maihar', 'Sehore', 'Shajapur', 'Nagda', 'Neemuch',
-  'Rampura', 'Jawra', 'Shamgarh',
-  // Rajasthan
-  'Jaipur', 'Jodhpur', 'Udaipur', 'Pushkar', 'Ajmer', 'Nathdwara', 'Bikaner', 'Kota',
-  'Mount Abu', 'Sawai Madhopur',
-  // Gujarat
-  'Ahmedabad', 'Somnath', 'Dwarka', 'Palitana', 'Ambaji', 'Surat', 'Vadodara', 'Rajkot',
-  'Dakor', 'Pavagadh',
-  // Maharashtra
-  'Mumbai', 'Pune', 'Nashik', 'Shirdi', 'Pandharpur', 'Tuljapur', 'Kolhapur', 'Aurangabad',
-  'Nagpur', 'Trimbakeshwar', 'Bhimashankar',
-  // Uttarakhand
-  'Haridwar', 'Rishikesh', 'Dehradun', 'Kedarnath', 'Badrinath', 'Gangotri', 'Yamunotri',
-  'Chardham', 'Omkareshwar',
-  // Himachal Pradesh
-  'Shimla', 'Dharamshala', 'Mandi', 'Rewalsar', 'Vashisht', 'Manali',
-  // Punjab & Haryana
-  'Amritsar', 'Anandpur Sahib', 'Kurukshetra', 'Chandigarh',
-  // Delhi NCR
-  'Delhi', 'New Delhi', 'Noida', 'Gurugram', 'Faridabad',
-  // Bihar & Jharkhand
-  'Patna', 'Bodh Gaya', 'Rajgir', 'Nalanda', 'Vaishali', 'Deoghar', 'Parasnath',
-  // West Bengal
-  'Kolkata', 'Tarapith', 'Navadwip', 'Mayapur', 'Kalighat',
-  // Odisha
-  'Puri', 'Bhubaneswar', 'Cuttack', 'Konark',
-  // Tamil Nadu
-  'Chennai', 'Madurai', 'Tirupati', 'Rameswaram', 'Kanchipuram', 'Chidambaram', 'Mahabalipuram',
-  'Thanjavur', 'Srirangam', 'Tiruvannamalai',
-  // Andhra Pradesh / Telangana
-  'Srikalahasti', 'Vijayawada', 'Hyderabad', 'Srisailam', 'Yadagirigutta',
-  // Karnataka
-  'Bengaluru', 'Mysuru', 'Hampi', 'Udupi', 'Dharmasthala', 'Gokarna', 'Kukke Subramanya',
-  // Kerala
-  'Thiruvananthapuram', 'Guruvayur', 'Sabarimala', 'Thrissur',
-  // Goa
-  'Panaji', 'Margao',
-  // Assam & Northeast
-  'Guwahati', 'Kamakhya',
-  // Jammu & Kashmir
-  'Jammu', 'Vaishno Devi', 'Amarnath',
 ];
 
 function toHyphen(city) {
@@ -94,58 +43,90 @@ const BOOKING_META = {
   bike:  { icon: '🗺️', label: 'Open in Google Maps',     provider: 'Google Maps',  color: '#E8650A' },
 };
 
-// ── CityAutocomplete Component ──────────────────────────────────────────────
+// ── AI-powered City Autocomplete Component ──────────────────────────────────
 function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
-  const [open, setOpen]           = useState(false);
+  const [open, setOpen]               = useState(false);
   const [suggestions, setSuggestions] = useState([]);
-  const [focused, setFocused]     = useState(false);
-  const containerRef              = useRef(null);
-  const inputRef                  = useRef(null);
+  const [focused, setFocused]         = useState(false);
+  const [fetching, setFetching]       = useState(false);
+  const containerRef                  = useRef(null);
+  const inputRef                      = useRef(null);
+  const debounceTimer                 = useRef(null);
+  const currentQuery                  = useRef('');   // stale-response guard
 
-  const getSuggestions = useCallback((text) => {
-    if (!text || text.length < 1) return [];
-    const lower = text.toLowerCase();
-    return INDIAN_PILGRIMAGE_CITIES
-      .filter(c => c.toLowerCase().includes(lower))
-      .sort((a, b) => {
-        // Prioritize starts-with matches
-        const aStarts = a.toLowerCase().startsWith(lower);
-        const bStarts = b.toLowerCase().startsWith(lower);
-        if (aStarts && !bStarts) return -1;
-        if (!aStarts && bStarts) return 1;
-        return a.localeCompare(b);
-      })
-      .slice(0, 8);
-  }, []);
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  // Fetch city suggestions from the backend (which calls OpenAI)
+  const fetchCities = useCallback(async (query) => {
+    if (!query || query.length < 1) {
+      setSuggestions([]);
+      setOpen(false);
+      return;
+    }
+
+    currentQuery.current = query;
+    setFetching(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/route/cities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+
+      // Discard if user has already typed something else
+      if (currentQuery.current !== query) return;
+
+      if (!res.ok) throw new Error('City search failed');
+      const data = await res.json();
+      const cities = data.cities || [];
+
+      setSuggestions(cities);
+      setOpen(cities.length > 0);
+    } catch {
+      if (currentQuery.current !== query) return;
+      setSuggestions([]);
+      setOpen(false);
+    } finally {
+      if (currentQuery.current === query) setFetching(false);
+    }
+  }, [API_BASE]);
 
   const handleInput = (e) => {
     const val = e.target.value;
     onChange(val);
-    const s = getSuggestions(val);
-    setSuggestions(s);
-    setOpen(s.length > 0);
+
+    clearTimeout(debounceTimer.current);
+
+    if (!val.trim()) {
+      setSuggestions([]);
+      setOpen(false);
+      setFetching(false);
+      return;
+    }
+
+    // Show "searching…" immediately, then debounce the actual API call
+    setFetching(true);
+    debounceTimer.current = setTimeout(() => fetchCities(val.trim()), 400);
   };
 
   const handleSelect = (city) => {
     onChange(city);
     setOpen(false);
     setSuggestions([]);
+    setFetching(false);
+    clearTimeout(debounceTimer.current);
     inputRef.current?.blur();
   };
 
   const handleFocus = () => {
     setFocused(true);
-    if (value) {
-      const s = getSuggestions(value);
-      setSuggestions(s);
-      setOpen(s.length > 0);
-    }
+    if (value && suggestions.length > 0) setOpen(true);
   };
 
   const handleBlur = () => {
     setFocused(false);
-    // Delay to allow click on suggestion
-    setTimeout(() => setOpen(false), 150);
+    setTimeout(() => setOpen(false), 180);
   };
 
   // Close on outside click
@@ -159,6 +140,11 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Cleanup debounce on unmount
+  useEffect(() => () => clearTimeout(debounceTimer.current), []);
+
+  const isDropdownOpen = open || (fetching && value.length > 0);
+
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
       <label style={{
@@ -169,7 +155,7 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
         border: `2px solid ${focused ? '#E8650A' : '#EDE0CC'}`,
-        borderRadius: open ? '14px 14px 0 0' : 14,
+        borderRadius: isDropdownOpen ? '14px 14px 0 0' : 14,
         padding: '13px 16px',
         background: 'white',
         transition: 'border-color .2s, border-radius .15s',
@@ -190,9 +176,27 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
             color: '#1A0A00', fontFamily: UI_FONT,
           }}
         />
-        {value && (
+
+        {/* Spinner while fetching */}
+        {fetching && (
+          <Loader2
+            size={15}
+            color="#E8650A"
+            style={{ flexShrink: 0, animation: 'spin .8s linear infinite' }}
+          />
+        )}
+
+        {/* Clear button */}
+        {value && !fetching && (
           <button
-            onMouseDown={(e) => { e.preventDefault(); onChange(''); setSuggestions([]); setOpen(false); }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onChange('');
+              setSuggestions([]);
+              setOpen(false);
+              setFetching(false);
+              clearTimeout(debounceTimer.current);
+            }}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: '#BBA080', fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0,
@@ -202,7 +206,7 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
       </div>
 
       {/* Dropdown */}
-      {open && suggestions.length > 0 && (
+      {isDropdownOpen && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999,
           background: 'white',
@@ -211,15 +215,28 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
           borderRadius: '0 0 14px 14px',
           boxShadow: '0 8px 24px rgba(61,31,0,0.14)',
           overflow: 'hidden',
-          maxHeight: 260,
+          maxHeight: 280,
           overflowY: 'auto',
         }}>
+          {/* Loading state */}
+          {fetching && suggestions.length === 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '13px 16px', color: '#9A7150', fontFamily: UI_FONT, fontSize: 13,
+            }}>
+              <Loader2 size={14} style={{ animation: 'spin .8s linear infinite', flexShrink: 0 }} />
+              Searching cities…
+            </div>
+          )}
+
+          {/* Suggestions */}
           {suggestions.map((city, i) => {
             const lower = value.toLowerCase();
             const idx   = city.toLowerCase().indexOf(lower);
-            const before = city.slice(0, idx);
-            const match  = city.slice(idx, idx + value.length);
-            const after  = city.slice(idx + value.length);
+            const before = idx >= 0 ? city.slice(0, idx) : city;
+            const match  = idx >= 0 ? city.slice(idx, idx + value.length) : '';
+            const after  = idx >= 0 ? city.slice(idx + value.length) : '';
+
             return (
               <div
                 key={city}
@@ -239,7 +256,7 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
                 <span style={{ color: '#BBA080', fontSize: 13, flexShrink: 0 }}>📍</span>
                 <span style={{ fontSize: 14, color: '#3D1F00' }}>
                   {before}
-                  <strong style={{ color: '#E8650A' }}>{match}</strong>
+                  {match && <strong style={{ color: '#E8650A' }}>{match}</strong>}
                   {after}
                 </span>
               </div>
@@ -327,96 +344,90 @@ export default function RoutePlannerPage() {
       <Navbar />
 
       {/* ── HERO ─────────────────────────────────────────────────────── */}
-<section style={{
-  position: 'relative',
-  overflow: 'hidden',
-  background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-  padding: '50px 12px',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: '100%',
-  boxSizing: 'border-box',
-}}>
-  <div style={{
-    position: 'relative', zIndex: 1,
-    width: '100%', maxWidth: 700,
-    padding: '0 24px',
-    boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    textAlign: 'center',
-  }}>
-
-    {/* Badge */}
-    <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 8,
-      background: 'rgba(255,255,255,0.08)',
-      border: '1px solid rgba(255,213,128,0.3)',
-      borderRadius: 50, padding: '5px 16px', marginBottom: 14,
-      color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
-      textTransform: 'uppercase', fontWeight: 500,
-      backdropFilter: 'blur(8px)',
-      whiteSpace: 'nowrap',
-    }}>✨ AI Route Planner</div>
-
-    {/* Title */}
-    <h1 style={{
-      fontFamily: 'var(--font-display)', fontWeight: 900,
-      fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
-      marginBottom: 10, marginTop: 0,
-      textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-      color: '#ffffff',
-      width: '100%',
-    }}>
-      Your Journey,{' '}
-      <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
-    </h1>
-
-    {/* Subtitle */}
-    <p style={{
-      color: 'rgba(255,255,255,0.7)', fontSize: 14,
-      width: '100%', maxWidth: 520,
-      margin: '0 0 22px 0',
-      fontWeight: 300, lineHeight: 1.7,
-      textAlign: 'center',
-    }}>
-      Tell us where you're headed — we'll find every sacred temple along your spiritual path.
-    </p>
-
-    {/* Nav tabs */}
-    <div style={{
-      display: 'flex', justifyContent: 'center',
-      gap: 8, flexWrap: 'wrap',
-      width: '100%',
-    }}>
-      {[
-        { label: '📍 Plan Route',    action: () => {} },
-        { label: '📋 My Routes',     action: () => {} },
-        { label: '🛕 Saved Temples', action: () => {} },
-      ].map((tab, i) => (
-        <button
-          key={i}
-          onClick={tab.action}
-          style={{
-            padding: '8px 20px', borderRadius: 50,
-            cursor: 'pointer',
-            fontSize: 13, fontWeight: 600,
-            background: i === 0 ? '#FFD580' : 'rgba(255,255,255,0.1)',
-            color: i === 0 ? '#7a3208' : '#FFD580',
+      <section style={{
+        position: 'relative',
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '50px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        boxSizing: 'border-box',
+      }}>
+        <div style={{
+          position: 'relative', zIndex: 1,
+          width: '100%', maxWidth: 700,
+          padding: '0 24px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+            color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+            textTransform: 'uppercase', fontWeight: 500,
             backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,213,128,0.2)',
-            transition: 'all 0.18s',
             whiteSpace: 'nowrap',
-          }}
-        >{tab.label}</button>
-      ))}
-    </div>
+          }}>✨ AI Route Planner</div>
 
-  </div>
-</section>
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 900,
+            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+            marginBottom: 10, marginTop: 0,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#ffffff',
+            width: '100%',
+          }}>
+            Your Journey,{' '}
+            <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
+          </h1>
+
+          <p style={{
+            color: 'rgba(255,255,255,0.7)', fontSize: 14,
+            width: '100%', maxWidth: 520,
+            margin: '0 0 22px 0',
+            fontWeight: 300, lineHeight: 1.7,
+            textAlign: 'center',
+          }}>
+            Tell us where you're headed — we'll find every sacred temple along your spiritual path.
+          </p>
+
+          <div style={{
+            display: 'flex', justifyContent: 'center',
+            gap: 8, flexWrap: 'wrap',
+            width: '100%',
+          }}>
+            {[
+              { label: '📍 Plan Route',    action: () => {} },
+              { label: '📋 My Routes',     action: () => {} },
+              { label: '🛕 Saved Temples', action: () => {} },
+            ].map((tab, i) => (
+              <button
+                key={i}
+                onClick={tab.action}
+                style={{
+                  padding: '8px 20px', borderRadius: 50,
+                  cursor: 'pointer',
+                  fontSize: 13, fontWeight: 600,
+                  background: i === 0 ? '#FFD580' : 'rgba(255,255,255,0.1)',
+                  color: i === 0 ? '#7a3208' : '#FFD580',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255,213,128,0.2)',
+                  transition: 'all 0.18s',
+                  whiteSpace: 'nowrap',
+                }}
+              >{tab.label}</button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ── BODY ─────────────────────────────────────────────────────── */}
       <section style={{ background: '#f8f4ef', paddingBottom: 80, paddingTop: 48 }}>
@@ -429,7 +440,6 @@ export default function RoutePlannerPage() {
             border: '1px solid rgba(232,101,10,0.12)',
             padding: '36px 36px 32px',
           }}>
-            {/* Card header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 14,
@@ -447,7 +457,7 @@ export default function RoutePlannerPage() {
               </div>
             </div>
 
-            {/* FROM / TO — with autocomplete */}
+            {/* FROM / TO — AI autocomplete */}
             <div className="route-form-inner" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 26 }}>
               <CityAutocomplete
                 label="From"
@@ -544,7 +554,6 @@ export default function RoutePlannerPage() {
                 : <>✨ Plan My Spiritual Route</>}
             </button>
 
-            {/* Error */}
             {error && (
               <div style={{
                 marginTop: 14, background: '#FFF4F4', border: '1px solid #FFCDD2',
@@ -574,7 +583,6 @@ export default function RoutePlannerPage() {
           {result && !loading && (
             <div style={{ marginTop: 32, animation: 'fadeDown .6s ease both' }}>
 
-              {/* Travel Time Warning */}
               {result.travel_time_warning && (
                 <div style={{
                   display: 'flex', alignItems: 'flex-start', gap: 14,
@@ -590,7 +598,6 @@ export default function RoutePlannerPage() {
                 </div>
               )}
 
-              {/* Route Summary Banner */}
               <div style={{
                 background: 'linear-gradient(135deg, #3D1F00 0%, #6B3A1F 100%)',
                 borderRadius: 24, padding: '26px 30px', marginBottom: 26,
@@ -622,10 +629,8 @@ export default function RoutePlannerPage() {
                 </div>
               </div>
 
-              {/* Temple Cards + Sidebar */}
               <div className="route-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 22, alignItems: 'start' }}>
 
-                {/* Temple Cards */}
                 <div>
                   <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 800, color: '#7a3208', marginBottom: 14 }}>
                     🛕 Temples Along Your Route
@@ -639,7 +644,6 @@ export default function RoutePlannerPage() {
                         boxShadow: '0 2px 10px rgba(61,31,0,0.06)',
                         transition: 'all .2s',
                       }}>
-                        {/* Header row */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 10, flexWrap: 'wrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00' }}>{t.name}</h3>
@@ -670,10 +674,7 @@ export default function RoutePlannerPage() {
                   </div>
                 </div>
 
-                {/* Sidebar */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-                  {/* Optimized Itinerary */}
                   <div style={{ background: 'white', borderRadius: 16, border: '1px solid #EDE0CC', padding: '20px', boxShadow: '0 2px 10px rgba(61,31,0,0.06)' }}>
                     <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00', marginBottom: 16 }}>
                       🗺️ Optimized Itinerary
@@ -703,7 +704,6 @@ export default function RoutePlannerPage() {
                     ))}
                   </div>
 
-                  {/* Pandit Tips */}
                   {result.insights?.length > 0 && (
                     <div style={{
                       background: 'rgba(200,150,12,0.06)',
@@ -721,7 +721,6 @@ export default function RoutePlannerPage() {
                     </div>
                   )}
 
-                  {/* Copy Route */}
                   <button
                     onClick={handleCopy}
                     style={{
