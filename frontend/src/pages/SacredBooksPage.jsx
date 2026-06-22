@@ -536,6 +536,8 @@ export default function SacredBooksPage() {
               }}>
                 {filteredBooks.map(book => {
                   const prog = getProgress(book.slug);
+                  /* ── All cards use Hanuman Chalisa orange ── */
+                  const cardColor = '#ea580c';
                   return (
                     <div
                       key={book.id}
@@ -543,8 +545,7 @@ export default function SacredBooksPage() {
                       className="book-card"
                       style={{
                         background: 'white',
-                        /* ── Hanuman Chalisa style: uniform accent border, no thick top ── */
-                        border: `2px solid ${book.accent_color}`,
+                        border: `2px solid ${cardColor}`,
                         borderRadius: 16,
                         padding: '22px 24px 24px',
                         cursor: 'pointer',
@@ -553,7 +554,7 @@ export default function SacredBooksPage() {
                       }}
                       onMouseEnter={e => {
                         e.currentTarget.style.transform = 'translateY(-3px)';
-                        e.currentTarget.style.boxShadow = `0 8px 28px ${book.accent_color}40`;
+                        e.currentTarget.style.boxShadow = `0 8px 28px ${cardColor}40`;
                       }}
                       onMouseLeave={e => {
                         e.currentTarget.style.transform = 'none';
@@ -565,12 +566,12 @@ export default function SacredBooksPage() {
                         <div style={{
                           width: 54, height: 54,
                           borderRadius: 12,
-                          background: `${book.accent_color}15`,
-                          border: `1.5px solid ${book.accent_color}35`,
+                          background: `${cardColor}15`,
+                          border: `1.5px solid ${cardColor}35`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0,
                         }}>
-                          <BookIcon size={38} color={book.accent_color} />
+                          <BookIcon size={38} color={cardColor} />
                         </div>
                         <div>
                           <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 18, marginBottom: 3, marginTop: 0 }}>
@@ -591,10 +592,10 @@ export default function SacredBooksPage() {
                           .filter(Boolean).map(tag => (
                           <span key={tag} style={{
                             fontSize: 11, padding: '3px 10px', borderRadius: 99,
-                            background: `${book.accent_color}15`,
-                            color: book.accent_color,
+                            background: `${cardColor}15`,
+                            color: cardColor,
                             fontWeight: 600,
-                            border: `1px solid ${book.accent_color}30`,
+                            border: `1px solid ${cardColor}30`,
                           }}>{tag}</span>
                         ))}
                       </div>
@@ -604,13 +605,13 @@ export default function SacredBooksPage() {
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
                             Reading progress · Chapter {prog.last_chapter} · {prog.percent_done}%
                           </div>
-                          <ProgressBar percent={prog.percent_done} color={book.accent_color} />
+                          <ProgressBar percent={prog.percent_done} color={cardColor} />
                         </div>
                       )}
 
                       <div style={{
                         fontSize: 13, fontWeight: 700,
-                        color: book.accent_color,
+                        color: cardColor,
                         display: 'flex', alignItems: 'center', gap: 4,
                       }}>
                         {prog && prog.percent_done > 0 ? 'Continue Reading ›' : 'Start Reading ›'}
