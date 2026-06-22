@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Calendar, Clock, Star, Sparkles, AlertCircle, Loader2, Sun, CheckCircle } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import PanchangCalendar from '../components/PanchangCalendar';
 
 const MUHURAT_TYPES = [
   { id: 'vivah',      emoji: '💍', label: 'Vivah',          hindi: 'विवाह',        desc: 'Marriage ceremony' },
@@ -262,6 +263,9 @@ export default function PanchangPage() {
             </p>
           </div>
         </section>
+
+        {/* ── PANCHANG CALENDAR ───────────────────────────────────────── */}
+        <PanchangCalendar />
 
         <div className="container" style={{ maxWidth: 960, paddingTop: 36 }}>
 
