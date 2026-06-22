@@ -1,714 +1,810 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { MapPin, Navigation, Star, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Calendar, Clock, Star, Sparkles, AlertCircle, Loader2, Sun, CheckCircle } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
-const MUHURAT_TYPES = [
-  { id: 'vivah',      emoji: '💍', label: 'Vivah',          hindi: 'विवाह',        desc: 'Marriage ceremony' },
-  { id: 'griha',      emoji: '🏠', label: 'Griha Pravesh',  hindi: 'गृह प्रवेश',   desc: 'New home entry' },
-  { id: 'naamkaran',  emoji: '👶', label: 'Naamkaran',      hindi: 'नामकरण',       desc: 'Baby naming' },
-  { id: 'vyapar',     emoji: '🏪', label: 'Vyapar Aarambh', hindi: 'व्यापार आरंभ', desc: 'Business launch' },
-  { id: 'yatra',      emoji: '✈️', label: 'Yatra',          hindi: 'यात्रा',        desc: 'Journey / travel' },
-  { id: 'vastu',      emoji: '🧱', label: 'Vastu / Bhoomi', hindi: 'वास्तु/भूमि',  desc: 'Construction' },
-  { id: 'vidyarambh', emoji: '📚', label: 'Vidyarambh',     hindi: 'विद्यारंभ',    desc: 'Starting education' },
-  { id: 'vahan',      emoji: '🚗', label: 'Vahan Puja',     hindi: 'वाहन पूजा',    desc: 'New vehicle' },
-  { id: 'mundan',     emoji: '✂️', label: 'Mundan',         hindi: 'मुंडन',        desc: 'First haircut' },
-  { id: 'investment', emoji: '💰', label: 'Nivesh',         hindi: 'निवेश',        desc: 'Investment / gold' },
-  { id: 'chikitsa',   emoji: '🏥', label: 'Chikitsa',       hindi: 'चिकित्सा',     desc: 'Medical procedure' },
-  { id: 'naukri',     emoji: '💼', label: 'Naukri / Job',   hindi: 'नौकरी',        desc: 'Job interview' },
-];
-
-const RASHI_LIST = [
-  'मेष (Aries)', 'वृषभ (Taurus)', 'मिथुन (Gemini)', 'कर्क (Cancer)',
-  'सिंह (Leo)', 'कन्या (Virgo)', 'तुला (Libra)', 'वृश्चिक (Scorpio)',
-  'धनु (Sagittarius)', 'मकर (Capricorn)', 'कुंभ (Aquarius)', 'मीन (Pisces)',
-];
-
-const TODAY = new Date().toISOString().split('T')[0];
-
-const VERDICT_COLOR = { excellent: '#16a34a', good: '#2563eb', average: '#d97706', avoid: '#dc2626' };
-const VERDICT_BG    = { excellent: '#f0fdf4', good: '#eff6ff', average: '#fffbeb', avoid: '#fef2f2' };
-const VERDICT_ICON  = { excellent: '🌟', good: '✅', average: '⚡', avoid: '❌' };
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-function to12h(timeStr) {
-  if (!timeStr) return timeStr;
-  if (/am|pm/i.test(timeStr)) return timeStr;
-  return timeStr.replace(/(\d{1,2}):(\d{2})/g, (_, h, m) => {
-    const hour = parseInt(h, 10);
-    const suffix = hour >= 12 ? 'PM' : 'AM';
-    const h12 = hour % 12 || 12;
-    return `${h12}:${m} ${suffix}`;
-  });
-}
-
-/* ── Shared styles ───────────────────────────────────────────────── */
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
 
-function Card({ children, accent, style = {} }) {
-  return (
-    <div style={{
-      background: 'white',
-      borderRadius: 'var(--radius-lg)',
-      padding: '24px 26px',
-      border: `1px solid ${accent || 'var(--cream-dark)'}`,
-      boxShadow: '0 2px 16px var(--shadow)',
-      marginBottom: 20,
-      ...style,
-    }}>
-      {children}
-    </div>
-  );
+const TRAVEL_MODES = [
+  { value: 'car',   icon: '🚗', label: 'Car' },
+  { value: 'bike',  icon: '🏍️', label: 'Bike' },
+  { value: 'train', icon: '🚆', label: 'Train' },
+  { value: 'bus',   icon: '🚌', label: 'Bus' },
+];
+
+const PREF_OPTIONS = [
+  '🕉 Shiv Temples',
+  '⭐ Jyotirlinga',
+  '🌸 Shaktipeeth',
+  '🪷 Vishnu Temples',
+  '🐘 Ganesh Temples',
+  '🏛 Famous & Historic',
+  '🌿 Peaceful & Serene',
+];
+
+// ── Comprehensive list of Indian pilgrimage cities ──────────────────────────
+const INDIAN_PILGRIMAGE_CITIES = [
+  // Uttar Pradesh
+  'Varanasi', 'Prayagraj', 'Mathura', 'Vrindavan', 'Ayodhya', 'Lucknow', 'Agra', 'Allahabad',
+  'Chitrakoot', 'Vindhyachal', 'Naimisharanya',
+  // Madhya Pradesh
+  'Ujjain', 'Indore', 'Bhopal', 'Mandsaur', 'Ratlam', 'Dewas', 'Omkareshwar', 'Maheshwar',
+  'Orchha', 'Khajuraho', 'Amarkantak', 'Maihar', 'Sehore', 'Shajapur', 'Nagda', 'Neemuch',
+  'Rampura', 'Jawra', 'Shamgarh',
+  // Rajasthan
+  'Jaipur', 'Jodhpur', 'Udaipur', 'Pushkar', 'Ajmer', 'Nathdwara', 'Bikaner', 'Kota',
+  'Mount Abu', 'Sawai Madhopur',
+  // Gujarat
+  'Ahmedabad', 'Somnath', 'Dwarka', 'Palitana', 'Ambaji', 'Surat', 'Vadodara', 'Rajkot',
+  'Dakor', 'Pavagadh',
+  // Maharashtra
+  'Mumbai', 'Pune', 'Nashik', 'Shirdi', 'Pandharpur', 'Tuljapur', 'Kolhapur', 'Aurangabad',
+  'Nagpur', 'Trimbakeshwar', 'Bhimashankar',
+  // Uttarakhand
+  'Haridwar', 'Rishikesh', 'Dehradun', 'Kedarnath', 'Badrinath', 'Gangotri', 'Yamunotri',
+  'Chardham', 'Omkareshwar',
+  // Himachal Pradesh
+  'Shimla', 'Dharamshala', 'Mandi', 'Rewalsar', 'Vashisht', 'Manali',
+  // Punjab & Haryana
+  'Amritsar', 'Anandpur Sahib', 'Kurukshetra', 'Chandigarh',
+  // Delhi NCR
+  'Delhi', 'New Delhi', 'Noida', 'Gurugram', 'Faridabad',
+  // Bihar & Jharkhand
+  'Patna', 'Bodh Gaya', 'Rajgir', 'Nalanda', 'Vaishali', 'Deoghar', 'Parasnath',
+  // West Bengal
+  'Kolkata', 'Tarapith', 'Navadwip', 'Mayapur', 'Kalighat',
+  // Odisha
+  'Puri', 'Bhubaneswar', 'Cuttack', 'Konark',
+  // Tamil Nadu
+  'Chennai', 'Madurai', 'Tirupati', 'Rameswaram', 'Kanchipuram', 'Chidambaram', 'Mahabalipuram',
+  'Thanjavur', 'Srirangam', 'Tiruvannamalai',
+  // Andhra Pradesh / Telangana
+  'Srikalahasti', 'Vijayawada', 'Hyderabad', 'Srisailam', 'Yadagirigutta',
+  // Karnataka
+  'Bengaluru', 'Mysuru', 'Hampi', 'Udupi', 'Dharmasthala', 'Gokarna', 'Kukke Subramanya',
+  // Kerala
+  'Thiruvananthapuram', 'Guruvayur', 'Sabarimala', 'Thrissur',
+  // Goa
+  'Panaji', 'Margao',
+  // Assam & Northeast
+  'Guwahati', 'Kamakhya',
+  // Jammu & Kashmir
+  'Jammu', 'Vaishno Devi', 'Amarnath',
+];
+
+function toHyphen(city) {
+  return city.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
-function SectionTitle({ icon, children }) {
-  return (
-    <h3 style={{
-      fontFamily: 'var(--font-display)',
-      fontSize: 15,
-      color: 'var(--brown)',
-      marginBottom: 16,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-    }}>
-      <span style={{
-        width: 28, height: 28,
-        background: 'linear-gradient(135deg,var(--saffron),var(--saffron-dark))',
-        borderRadius: 8,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, fontSize: 14,
-      }}>{icon}</span>
-      {children}
-    </h3>
-  );
+function buildBookingUrl(travelMode, from, to) {
+  const fH = toHyphen(from);
+  const tH = toHyphen(to);
+  switch (travelMode) {
+    case 'train': return `https://www.ixigo.com/by-train-rail/${fH}-to-${tH}-by-train`;
+    case 'bus':   return `https://www.redbus.in/bus-tickets/${fH}-to-${tH}`;
+    default:      return `https://www.google.com/maps/dir/${encodeURIComponent(from.trim())}/${encodeURIComponent(to.trim())}`;
+  }
 }
 
-/* ── 3-column timing strip ────────────────────────────────────────── */
-function TimingStrip({ items }) {
-  return (
-    <div style={{ display: 'flex', borderRadius: 'var(--radius)', border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
-      {items.map((item, i) => (
-        <div key={i} style={{
-          flex: 1, padding: '18px 16px', textAlign: 'center',
-          background: item.bg || 'var(--cream)',
-          borderRight: i < items.length - 1 ? '1px solid var(--cream-dark)' : 'none',
-        }}>
-          <p style={{
-            fontFamily: UI_FONT,
-            fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase',
-            color: item.labelColor || 'var(--text-light)', marginBottom: 8, fontWeight: 600,
-          }}>{item.label}</p>
-          <p style={{
-            fontFamily: UI_FONT,
-            fontSize: 22, fontWeight: 700, color: item.color || 'var(--brown)',
-            lineHeight: 1.1, letterSpacing: '-0.02em', whiteSpace: 'nowrap',
-          }}>{item.value}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
+const BOOKING_META = {
+  train: { icon: '🚆', label: 'Search Trains on ixigo',  provider: 'ixigo trains', color: '#1565C0' },
+  bus:   { icon: '🚌', label: 'Search Buses on redBus',  provider: 'redBus',       color: '#D84315' },
+  car:   { icon: '🗺️', label: 'Open in Google Maps',     provider: 'Google Maps',  color: '#E8650A' },
+  bike:  { icon: '🗺️', label: 'Open in Google Maps',     provider: 'Google Maps',  color: '#E8650A' },
+};
 
-/* ── Loading skeleton ─────────────────────────────────────────────── */
-function LoadingState({ message = 'Consulting the stars…' }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-      <div style={{ fontSize: 52, marginBottom: 16, animation: 'pulse-om 2s ease-in-out infinite' }}>🛕</div>
-      <p style={{ fontFamily: 'var(--font-hindi)', color: 'var(--text-light)', fontSize: 17 }}>{message}</p>
-      <p style={{ color: 'var(--text-light)', fontSize: 13, marginTop: 6 }}>
-        Calculating auspicious timings based on Vedic astrology
-      </p>
-    </div>
-  );
-}
+// ── CityAutocomplete Component ──────────────────────────────────────────────
+function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
+  const [open, setOpen]           = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [focused, setFocused]     = useState(false);
+  const containerRef              = useRef(null);
+  const inputRef                  = useRef(null);
 
-export default function PanchangPage() {
-  const { t } = useTranslation();
-  const [selected,     setSelected]     = useState(null);
-  const [date,         setDate]         = useState(TODAY);
-  const [rashi,        setRashi]        = useState('');
-  const [name,         setName]         = useState('');
-  const [city,         setCity]         = useState('');
-  const [loading,      setLoading]      = useState(false);
-  const [dailyLoading, setDailyLoading] = useState(false);
-  const [result,       setResult]       = useState(null);
-  const [dailyResult,  setDailyResult]  = useState(null);
-  const [error,        setError]        = useState(null);
+  const getSuggestions = useCallback((text) => {
+    if (!text || text.length < 1) return [];
+    const lower = text.toLowerCase();
+    return INDIAN_PILGRIMAGE_CITIES
+      .filter(c => c.toLowerCase().includes(lower))
+      .sort((a, b) => {
+        // Prioritize starts-with matches
+        const aStarts = a.toLowerCase().startsWith(lower);
+        const bStarts = b.toLowerCase().startsWith(lower);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, 8);
+  }, []);
 
-  const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
+  const handleInput = (e) => {
+    const val = e.target.value;
+    onChange(val);
+    const s = getSuggestions(val);
+    setSuggestions(s);
+    setOpen(s.length > 0);
+  };
 
-  const fetchDailyPanchang = async () => {
-    setDailyLoading(true); setDailyResult(null); setError(null);
-    try {
-      const res = await fetch(`${API_BASE}/api/panchang/daily`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, city: city || 'India' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to load Panchang');
-      setDailyResult(data);
-    } catch (e) {
-      setError('Could not load Panchang: ' + e.message);
-    } finally {
-      setDailyLoading(false);
+  const handleSelect = (city) => {
+    onChange(city);
+    setOpen(false);
+    setSuggestions([]);
+    inputRef.current?.blur();
+  };
+
+  const handleFocus = () => {
+    setFocused(true);
+    if (value) {
+      const s = getSuggestions(value);
+      setSuggestions(s);
+      setOpen(s.length > 0);
     }
   };
 
-  const findMuhurat = async () => {
-    if (!selected) { setError('Please select an occasion first.'); return; }
-    setLoading(true); setResult(null); setError(null);
+  const handleBlur = () => {
+    setFocused(false);
+    // Delay to allow click on suggestion
+    setTimeout(() => setOpen(false), 150);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <label style={{
+        display: 'block', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700,
+        letterSpacing: '.09em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 8,
+      }}>{label}</label>
+
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        border: `2px solid ${focused ? '#E8650A' : '#EDE0CC'}`,
+        borderRadius: open ? '14px 14px 0 0' : 14,
+        padding: '13px 16px',
+        background: 'white',
+        transition: 'border-color .2s, border-radius .15s',
+      }}>
+        {icon}
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={handleInput}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          placeholder={placeholder}
+          autoComplete="off"
+          style={{
+            width: '100%', border: 'none', outline: 'none',
+            background: 'transparent', fontSize: 15,
+            color: '#1A0A00', fontFamily: UI_FONT,
+          }}
+        />
+        {value && (
+          <button
+            onMouseDown={(e) => { e.preventDefault(); onChange(''); setSuggestions([]); setOpen(false); }}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#BBA080', fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0,
+            }}
+          >×</button>
+        )}
+      </div>
+
+      {/* Dropdown */}
+      {open && suggestions.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999,
+          background: 'white',
+          border: '2px solid #E8650A',
+          borderTop: '1px solid #EDE0CC',
+          borderRadius: '0 0 14px 14px',
+          boxShadow: '0 8px 24px rgba(61,31,0,0.14)',
+          overflow: 'hidden',
+          maxHeight: 260,
+          overflowY: 'auto',
+        }}>
+          {suggestions.map((city, i) => {
+            const lower = value.toLowerCase();
+            const idx   = city.toLowerCase().indexOf(lower);
+            const before = city.slice(0, idx);
+            const match  = city.slice(idx, idx + value.length);
+            const after  = city.slice(idx + value.length);
+            return (
+              <div
+                key={city}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(city); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '11px 16px',
+                  cursor: 'pointer',
+                  borderBottom: i < suggestions.length - 1 ? '1px solid #FDF6EC' : 'none',
+                  background: 'white',
+                  transition: 'background .12s',
+                  fontFamily: UI_FONT,
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#FDF6EC'}
+                onMouseLeave={e => e.currentTarget.style.background = 'white'}
+              >
+                <span style={{ color: '#BBA080', fontSize: 13, flexShrink: 0 }}>📍</span>
+                <span style={{ fontSize: 14, color: '#3D1F00' }}>
+                  {before}
+                  <strong style={{ color: '#E8650A' }}>{match}</strong>
+                  {after}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ───────────────────────────────────────────────────────────────
+export default function RoutePlannerPage() {
+  const [form, setForm] = useState({
+    start: '', destination: '', travel_mode: 'car',
+    time_available: '6', preferences: [],
+  });
+  const [loading,   setLoading]   = useState(false);
+  const [result,    setResult]    = useState(null);
+  const [error,     setError]     = useState(null);
+  const [copied,    setCopied]    = useState(false);
+
+  const togglePref = (p) =>
+    setForm(f => ({
+      ...f,
+      preferences: f.preferences.includes(p)
+        ? f.preferences.filter(x => x !== p)
+        : [...f.preferences, p],
+    }));
+
+  const handleSubmit = async () => {
+    if (!form.start.trim() || !form.destination.trim()) {
+      setError('Please enter both start and destination.'); return;
+    }
+    setLoading(true); setError(null); setResult(null);
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     try {
-      const res = await fetch(`${API_BASE}/api/panchang/muhurat`, {
+      const res = await fetch(`${API_BASE}/api/route/plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          muhurat_type:  selected,
-          muhurat_label: selectedType?.label || selected,
-          muhurat_hindi: selectedType?.hindi || '',
-          date, name: name || '', rashi: rashi || '', city: city || 'India',
+          start:          form.start,
+          destination:    form.destination,
+          travel_mode:    form.travel_mode,
+          time_available: parseInt(form.time_available),
+          preferences:    form.preferences,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to get Muhurat');
+      if (!res.ok) throw new Error(data.detail || 'Failed to plan route');
       setResult(data);
     } catch (e) {
-      setError('Could not get Muhurat: ' + e.message);
+      setError(e.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  /* shared input / label styles */
-  const inputStyle = {
-    width: '100%', padding: '11px 14px',
-    border: '2px solid var(--cream-dark)', borderRadius: 'var(--radius)',
-    fontFamily: UI_FONT, fontSize: 14, outline: 'none',
-    transition: 'var(--transition)', color: 'var(--text-dark)', background: 'white',
+  const handleBookingClick = () => {
+    if (!form.start.trim() || !form.destination.trim()) {
+      setError('Please enter both source and destination first.'); return;
+    }
+    window.open(buildBookingUrl(form.travel_mode, form.start, form.destination), '_blank', 'noopener,noreferrer');
   };
-  const labelStyle = {
-    fontFamily: UI_FONT, fontWeight: 600,
-    fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase',
-    color: 'var(--text-light)', display: 'block', marginBottom: 6,
+
+  const handleCopy = () => {
+    if (!result) return;
+    const text =
+      `🛕 My Spiritual Route: ${result.route_summary.start} → ${result.route_summary.destination}\n` +
+      (result.recommended_temples || []).map(t => `• ${t.name} (${t.location})`).join('\n') +
+      '\n\nPlanned via BharatMandir 🙏';
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
+
+  const bookingMeta     = BOOKING_META[form.travel_mode] || BOOKING_META.car;
+  const bookingSubtitle = form.start.trim() && form.destination.trim()
+    ? `${form.start} → ${form.destination} via ${form.travel_mode}`
+    : 'Enter your route above to get a direct booking link.';
 
   return (
     <>
       <Navbar />
-      <div style={{ background: 'var(--cream)', minHeight: '100vh', paddingBottom: 80 }}>
 
-        {/* ── HERO ─────────────────────────────────────────────────────── */}
-        <section style={{
-          position: 'relative', overflow: 'hidden', color: 'white',
-          background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '50px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '100%',
-          boxSizing: 'border-box',
-        }}>
+      {/* ── HERO ─────────────────────────────────────────────────────── */}
+<section style={{
+  position: 'relative',
+  overflow: 'hidden',
+  background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+  padding: '50px 12px',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '100%',
+  boxSizing: 'border-box',
+}}>
+  <div style={{
+    position: 'relative', zIndex: 1,
+    width: '100%', maxWidth: 700,
+    padding: '0 24px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
+  }}>
+
+    {/* Badge */}
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8,
+      background: 'rgba(255,255,255,0.08)',
+      border: '1px solid rgba(255,213,128,0.3)',
+      borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+      color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+      textTransform: 'uppercase', fontWeight: 500,
+      backdropFilter: 'blur(8px)',
+      whiteSpace: 'nowrap',
+    }}>✨ AI Route Planner</div>
+
+    {/* Title */}
+    <h1 style={{
+      fontFamily: 'var(--font-display)', fontWeight: 900,
+      fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+      marginBottom: 10, marginTop: 0,
+      textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+      color: '#ffffff',
+      width: '100%',
+    }}>
+      Your Journey,{' '}
+      <span style={{ color: '#FFD580' }}>Divine Stopovers</span>
+    </h1>
+
+    {/* Subtitle */}
+    <p style={{
+      color: 'rgba(255,255,255,0.7)', fontSize: 14,
+      width: '100%', maxWidth: 520,
+      margin: '0 0 22px 0',
+      fontWeight: 300, lineHeight: 1.7,
+      textAlign: 'center',
+    }}>
+      Tell us where you're headed — we'll find every sacred temple along your spiritual path.
+    </p>
+
+    {/* Nav tabs */}
+    <div style={{
+      display: 'flex', justifyContent: 'center',
+      gap: 8, flexWrap: 'wrap',
+      width: '100%',
+    }}>
+      {[
+        { label: '📍 Plan Route',    action: () => {} },
+        { label: '📋 My Routes',     action: () => {} },
+        { label: '🛕 Saved Temples', action: () => {} },
+      ].map((tab, i) => (
+        <button
+          key={i}
+          onClick={tab.action}
+          style={{
+            padding: '8px 20px', borderRadius: 50,
+            cursor: 'pointer',
+            fontSize: 13, fontWeight: 600,
+            background: i === 0 ? '#FFD580' : 'rgba(255,255,255,0.1)',
+            color: i === 0 ? '#7a3208' : '#FFD580',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,213,128,0.2)',
+            transition: 'all 0.18s',
+            whiteSpace: 'nowrap',
+          }}
+        >{tab.label}</button>
+      ))}
+    </div>
+
+  </div>
+</section>
+
+      {/* ── BODY ─────────────────────────────────────────────────────── */}
+      <section style={{ background: '#f8f4ef', paddingBottom: 80, paddingTop: 48 }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 20px' }}>
+
+          {/* ── PLANNER CARD ── */}
           <div style={{
-            position: 'relative', zIndex: 1,
-            width: '100%', maxWidth: 700,
-            padding: '0 24px',
-            boxSizing: 'border-box',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
+            background: 'white', borderRadius: 24,
+            boxShadow: '0 8px 40px rgba(61,31,0,0.13)',
+            border: '1px solid rgba(232,101,10,0.12)',
+            padding: '36px 36px 32px',
           }}>
-            {/* Badge */}
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
-              borderRadius: 50, padding: '5px 16px', marginBottom: 14,
-              color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
-              textTransform: 'uppercase', fontWeight: 500,
-              backdropFilter: 'blur(8px)',
-              whiteSpace: 'nowrap',
-              fontFamily: UI_FONT,
-            }}>
-              <Sun size={11} /> {t('panchang.badge')}
-            </div>
-
-            {/* Title */}
-            <h1 style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900,
-              fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
-              marginBottom: 10, marginTop: 0,
-              textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-              color: '#ffffff',
-              width: '100%',
-            }}>
-              AI Pandit Ji —{' '}
-              <span style={{ color: '#FFD580' }}>Panchang &amp; Muhurat</span>
-            </h1>
-
-            {/* Subtitle */}
-            <p style={{
-              color: 'rgba(255,255,255,0.7)', fontSize: 14,
-              width: '100%', maxWidth: 520,
-              margin: '0 0 0 0',
-              fontWeight: 300, lineHeight: 1.7,
-              textAlign: 'center',
-              fontFamily: UI_FONT,
-            }}>
-              {t('panchang.subtitle')}
-            </p>
-          </div>
-        </section>
-
-        <div className="container" style={{ maxWidth: 960, paddingTop: 36 }}>
-
-          {/* ── SECTION 1 — Daily Panchang ─────────────────────────────── */}
-          <Card>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--brown)', marginBottom: 4 }}>
-              {t('panchang.today')}
-            </h2>
-            <p style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-light)', marginBottom: 22 }}>
-              Get today's Tithi, Nakshatra, auspicious timings &amp; Choghadiya
-            </p>
-
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 20 }}>
-              <div>
-                <label style={labelStyle}>Date</label>
-                <input type="date" value={date}
-                  onChange={e => { setDate(e.target.value); setResult(null); setDailyResult(null); }}
-                  style={{ ...inputStyle, width: 180, background: 'var(--cream)' }}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>City</label>
-                <input type="text" value={city} onChange={e => setCity(e.target.value)}
-                  placeholder="e.g. Ujjain, Mumbai…"
-                  style={{ ...inputStyle, width: 210 }}
-                  onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-                />
-              </div>
-              <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading}
-                style={{ padding: '12px 26px', borderRadius: 50 }}>
-                {dailyLoading
-                  ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading…</>
-                  : <><Calendar size={15} /> Today's Panchang</>}
-              </button>
-            </div>
-
-            {/* Loading */}
-            {dailyLoading && <LoadingState message="Loading today's Panchang…" />}
-
-            {dailyResult && !dailyLoading && (
-              <div style={{ animation: 'fadeDown .5s ease both' }}>
-
-                {/* Overall Day Banner */}
-                <div style={{
-                  background: VERDICT_BG[dailyResult.overall_day] || '#fffbeb',
-                  borderRadius: 'var(--radius)', padding: '16px 20px', marginBottom: 20,
-                  border: `1px solid ${VERDICT_COLOR[dailyResult.overall_day] || '#d97706'}40`,
-                  display: 'flex', alignItems: 'center', gap: 14,
-                }}>
-                  <span style={{ fontSize: 36 }}>{VERDICT_ICON[dailyResult.overall_day] || '🌤️'}</span>
-                  <div>
-                    <p style={{
-                      fontFamily: UI_FONT, fontSize: 11, letterSpacing: '.09em', textTransform: 'uppercase',
-                      color: VERDICT_COLOR[dailyResult.overall_day] || '#d97706', fontWeight: 700, marginBottom: 4,
-                    }}>{dailyResult.overall_day} Day</p>
-                    <p style={{ fontFamily: 'var(--font-hindi)', fontSize: 15, color: 'var(--text-mid)' }}>
-                      {dailyResult.pandit_blessings}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 5 Angas — horizontal scroll on mobile */}
-                <div style={{ overflowX: 'auto', marginBottom: 18, WebkitOverflowScrolling: 'touch' }}>
-                  <div className="panchang-angas" style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(5,1fr)',
-                    gap: 10, minWidth: 480,
-                  }}>
-                    {[
-                      { label: 'Tithi',     icon: '🌙', val: dailyResult.tithi?.name,     sub: dailyResult.tithi?.nature },
-                      { label: 'Nakshatra', icon: '⭐', val: dailyResult.nakshatra?.name, sub: dailyResult.nakshatra?.lord },
-                      { label: 'Yoga',      icon: '🔗', val: dailyResult.yoga?.name,      sub: dailyResult.yoga?.nature },
-                      { label: 'Karana',    icon: '⚡', val: dailyResult.karana?.name,    sub: dailyResult.karana?.nature },
-                      { label: 'Var',       icon: '☀️', val: dailyResult.var?.day,        sub: `Lord: ${dailyResult.var?.lord}` },
-                    ].map(a => (
-                      <div key={a.label} style={{
-                        background: 'var(--cream)', borderRadius: 'var(--radius)',
-                        padding: '12px 8px', textAlign: 'center', border: '1px solid var(--cream-dark)',
-                      }}>
-                        <span style={{ fontSize: 20 }}>{a.icon}</span>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 600, color: 'var(--text-light)', letterSpacing: '.07em', textTransform: 'uppercase', marginTop: 4 }}>{a.label}</p>
-                        <p style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--brown)', fontWeight: 700, marginTop: 2 }}>{a.val}</p>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>{a.sub}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 3 key timings */}
-                <div style={{ marginBottom: 18 }}>
-                  <TimingStrip items={[
-                    { value: to12h(dailyResult.brahma_muhurat?.time) || '—', label: '🌅 Brahma Muhurat', color: '#15803d', labelColor: '#16a34a', bg: '#f0fdf4' },
-                    { value: to12h(dailyResult.abhijit_muhurat?.time) || '—', label: '☀️ Abhijit Muhurat', color: '#075985', labelColor: '#0369a1', bg: '#f0f9ff' },
-                    { value: to12h(dailyResult.rahu_kaal?.time) || '—', label: '🚫 Rahu Kaal', color: '#b91c1c', labelColor: '#dc2626', bg: '#fef2f2' },
-                  ]} />
-                  <div style={{ display: 'flex', gap: 0 }}>
-                    {[
-                      { note: dailyResult.brahma_muhurat?.benefit, color: '#16a34a', bg: '#f0fdf4' },
-                      { note: dailyResult.abhijit_muhurat?.benefit, color: '#0369a1', bg: '#f0f9ff' },
-                      { note: 'Avoid all auspicious work', color: '#dc2626', bg: '#fef2f2' },
-                    ].map((n, i) => (
-                      <div key={i} style={{
-                        flex: 1, padding: '6px 12px 10px',
-                        fontFamily: UI_FONT, fontSize: 11, color: n.color,
-                        textAlign: 'center', lineHeight: 1.4,
-                        borderLeft: i > 0 ? '1px solid var(--cream-dark)' : 'none',
-                        borderBottom: '1px solid var(--cream-dark)',
-                        borderRight: i === 2 ? '1px solid var(--cream-dark)' : 'none',
-                        background: n.bg,
-                        borderBottomLeftRadius: i === 0 ? 'var(--radius)' : 0,
-                        borderBottomRightRadius: i === 2 ? 'var(--radius)' : 0,
-                      }}>{n.note}</div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Choghadiya — border-left strip style, neutral bg */}
-                {dailyResult.choghadiya?.length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <p style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--brown)', marginBottom: 10 }}>
-                      🕐 Choghadiya
-                    </p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {dailyResult.choghadiya.map((c, i) => (
-                        <div key={i} style={{
-                          padding: '8px 12px', borderRadius: 8,
-                          background: 'var(--cream)',
-                          border: '1px solid var(--cream-dark)',
-                          borderLeft: `3px solid ${c.nature === 'good' ? '#16a34a' : c.nature === 'bad' ? '#dc2626' : '#94a3b8'}`,
-                        }}>
-                          <p style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 700, color: c.nature === 'good' ? '#15803d' : c.nature === 'bad' ? '#b91c1c' : 'var(--text-mid)' }}>{c.name}</p>
-                          <p style={{ fontFamily: UI_FONT, fontSize: 11, color: 'var(--text-light)', whiteSpace: 'nowrap', marginTop: 2 }}>{to12h(c.time)}</p>
-                          {c.good_for && <p style={{ fontFamily: UI_FONT, fontSize: 10, color: 'var(--text-light)', marginTop: 2 }}>{c.good_for}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Do / Avoid */}
-                <div className="panchang-do-avoid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  {[
-                    { title: '✅ Do today',    items: dailyResult.do_today,    bg: '#f0fdf4', border: '#86efac', color: '#15803d', hdr: '#16a34a' },
-                    { title: '🚫 Avoid today', items: dailyResult.avoid_today, bg: '#fef2f2', border: '#fca5a5', color: '#b91c1c', hdr: '#dc2626' },
-                  ].map(s => (
-                    <div key={s.title} style={{ background: s.bg, borderRadius: 'var(--radius)', padding: '14px 16px', border: `1px solid ${s.border}` }}>
-                      <p style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: s.hdr, marginBottom: 8 }}>{s.title}</p>
-                      {(s.items || []).map((d, i) => (
-                        <p key={i} style={{ fontFamily: UI_FONT, fontSize: 13, color: s.color, marginBottom: 5, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                          <span style={{ flexShrink: 0 }}>•</span><span>{d}</span>
-                        </p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* ── SECTION 2 — Muhurat Finder ─────────────────────────────── */}
-          <Card>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--brown)', marginBottom: 4 }}>
-              Muhurat Finder
-            </h2>
-            <p style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-light)', marginBottom: 24 }}>
-              Find the most auspicious time for your important occasion
-            </p>
-
-            {/* Occasion grid — fixed 6 cols desktop, no orphans */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>Select Occasion</label>
-              <div className="muhurat-occasion-grid" style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(6, 1fr)',
-                gap: 10,
-              }}>
-                {MUHURAT_TYPES.map(m => (
-                  <button key={m.id} onClick={() => setSelected(m.id)} style={{
-                    padding: '14px 8px', borderRadius: 'var(--radius)',
-                    border: `2px solid ${selected === m.id ? 'var(--saffron)' : 'var(--cream-dark)'}`,
-                    background: selected === m.id ? 'rgba(232,101,10,0.07)' : 'white',
-                    cursor: 'pointer', textAlign: 'center', transition: 'var(--transition)',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                  }}>
-                    <span style={{ fontSize: 24 }}>{m.emoji}</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: selected === m.id ? 'var(--saffron-dark)' : 'var(--brown)', fontWeight: 700, lineHeight: 1.2 }}>{m.label}</span>
-                    <span style={{ fontFamily: 'var(--font-hindi)', fontSize: 10, color: 'var(--text-light)' }}>{m.hindi}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="muhurat-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}>
-              <div>
-                <label style={labelStyle}>Date</label>
-                <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                  style={{ ...inputStyle, background: 'var(--cream)' }} />
-              </div>
-              <div>
-                <label style={labelStyle}>Your Name (optional)</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Rahul Sharma" style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'} />
-              </div>
-              <div>
-                <label style={labelStyle}>Rashi (Moon Sign)</label>
-                <select value={rashi} onChange={e => setRashi(e.target.value)}
-                  style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value="">Select your Rashi…</option>
-                  {RASHI_LIST.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>City</label>
-                <input type="text" value={city} onChange={e => setCity(e.target.value)}
-                  placeholder="e.g. Varanasi…" style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'} />
-              </div>
-            </div>
-
-            <button className="btn-primary" onClick={findMuhurat} disabled={loading}
-              style={{ width: '100%', justifyContent: 'center', padding: '15px', fontSize: 15, borderRadius: 50, gap: 10 }}>
-              {loading
-                ? <><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Muhurat…</>
-                : <><Sparkles size={18} /> Find Auspicious Muhurat</>}
-            </button>
-
-            {/* Empty state — shown before any result */}
-            {!loading && !result && (
+            {/* Card header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
               <div style={{
-                marginTop: 28, textAlign: 'center', padding: '28px 24px',
-                background: 'var(--cream)', borderRadius: 'var(--radius)',
-                border: '1px dashed var(--cream-dark)',
-              }}>
-                <div style={{ fontSize: 36, marginBottom: 10 }}>🪔</div>
-                <p style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--text-light)', lineHeight: 1.6 }}>
-                  Select an occasion above and click <strong>Find Auspicious Muhurat</strong><br />
-                  to see Vedic timing recommendations
+                width: 48, height: 48, borderRadius: 14,
+                background: 'rgba(232,101,10,0.10)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 22, flexShrink: 0,
+              }}>📍</div>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: '#7a3208', marginBottom: 2 }}>
+                  Plan Your Spiritual Route
+                </h2>
+                <p style={{ fontFamily: UI_FONT, color: '#9A7150', fontSize: 14 }}>
+                  Discover temples and divine stops on your journey.
                 </p>
               </div>
-            )}
-          </Card>
+            </div>
 
-          {/* Error */}
-          {error && (
-            <div style={{ background: '#FFF4F4', border: '1px solid #FFCDD2', borderRadius: 'var(--radius)', padding: '14px 18px', marginBottom: 24, display: 'flex', gap: 10 }}>
-              <AlertCircle size={18} color="#D32F2F" style={{ flexShrink: 0, marginTop: 2 }} />
-              <p style={{ fontFamily: UI_FONT, color: '#C62828', fontSize: 14 }}>{error}</p>
+            {/* FROM / TO — with autocomplete */}
+            <div className="route-form-inner" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 26 }}>
+              <CityAutocomplete
+                label="From"
+                placeholder="e.g. Indore"
+                value={form.start}
+                onChange={val => setForm(prev => ({ ...prev, start: val }))}
+                icon={<MapPin size={16} color="#E8650A" style={{ flexShrink: 0 }} />}
+              />
+              <CityAutocomplete
+                label="To"
+                placeholder="e.g. Ujjain"
+                value={form.destination}
+                onChange={val => setForm(prev => ({ ...prev, destination: val }))}
+                icon={<Navigation size={16} color="#6B3A1F" style={{ flexShrink: 0 }} />}
+              />
+            </div>
+
+            {/* TRAVEL MODE */}
+            <div style={{ marginBottom: 26 }}>
+              <h3 style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 12 }}>
+                Travel Mode
+              </h3>
+              <div className="mode-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+                {TRAVEL_MODES.map(m => {
+                  const active = form.travel_mode === m.value;
+                  return (
+                    <button
+                      key={m.value}
+                      onClick={() => setForm(f => ({ ...f, travel_mode: m.value }))}
+                      style={{
+                        border: `2px solid ${active ? '#E8650A' : '#EDE0CC'}`,
+                        borderRadius: 14, padding: '13px 8px',
+                        background: active ? 'linear-gradient(135deg, #E8650A, #FF8C2A)' : 'white',
+                        color: active ? 'white' : '#5C3D1E',
+                        cursor: 'pointer', textAlign: 'center', transition: 'all .2s',
+                        boxShadow: active ? '0 4px 16px rgba(232,101,10,0.28)' : 'none',
+                        fontFamily: UI_FONT,
+                      }}
+                    >
+                      <div style={{ fontSize: 22, marginBottom: 5 }}>{m.icon}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{m.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* TEMPLE PREFERENCES */}
+            <div style={{ marginBottom: 28 }}>
+              <h3 style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 12 }}>
+                Temple Preferences{' '}
+                <span style={{ fontSize: 11, fontWeight: 400, color: '#BBA080', letterSpacing: 0, textTransform: 'none' }}>(optional)</span>
+              </h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {PREF_OPTIONS.map(p => {
+                  const active = form.preferences.includes(p);
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => togglePref(p)}
+                      style={{
+                        padding: '8px 16px', borderRadius: 50, fontFamily: UI_FONT,
+                        border: `2px solid ${active ? '#E8650A' : '#EDE0CC'}`,
+                        background: active ? 'linear-gradient(135deg, #E8650A, #FF8C2A)' : '#FDF6EC',
+                        color: active ? 'white' : '#5C3D1E',
+                        cursor: 'pointer', fontSize: 13, fontWeight: 500, transition: 'all .2s',
+                        boxShadow: active ? '0 3px 10px rgba(232,101,10,0.28)' : 'none',
+                      }}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* CTA */}
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              style={{
+                width: '100%', padding: '16px', borderRadius: 50, border: 'none',
+                background: 'linear-gradient(135deg, #3D1F00 0%, #B84D00 50%, #E8650A 100%)',
+                color: 'white', fontSize: 16, fontWeight: 700,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                fontFamily: 'var(--font-display)', letterSpacing: '.04em',
+                boxShadow: '0 6px 22px rgba(184,77,0,0.32)',
+                transition: 'all .25s', opacity: loading ? 0.75 : 1,
+              }}
+            >
+              {loading
+                ? <><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Sacred Stops…</>
+                : <>✨ Plan My Spiritual Route</>}
+            </button>
+
+            {/* Error */}
+            {error && (
+              <div style={{
+                marginTop: 14, background: '#FFF4F4', border: '1px solid #FFCDD2',
+                borderRadius: 12, padding: '12px 16px',
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+              }}>
+                <AlertCircle size={17} color="#D32F2F" style={{ flexShrink: 0, marginTop: 2 }} />
+                <p style={{ fontFamily: UI_FONT, color: '#C62828', fontSize: 13 }}>{error}</p>
+              </div>
+            )}
+          </div>
+
+          {/* ── LOADING ── */}
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <div style={{ fontSize: 52, marginBottom: 16, animation: 'float 2.5s ease-in-out infinite' }}>🛕</div>
+              <p style={{ fontFamily: 'var(--font-display)', color: '#9A7150', fontSize: 18, fontWeight: 600 }}>
+                Consulting the divine route map…
+              </p>
+              <p style={{ fontFamily: UI_FONT, color: '#9A7150', fontSize: 13, marginTop: 6 }}>
+                AI is mapping sacred temples along your journey
+              </p>
             </div>
           )}
 
-          {/* Loading */}
-          {loading && <LoadingState />}
-
-          {/* ── Muhurat Results ─────────────────────────────────────────── */}
+          {/* ── RESULTS ── */}
           {result && !loading && (
-            <div style={{ animation: 'fadeDown .6s ease both' }}>
+            <div style={{ marginTop: 32, animation: 'fadeDown .6s ease both' }}>
 
-              {/* Verdict Banner */}
-              <div style={{
-                background: VERDICT_BG[result.verdict] || '#fffbeb',
-                border: `2px solid ${VERDICT_COLOR[result.verdict] || '#d97706'}40`,
-                borderRadius: 'var(--radius-lg)', padding: '24px 28px', marginBottom: 24,
-                display: 'flex', alignItems: 'flex-start', gap: 18,
-              }}>
-                <span style={{ fontSize: 52 }}>{VERDICT_ICON[result.verdict] || '🌤️'}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                    <span style={{
-                      fontFamily: UI_FONT, fontSize: 11, letterSpacing: '.09em', textTransform: 'uppercase',
-                      fontWeight: 700, color: 'white', background: VERDICT_COLOR[result.verdict] || '#d97706',
-                      padding: '3px 14px', borderRadius: 50,
-                    }}>{result.verdict}</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--brown)', fontWeight: 700 }}>
-                      {selectedType?.label} Muhurat
-                    </span>
+              {/* Travel Time Warning */}
+              {result.travel_time_warning && (
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 14,
+                  background: '#FFFBEB', border: '1px solid #FCD34D',
+                  borderLeft: '4px solid #F59E0B',
+                  borderRadius: 16, padding: '16px 20px', marginBottom: 20,
+                }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>⏱️</span>
+                  <div>
+                    <p style={{ fontFamily: UI_FONT, fontWeight: 700, color: '#92400E', fontSize: 14, marginBottom: 4 }}>Travel Time Heads-up</p>
+                    <p style={{ fontFamily: UI_FONT, color: '#78350F', fontSize: 13, lineHeight: 1.6 }}>{result.travel_time_warning}</p>
                   </div>
-                  <p style={{ fontFamily: UI_FONT, fontSize: 15, color: VERDICT_COLOR[result.verdict] || '#d97706', marginBottom: 10, fontWeight: 600 }}>
-                    {result.verdict_reason}
-                  </p>
-                  <p style={{ fontFamily: 'var(--font-body)', fontSize: 16, color: 'var(--text-mid)', lineHeight: 1.75, fontStyle: 'italic' }}>
-                    "{result.pandit_message}"
-                  </p>
+                </div>
+              )}
+
+              {/* Route Summary Banner */}
+              <div style={{
+                background: 'linear-gradient(135deg, #3D1F00 0%, #6B3A1F 100%)',
+                borderRadius: 24, padding: '26px 30px', marginBottom: 26,
+                color: 'white', boxShadow: '0 6px 28px rgba(61,31,0,0.18)',
+              }}>
+                <div className="route-summary-inner" style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontFamily: UI_FONT, fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 8, fontWeight: 700 }}>
+                      Your Route
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'white' }}>
+                      {result.route_summary.start}
+                      <span style={{ color: '#FFD580' }}>→</span>
+                      {result.route_summary.destination}
+                    </div>
+                  </div>
+                  <div className="route-summary-stats" style={{ display: 'flex', gap: 28 }}>
+                    {[
+                      { val: result.route_summary.total_distance,        key: 'Distance' },
+                      { val: result.route_summary.estimated_travel_time, key: 'Travel Time' },
+                      { val: result.recommended_temples?.length || 0,    key: 'Temples' },
+                    ].map(s => (
+                      <div key={s.key} style={{ textAlign: 'center' }}>
+                        <span style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: '#FFD580' }}>{s.val}</span>
+                        <span style={{ fontFamily: UI_FONT, fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>{s.key}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Main + Sidebar */}
-              <div className="muhurat-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}>
+              {/* Temple Cards + Sidebar */}
+              <div className="route-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 22, alignItems: 'start' }}>
 
-                {/* LEFT */}
+                {/* Temple Cards */}
                 <div>
-                  {/* Auspicious Timings */}
-                  <Card accent="rgba(34,197,94,0.3)">
-                    <SectionTitle icon={<Clock size={14} color="white" />}>Shubh Muhurat Timings</SectionTitle>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {(result.auspicious_timings || []).map((timing, i) => (
-                        <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #86efac', overflow: 'hidden', background: '#f0fdf4' }}>
-                          <div style={{ display: 'flex', borderBottom: '1px solid #86efac' }}>
-                            <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid #86efac' }}>
-                              <p style={{ fontFamily: UI_FONT, fontSize: 17, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap', marginBottom: 2 }}>{to12h(timing.time)}</p>
-                              <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a' }}>Shubh Timing</p>
-                            </div>
-                            <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#dcfce7' }}>
-                              <p style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#15803d', textAlign: 'center' }}>{timing.quality}</p>
-                            </div>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 800, color: '#7a3208', marginBottom: 14 }}>
+                    🛕 Temples Along Your Route
+                  </h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {(result.recommended_temples || []).map((t, i) => (
+                      <div key={i} style={{
+                        background: 'white', borderRadius: 16,
+                        border: `2px solid ${t.importance === 'high' ? '#E8650A' : '#EDE0CC'}`,
+                        padding: '18px 20px',
+                        boxShadow: '0 2px 10px rgba(61,31,0,0.06)',
+                        transition: 'all .2s',
+                      }}>
+                        {/* Header row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 10, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00' }}>{t.name}</h3>
+                            {t.importance === 'high' && (
+                              <span style={{
+                                background: '#E8650A', color: 'white',
+                                fontFamily: UI_FONT, fontSize: 9, fontWeight: 700,
+                                letterSpacing: '.07em', padding: '3px 9px',
+                                borderRadius: 50, whiteSpace: 'nowrap', flexShrink: 0,
+                              }}>⭐ MUST VISIT</span>
+                            )}
                           </div>
-                          <div style={{ padding: '10px 16px' }}>
-                            <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#16a34a', lineHeight: 1.5 }}>{timing.reason}</p>
+                          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                            <span style={{ background: '#FDF6EC', borderRadius: 50, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, color: '#5C3D1E', fontWeight: 500 }}>
+                              📍 {t.distance_from_route_km}
+                            </span>
+                            <span style={{ background: '#FDF6EC', borderRadius: 50, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, color: '#5C3D1E', fontWeight: 500 }}>
+                              ⏱ {t.estimated_stop_time_minutes} min
+                            </span>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </Card>
-
-                  {/* Inauspicious Timings */}
-                  {result.timings_to_avoid?.length > 0 && (
-                    <Card accent="rgba(220,38,38,0.25)">
-                      <SectionTitle icon={<AlertCircle size={14} color="white" />}>Timings to Avoid</SectionTitle>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {result.timings_to_avoid.map((timing, i) => (
-                          <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #fca5a5', overflow: 'hidden', background: '#fef2f2' }}>
-                            <div style={{ display: 'flex', borderBottom: '1px solid #fca5a5' }}>
-                              <div style={{ padding: '10px 16px', borderRight: '1px solid #fca5a5' }}>
-                                <p style={{ fontFamily: UI_FONT, fontSize: 16, fontWeight: 700, color: '#b91c1c', whiteSpace: 'nowrap', marginBottom: 2 }}>{to12h(timing.time)}</p>
-                                <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#dc2626' }}>Avoid</p>
-                              </div>
-                              <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center' }}>
-                                <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#dc2626', lineHeight: 1.4 }}>{timing.reason}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', marginBottom: 6 }}>
+                          📌 {t.location}{t.deity && ` · ${t.deity}`}
+                        </p>
+                        <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#5C3D1E', lineHeight: 1.65 }}>{t.why_visit}</p>
                       </div>
-                    </Card>
-                  )}
-
-                  {/* Rituals */}
-                  {result.rituals_recommended?.length > 0 && (
-                    <Card>
-                      <SectionTitle icon={<Star size={14} color="white" />}>Recommended Rituals</SectionTitle>
-                      {result.rituals_recommended.map((ritual, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
-                          <CheckCircle size={16} color="var(--saffron)" style={{ marginTop: 3, flexShrink: 0 }} />
-                          <span style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.6 }}>{ritual}</span>
-                        </div>
-                      ))}
-                    </Card>
-                  )}
-
-                  {/* Mantras */}
-                  {result.mantras?.length > 0 && (
-                    <Card>
-                      <SectionTitle icon="🕉️">Mantras to Chant</SectionTitle>
-                      {result.mantras.map((m, i) => (
-                        <div key={i} className="mantra-card" style={{ marginBottom: 12 }}>
-                          <div className="mantra-title">{m.deity} · Chant {m.chant_times} times</div>
-                          <div className="mantra-sanskrit">{m.mantra}</div>
-                          <div className="mantra-meaning">{m.purpose}</div>
-                        </div>
-                      ))}
-                    </Card>
-                  )}
+                    ))}
+                  </div>
                 </div>
 
-                {/* RIGHT sidebar */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Sidebar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-                  {/* Planetary Check */}
-                  <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--cream-dark)', padding: '20px', boxShadow: '0 2px 12px var(--shadow)' }}>
-                    <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>🔭 Planetary Check</h3>
-                    {[
-                      { label: 'Tithi',     data: result.tithi_today },
-                      { label: 'Nakshatra', data: result.nakshatra_today },
-                    ].map(item => item.data && (
-                      <div key={item.label} style={{
-                        background: item.data.is_auspicious_for_this_muhurat ? '#f0fdf4' : '#fef2f2',
-                        borderRadius: 10, padding: '12px 14px', marginBottom: 10,
-                        border: `1px solid ${item.data.is_auspicious_for_this_muhurat ? '#86efac' : '#fca5a5'}`,
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 600, color: 'var(--text-light)', letterSpacing: '.06em', textTransform: 'uppercase' }}>{item.label}</span>
-                          <span style={{ fontFamily: UI_FONT, fontSize: 11, color: item.data.is_auspicious_for_this_muhurat ? '#16a34a' : '#dc2626' }}>
-                            {item.data.is_auspicious_for_this_muhurat ? '✅ Auspicious' : '⚠️ Caution'}
-                          </span>
+                  {/* Optimized Itinerary */}
+                  <div style={{ background: 'white', borderRadius: 16, border: '1px solid #EDE0CC', padding: '20px', boxShadow: '0 2px 10px rgba(61,31,0,0.06)' }}>
+                    <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00', marginBottom: 16 }}>
+                      🗺️ Optimized Itinerary
+                    </h3>
+                    {(result.optimized_plan || []).map((stop, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 12, position: 'relative' }}>
+                        {i < result.optimized_plan.length - 1 && (
+                          <div style={{ position: 'absolute', left: 14, top: 28, bottom: 0, width: 2, background: '#EDE0CC', zIndex: 0 }} />
+                        )}
+                        <div style={{
+                          width: 28, height: 28, borderRadius: '50%',
+                          background: '#E8650A', color: 'white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontFamily: UI_FONT, fontWeight: 700, fontSize: 12,
+                          flexShrink: 0, zIndex: 1,
+                        }}>
+                          {stop.stop_number}
                         </div>
-                        <p style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 700 }}>{item.data.name}</p>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)', marginTop: 4, lineHeight: 1.5 }}>{item.data.reason}</p>
+                        <div style={{ paddingBottom: 18 }}>
+                          <p style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: '#3D1F00' }}>{stop.temple_name}</p>
+                          {stop.arrival_time_hint && (
+                            <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#E8650A', fontWeight: 600, marginTop: 2 }}>🕐 {stop.arrival_time_hint}</p>
+                          )}
+                          <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', lineHeight: 1.5, marginTop: 3 }}>{stop.arrival_order_reason}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Alternative Dates */}
-                  {result.alternative_dates?.length > 0 && (
-                    <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--cream-dark)', padding: '20px', boxShadow: '0 2px 12px var(--shadow)' }}>
-                      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>📆 Alternative Dates</h3>
-                      {result.alternative_dates.map((d, i) => (
-                        <div key={i} style={{ padding: '10px 12px', borderRadius: 10, marginBottom: 8, background: 'var(--cream)', border: '1px solid var(--cream-dark)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                            <span style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--brown)', fontWeight: 700 }}>{d.date}</span>
-                            <span style={{ fontFamily: UI_FONT, fontSize: 10, background: 'var(--saffron)', color: 'white', borderRadius: 50, padding: '2px 8px', fontWeight: 700 }}>{d.quality}</span>
-                          </div>
-                          <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)' }}>{d.reason}</p>
+                  {/* Pandit Tips */}
+                  {result.insights?.length > 0 && (
+                    <div style={{
+                      background: 'rgba(200,150,12,0.06)',
+                      borderRadius: 16, border: '1px solid rgba(200,150,12,0.2)', padding: '20px',
+                    }}>
+                      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: '#3D1F00', marginBottom: 12 }}>
+                        💡 Pandit's Tips
+                      </h3>
+                      {result.insights.map((tip, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 10 }}>
+                          <Star size={12} color="#C8960C" style={{ marginTop: 4, flexShrink: 0 }} />
+                          <span style={{ fontFamily: UI_FONT, fontSize: 13, color: '#5C3D1E', lineHeight: 1.6 }}>{tip}</span>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  {/* Special Notes */}
-                  {result.special_notes?.length > 0 && (
-                    <div style={{
-                      background: 'linear-gradient(135deg,rgba(200,150,12,0.07),rgba(232,101,10,0.04))',
-                      borderRadius: 'var(--radius-lg)', border: '1px solid rgba(200,150,12,0.2)', padding: '20px',
-                    }}>
-                      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 12 }}>💡 Pandit Ji's Notes</h3>
-                      {result.special_notes.map((n, i) => (
-                        <p key={i} style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 8, display: 'flex', gap: 8 }}>
-                          <Star size={12} color="var(--gold)" style={{ marginTop: 4, flexShrink: 0 }} />
-                          {n}
-                        </p>
-                      ))}
-                    </div>
-                  )}
+                  {/* Copy Route */}
+                  <button
+                    onClick={handleCopy}
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: 50,
+                      border: `2px solid ${copied ? '#16a34a' : '#EDE0CC'}`,
+                      background: copied ? '#f0fdf4' : '#FDF6EC',
+                      color: copied ? '#15803d' : '#5C3D1E',
+                      fontFamily: UI_FONT, fontSize: 13, fontWeight: 600,
+                      cursor: 'pointer', transition: 'all .2s',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
+                  >
+                    {copied ? '✅ Copied!' : '📋 Copy Route Summary'}
+                  </button>
                 </div>
               </div>
             </div>
           )}
+
+          {/* ── BOOKING CARD ── */}
+          <div style={{
+            marginTop: result ? 32 : 24,
+            background: 'white', borderRadius: 24,
+            border: '1px solid rgba(232,101,10,0.14)',
+            boxShadow: '0 4px 20px rgba(61,31,0,0.08)',
+            padding: '24px 28px',
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 20, flexWrap: 'wrap',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+              <div style={{
+                width: 52, height: 52, borderRadius: 14,
+                background: `${bookingMeta.color}15`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 24, flexShrink: 0,
+              }}>
+                {bookingMeta.icon}
+              </div>
+              <div>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: '#7a3208', marginBottom: 4 }}>
+                  Already know your route?
+                </h3>
+                <p style={{ fontFamily: UI_FONT, color: '#9A7150', fontSize: 13 }}>{bookingSubtitle}</p>
+              </div>
+            </div>
+            <div style={{ textAlign: 'center', flexShrink: 0 }}>
+              <button
+                onClick={handleBookingClick}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '12px 24px', borderRadius: 50,
+                  border: `2px solid ${bookingMeta.color}`,
+                  color: bookingMeta.color, background: 'transparent',
+                  fontFamily: UI_FONT, fontSize: 14, fontWeight: 700,
+                  cursor: 'pointer', transition: 'all .2s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = bookingMeta.color; e.currentTarget.style.color = 'white'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = bookingMeta.color; }}
+              >
+                {bookingMeta.label} <ExternalLink size={15} />
+              </button>
+              <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#9A7150', marginTop: 6 }}>
+                Powered by <span style={{ fontWeight: 700, color: bookingMeta.color }}>{bookingMeta.provider}</span>
+              </p>
+            </div>
+          </div>
+
         </div>
-      </div>
+      </section>
 
       <style>{`
-        @keyframes spin      { to { transform: rotate(360deg); } }
-        @keyframes fadeDown  { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes pulse-om  { 0%,100% { transform:scale(1); opacity:.7; } 50% { transform:scale(1.04); opacity:1; } }
-
-        @media (max-width: 900px) {
-          .muhurat-results-grid { grid-template-columns: 1fr !important; }
+        @keyframes spin     { to { transform: rotate(360deg); } }
+        @keyframes float    { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes fadeDown { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+        @media (max-width: 860px) {
+          .route-results-grid  { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 720px) {
-          .muhurat-occasion-grid { grid-template-columns: repeat(4,1fr) !important; }
-          .muhurat-form-grid     { grid-template-columns: 1fr 1fr !important; }
-          .panchang-do-avoid     { grid-template-columns: 1fr !important; }
-        }
-        @media (max-width: 480px) {
-          .muhurat-occasion-grid { grid-template-columns: repeat(3,1fr) !important; }
-          .muhurat-form-grid     { grid-template-columns: 1fr !important; }
+          .route-form-inner    { grid-template-columns: 1fr !important; }
+          .mode-grid           { grid-template-columns: repeat(2,1fr) !important; }
+          .route-summary-inner { flex-direction: column !important; }
+          .route-summary-stats { width: 100%; justify-content: space-around; display: flex; }
         }
       `}</style>
 
