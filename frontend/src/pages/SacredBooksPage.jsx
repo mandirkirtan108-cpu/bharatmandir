@@ -8,7 +8,7 @@ import {
 } from '../services/sacredBooksApi';
 
 /* ═══════════════════════════════════════════════════════════════
-   AUDIO — Web Speech API (free, no key needed)
+   AUDIO — Web Speech API
 ═══════════════════════════════════════════════════════════════ */
 function speakVerse(text) {
   if (!window.speechSynthesis) return;
@@ -22,8 +22,8 @@ function speakVerse(text) {
 function stopSpeaking() { window.speechSynthesis?.cancel(); }
 
 /* ═══════════════════════════════════════════════════════════════
-   BOOK ICON — SVG book with ॐ symbol, replaces all emojis
-   size: pixel size (default 48), color: accent color
+   BOOK ICON — Sacred book with OM printed on the cover,
+   like a physical scripture (matches the uploaded reference image)
 ═══════════════════════════════════════════════════════════════ */
 function BookIcon({ size = 48, color = '#c2410c', style = {} }) {
   return (
@@ -33,38 +33,40 @@ function BookIcon({ size = 48, color = '#c2410c', style = {} }) {
       viewBox="0 0 48 48"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      style={{ flexShrink: 0, ...style }}
+      style={{ flexShrink: 0, display: 'block', ...style }}
     >
-      {/* OM symbol above the book */}
+      {/* Book spine (left edge) */}
+      <rect x="4" y="6" width="6" height="36" rx="2"
+        fill={color} opacity="0.85" />
+
+      {/* Book cover (front face) */}
+      <rect x="10" y="6" width="34" height="36" rx="2"
+        fill={`${color}18`}
+        stroke={color}
+        strokeWidth="1.8" />
+
+      {/* Cover border decoration (inner frame) */}
+      <rect x="13" y="9" width="28" height="30" rx="1.5"
+        fill="none"
+        stroke={color}
+        strokeWidth="0.9"
+        opacity="0.5" />
+
+      {/* ॐ symbol large and centered on the cover */}
       <text
-        x="24"
-        y="16"
+        x="27"
+        y="30"
         textAnchor="middle"
-        fontSize="15"
-        fontWeight="bold"
+        fontSize="20"
+        fontWeight="900"
         fill={color}
-        fontFamily="serif"
-        style={{ userSelect: 'none' }}
+        fontFamily="Georgia, 'Noto Serif Devanagari', serif"
+        opacity="0.9"
       >ॐ</text>
 
-      {/* Book spine */}
-      <rect x="10" y="18" width="4" height="24" rx="1.5" fill={color} opacity="0.85" />
-
-      {/* Book cover */}
-      <rect x="13" y="18" width="25" height="24" rx="2" fill={color} opacity="0.15" stroke={color} strokeWidth="1.5" />
-
-      {/* Book pages (right side lines) */}
-      <line x1="17" y1="24" x2="34" y2="24" stroke={color} strokeWidth="1" opacity="0.5" />
-      <line x1="17" y1="28" x2="34" y2="28" stroke={color} strokeWidth="1" opacity="0.5" />
-      <line x1="17" y1="32" x2="34" y2="32" stroke={color} strokeWidth="1" opacity="0.5" />
-      <line x1="17" y1="36" x2="28" y2="36" stroke={color} strokeWidth="1" opacity="0.5" />
-
-      {/* Bookmark ribbon on top-right */}
-      <path
-        d="M33 18 L37 18 L37 26 L35 24 L33 26 Z"
-        fill={color}
-        opacity="0.8"
-      />
+      {/* Subtle horizontal line above OM (like a title bar) */}
+      <line x1="15" y1="14" x2="39" y2="14"
+        stroke={color} strokeWidth="0.8" opacity="0.4" />
     </svg>
   );
 }
@@ -102,7 +104,6 @@ function ProgressBar({ percent, color }) {
   );
 }
 
-/* ── Toast notification ── */
 function Toast({ message, visible }) {
   if (!visible) return null;
   return (
@@ -123,7 +124,6 @@ function Toast({ message, visible }) {
   );
 }
 
-/* ── BookCard in sidebar ── */
 function BookCard({ book, isSelected, onSelect, progress }) {
   const pct = progress?.percent_done ?? 0;
   return (
@@ -132,14 +132,23 @@ function BookCard({ book, isSelected, onSelect, progress }) {
       style={{
         width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
         padding: '14px 16px',
-        background: isSelected ? `${book.accent_color}22` : 'white',
+        background: isSelected ? `${book.accent_color}15` : 'white',
         borderLeft: `3px solid ${isSelected ? book.accent_color : 'transparent'}`,
         borderBottom: '1px solid var(--cream-dark)',
         transition: 'all 0.18s',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-        <BookIcon size={28} color={book.accent_color} />
+        <div style={{
+          width: 32, height: 32,
+          background: `${book.accent_color}15`,
+          border: `1px solid ${book.accent_color}30`,
+          borderRadius: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <BookIcon size={22} color={book.accent_color} />
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontFamily: 'var(--font-display)',
@@ -162,7 +171,6 @@ function BookCard({ book, isSelected, onSelect, progress }) {
   );
 }
 
-/* ── Single verse card in reader ── */
 function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, speakingVerse, onSpeak }) {
   const [showSanskrit, setShowSanskrit] = useState(false);
   const [showCommentary, setShowCommentary] = useState(false);
@@ -177,28 +185,23 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
       id={`verse-${verse.verse_number}`}
       style={{
         borderRadius: 'var(--radius-lg)',
-        border: `1px solid ${isBookmarked ? bookColor + '55' : 'var(--cream-dark)'}`,
+        border: `1.5px solid ${isBookmarked ? bookColor + '88' : bookColor + '33'}`,
         background: isBookmarked ? `${bookColor}06` : 'white',
         marginBottom: 16,
         overflow: 'hidden',
         transition: 'border-color 0.2s',
       }}
     >
-      {/* Verse header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '10px 16px',
         background: `${bookColor}0A`,
         borderBottom: `1px solid ${bookColor}18`,
       }}>
-        <span style={{
-          fontSize: 12, fontWeight: 700, color: bookColor,
-          letterSpacing: '0.07em',
-        }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: bookColor, letterSpacing: '0.07em' }}>
           {verse.chapter_number}.{verse.verse_number}
         </span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {/* Sanskrit toggle */}
           <button
             onClick={() => setShowSanskrit(s => !s)}
             title="Toggle Sanskrit"
@@ -209,8 +212,6 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
               fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
             }}
           >ॐ Sanskrit</button>
-
-          {/* Audio */}
           <button
             onClick={() => onSpeak(key, verse.translation)}
             title={isSpeaking ? 'Stop' : 'Listen'}
@@ -221,8 +222,6 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
               fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
             }}
           >{isSpeaking ? '⏹ Stop' : '🔊 Listen'}</button>
-
-          {/* Bookmark */}
           <button
             onClick={() => onBookmarkToggle(verse)}
             title={isBookmarked ? 'Remove bookmark' : 'Bookmark this verse'}
@@ -235,10 +234,7 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
           >{isBookmarked ? '🔖' : '☆'}</button>
         </div>
       </div>
-
-      {/* Content */}
       <div style={{ padding: '14px 18px' }}>
-        {/* Sanskrit */}
         {showSanskrit && verse.sanskrit && (
           <div style={{
             fontFamily: 'var(--font-hindi)',
@@ -248,8 +244,6 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
             animation: 'fadeDown 0.2s ease',
           }}>{verse.sanskrit}</div>
         )}
-
-        {/* Transliteration */}
         {showSanskrit && verse.transliteration && (
           <div style={{
             fontSize: 13, color: 'var(--text-muted)',
@@ -257,15 +251,11 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
             whiteSpace: 'pre-line',
           }}>{verse.transliteration}</div>
         )}
-
-        {/* Translation */}
         {verse.translation && (
           <p style={{ fontSize: 15, color: 'var(--text-mid)', lineHeight: 1.85, margin: 0 }}>
             {verse.translation}
           </p>
         )}
-
-        {/* Commentary toggle */}
         {verse.commentary && (
           <div style={{ marginTop: 10 }}>
             <button
@@ -301,7 +291,6 @@ function VerseCard({ verse, bookSlug, bookColor, bookmarks, onBookmarkToggle, sp
 const LAST_BOOKS = ['ramayana', 'mahabharata', 'ramayan', 'the-ramayana', 'the-mahabharata'];
 
 export default function SacredBooksPage() {
-  // ── State ────────────────────────────────────────────────────
   const [books, setBooks] = useState([]);
   const [selectedBook, setSelectedBook] = useState(null);
   const [chapters, setChapters] = useState([]);
@@ -313,33 +302,22 @@ export default function SacredBooksPage() {
   const [searchResults, setSearchResults] = useState(null);
   const [speakingVerse, setSpeakingVerse] = useState(null);
   const [bookFilter, setBookFilter] = useState('');
-
-  // Mobile sidebar
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // Toast
   const [toast, setToast] = useState({ message: '', visible: false });
   const toastTimerRef = useRef(null);
-
-  // Loading states
   const [loadingBooks, setLoadingBooks]       = useState(true);
   const [loadingChapters, setLoadingChapters] = useState(false);
   const [loadingVerses, setLoadingVerses]     = useState(false);
   const [searching, setSearching]             = useState(false);
-
-  // View mode
   const [view, setView] = useState('library');
-
   const readerTopRef = useRef(null);
 
-  // ── Toast helper ─────────────────────────────────────────────
   const showToast = useCallback((message) => {
     clearTimeout(toastTimerRef.current);
     setToast({ message, visible: true });
     toastTimerRef.current = setTimeout(() => setToast(t => ({ ...t, visible: false })), 2200);
   }, []);
 
-  // ── Boot ─────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([fetchBooks(), fetchBookmarks(), fetchAllProgress()])
       .then(([booksRes, bmRes, progRes]) => {
@@ -351,10 +329,8 @@ export default function SacredBooksPage() {
       .finally(() => setLoadingBooks(false));
   }, []);
 
-  // Close sidebar on view change
   useEffect(() => { setSidebarOpen(false); }, [view, selectedChapter]);
 
-  // ── Select book ───────────────────────────────────────────────
   const handleSelectBook = useCallback(async (book) => {
     setSelectedBook(book);
     setChapters([]);
@@ -366,19 +342,14 @@ export default function SacredBooksPage() {
     try {
       const res = await fetchChapters(book.slug);
       setChapters(res.chapters || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingChapters(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoadingChapters(false); }
   }, [showToast]);
 
-  // ── Select chapter ────────────────────────────────────────────
   const handleSelectChapter = useCallback(async (chNum) => {
     if (!selectedBook) return;
     stopSpeaking();
     setSpeakingVerse(null);
-
     setSelectedChapter(chNum);
     setChapterData(null);
     setLoadingVerses(true);
@@ -393,14 +364,10 @@ export default function SacredBooksPage() {
         const filtered = prev.filter(p => p.slug !== selectedBook.slug);
         return [{ slug: selectedBook.slug, last_chapter: chNum, last_verse: 1, percent_done: pct }, ...filtered];
       });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingVerses(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoadingVerses(false); }
   }, [selectedBook]);
 
-  // ── Bookmark toggle ───────────────────────────────────────────
   const handleBookmarkToggle = useCallback(async (verse) => {
     if (!selectedBook) return;
     const existing = bookmarks.find(
@@ -425,7 +392,6 @@ export default function SacredBooksPage() {
     }
   }, [selectedBook, bookmarks, showToast]);
 
-  // ── Search ────────────────────────────────────────────────────
   const handleSearch = useCallback(async (e) => {
     e.preventDefault();
     if (!searchQuery.trim() || !selectedBook) return;
@@ -435,25 +401,15 @@ export default function SacredBooksPage() {
     try {
       const res = await searchInBook(selectedBook.slug, searchQuery);
       setSearchResults(res);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSearching(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setSearching(false); }
   }, [searchQuery, selectedBook]);
 
-  // ── Audio ─────────────────────────────────────────────────────
   const handleSpeak = (key, text) => {
-    if (speakingVerse === key) {
-      stopSpeaking();
-      setSpeakingVerse(null);
-    } else {
-      speakVerse(text);
-      setSpeakingVerse(key);
-    }
+    if (speakingVerse === key) { stopSpeaking(); setSpeakingVerse(null); }
+    else { speakVerse(text); setSpeakingVerse(key); }
   };
 
-  // ── Helpers ───────────────────────────────────────────────────
   const getProgress = (slug) => allProgress.find(p => p.slug === slug);
 
   const filteredBooks = books
@@ -470,39 +426,29 @@ export default function SacredBooksPage() {
 
   const bk = selectedBook;
 
-  // ── Render ────────────────────────────────────────────────────
   return (
     <>
       <Navbar />
       <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
 
-        {/* ── Toast ───────────────────────────────────────────── */}
         <Toast message={toast.message} visible={toast.visible} />
 
-        {/* ── Hero Banner ────────────────────────────────────── */}
+        {/* ── Hero Banner ── */}
         <div style={{
-          position: 'relative',
-          overflow: 'hidden',
+          position: 'relative', overflow: 'hidden',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
           padding: '50px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '100%',
-          boxSizing: 'border-box',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          width: '100%', boxSizing: 'border-box',
         }}>
           <div style={{
             position: 'relative', zIndex: 1,
             width: '100%', maxWidth: 700,
-            padding: '0 24px',
-            boxSizing: 'border-box',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
+            padding: '0 24px', boxSizing: 'border-box',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', textAlign: 'center',
           }}>
-            {/* Badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               background: 'rgba(255,255,255,0.08)',
@@ -510,47 +456,36 @@ export default function SacredBooksPage() {
               borderRadius: 50, padding: '5px 16px', marginBottom: 14,
               color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
               textTransform: 'uppercase', fontWeight: 500,
-              backdropFilter: 'blur(8px)',
-              whiteSpace: 'nowrap',
+              backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
             }}>
-              <BookIcon size={16} color="rgba(255,213,128,0.85)" />
+              <BookIcon size={16} color="rgba(255,213,128,0.9)" />
               Sacred Scriptures of Bharat
             </div>
 
-            {/* Title */}
             <h1 style={{
               fontFamily: 'var(--font-display)', fontWeight: 900,
               fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
               marginBottom: 10, marginTop: 0,
               textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-              color: '#ffffff',
-              width: '100%',
+              color: '#ffffff', width: '100%',
             }}>
               Read the <span style={{ color: '#FFD580' }}>Sacred Books</span>
             </h1>
 
-            {/* Subtitle */}
             <p style={{
               color: 'rgba(255,255,255,0.7)', fontSize: 14,
               width: '100%', maxWidth: 520,
-              margin: '0 0 22px 0',
-              fontWeight: 300, lineHeight: 1.7,
-              textAlign: 'center',
+              margin: '0 0 22px 0', fontWeight: 300, lineHeight: 1.7, textAlign: 'center',
             }}>
               Full text · Verse-by-verse · Sanskrit · Audio · Bookmarks · Reading progress
             </p>
 
-            {/* Nav tabs */}
-            <div style={{
-              display: 'flex', justifyContent: 'center',
-              gap: 8, flexWrap: 'wrap',
-              width: '100%',
-            }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', width: '100%' }}>
               {[
                 { id: 'library',   label: 'Library' },
-                { id: 'reader',    label: 'Reader',      disabled: !bk },
+                { id: 'reader',    label: 'Reader',   disabled: !bk },
                 { id: 'bookmarks', label: `Bookmarks (${bookmarks.length})` },
-                { id: 'search',    label: 'Search',      disabled: !bk, tooltip: !bk ? 'Select a book first' : '' },
+                { id: 'search',    label: 'Search',   disabled: !bk, tooltip: !bk ? 'Select a book first' : '' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -562,13 +497,10 @@ export default function SacredBooksPage() {
                     cursor: tab.disabled ? 'not-allowed' : 'pointer',
                     fontSize: 13, fontWeight: 600,
                     background: view === tab.id ? '#FFD580' : 'rgba(255,255,255,0.1)',
-                    color: view === tab.id
-                      ? '#7a3208'
-                      : tab.disabled ? 'rgba(255,213,128,0.3)' : '#FFD580',
+                    color: view === tab.id ? '#7a3208' : tab.disabled ? 'rgba(255,213,128,0.3)' : '#FFD580',
                     backdropFilter: 'blur(8px)',
                     border: '1px solid rgba(255,213,128,0.2)',
-                    transition: 'all 0.18s',
-                    whiteSpace: 'nowrap',
+                    transition: 'all 0.18s', whiteSpace: 'nowrap',
                   }}
                 >{tab.label}</button>
               ))}
@@ -576,7 +508,7 @@ export default function SacredBooksPage() {
           </div>
         </div>
 
-        {/* ── LIBRARY VIEW ────────────────────────────────────── */}
+        {/* ── LIBRARY VIEW ── */}
         {view === 'library' && (
           <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
@@ -591,8 +523,7 @@ export default function SacredBooksPage() {
                   padding: '9px 16px', borderRadius: 99,
                   border: '2px solid var(--cream-dark)',
                   background: 'white', fontSize: 13,
-                  fontFamily: 'var(--font-body)', outline: 'none',
-                  width: 260,
+                  fontFamily: 'var(--font-body)', outline: 'none', width: 260,
                 }}
               />
             </div>
@@ -612,44 +543,37 @@ export default function SacredBooksPage() {
                       className="book-card"
                       style={{
                         background: 'white',
-                        border: `2px solid var(--cream-dark)`,
-                        borderRadius: 'var(--radius-xl)',
-                        padding: '24px',
+                        /* ── Hanuman Chalisa style: uniform accent border, no thick top ── */
+                        border: `2px solid ${book.accent_color}`,
+                        borderRadius: 16,
+                        padding: '22px 24px 24px',
                         cursor: 'pointer',
-                        transition: 'all 0.22s',
+                        transition: 'transform 0.22s, box-shadow 0.22s',
                         position: 'relative',
-                        overflow: 'hidden',
                       }}
                       onMouseEnter={e => {
-                        e.currentTarget.style.borderColor = book.accent_color;
                         e.currentTarget.style.transform = 'translateY(-3px)';
-                        e.currentTarget.style.boxShadow = `0 8px 28px ${book.accent_color}25`;
+                        e.currentTarget.style.boxShadow = `0 8px 28px ${book.accent_color}40`;
                       }}
                       onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = 'var(--cream-dark)';
                         e.currentTarget.style.transform = 'none';
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                     >
-                      {/* Color strip */}
-                      <div style={{
-                        position: 'absolute', top: 0, left: 0, right: 0, height: 4,
-                        background: book.accent_color,
-                      }} />
-
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-                        {/* BookIcon replacing emoji */}
+                        {/* Sacred book icon with OM on cover */}
                         <div style={{
-                          width: 52, height: 52, borderRadius: 12,
-                          background: `${book.accent_color}12`,
-                          border: `1.5px solid ${book.accent_color}30`,
+                          width: 54, height: 54,
+                          borderRadius: 12,
+                          background: `${book.accent_color}15`,
+                          border: `1.5px solid ${book.accent_color}35`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0,
                         }}>
-                          <BookIcon size={36} color={book.accent_color} />
+                          <BookIcon size={38} color={book.accent_color} />
                         </div>
                         <div>
-                          <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 18, marginBottom: 2 }}>
+                          <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 18, marginBottom: 3, marginTop: 0 }}>
                             {book.title}
                           </h3>
                           <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: 'var(--text-muted)' }}>
@@ -663,16 +587,20 @@ export default function SacredBooksPage() {
                       </p>
 
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                        {[book.tradition, book.language, `${book.total_chapters} ch`, `${(book.total_verses||0).toLocaleString()} verses`].filter(Boolean).map(tag => (
+                        {[book.tradition, book.language, `${book.total_chapters} ch`, `${(book.total_verses||0).toLocaleString()} verses`]
+                          .filter(Boolean).map(tag => (
                           <span key={tag} style={{
-                            fontSize: 11, padding: '3px 9px', borderRadius: 99,
-                            background: `${book.accent_color}18`, color: book.accent_color, fontWeight: 600,
+                            fontSize: 11, padding: '3px 10px', borderRadius: 99,
+                            background: `${book.accent_color}15`,
+                            color: book.accent_color,
+                            fontWeight: 600,
+                            border: `1px solid ${book.accent_color}30`,
                           }}>{tag}</span>
                         ))}
                       </div>
 
                       {prog && prog.percent_done > 0 && (
-                        <div>
+                        <div style={{ marginBottom: 12 }}>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
                             Reading progress · Chapter {prog.last_chapter} · {prog.percent_done}%
                           </div>
@@ -681,7 +609,7 @@ export default function SacredBooksPage() {
                       )}
 
                       <div style={{
-                        marginTop: 16, fontSize: 13, fontWeight: 700,
+                        fontSize: 13, fontWeight: 700,
                         color: book.accent_color,
                         display: 'flex', alignItems: 'center', gap: 4,
                       }}>
@@ -695,13 +623,10 @@ export default function SacredBooksPage() {
           </div>
         )}
 
-        {/* ── READER VIEW ─────────────────────────────────────── */}
+        {/* ── READER VIEW ── */}
         {view === 'reader' && bk && (
-          <div style={{
-            maxWidth: 1200, margin: '0 auto', padding: '24px 20px',
-          }}>
+          <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px' }}>
 
-            {/* Breadcrumb */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
               fontSize: 13, color: 'var(--text-muted)',
@@ -713,15 +638,9 @@ export default function SacredBooksPage() {
               >Library</button>
               <span>›</span>
               <span style={{ color: 'var(--brown)', fontWeight: 600 }}>{bk.title}</span>
-              {selectedChapter && (
-                <>
-                  <span>›</span>
-                  <span>Chapter {selectedChapter}</span>
-                </>
-              )}
+              {selectedChapter && (<><span>›</span><span>Chapter {selectedChapter}</span></>)}
             </div>
 
-            {/* Mobile: chapter toggle button */}
             <div style={{ display: 'none' }} className="mobile-chapter-toggle">
               <button
                 onClick={() => setSidebarOpen(o => !o)}
@@ -738,34 +657,21 @@ export default function SacredBooksPage() {
               </button>
             </div>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '260px 1fr',
-              gap: 20,
-              alignItems: 'start',
-            }} className="reader-grid">
+            <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 20, alignItems: 'start' }} className="reader-grid">
 
-              {/* Chapter sidebar */}
               <aside
                 className={`chapter-sidebar${sidebarOpen ? ' sidebar-open' : ''}`}
                 style={{
                   background: 'white',
                   borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--cream-dark)',
+                  border: `2px solid ${bk.accent_color}`,
                   overflow: 'hidden',
-                  position: 'sticky',
-                  top: 84,
+                  position: 'sticky', top: 84,
                   maxHeight: 'calc(100vh - 100px)',
-                  display: 'flex',
-                  flexDirection: 'column',
+                  display: 'flex', flexDirection: 'column',
                 }}
               >
-                {/* Book header */}
-                <div style={{
-                  padding: '16px',
-                  background: bk.accent_color,
-                  borderBottom: '1px solid rgba(0,0,0,0.1)',
-                }}>
+                <div style={{ padding: '16px', background: bk.accent_color, borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <BookIcon size={28} color="rgba(255,255,255,0.95)" />
                     <div>
@@ -774,8 +680,6 @@ export default function SacredBooksPage() {
                     </div>
                   </div>
                 </div>
-
-                {/* Chapter list */}
                 <div style={{ overflowY: 'auto', flex: 1 }}>
                   {loadingChapters ? <Spinner color={bk.accent_color} /> : (
                     chapters.map(ch => (
@@ -805,9 +709,7 @@ export default function SacredBooksPage() {
                               color: selectedChapter === ch.chapter_number ? bk.accent_color : 'var(--brown)',
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                             }}>{ch.title || ch.name_translated || `Chapter ${ch.chapter_number}`}</div>
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                              {ch.verse_count || ch.verses_count} verses
-                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{ch.verse_count || ch.verses_count} verses</div>
                           </div>
                         </div>
                       </button>
@@ -816,30 +718,24 @@ export default function SacredBooksPage() {
                 </div>
               </aside>
 
-              {/* Verse reader */}
               <main ref={readerTopRef}>
                 {!selectedChapter && (
                   <div style={{
-                    background: 'white', borderRadius: 'var(--radius-xl)',
-                    border: '1px solid var(--cream-dark)',
+                    background: 'white', borderRadius: 16,
+                    border: `2px solid ${bk.accent_color}`,
                     padding: '48px 32px', textAlign: 'center',
                   }}>
-                    {/* Large book icon replacing emoji */}
                     <div style={{
                       width: 80, height: 80, borderRadius: 20,
                       background: `${bk.accent_color}12`,
-                      border: `2px solid ${bk.accent_color}25`,
+                      border: `2px solid ${bk.accent_color}40`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       margin: '0 auto 20px',
                     }}>
                       <BookIcon size={52} color={bk.accent_color} />
                     </div>
-                    <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 10 }}>
-                      {bk.title}
-                    </h2>
-                    <p style={{ color: 'var(--text-light)', fontSize: 15, lineHeight: 1.7, maxWidth: 500, margin: '0 auto 20px' }}>
-                      {bk.description}
-                    </p>
+                    <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 10 }}>{bk.title}</h2>
+                    <p style={{ color: 'var(--text-light)', fontSize: 15, lineHeight: 1.7, maxWidth: 500, margin: '0 auto 20px' }}>{bk.description}</p>
                     {getProgress(bk.slug)?.last_chapter && (
                       <button
                         onClick={() => handleSelectChapter(getProgress(bk.slug).last_chapter)}
@@ -850,14 +746,12 @@ export default function SacredBooksPage() {
                         }}
                       >Continue from Chapter {getProgress(bk.slug).last_chapter} ›</button>
                     )}
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 16 }}>
-                      ← Select a chapter to begin reading
-                    </p>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 16 }}>← Select a chapter to begin reading</p>
                   </div>
                 )}
 
                 {selectedChapter && loadingVerses && (
-                  <div style={{ background: 'white', borderRadius: 'var(--radius-xl)', border: '1px solid var(--cream-dark)', padding: 40 }}>
+                  <div style={{ background: 'white', borderRadius: 16, border: `2px solid ${bk.accent_color}`, padding: 40 }}>
                     <Spinner color={bk.accent_color} />
                     <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>Loading verses…</p>
                   </div>
@@ -865,10 +759,9 @@ export default function SacredBooksPage() {
 
                 {selectedChapter && chapterData && !loadingVerses && (
                   <div>
-                    {/* Chapter header */}
                     <div style={{
-                      background: 'white', borderRadius: 'var(--radius-xl)',
-                      border: `1px solid ${bk.accent_color}33`,
+                      background: 'white', borderRadius: 16,
+                      border: `2px solid ${bk.accent_color}`,
                       padding: '24px 28px', marginBottom: 20,
                     }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -885,15 +778,14 @@ export default function SacredBooksPage() {
                             </div>
                           )}
                           {chapterData.summary && (
-                            <p style={{ fontSize: 14, color: 'var(--text-light)', lineHeight: 1.75, maxWidth: 600, margin: 0 }}>
-                              {chapterData.summary}
-                            </p>
+                            <p style={{ fontSize: 14, color: 'var(--text-light)', lineHeight: 1.75, maxWidth: 600, margin: 0 }}>{chapterData.summary}</p>
                           )}
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <div>
                           <div style={{
                             background: `${bk.accent_color}15`, borderRadius: 'var(--radius)',
                             padding: '10px 16px', textAlign: 'center',
+                            border: `1px solid ${bk.accent_color}30`,
                           }}>
                             <div style={{ fontSize: 22, fontWeight: 700, color: bk.accent_color, fontFamily: 'var(--font-display)' }}>
                               {chapterData.verse_count || chapterData.verses?.length || 0}
@@ -902,8 +794,6 @@ export default function SacredBooksPage() {
                           </div>
                         </div>
                       </div>
-
-                      {/* Prev / Next navigation */}
                       <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                         {selectedChapter > 1 && (
                           <button onClick={() => handleSelectChapter(selectedChapter - 1)} style={{
@@ -920,7 +810,6 @@ export default function SacredBooksPage() {
                       </div>
                     </div>
 
-                    {/* Search bar within reader */}
                     <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
                       <input
                         value={searchQuery}
@@ -928,7 +817,7 @@ export default function SacredBooksPage() {
                         placeholder={`Search in ${bk.title}…`}
                         style={{
                           flex: 1, padding: '10px 16px', borderRadius: 99,
-                          border: '2px solid var(--cream-dark)', background: 'white',
+                          border: `2px solid ${bk.accent_color}40`, background: 'white',
                           fontSize: 13, fontFamily: 'var(--font-body)', outline: 'none',
                         }}
                       />
@@ -939,7 +828,6 @@ export default function SacredBooksPage() {
                       }}>Search</button>
                     </form>
 
-                    {/* Note if no full text */}
                     {chapterData.note && (
                       <div style={{
                         background: 'var(--cream-mid)', borderRadius: 'var(--radius)',
@@ -948,7 +836,6 @@ export default function SacredBooksPage() {
                       }}>ℹ️ {chapterData.note}</div>
                     )}
 
-                    {/* Verse list */}
                     {(chapterData.verses || []).map(verse => (
                       <VerseCard
                         key={`${verse.chapter_number}-${verse.verse_number}`}
@@ -962,7 +849,6 @@ export default function SacredBooksPage() {
                       />
                     ))}
 
-                    {/* Bottom navigation */}
                     <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
                       {selectedChapter > 1 && (
                         <button onClick={() => handleSelectChapter(selectedChapter - 1)} style={{
@@ -985,7 +871,7 @@ export default function SacredBooksPage() {
           </div>
         )}
 
-        {/* ── BOOKMARKS VIEW ──────────────────────────────────── */}
+        {/* ── BOOKMARKS VIEW ── */}
         {view === 'bookmarks' && (
           <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 20px' }}>
             <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 20, fontSize: 22 }}>
@@ -993,8 +879,8 @@ export default function SacredBooksPage() {
             </h2>
             {bookmarks.length === 0 ? (
               <div style={{
-                background: 'white', borderRadius: 'var(--radius-xl)',
-                border: '1px solid var(--cream-dark)', padding: '48px',
+                background: 'white', borderRadius: 16,
+                border: '2px solid var(--cream-dark)', padding: '48px',
                 textAlign: 'center', color: 'var(--text-muted)',
               }}>
                 <div style={{
@@ -1016,22 +902,20 @@ export default function SacredBooksPage() {
                     <div
                       key={bm.id}
                       style={{
-                        background: 'white', borderRadius: 'var(--radius-lg)',
-                        border: `1px solid ${color}33`,
+                        background: 'white', borderRadius: 14,
+                        border: `2px solid ${color}`,
                         padding: '16px 20px',
-                        display: 'flex', alignItems: 'center', gap: 14,
-                        flexWrap: 'wrap',
+                        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
                       }}
                     >
-                      {/* BookIcon replacing emoji */}
                       <div style={{
-                        width: 40, height: 40, borderRadius: 10,
-                        background: `${color}12`,
-                        border: `1px solid ${color}25`,
+                        width: 44, height: 44, borderRadius: 10,
+                        background: `${color}15`,
+                        border: `1.5px solid ${color}40`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         flexShrink: 0,
                       }}>
-                        <BookIcon size={26} color={color} />
+                        <BookIcon size={28} color={color} />
                       </div>
                       <div style={{ flex: 1, minWidth: 160 }}>
                         <div style={{ fontWeight: 700, color: 'var(--brown)', fontSize: 14, marginBottom: 2 }}>
@@ -1081,13 +965,11 @@ export default function SacredBooksPage() {
           </div>
         )}
 
-        {/* ── SEARCH RESULTS VIEW ─────────────────────────────── */}
+        {/* ── SEARCH RESULTS VIEW ── */}
         {view === 'search' && (
           <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-              <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 22 }}>
-                Search Results
-              </h2>
+              <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 22 }}>Search Results</h2>
               {searchResults && (
                 <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                   {searchResults.total} results for "{searchResults.query}"
@@ -1110,14 +992,11 @@ export default function SacredBooksPage() {
                   </div>
                 ) : (
                   searchResults.results.map((r, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        background: 'white', borderRadius: 'var(--radius-lg)',
-                        border: '1px solid var(--cream-dark)', padding: '16px 20px',
-                        marginBottom: 12,
-                      }}
-                    >
+                    <div key={i} style={{
+                      background: 'white', borderRadius: 14,
+                      border: `2px solid ${bk?.accent_color}`,
+                      padding: '16px 20px', marginBottom: 12,
+                    }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: bk?.accent_color, marginBottom: 6, letterSpacing: '0.06em' }}>
                         {r.chapter_title} · {r.chapter_number}.{r.verse_number}
                       </div>
@@ -1153,23 +1032,11 @@ export default function SacredBooksPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 
-        /* ── Mobile responsive ── */
         @media (max-width: 768px) {
-          .reader-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .chapter-sidebar {
-            display: none !important;
-            position: static !important;
-            max-height: 280px !important;
-          }
-          .chapter-sidebar.sidebar-open {
-            display: flex !important;
-            margin-bottom: 16px;
-          }
-          .mobile-chapter-toggle {
-            display: block !important;
-          }
+          .reader-grid { grid-template-columns: 1fr !important; }
+          .chapter-sidebar { display: none !important; position: static !important; max-height: 280px !important; }
+          .chapter-sidebar.sidebar-open { display: flex !important; margin-bottom: 16px; }
+          .mobile-chapter-toggle { display: block !important; }
         }
       `}</style>
     </>
