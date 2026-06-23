@@ -13,7 +13,7 @@ import {
   Search, Shield, ShieldCheck, ExternalLink, Clock,
   MapPin, User, Star, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, LayoutDashboard, PlusCircle,
-  CalendarPlus, LogOut, Pencil, Trash2, Save, X,
+  CalendarPlus, LogOut, Pencil, Trash2, Save, X, FileText,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -1116,6 +1116,22 @@ export default function AdminPanelPage() {
             >
               <CalendarPlus size={15} />
               <span className="btn-label-festival">Add Festival</span>
+            </Link>
+
+            <Link to="/admin/add-blog" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7,
+              padding: '10px 18px',
+              background: 'linear-gradient(135deg, #1e5c3a, #2d8a57)',
+              border: '2px solid transparent', borderRadius: 50,
+              fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
+              color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+              boxShadow: '0 2px 12px rgba(30,92,58,.28)', transition: 'all .2s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(30,92,58,.45)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(30,92,58,.28)'; }}
+            >
+              <FileText size={15} />
+              <span>Add Blog</span>
             </Link>
 
             <button onClick={() => { loadTemples(); loadCounts(); }} style={{

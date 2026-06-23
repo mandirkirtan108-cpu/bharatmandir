@@ -18,6 +18,8 @@ import LoginPage                 from './pages/LoginPage';
 import SignupPage                from './pages/SignupPage';
 import UserProfilePage           from './pages/UserProfilePage';
 import ForgotPasswordPage        from './pages/ForgotPasswordPage';
+import BlogPage                  from './pages/BlogPage';
+import AdminAddBlogPage          from './pages/AdminAddBlogPage';
 
 export default function App() {
   return (
@@ -47,12 +49,18 @@ export default function App() {
           <Route path="/sacred-books"    element={<SacredBooksPage />} />
           <Route path="/profile"         element={<UserProfilePage />} />
 
+          {/* ── Blog (public) ───────────────────────────────── */}
+          <Route path="/blog"            element={<BlogPage />} />
+
           {/* ── Protected Admin Routes ──────────────────────── */}
           <Route path="/admin/add" element={
             <ProtectedRoute><AdminAddTemplePage /></ProtectedRoute>
           } />
           <Route path="/admin/add-festival" element={
             <ProtectedRoute><AdminAddFestivalPage /></ProtectedRoute>
+          } />
+          <Route path="/admin/add-blog" element={
+            <ProtectedRoute><AdminAddBlogPage /></ProtectedRoute>
           } />
           <Route path="/admin/panel" element={
             <ProtectedRoute><AdminPanelPage /></ProtectedRoute>
