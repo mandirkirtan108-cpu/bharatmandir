@@ -29,25 +29,6 @@ const CSS = `
   body{font-family:var(--fb);background:var(--cream);color:var(--text);}
   a{text-decoration:none;color:inherit;}
 
-  /* ── Hero ── */
-  .blog-hero{
-    position:relative;
-    background:linear-gradient(160deg,#1A0A00 0%,#3D1F00 40%,#6B3A10 70%,#B84D00 100%);
-    padding:60px 24px 72px;text-align:center;overflow:hidden;
-  }
-  .blog-hero-bg{position:absolute;inset:0;pointer-events:none;}
-  .bfl{position:absolute;font-size:clamp(20px,3vw,44px);opacity:.1;animation:bfloat 8s ease-in-out infinite;}
-  .bfl:nth-child(1){top:10%;left:5%;animation-delay:0s;}
-  .bfl:nth-child(2){top:60%;left:15%;animation-delay:1.6s;}
-  .bfl:nth-child(3){top:15%;right:7%;animation-delay:.9s;}
-  .bfl:nth-child(4){bottom:12%;right:4%;animation-delay:2.4s;}
-  @keyframes bfloat{0%,100%{transform:translateY(0) rotate(-4deg);opacity:.1;}50%{transform:translateY(-16px) rotate(4deg);opacity:.22;}}
-  .blog-hero-inner{position:relative;z-index:1;}
-  .blog-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(200,150,12,.18);border:1px solid rgba(240,192,64,.35);backdrop-filter:blur(8px);color:var(--gold-l);padding:5px 20px;border-radius:50px;font-family:var(--fd);font-size:11px;letter-spacing:.15em;margin-bottom:16px;}
-  .blog-hero-title{font-family:var(--fd);font-weight:900;font-size:clamp(28px,5vw,52px);color:#fff;line-height:1.1;margin-bottom:10px;text-shadow:0 2px 20px rgba(0,0,0,.4);}
-  .blog-hero-title span{color:var(--gold-l);}
-  .blog-hero-sub{font-family:var(--fh);font-size:14px;color:rgba(255,255,255,.65);max-width:500px;margin:0 auto;}
-
   /* ── Main layout ── */
   .blog-main{max-width:1100px;margin:0 auto;padding:40px 24px 80px;}
 
@@ -177,7 +158,7 @@ function BlogDetail({ blog, onBack }) {
 export default function BlogPage() {
   const [blogs, setBlogs]       = useState([]);
   const [loading, setLoading]   = useState(true);
-  const [selected, setSelected] = useState(null); // blog object for detail view
+  const [selected, setSelected] = useState(null);
   const [search, setSearch]     = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -196,7 +177,6 @@ export default function BlogPage() {
         const res = await fetch(`${API_BASE}/api/blogs`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        // Support both { blogs: [...] } and [...]
         setBlogs(Array.isArray(data) ? data : (data.blogs || data.items || []));
       } catch {
         setBlogs([]);
@@ -232,22 +212,56 @@ export default function BlogPage() {
       <style>{CSS}</style>
       <Navbar />
 
-      {/* ── Hero ── */}
-      <div className="blog-hero">
-        <div className="blog-hero-bg">
-          <span className="bfl">📖</span>
-          <span className="bfl">✍️</span>
-          <span className="bfl">🕉️</span>
-          <span className="bfl">🔱</span>
-        </div>
-        <div className="blog-hero-inner">
-          <div className="blog-badge">📖 &nbsp;SPIRITUAL BLOG</div>
-          <h1 className="blog-hero-title">Divine <span>Wisdom</span> &amp; Stories</h1>
-          <p className="blog-hero-sub">
+      {/* ── Hero — matches RoutePlannerPage exactly ── */}
+      <section style={{
+        position: 'relative', overflow: 'hidden',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '50px 12px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        width: '100%', boxSizing: 'border-box',
+      }}>
+        <div style={{
+          position: 'relative', zIndex: 1, width: '100%', maxWidth: 700,
+          padding: '0 24px', boxSizing: 'border-box',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+        }}>
+          {/* Badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+            color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+            textTransform: 'uppercase', fontWeight: 500,
+            backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
+          }}>
+            📖 Spiritual Blog
+          </div>
+
+          {/* Title */}
+          <h1 style={{
+            fontFamily: 'var(--fd)', fontWeight: 900,
+            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+            marginBottom: 10, marginTop: 0,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#ffffff', width: '100%',
+          }}>
+            Divine{' '}
+            <span style={{ color: '#FFD580' }}>Wisdom</span>
+            {' '}& Stories
+          </h1>
+
+          {/* Subtitle */}
+          <p style={{
+            color: 'rgba(255,255,255,0.7)', fontSize: 14,
+            width: '100%', maxWidth: 520,
+            margin: '0',
+            fontWeight: 300, lineHeight: 1.7,
+            textAlign: 'center',
+          }}>
             Explore spiritual insights, temple stories, and sacred knowledge curated by our team.
           </p>
         </div>
-      </div>
+      </section>
 
       {/* ── Content ── */}
       {selected ? (
