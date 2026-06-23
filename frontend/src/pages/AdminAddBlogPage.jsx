@@ -50,7 +50,7 @@ const CSS = `
    */
   .hero{
     background:linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%);
-    padding:36px 24px 28px;
+    padding:50px 12px;
   }
   .hero-inner{
     max-width:860px;
