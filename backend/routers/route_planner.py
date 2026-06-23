@@ -1,15 +1,16 @@
 """
 Route Planner API for BharatMandir.
-POST /api/route/plan   — AI-powered temple route suggestion
-POST /api/route/cities — AI-powered city autocomplete (all Indian cities)
+POST /api/route/plan        — AI-powered temple route suggestion
+GET  /api/route/cities      — Google Places city autocomplete (all Indian cities)
 Pure OpenAI knowledge — no DB dependency.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List
 import os
 import json
+import httpx
 from openai import OpenAI
 import openai as openai_lib
 
@@ -29,10 +30,6 @@ class RoutePlanRequest(BaseModel):
     travel_mode:    str                 = "car"
     time_available: int                 = 6
     preferences:    Optional[List[str]] = []
-
-
-class CitySearchRequest(BaseModel):
-    query: str
 
 
 class CitySearchResponse(BaseModel):
@@ -112,7 +109,7 @@ def get_known_distance(start: str, destination: str):
 
 
 # ─────────────────────────────────────────────
-# Known highway corridors — exact towns on the road
+# Known highway corridors
 # ─────────────────────────────────────────────
 
 HIGHWAY_CORRIDORS = {
@@ -137,7 +134,7 @@ HIGHWAY_CORRIDORS = {
         "highway": "NH-52",
         "towns": ["Indore", "Dewas", "Ujjain"],
         "direction": "north-east",
-        "exclude_note": "Only temples in Indore, Dewas, or Ujjain. Do not suggest temples in other districts.",
+        "exclude_note": "Only temples in Indore, Dewas, or Ujjain.",
     },
     frozenset(["bhopal", "ujjain"]): {
         "highway": "SH-18",
@@ -184,75 +181,55 @@ def get_openai_client() -> OpenAI:
 
 
 # ─────────────────────────────────────────────
-# POST /api/route/cities  — AI city autocomplete
+# GET /api/route/cities — Google Places Autocomplete
 # ─────────────────────────────────────────────
 
-@router.post("/cities", response_model=CitySearchResponse)
-async def search_cities(req: CitySearchRequest):
+@router.get("/cities", response_model=CitySearchResponse)
+async def search_cities(q: str = Query(..., min_length=1, description="City search query")):
     """
-    Returns up to 10 Indian city/town names that match the given query string.
-    Covers all cities — metros, tier-2, tier-3, pilgrimage towns, and more.
+    Returns city suggestions using Google Places Autocomplete API.
+    Restricted to India, types: (cities) only.
     """
-    query = req.query.strip()
-    if not query:
-        return CitySearchResponse(cities=[])
+    google_api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    if not google_api_key:
+        raise HTTPException(status_code=500, detail="GOOGLE_MAPS_API_KEY not configured on server.")
 
-    client = get_openai_client()
+    params = {
+        "input":      q.strip(),
+        "key":        google_api_key,
+        "types":      "(cities)",          # cities, towns, villages
+        "components": "country:in",        # restrict to India only
+        "language":   "en",
+    }
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",       # fast + cheap for autocomplete
-            max_tokens=300,
-            temperature=0,             # deterministic results
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a comprehensive database of every city, town, and village in India. "
-                        "You know all metros, tier-2, tier-3 cities, pilgrimage towns, district headquarters, "
-                        "tehsil towns, and well-known villages across all 28 states and 8 UTs. "
-                        "Always respond with valid JSON only."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f'List up to 10 Indian city or town names that contain or start with "{query}". '
-                        f"Include all city types: metros, tier-2, tier-3, pilgrimage cities, district towns. "
-                        f"Sort results: names that START with '{query}' first, then names that CONTAIN it. "
-                        f'Return ONLY a JSON object with a single key "cities" containing an array of strings. '
-                        f'Example: {{"cities": ["Agra", "Ahmedabad", "Akola"]}}'
-                    ),
-                },
-            ],
-        )
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.get(
+                "https://maps.googleapis.com/maps/api/place/autocomplete/json",
+                params=params,
+            )
+        data = res.json()
 
-        raw = response.choices[0].message.content
-        parsed = json.loads(raw)
-        cities = parsed.get("cities", [])
+        if data.get("status") not in ("OK", "ZERO_RESULTS"):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Google Places API error: {data.get('status')} — {data.get('error_message', '')}",
+            )
 
-        # Sanitize: keep only strings, strip whitespace, remove duplicates
-        seen = set()
-        clean = []
-        for c in cities:
-            if isinstance(c, str):
-                c = c.strip()
-                lower = c.lower()
-                if c and lower not in seen:
-                    seen.add(lower)
-                    clean.append(c)
+        cities = []
+        for prediction in data.get("predictions", []):
+            # structured_formatting.main_text gives just the city name (no state/country suffix)
+            name = (
+                prediction.get("structured_formatting", {}).get("main_text")
+                or prediction.get("description", "").split(",")[0]
+            ).strip()
+            if name:
+                cities.append(name)
 
-        return CitySearchResponse(cities=clean[:10])
+        return CitySearchResponse(cities=cities[:10])
 
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {e}")
-    except openai_lib.APIError as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {str(e)}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Google Maps API: {str(e)}")
 
 
 # ─────────────────────────────────────────────
@@ -313,7 +290,10 @@ TASK: Plan a temple route from {req.start} to {req.destination} for a spiritual 
    - Use your knowledge of famous, historically significant, and spiritually important
      temples ONLY in the towns listed in the corridor above.
    - Do NOT suggest temples in towns that are off this highway/road.
-   - Suggest as many REAL temples as genuinely exist on this route — do NOT invent or stretch. For short routes (under 60 km) with only 2 cities, 3-5 temples is fine. For longer routes (100+ km) with many towns, aim for 6-8 temples. Quality over quantity — only real, significant temples.
+   - Suggest as many REAL temples as genuinely exist on this route — do NOT invent or stretch.
+     For short routes (under 60 km) with only 2 cities, 3-5 temples is fine.
+     For longer routes (100+ km) with many towns, aim for 6-8 temples.
+     Quality over quantity — only real, significant temples.
    - Priority order: Jyotirlinga > Shaktipeeth > Ancient/Famous > Local significant temples.
    - Every temple must be REAL and must actually exist on or near this exact route.
 
@@ -400,7 +380,6 @@ Time budget: {req.time_available} hours
         raw    = response.choices[0].message.content
         parsed = json.loads(raw)
 
-        # Hard override: fix distance/time with verified values
         if known_distance_km and "route_summary" in parsed:
             realistic_hrs = realistic_hours(known_distance_km, req.travel_mode)
             parsed["route_summary"]["total_distance"]        = f"{known_distance_km} km"
