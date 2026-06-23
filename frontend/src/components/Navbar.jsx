@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Menu, X, Navigation, CalendarDays, Sparkles, BookOpen, User, LogOut } from 'lucide-react';
+import { Search, Menu, X, Navigation, CalendarDays, BookOpen, PenLine, User, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useUserAuth } from '../hooks/useUserAuth';
@@ -59,7 +59,7 @@ export default function Navbar() {
     { to: '/search',          label: '🛕 ' + 'Temples',              icon: <Search size={16} /> },
     { to: '/route-planner',   label: t('nav.route'),                 icon: <Navigation size={16} /> },
     { to: '/panchang',        label: t('nav.panchang'),              icon: <CalendarDays size={16} /> },
-    { to: '/festivals',       label: t('nav.festivals'),             icon: <Sparkles size={16} /> },
+    { to: '/blog',            label: '📖 Blog',                      icon: <PenLine size={16} /> },
     { to: '/sacred-books',    label: '📚 Library',                   icon: <BookOpen size={16} /> },
     { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'),     icon: null },
   ];
@@ -84,6 +84,7 @@ export default function Navbar() {
           maxWidth: 1200,
           margin: '0 auto',
           gap: 0,
+          // REMOVED: position: 'relative' — no longer needed since links are in-flow
         }}>
 
           {/* Logo — left, fixed width so centre links truly center */}
@@ -96,12 +97,16 @@ export default function Navbar() {
           </Link>
 
           {/* ── Desktop centre links ── */}
+          {/* FIX: was position:absolute which caused overlap + height jump.
+              Now flex:1 + justifyContent:center keeps links in-flow so the
+              navbar height is stable and nothing overlaps the logo or right controls. */}
           <div className="nav-actions-desktop" style={{
             display: 'flex',
             alignItems: 'center',
             gap: 2,
-            flex: 1,
-            justifyContent: 'center',
+            flex: 1,                    // ← fills remaining horizontal space
+            justifyContent: 'center',   // ← centers within that space
+            // REMOVED: position, left, transform
           }}>
             {NAV_LINKS.map((link) => (
               <Link
@@ -115,11 +120,14 @@ export default function Navbar() {
           </div>
 
           {/* ── Right side: lang + user ── */}
+          {/* FIX: removed marginLeft:'auto' — flex:1 on centre div already pushes
+              this block to the right. flexShrink:0 prevents it from squishing. */}
           <div className="nav-actions-desktop" style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            flexShrink: 0,
+            flexShrink: 0,             // ← never shrink; links shrink first
+            // REMOVED: marginLeft: 'auto'
           }}>
             <select
               className="nav-lang-select"
@@ -233,16 +241,11 @@ export default function Navbar() {
           </div>
 
           {/* Hamburger — mobile only */}
-          {/* FIX: marginLeft changed from a fixed 12px to 'auto'.
-              On mobile, the two .nav-actions-desktop blocks above are
-              display:none via CSS, so they take up zero flex space.
-              Without auto-margin, this button would sit right next to
-              the logo instead of being pushed to the far right edge. */}
           <button
             className="nav-hamburger"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            style={{ marginLeft: 'auto' }}
+            style={{ marginLeft: 12 }}
           >
             <Menu size={24} />
           </button>
