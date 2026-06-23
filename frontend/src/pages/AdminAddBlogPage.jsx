@@ -48,31 +48,52 @@ const CSS = `
    *   background gradient, padding 36px 24px 28px, no floating icons, no big title.
    *   We keep a subtle sub-label + title but at the same visual weight.
    */
-  .hero{
-    background:linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%);
-    padding:50px 12px;
-  }
-  .hero-inner{
-    max-width:860px;
-    margin:0 auto;
-  }
-  .hero-eyebrow{
-    display:inline-flex;align-items:center;gap:8px;
-    background:rgba(255,255,255,.08);border:1px solid rgba(255,213,128,.25);
-    color:rgba(255,213,128,.8);padding:3px 14px;border-radius:50px;
-    font-family:var(--fd);font-size:10px;letter-spacing:.14em;
-    margin-bottom:10px;text-transform:uppercase;
-  }
-  .hero-title{
-    font-family:var(--fd);font-weight:700;font-size:24px;
-    color:#fff;line-height:1.15;margin-bottom:4px;
-    letter-spacing:.02em;
-  }
-  .hero-title span{color:#FFD580;}
-  .hero-sub{
-    font-family:var(--fh);font-size:13px;
-    color:rgba(255,255,255,.6);margin:0;
-  }
+  /* NEW */
+.hero{
+  background:linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%);
+  padding:50px 12px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  box-sizing:border-box;
+}
+.hero-inner{
+  position:relative;
+  z-index:1;
+  width:100%;
+  max-width:700px;
+  padding:0 24px;
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+}
+ /* NEW */
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,213,128,.3);
+  color:rgba(255,213,128,.85);padding:5px 16px;border-radius:50px;
+  font-size:11px;letter-spacing:.1em;
+  margin-bottom:14px;text-transform:uppercase;font-weight:500;
+  white-space:nowrap;
+}
+.hero-title{
+  font-family:var(--fd);font-weight:900;
+  font-size:clamp(28px, 5vw, 52px);
+  color:#fff;line-height:1.1;margin-bottom:10px;margin-top:0;
+  text-shadow:0 4px 40px rgba(0,0,0,.3);
+  width:100%;
+}
+.hero-title span{color:#FFD580;}
+.hero-sub{
+  color:rgba(255,255,255,.7);font-size:14px;
+  width:100%;max-width:520px;
+  margin:0;font-weight:300;line-height:1.7;
+  text-align:center;
+}
 
   .bc{background:#fff;border-bottom:1px solid var(--cream-d);padding:11px 24px;}
   .bc-inner{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:8px;font-family:var(--fd);font-size:11px;letter-spacing:.04em;color:var(--text-l);}
