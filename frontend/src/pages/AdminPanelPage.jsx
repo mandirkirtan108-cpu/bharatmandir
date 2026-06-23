@@ -4,6 +4,7 @@
  *   - Edit button (pencil) → inline Edit Modal with field update
  *   - Delete button (trash) → confirmation dialog → DELETE API call
  *   - Review Modal → full details: facilities, puja flags, donation flags, programs
+ *   - Blog Management tab → list, edit, delete published blogs
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -112,6 +113,27 @@ async function patchTempleFields(id, fields) {
 
 async function deleteTemple(id) {
   return apiFetch(`/api/admin/temples/${id}`, { method: 'DELETE' });
+}
+
+// ── Blog API calls ────────────────────────────────────────────────────────────
+async function fetchAdminBlogs() {
+  // Try admin endpoint first, fall back to public
+  try {
+    return apiFetch('/api/admin/blogs');
+  } catch {
+    return apiFetch('/api/blogs');
+  }
+}
+
+async function patchBlog(id, fields) {
+  return apiFetch(`/api/admin/blogs/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(fields),
+  });
+}
+
+async function deleteBlog(id) {
+  return apiFetch(`/api/admin/blogs/${id}`, { method: 'DELETE' });
 }
 
 // ── Flag section helper ───────────────────────────────────────────────────────
@@ -522,7 +544,7 @@ function EditModal({ temple, onClose, onSaved }) {
         { key: 'official_email',   label: 'Official Email',           type: 'text' },
         { key: 'best_time_to_call',label: 'Best Time to Call',        type: 'text' },
         { key: 'website_url',      label: 'Website URL',              type: 'text' },
-        { key: 'payment_page_url', label: '💳 Payment / Donation URL',type: 'text' },
+        { key: 'payment_page_url', label: 'Payment / Donation URL',   type: 'text' },
         { key: 'facebook_page',    label: 'Facebook Page',            type: 'text' },
         { key: 'instagram_handle', label: 'Instagram Handle',         type: 'text' },
         { key: 'youtube_channel',  label: 'YouTube Channel',          type: 'text' },
@@ -551,10 +573,8 @@ function EditModal({ temple, onClose, onSaved }) {
     },
   ];
 
-  // Flatten all fields for form init
   const allFields = SECTIONS.flatMap(s => s.fields);
 
-  // Fetch full temple detail first (list view has limited fields)
   const [fullTemple, setFullTemple] = useState(null);
   const [fetchingDetail, setFetchingDetail] = useState(true);
 
@@ -564,7 +584,6 @@ function EditModal({ temple, onClose, onSaved }) {
       .catch(() => { setFullTemple(temple); setFetchingDetail(false); });
   }, [temple.id]);
 
-  // Re-initialize form once full data arrives
   const [form, setForm] = useState({});
   useEffect(() => {
     if (!fullTemple) return;
@@ -652,7 +671,7 @@ function EditModal({ temple, onClose, onSaved }) {
           </div>
         )}
 
-        {/* Form Body — scrollable */}
+        {/* Form Body */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
           {fetchingDetail ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: 14 }}>
@@ -663,59 +682,58 @@ function EditModal({ temple, onClose, onSaved }) {
             </div>
           ) : (
             <div>
-          {SECTIONS.map(section => (
-            <div key={section.title} style={{ marginBottom: 28 }}>
-              {/* Section Header */}
-              <div style={{
-                fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
-                letterSpacing: '.08em', color: 'var(--saffron)',
-                textTransform: 'uppercase', marginBottom: 12,
-                paddingBottom: 8, borderBottom: '2px solid var(--cream-dark)',
-              }}>
-                {section.title}
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
-                {section.fields.map(f => (
-                  <div key={f.key} style={{ gridColumn: (f.type === 'textarea' || f.full) ? '1 / -1' : undefined }}>
-                    <label style={{
-                      display: 'block', marginBottom: 5,
-                      fontFamily: 'var(--font-display)', fontSize: 11,
-                      letterSpacing: '.06em', color: 'var(--text-light)', textTransform: 'uppercase',
-                    }}>{f.label}</label>
-
-                    {f.type === 'textarea' ? (
-                      <textarea
-                        value={form[f.key]}
-                        onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        rows={f.rows || 4}
-                        placeholder={fullTemple?.[f.key] ? String(fullTemple[f.key]) : `Enter ${f.label}…`}
-                        style={{ ...inputStyle, resize: 'vertical' }}
-                        onFocus={e => e.target.style.borderColor = '#bf5310'}
-                        onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-                      />
-                    ) : (
-                      <input
-                        type={f.type}
-                        value={form[f.key]}
-                        onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        placeholder={
-                          fullTemple?.[f.key] !== null && fullTemple?.[f.key] !== undefined && fullTemple?.[f.key] !== ''
-                            ? String(fullTemple[f.key])
-                            : `Enter ${f.label}…`
-                        }
-                        style={inputStyle}
-                        onFocus={e => e.target.style.borderColor = '#bf5310'}
-                        onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-                      />
-                    )}
+              {SECTIONS.map(section => (
+                <div key={section.title} style={{ marginBottom: 28 }}>
+                  <div style={{
+                    fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
+                    letterSpacing: '.08em', color: 'var(--saffron)',
+                    textTransform: 'uppercase', marginBottom: 12,
+                    paddingBottom: 8, borderBottom: '2px solid var(--cream-dark)',
+                  }}>
+                    {section.title}
                   </div>
-                ))}
-              </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px' }}>
+                    {section.fields.map(f => (
+                      <div key={f.key} style={{ gridColumn: (f.type === 'textarea' || f.full) ? '1 / -1' : undefined }}>
+                        <label style={{
+                          display: 'block', marginBottom: 5,
+                          fontFamily: 'var(--font-display)', fontSize: 11,
+                          letterSpacing: '.06em', color: 'var(--text-light)', textTransform: 'uppercase',
+                        }}>{f.label}</label>
+
+                        {f.type === 'textarea' ? (
+                          <textarea
+                            value={form[f.key]}
+                            onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                            rows={f.rows || 4}
+                            placeholder={fullTemple?.[f.key] ? String(fullTemple[f.key]) : `Enter ${f.label}…`}
+                            style={{ ...inputStyle, resize: 'vertical' }}
+                            onFocus={e => e.target.style.borderColor = '#bf5310'}
+                            onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+                          />
+                        ) : (
+                          <input
+                            type={f.type}
+                            value={form[f.key]}
+                            onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                            placeholder={
+                              fullTemple?.[f.key] !== null && fullTemple?.[f.key] !== undefined && fullTemple?.[f.key] !== ''
+                                ? String(fullTemple[f.key])
+                                : `Enter ${f.label}…`
+                            }
+                            style={inputStyle}
+                            onFocus={e => e.target.style.borderColor = '#bf5310'}
+                            onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-            </div>
-          )} {/* end fetchingDetail */}
+          )}
         </div>
 
         {/* Footer */}
@@ -739,7 +757,7 @@ function EditModal({ temple, onClose, onSaved }) {
             <button onClick={handleSave} disabled={saving} style={{
               padding: '9px 20px', borderRadius: 50,
               border: '2px solid #bf5310',
-              background: saving ? '#bf5310' : '#bf5310',
+              background: '#bf5310',
               fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
               cursor: saving ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700,
               display: 'flex', alignItems: 'center', gap: 6, transition: 'all .2s',
@@ -785,7 +803,6 @@ function DeleteConfirmModal({ temple, onClose, onDeleted }) {
         width: '100%', maxWidth: 440,
         padding: '32px', boxShadow: '0 24px 80px rgba(61,31,0,.35)',
       }}>
-        {/* Icon */}
         <div style={{
           width: 56, height: 56, borderRadius: '50%',
           background: '#fef2f2', border: '2px solid #fca5a5',
@@ -821,7 +838,7 @@ function DeleteConfirmModal({ temple, onClose, onDeleted }) {
           fontFamily: 'var(--font-display)', fontSize: 12, color: '#b91c1c',
           letterSpacing: '.03em',
         }}>
-          ⚠ This action cannot be undone. All temple data, media references, and associated records will be permanently removed.
+          This action cannot be undone. All temple data and associated records will be permanently removed.
         </div>
 
         {error && (
@@ -859,6 +876,477 @@ function DeleteConfirmModal({ temple, onClose, onDeleted }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Blog Edit Modal ───────────────────────────────────────────────────────────
+function BlogEditModal({ blog, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    title: blog.title || '',
+    submitted_by: blog.submitted_by || '',
+    description: blog.description || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSave = async () => {
+    if (!form.title.trim() || !form.submitted_by.trim() || !form.description.trim()) {
+      setError('All fields are required.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await patchBlog(blog.id, {
+        title: form.title.trim(),
+        submitted_by: form.submitted_by.trim(),
+        description: form.description.trim(),
+      });
+      onSaved({ ...blog, ...form });
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%', padding: '10px 14px',
+    border: '2px solid var(--cream-dark)', borderRadius: 10,
+    fontFamily: 'var(--font-body)', fontSize: 14,
+    color: 'var(--text-dark)', background: '#fdf8f0',
+    outline: 'none', boxSizing: 'border-box', transition: 'border-color .2s',
+  };
+
+  const labelStyle = {
+    display: 'block', marginBottom: 6,
+    fontFamily: 'var(--font-display)', fontSize: 11,
+    letterSpacing: '.08em', color: 'var(--text-light)', textTransform: 'uppercase',
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10000,
+      background: 'rgba(29,15,0,.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: 'var(--cream)', borderRadius: 20,
+        width: '100%', maxWidth: 620, maxHeight: '90vh',
+        overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 80px rgba(61,31,0,.35)',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: 'linear-gradient(135deg, #4b1d04, #7a3208)',
+          padding: '18px 24px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Pencil size={18} color="white" />
+            <div>
+              <h2 style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: 17, fontWeight: 700, margin: 0 }}>
+                Edit Blog Post
+              </h2>
+              <p style={{ color: 'rgba(255,255,255,.6)', fontSize: 11, margin: '2px 0 0', fontFamily: 'var(--font-display)' }}>
+                ID #{blog.id}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'rgba(255,255,255,.15)', border: 'none', color: 'white',
+            borderRadius: '50%', width: 34, height: 34, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+          }}>×</button>
+        </div>
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', borderBottom: '1px solid #fca5a5',
+            padding: '10px 20px', color: '#b91c1c', flexShrink: 0,
+            fontFamily: 'var(--font-display)', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center',
+          }}>
+            <AlertTriangle size={14} /> {error}
+          </div>
+        )}
+
+        {/* Body */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '22px 24px' }}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Blog Title <span style={{ color: '#E8650A' }}>*</span></label>
+            <input
+              value={form.title}
+              onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              placeholder="Enter blog title…"
+              style={inputStyle}
+              onFocus={e => e.target.style.borderColor = '#7a3208'}
+              onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Author Name <span style={{ color: '#E8650A' }}>*</span></label>
+            <input
+              value={form.submitted_by}
+              onChange={e => setForm(p => ({ ...p, submitted_by: e.target.value }))}
+              placeholder="Enter author name…"
+              style={inputStyle}
+              onFocus={e => e.target.style.borderColor = '#7a3208'}
+              onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Blog Content <span style={{ color: '#E8650A' }}>*</span></label>
+            <textarea
+              value={form.description}
+              onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+              placeholder="Write blog content…"
+              rows={10}
+              style={{ ...inputStyle, resize: 'vertical', minHeight: 200, lineHeight: 1.75 }}
+              onFocus={e => e.target.style.borderColor = '#7a3208'}
+              onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+            />
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'var(--text-light)', textAlign: 'right', marginTop: 4 }}>
+              {form.description.length} characters
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          borderTop: '2px solid var(--cream-dark)', flexShrink: 0,
+          padding: '14px 24px', background: 'white',
+          display: 'flex', justifyContent: 'flex-end', gap: 10,
+        }}>
+          <button onClick={onClose} style={{
+            padding: '9px 18px', borderRadius: 50,
+            border: '2px solid var(--cream-dark)', background: 'white',
+            fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
+            cursor: 'pointer', color: 'var(--text-mid)', display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <X size={14} /> Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving} style={{
+            padding: '9px 20px', borderRadius: 50,
+            border: '2px solid #7a3208', background: '#7a3208',
+            fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.04em',
+            cursor: saving ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            {saving
+              ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Saving…</>
+              : <><Save size={14} /> Save Changes</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Blog Delete Confirm Modal ─────────────────────────────────────────────────
+function BlogDeleteModal({ blog, onClose, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteBlog(blog.id);
+      onDeleted(blog.id);
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10002,
+      background: 'rgba(29,15,0,.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: 'white', borderRadius: 20,
+        width: '100%', maxWidth: 420, padding: '32px',
+        boxShadow: '0 24px 80px rgba(61,31,0,.35)',
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%',
+          background: '#fef2f2', border: '2px solid #fca5a5',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 18px',
+        }}>
+          <Trash2 size={22} color="#b91c1c" />
+        </div>
+
+        <h2 style={{
+          fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700,
+          color: 'var(--brown)', textAlign: 'center', margin: '0 0 10px',
+        }}>Delete Blog Post?</h2>
+
+        <p style={{
+          fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700,
+          color: '#b91c1c', textAlign: 'center', margin: '0 0 20px',
+          lineHeight: 1.4,
+        }}>"{blog.title}"</p>
+
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5',
+          borderRadius: 10, padding: '10px 14px', marginBottom: 24,
+          fontFamily: 'var(--font-display)', fontSize: 12, color: '#b91c1c',
+        }}>
+          This action cannot be undone.
+        </div>
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+            fontFamily: 'var(--font-display)', fontSize: 12, color: '#b91c1c',
+          }}>Error: {error}</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '11px 0', borderRadius: 50,
+            border: '2px solid var(--cream-dark)', background: 'white',
+            fontFamily: 'var(--font-display)', fontSize: 13, cursor: 'pointer',
+            color: 'var(--text-mid)', fontWeight: 600,
+          }}>Cancel</button>
+          <button onClick={handleDelete} disabled={deleting} style={{
+            flex: 1, padding: '11px 0', borderRadius: 50,
+            border: '2px solid #b91c1c', background: deleting ? '#fca5a5' : '#b91c1c',
+            fontFamily: 'var(--font-display)', fontSize: 13, cursor: deleting ? 'not-allowed' : 'pointer',
+            color: 'white', fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}>
+            {deleting
+              ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Deleting…</>
+              : <><Trash2 size={13} /> Delete</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Blog Management Tab ───────────────────────────────────────────────────────
+function BlogManagement() {
+  const [blogs, setBlogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [editingBlog, setEditingBlog] = useState(null);
+  const [deletingBlog, setDeletingBlog] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchAdminBlogs();
+      setBlogs(Array.isArray(data) ? data : (data.blogs || data.items || []));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const filtered = blogs.filter(b => {
+    const q = search.toLowerCase();
+    return (
+      b.title?.toLowerCase().includes(q) ||
+      b.submitted_by?.toLowerCase().includes(q)
+    );
+  });
+
+  const handleBlogSaved = (updated) => {
+    setBlogs(prev => prev.map(b => b.id === updated.id ? updated : b));
+  };
+
+  const handleBlogDeleted = (id) => {
+    setBlogs(prev => prev.filter(b => b.id !== id));
+  };
+
+  return (
+    <div>
+      {/* Controls */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: '1 1 200px' }}>
+          <Search size={15} style={{
+            position: 'absolute', left: 13, top: '50%',
+            transform: 'translateY(-50%)', color: 'var(--text-light)', pointerEvents: 'none',
+          }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search blogs by title or author…"
+            style={{
+              width: '100%', padding: '9px 14px 9px 38px',
+              border: '2px solid var(--cream-dark)', borderRadius: 50,
+              fontFamily: 'var(--font-body)', fontSize: 13,
+              background: 'white', outline: 'none', boxSizing: 'border-box',
+            }}
+            onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
+            onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+          />
+        </div>
+
+        <Link to="/admin/add-blog" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7,
+          padding: '9px 18px',
+          background: 'linear-gradient(135deg, #4b1d04, #7a3208)',
+          border: 'none', borderRadius: 50,
+          fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.06em', fontWeight: 700,
+          color: 'white', textDecoration: 'none', whiteSpace: 'nowrap',
+        }}>
+          <FileText size={14} /> New Blog Post
+        </Link>
+
+        <button onClick={load} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '9px 16px', border: '2px solid var(--cream-dark)',
+          borderRadius: 50, background: 'white',
+          fontFamily: 'var(--font-display)', fontSize: 12, cursor: 'pointer',
+          color: 'var(--text-mid)',
+        }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--saffron)'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cream-dark)'}
+        >
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div style={{
+          background: '#fef2f2', border: '1.5px solid #fca5a5',
+          borderRadius: 12, padding: '12px 18px', marginBottom: 16,
+          display: 'flex', gap: 8, alignItems: 'center',
+          color: '#b91c1c', fontFamily: 'var(--font-display)', fontSize: 13,
+        }}>
+          <AlertTriangle size={16} /> {error}
+        </div>
+      )}
+
+      {/* Blog Table */}
+      <div style={{
+        background: 'white', borderRadius: 16,
+        border: '1.5px solid var(--cream-dark)', overflow: 'hidden',
+        boxShadow: '0 4px 20px var(--shadow)',
+      }}>
+        {/* Table Header */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 130px',
+          padding: '12px 20px',
+          background: 'var(--cream)', borderBottom: '2px solid var(--cream-dark)',
+          fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.08em',
+          color: 'var(--text-light)',
+        }}>
+          <span>TITLE</span>
+          <span>AUTHOR</span>
+          <span>PUBLISHED</span>
+          <span style={{ textAlign: 'right' }}>ACTIONS</span>
+        </div>
+
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '50px 0', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <Loader2 size={28} color="#7a3208" style={{ animation: 'spin .8s linear infinite' }} />
+            <span style={{ fontFamily: 'var(--font-display)', color: 'var(--text-light)', fontSize: 13 }}>Loading blogs…</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: '50px 20px', textAlign: 'center', color: 'var(--text-light)' }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>📝</div>
+            <p style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--brown)' }}>
+              {search ? 'No blogs match your search' : 'No blog posts yet'}
+            </p>
+          </div>
+        ) : (
+          filtered.map((blog, i) => (
+            <div
+              key={blog.id}
+              style={{
+                display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 130px',
+                padding: '14px 20px',
+                borderBottom: i < filtered.length - 1 ? '1px solid var(--cream-dark)' : 'none',
+                alignItems: 'center', background: 'white', transition: 'background .15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
+              onMouseLeave={e => e.currentTarget.style.background = 'white'}
+            >
+              {/* Title */}
+              <div style={{ paddingRight: 12 }}>
+                <div style={{
+                  fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--brown)',
+                  fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{blog.title}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+                  #{blog.id} · {(blog.description || '').slice(0, 60)}…
+                </div>
+              </div>
+
+              {/* Author */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #7a3208, #a14a0b)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: 'white',
+                  flexShrink: 0,
+                }}>
+                  {(blog.submitted_by || 'A')[0].toUpperCase()}
+                </div>
+                <span style={{ fontSize: 13, color: 'var(--text-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {blog.submitted_by}
+                </span>
+              </div>
+
+              {/* Date */}
+              <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{fmtDate(blog.created_at)}</div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <QuickBtn
+                  icon={<Pencil size={14} />}
+                  color="#1d4ed8"
+                  title="Edit Blog"
+                  onClick={e => { e.stopPropagation(); setEditingBlog(blog); }}
+                />
+                <QuickBtn
+                  icon={<Trash2 size={14} />}
+                  color="#b91c1c"
+                  title="Delete Blog"
+                  hoverBg="#fef2f2"
+                  onClick={e => { e.stopPropagation(); setDeletingBlog(blog); }}
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Modals */}
+      {editingBlog && (
+        <BlogEditModal
+          blog={editingBlog}
+          onClose={() => setEditingBlog(null)}
+          onSaved={handleBlogSaved}
+        />
+      )}
+      {deletingBlog && (
+        <BlogDeleteModal
+          blog={deletingBlog}
+          onClose={() => setDeletingBlog(null)}
+          onDeleted={handleBlogDeleted}
+        />
+      )}
     </div>
   );
 }
@@ -915,6 +1403,7 @@ function ActionBtn({ icon, label, color, bg, border, loading, onClick }) {
 export default function AdminPanelPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab]         = useState('all');
+  const [mainView, setMainView]           = useState('temples'); // 'temples' | 'blogs'
   const [temples, setTemples]             = useState([]);
   const [counts, setCounts]               = useState({});
   const [total, setTotal]                 = useState(0);
@@ -1038,7 +1527,7 @@ export default function AdminPanelPage() {
               }}>Admin Panel</h1>
             </div>
             <p style={{ color: 'rgba(255,255,255,.65)', fontFamily: 'var(--font-hindi)', margin: 0, fontSize: 14 }}>
-              Temple Onboarding & Verification Dashboard
+              Temple Onboarding &amp; Verification Dashboard
             </p>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
@@ -1064,206 +1553,240 @@ export default function AdminPanelPage() {
 
         <div className="container" style={{ marginTop: 28 }}>
 
-          {/* Controls */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 0 }}>
-              <Search size={16} style={{
-                position: 'absolute', left: 14, top: '50%',
-                transform: 'translateY(-50%)', color: 'var(--text-light)', pointerEvents: 'none',
-              }} />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Filter by name, city, deity, MKT ID…"
+          {/* Main View Switcher */}
+          <div style={{
+            display: 'flex', gap: 4, marginBottom: 24,
+            background: 'white', border: '1.5px solid var(--cream-dark)',
+            borderRadius: 50, padding: 4, width: 'fit-content',
+          }}>
+            {[
+              { id: 'temples', label: 'Temples' },
+              { id: 'blogs', label: 'Blog Posts' },
+            ].map(v => (
+              <button
+                key={v.id}
+                onClick={() => setMainView(v.id)}
                 style={{
-                  width: '100%', padding: '10px 14px 10px 40px',
-                  border: '2px solid var(--cream-dark)', borderRadius: 50,
-                  fontFamily: 'var(--font-body)', fontSize: 14,
-                  background: 'white', color: 'var(--text-dark)', outline: 'none', boxSizing: 'border-box',
+                  padding: '8px 22px', borderRadius: 50, border: 'none',
+                  background: mainView === v.id ? 'linear-gradient(135deg, var(--saffron), var(--saffron-dark))' : 'transparent',
+                  color: mainView === v.id ? 'white' : 'var(--text-light)',
+                  fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.06em',
+                  fontWeight: mainView === v.id ? 700 : 400,
+                  cursor: 'pointer', transition: 'all .2s',
                 }}
-                onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-              />
-            </div>
-
-            <Link to="/admin/add" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              padding: '10px 18px',
-              background: 'linear-gradient(135deg, var(--saffron), var(--saffron-dark))',
-              border: '2px solid transparent', borderRadius: 50,
-              fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
-              color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-              boxShadow: '0 2px 12px rgba(200,100,0,.25)', transition: 'all .2s',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(200,100,0,.4)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(200,100,0,.25)'; }}
-            >
-              <PlusCircle size={15} />
-              <span className="btn-label-temple">Add Temple</span>
-            </Link>
-
-            <Link to="/admin/add-festival" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              padding: '10px 18px',
-              background: 'linear-gradient(135deg, #92400e, #bf5310)',
-              border: '2px solid transparent', borderRadius: 50,
-              fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
-              color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-              boxShadow: '0 2px 12px rgba(124,58,237,.25)', transition: 'all .2s',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(124,58,237,.4)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(124,58,237,.25)'; }}
-            >
-              <CalendarPlus size={15} />
-              <span className="btn-label-festival">Add Festival</span>
-            </Link>
-
-            <Link to="/admin/add-blog" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              padding: '10px 18px',
-              background: 'linear-gradient(135deg, #7a3208, #a14a0b)',
-              border: '2px solid transparent', borderRadius: 50,
-              fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
-              color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-              boxShadow: '0 2px 12px rgba(122,50,8,.28)', transition: 'all .2s',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(122,50,8,.45)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(122,50,8,.28)'; }}
-            >
-              <FileText size={15} />
-              <span>Add Blog</span>
-            </Link>
-
-            <button onClick={() => { loadTemples(); loadCounts(); }} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '10px 16px', border: '2px solid var(--cream-dark)',
-              borderRadius: 50, background: 'white',
-              fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
-              cursor: 'pointer', color: 'var(--text-mid)', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
-            }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--saffron)'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cream-dark)'}
-            >
-              <RefreshCw size={14} />
-              <span className="refresh-label">Refresh</span>
-            </button>
-
-            <button onClick={handleLogout} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '10px 16px', border: '2px solid #fca5a5',
-              borderRadius: 50, background: '#fef2f2',
-              fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
-              cursor: 'pointer', color: '#b91c1c', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s', fontWeight: 600,
-            }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#b91c1c'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#b91c1c'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#b91c1c'; e.currentTarget.style.borderColor = '#fca5a5'; }}
-            >
-              <LogOut size={14} />
-              <span className="logout-label">Logout</span>
-            </button>
+              >
+                {v.label}
+              </button>
+            ))}
           </div>
 
-          {/* Status Tabs */}
-          <div style={{
-            display: 'flex', gap: 0, marginBottom: 20, flexWrap: 'nowrap',
-            borderBottom: '2px solid var(--cream-dark)', paddingBottom: 0, overflowX: 'auto',
-          }}>
-            {ALL_STATUSES.map(s => {
-              const active = activeTab === s;
-              const meta = s === 'all' ? { label: 'All', dot: 'var(--saffron)' } : STATUS_META[s];
-              const count = counts[s] ?? 0;
-              return (
-                <button key={s} onClick={() => switchTab(s)} style={{
+          {/* ── TEMPLES VIEW ── */}
+          {mainView === 'temples' && (
+            <>
+              {/* Controls */}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 0 }}>
+                  <Search size={16} style={{
+                    position: 'absolute', left: 14, top: '50%',
+                    transform: 'translateY(-50%)', color: 'var(--text-light)', pointerEvents: 'none',
+                  }} />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Filter by name, city, deity, MKT ID…"
+                    style={{
+                      width: '100%', padding: '10px 14px 10px 40px',
+                      border: '2px solid var(--cream-dark)', borderRadius: 50,
+                      fontFamily: 'var(--font-body)', fontSize: 14,
+                      background: 'white', color: 'var(--text-dark)', outline: 'none', boxSizing: 'border-box',
+                    }}
+                    onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
+                    onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+                  />
+                </div>
+
+                <Link to="/admin/add" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, var(--saffron), var(--saffron-dark))',
+                  border: '2px solid transparent', borderRadius: 50,
+                  fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
+                  color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+                  boxShadow: '0 2px 12px rgba(200,100,0,.25)', transition: 'all .2s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
+                  <PlusCircle size={15} />
+                  <span className="btn-label-temple">Add Temple</span>
+                </Link>
+
+                <Link to="/admin/add-festival" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, #92400e, #bf5310)',
+                  border: '2px solid transparent', borderRadius: 50,
+                  fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
+                  color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
+                  <CalendarPlus size={15} />
+                  <span className="btn-label-festival">Add Festival</span>
+                </Link>
+
+                <Link to="/admin/add-blog" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '10px 18px',
+                  background: 'linear-gradient(135deg, #4b1d04, #7a3208)',
+                  border: '2px solid transparent', borderRadius: 50,
+                  fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
+                  color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
+                  <FileText size={15} />
+                  <span>Add Blog</span>
+                </Link>
+
+                <button onClick={() => { loadTemples(); loadCounts(); }} style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '9px 14px', border: 'none',
-                  borderBottom: active ? '3px solid var(--saffron)' : '3px solid transparent',
-                  background: 'transparent',
+                  padding: '10px 16px', border: '2px solid var(--cream-dark)',
+                  borderRadius: 50, background: 'white',
                   fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
-                  cursor: 'pointer', color: active ? 'var(--saffron)' : 'var(--text-light)',
-                  marginBottom: -2, fontWeight: active ? 700 : 400, whiteSpace: 'nowrap', flexShrink: 0,
-                }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
-                  {meta.label}
-                  <span style={{
-                    background: active ? 'var(--saffron)' : 'var(--cream-dark)',
-                    color: active ? 'white' : 'var(--text-light)',
-                    borderRadius: 50, padding: '1px 7px', fontSize: 11, fontWeight: 700,
-                  }}>{count}</span>
+                  cursor: 'pointer', color: 'var(--text-mid)', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
+                }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--saffron)'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cream-dark)'}
+                >
+                  <RefreshCw size={14} />
+                  <span className="refresh-label">Refresh</span>
                 </button>
-              );
-            })}
-          </div>
 
-          {error && (
-            <div style={{
-              background: '#fef2f2', border: '1.5px solid #fca5a5',
-              borderRadius: 12, padding: '14px 20px', marginBottom: 20,
-              display: 'flex', gap: 10, alignItems: 'center',
-              color: '#b91c1c', fontFamily: 'var(--font-display)', fontSize: 13,
-            }}>
-              <AlertTriangle size={18} /> {error}
-            </div>
+                <button onClick={handleLogout} style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '10px 16px', border: '2px solid #fca5a5',
+                  borderRadius: 50, background: '#fef2f2',
+                  fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
+                  cursor: 'pointer', color: '#b91c1c', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s', fontWeight: 600,
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#b91c1c'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#b91c1c'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#b91c1c'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                >
+                  <LogOut size={14} />
+                  <span className="logout-label">Logout</span>
+                </button>
+              </div>
+
+              {/* Status Tabs */}
+              <div style={{
+                display: 'flex', gap: 0, marginBottom: 20,
+                borderBottom: '2px solid var(--cream-dark)', overflowX: 'auto',
+              }}>
+                {ALL_STATUSES.map(s => {
+                  const active = activeTab === s;
+                  const meta = s === 'all' ? { label: 'All', dot: 'var(--saffron)' } : STATUS_META[s];
+                  const count = counts[s] ?? 0;
+                  return (
+                    <button key={s} onClick={() => switchTab(s)} style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '9px 14px', border: 'none',
+                      borderBottom: active ? '3px solid var(--saffron)' : '3px solid transparent',
+                      background: 'transparent',
+                      fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
+                      cursor: 'pointer', color: active ? 'var(--saffron)' : 'var(--text-light)',
+                      marginBottom: -2, fontWeight: active ? 700 : 400, whiteSpace: 'nowrap', flexShrink: 0,
+                    }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
+                      {meta.label}
+                      <span style={{
+                        background: active ? 'var(--saffron)' : 'var(--cream-dark)',
+                        color: active ? 'white' : 'var(--text-light)',
+                        borderRadius: 50, padding: '1px 7px', fontSize: 11, fontWeight: 700,
+                      }}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {error && (
+                <div style={{
+                  background: '#fef2f2', border: '1.5px solid #fca5a5',
+                  borderRadius: 12, padding: '14px 20px', marginBottom: 20,
+                  display: 'flex', gap: 10, alignItems: 'center',
+                  color: '#b91c1c', fontFamily: 'var(--font-display)', fontSize: 13,
+                }}>
+                  <AlertTriangle size={18} /> {error}
+                </div>
+              )}
+
+              {/* Table */}
+              <div style={{
+                background: 'white', borderRadius: 16,
+                border: '1.5px solid var(--cream-dark)',
+                overflow: 'hidden', boxShadow: '0 4px 20px var(--shadow)',
+              }}>
+                <div className="admin-table-header" style={{
+                  display: 'grid',
+                  gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 160px',
+                  padding: '12px 20px',
+                  background: 'var(--cream)', borderBottom: '2px solid var(--cream-dark)',
+                  fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.08em',
+                  color: 'var(--text-light)',
+                }}>
+                  <span>TEMPLE</span><span>LOCATION</span><span>DEITY</span>
+                  <span>STATUS</span><span>SUBMITTED</span>
+                  <span style={{ textAlign: 'right' }}>ACTIONS</span>
+                </div>
+
+                {loading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                    <Loader2 size={32} color="var(--saffron)" style={{ animation: 'spin .8s linear infinite' }} />
+                    <span style={{ fontFamily: 'var(--font-display)', color: 'var(--text-light)', fontSize: 13 }}>Loading temples…</span>
+                  </div>
+                ) : displayed.length === 0 ? (
+                  <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-light)' }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>🏛️</div>
+                    <p style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--brown)' }}>No temples found</p>
+                    <p style={{ fontSize: 14 }}>Try a different filter or tab</p>
+                  </div>
+                ) : (
+                  displayed.map((t, i) => (
+                    <TempleRow
+                      key={t.id}
+                      t={t}
+                      i={i}
+                      total={displayed.length}
+                      actionLoading={actionLoading}
+                      onReview={() => setReviewing(t)}
+                      onEdit={e => { e.stopPropagation(); setEditing(t); }}
+                      onDelete={e => { e.stopPropagation(); setDeleting(t); }}
+                      onQuickAction={quickAction}
+                    />
+                  ))
+                )}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 24 }}>
+                  <PaginationBtn icon={<ChevronLeft size={16} />} disabled={page === 1} onClick={() => setPage(p => p - 1)} />
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--text-mid)' }}>Page {page} of {totalPages}</span>
+                  <PaginationBtn icon={<ChevronRight size={16} />} disabled={page === totalPages} onClick={() => setPage(p => p + 1)} />
+                </div>
+              )}
+            </>
           )}
 
-          {/* Table */}
-          <div style={{
-            background: 'white', borderRadius: 16,
-            border: '1.5px solid var(--cream-dark)',
-            overflow: 'hidden', boxShadow: '0 4px 20px var(--shadow)',
-          }}>
-            <div className="admin-table-header" style={{
-              display: 'grid',
-              gridTemplateColumns: '2fr 1.2fr 1fr 120px 110px 160px',
-              padding: '12px 20px',
-              background: 'var(--cream)', borderBottom: '2px solid var(--cream-dark)',
-              fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.08em',
-              color: 'var(--text-light)',
-            }}>
-              <span>TEMPLE</span><span>LOCATION</span><span>DEITY</span>
-              <span>STATUS</span><span>SUBMITTED</span>
-              <span style={{ textAlign: 'right' }}>ACTIONS</span>
-            </div>
+          {/* ── BLOGS VIEW ── */}
+          {mainView === 'blogs' && <BlogManagement />}
 
-            {loading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                <Loader2 size={32} color="var(--saffron)" style={{ animation: 'spin .8s linear infinite' }} />
-                <span style={{ fontFamily: 'var(--font-display)', color: 'var(--text-light)', fontSize: 13 }}>Loading temples…</span>
-              </div>
-            ) : displayed.length === 0 ? (
-              <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-light)' }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>🏛️</div>
-                <p style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--brown)' }}>No temples found</p>
-                <p style={{ fontSize: 14 }}>Try a different filter or tab</p>
-              </div>
-            ) : (
-              displayed.map((t, i) => (
-                <TempleRow
-                  key={t.id}
-                  t={t}
-                  i={i}
-                  total={displayed.length}
-                  actionLoading={actionLoading}
-                  onReview={() => setReviewing(t)}
-                  onEdit={e => { e.stopPropagation(); setEditing(t); }}
-                  onDelete={e => { e.stopPropagation(); setDeleting(t); }}
-                  onQuickAction={quickAction}
-                />
-              ))
-            )}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 24 }}>
-              <PaginationBtn icon={<ChevronLeft size={16} />} disabled={page === 1} onClick={() => setPage(p => p - 1)} />
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--text-mid)' }}>Page {page} of {totalPages}</span>
-              <PaginationBtn icon={<ChevronRight size={16} />} disabled={page === totalPages} onClick={() => setPage(p => p + 1)} />
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Modals */}
+      {/* Temple Modals */}
       {reviewing && (
         <ReviewModal temple={reviewing} onClose={() => setReviewing(null)}
           onStatusChange={handleStatusChange} onVerify={handleVerify} />
@@ -1385,7 +1908,6 @@ function TempleNameCell({ t }) {
   );
 }
 
-// ── Row Actions — now includes Edit + Delete ───────────────────────────────────
 function RowActions({ t, actionLoading, onReview, onEdit, onDelete, onQuickAction, justify }) {
   return (
     <div style={{ display: 'flex', gap: 5, justifyContent: justify }}>
@@ -1397,17 +1919,12 @@ function RowActions({ t, actionLoading, onReview, onEdit, onDelete, onQuickActio
         <QuickBtn icon={<XCircle size={14} />} color="#b91c1c" title="Flag / Reject"
           loading={actionLoading === `${t.id}-flagged`} onClick={e => onQuickAction(t, 'flagged', e)} />
       )}
-      {/* Eye — Review Details */}
       <QuickBtn icon={<Eye size={14} />} color="var(--saffron)" title="View Full Details"
         onClick={e => { e.stopPropagation(); onReview(); }} />
-      {/* Pencil — Edit */}
       <QuickBtn icon={<Pencil size={14} />} color="#1d4ed8" title="Edit Temple"
         onClick={onEdit} />
-      {/* Trash — Delete */}
       <QuickBtn icon={<Trash2 size={14} />} color="#b91c1c" title="Delete Temple"
-        onClick={onDelete}
-        hoverBg="#fef2f2"
-      />
+        onClick={onDelete} hoverBg="#fef2f2" />
     </div>
   );
 }
