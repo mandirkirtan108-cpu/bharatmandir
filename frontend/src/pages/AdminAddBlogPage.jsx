@@ -1,6 +1,6 @@
 /**
  * AdminAddBlogPage.jsx — BharatMandir Admin: Create Blog Posts
- * FIXED: Hero banner height matched to Admin Panel header (padding: 36px 24px 28px)
+ * Hero banner now matches PanchangPage exactly (section tag, inline styles, centered flex)
  * Fields: title, submitted_by, description
  * POST  /api/admin/blogs
  */
@@ -42,58 +42,6 @@ const CSS = `
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:var(--fb);background:var(--cream);color:var(--text);}
   a{text-decoration:none;color:inherit;}
-
-  /*
-   * Hero — matches AdminPanelPage header exactly:
-   *   background gradient, padding 36px 24px 28px, no floating icons, no big title.
-   *   We keep a subtle sub-label + title but at the same visual weight.
-   */
-  /* NEW */
-.hero{
-  background:linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%);
-  padding:50px 12px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  width:100%;
-  box-sizing:border-box;
-}
-.hero-inner{
-  position:relative;
-  z-index:1;
-  width:100%;
-  max-width:700px;
-  padding:0 24px;
-  box-sizing:border-box;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  text-align:center;
-}
- /* NEW */
-.hero-eyebrow{
-  display:inline-flex;align-items:center;gap:8px;
-  background:rgba(255,255,255,.08);border:1px solid rgba(255,213,128,.3);
-  color:rgba(255,213,128,.85);padding:5px 16px;border-radius:50px;
-  font-size:11px;letter-spacing:.1em;
-  margin-bottom:14px;text-transform:uppercase;font-weight:500;
-  white-space:nowrap;
-}
-.hero-title{
-  font-family:var(--fd);font-weight:900;
-  font-size:clamp(28px, 5vw, 52px);
-  color:#fff;line-height:1.1;margin-bottom:10px;margin-top:0;
-  text-shadow:0 4px 40px rgba(0,0,0,.3);
-  width:100%;
-}
-.hero-title span{color:#FFD580;}
-.hero-sub{
-  color:rgba(255,255,255,.7);font-size:14px;
-  width:100%;max-width:520px;
-  margin:0;font-weight:300;line-height:1.7;
-  text-align:center;
-}
 
   .bc{background:#fff;border-bottom:1px solid var(--cream-d);padding:11px 24px;}
   .bc-inner{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:8px;font-family:var(--fd);font-size:11px;letter-spacing:.04em;color:var(--text-l);}
@@ -217,14 +165,66 @@ export default function AdminAddBlogPage() {
       <style>{CSS}</style>
       <Navbar />
 
-      {/* ── Hero — compact, same visual weight as Admin Panel header ── */}
-      <div className="hero">
-        <div className="hero-inner">
-          <div className="hero-eyebrow">Admin · Blog Management</div>
-          <h1 className="hero-title">Create <span>Blog Post</span></h1>
-          <p className="hero-sub">Share spiritual wisdom, temple stories &amp; divine knowledge</p>
+      {/* ── Hero — matches PanchangPage exactly ── */}
+      <section style={{
+        position: 'relative', overflow: 'hidden', color: 'white',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '50px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        boxSizing: 'border-box',
+      }}>
+        <div style={{
+          position: 'relative', zIndex: 1,
+          width: '100%', maxWidth: 700,
+          padding: '0 24px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}>
+          {/* Badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+            color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+            textTransform: 'uppercase', fontWeight: 500,
+            backdropFilter: 'blur(8px)',
+            whiteSpace: 'nowrap',
+          }}>
+            ✦ Admin · Blog Management
+          </div>
+
+          {/* Title */}
+          <h1 style={{
+            fontFamily: 'var(--fd)', fontWeight: 900,
+            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+            marginBottom: 10, marginTop: 0,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#ffffff',
+            width: '100%',
+          }}>
+            Create —{' '}
+            <span style={{ color: '#FFD580' }}>Blog Post</span>
+          </h1>
+
+          {/* Subtitle */}
+          <p style={{
+            color: 'rgba(255,255,255,0.7)', fontSize: 14,
+            width: '100%', maxWidth: 520,
+            margin: '0',
+            fontWeight: 300, lineHeight: 1.7,
+            textAlign: 'center',
+          }}>
+            Share spiritual wisdom, temple stories &amp; divine knowledge
+          </p>
         </div>
-      </div>
+      </section>
 
       {/* ── Breadcrumb ── */}
       <div className="bc">
