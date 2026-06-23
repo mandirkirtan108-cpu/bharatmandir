@@ -1,6 +1,7 @@
 /**
- * AdminAddBlogPage.jsx — BharatMandir Admin: Create / Edit Blog Posts
- * Fields: title, submitted_by, description (rich text)
+ * AdminAddBlogPage.jsx — BharatMandir Admin: Create Blog Posts
+ * FIXED: Hero banner height matched to Admin Panel header (padding: 36px 24px 28px)
+ * Fields: title, submitted_by, description
  * POST  /api/admin/blogs
  */
 
@@ -42,90 +43,97 @@ const CSS = `
   body{font-family:var(--fb);background:var(--cream);color:var(--text);}
   a{text-decoration:none;color:inherit;}
 
-  /* Hero — compact, matching library page height */
+  /*
+   * Hero — matches AdminPanelPage header exactly:
+   *   background gradient, padding 36px 24px 28px, no floating icons, no big title.
+   *   We keep a subtle sub-label + title but at the same visual weight.
+   */
   .hero{
-    position:relative;
-    background:linear-gradient(135deg,#4b1d04 0%,#7a3208 55%,#a14a0b 100%);
-    padding:50px 12px;
-    text-align:center;overflow:hidden;
+    background:linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%);
+    padding:36px 24px 28px;
   }
-  .hero-bg{position:absolute;inset:0;pointer-events:none;}
-  .fl{position:absolute;font-size:clamp(18px,3vw,40px);opacity:.08;animation:floatUp 7s ease-in-out infinite;}
-  .fl:nth-child(1){top:12%;left:6%;animation-delay:0s;}
-  .fl:nth-child(2){top:55%;left:12%;animation-delay:1.4s;}
-  .fl:nth-child(3){top:18%;right:8%;animation-delay:.7s;}
-  .fl:nth-child(4){bottom:18%;right:5%;animation-delay:2.1s;}
-  @keyframes floatUp{0%,100%{transform:translateY(0) rotate(-4deg);opacity:.08;}50%{transform:translateY(-14px) rotate(4deg);opacity:.16;}}
-  .hero-inner{position:relative;z-index:1;}
-  .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,213,128,.3);backdrop-filter:blur(8px);color:rgba(255,213,128,.85);padding:5px 18px;border-radius:50px;font-family:var(--fd);font-size:11px;letter-spacing:.14em;margin-bottom:14px;text-transform:uppercase;font-weight:500;}
-  .hero-title{font-family:var(--fd);font-weight:900;font-size:clamp(26px,5vw,48px);color:#fff;line-height:1.1;margin-bottom:8px;text-shadow:0 2px 20px rgba(0,0,0,.4);}
+  .hero-inner{
+    max-width:860px;
+    margin:0 auto;
+  }
+  .hero-eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,213,128,.25);
+    color:rgba(255,213,128,.8);padding:3px 14px;border-radius:50px;
+    font-family:var(--fd);font-size:10px;letter-spacing:.14em;
+    margin-bottom:10px;text-transform:uppercase;
+  }
+  .hero-title{
+    font-family:var(--fd);font-weight:700;font-size:24px;
+    color:#fff;line-height:1.15;margin-bottom:4px;
+    letter-spacing:.02em;
+  }
   .hero-title span{color:#FFD580;}
-  .hero-sub{font-family:var(--fh);font-size:14px;color:rgba(255,255,255,.65);}
+  .hero-sub{
+    font-family:var(--fh);font-size:13px;
+    color:rgba(255,255,255,.6);margin:0;
+  }
 
-  .bc{background:#fff;border-bottom:1px solid var(--cream-d);padding:12px 24px;}
-  .bc-inner{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:8px;font-family:var(--fd);font-size:12px;letter-spacing:.04em;color:var(--text-l);}
+  .bc{background:#fff;border-bottom:1px solid var(--cream-d);padding:11px 24px;}
+  .bc-inner{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:8px;font-family:var(--fd);font-size:11px;letter-spacing:.04em;color:var(--text-l);}
   .bc-inner a{color:var(--s);}
   .bc-inner a:hover{text-decoration:underline;}
 
-  .main{max-width:860px;margin:0 auto;padding:32px 24px 80px;}
+  .main{max-width:860px;margin:0 auto;padding:28px 24px 80px;}
 
-  .card{background:#fff;border:1.5px solid var(--cream-d);border-radius:var(--rl);padding:26px 30px;margin-bottom:18px;position:relative;overflow:hidden;}
-  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--s),var(--gold));}
-  .card-title{font-family:var(--fd);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--s);margin-bottom:20px;display:flex;align-items:center;gap:10px;}
+  .card{background:#fff;border:1.5px solid var(--cream-d);border-radius:var(--rl);padding:24px 28px;margin-bottom:16px;position:relative;overflow:hidden;}
+  .card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--s),var(--gold));}
+  .card-title{font-family:var(--fd);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--s);margin-bottom:18px;display:flex;align-items:center;gap:10px;}
   .card-title::after{content:'';flex:1;height:1px;background:var(--cream-d);}
 
-  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
-  .lbl{font-family:var(--fd);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-l);}
+  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;}
+  .lbl{font-family:var(--fd);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-l);}
   .lbl .req{color:var(--s);margin-left:2px;}
   .inp,.ta{width:100%;padding:10px 14px;border:2px solid var(--cream-d);border-radius:var(--r);font-family:var(--fb);font-size:15px;color:var(--text);background:var(--cream);outline:none;transition:var(--tr);}
   .inp:focus,.ta:focus{border-color:var(--s);background:#fff;box-shadow:0 0 0 3px rgba(232,101,10,.1);}
   .inp.err,.ta.err{border-color:var(--red);}
-  .ta{resize:vertical;min-height:200px;line-height:1.7;}
+  .ta{resize:vertical;min-height:180px;line-height:1.7;}
   .hint{font-size:12px;color:var(--text-l);margin-top:2px;}
   .err-msg{font-size:12px;color:var(--red);margin-top:2px;}
-
   .char-count{font-size:11px;color:var(--text-l);text-align:right;margin-top:3px;}
 
-  .btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px;}
+  .btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px;}
 
-  /* Primary CTA — professional, no emoji */
   .btn-submit{
     display:inline-flex;align-items:center;gap:8px;
-    padding:12px 32px;border:none;border-radius:50px;
+    padding:11px 28px;border:none;border-radius:50px;
     background:linear-gradient(135deg,var(--s),var(--sd));
-    color:#fff;font-family:var(--fd);font-size:12px;letter-spacing:.1em;
+    color:#fff;font-family:var(--fd);font-size:11px;letter-spacing:.1em;
     font-weight:700;cursor:pointer;text-transform:uppercase;
-    box-shadow:0 3px 14px rgba(232,101,10,.35);transition:var(--tr);
+    box-shadow:0 3px 14px rgba(232,101,10,.3);transition:var(--tr);
   }
-  .btn-submit:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(232,101,10,.50);}
+  .btn-submit:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(232,101,10,.45);}
   .btn-submit:disabled{opacity:.55;cursor:not-allowed;transform:none;}
 
   .btn-secondary{
     display:inline-flex;align-items:center;gap:8px;
-    padding:12px 22px;border:2px solid var(--cream-d);border-radius:50px;
-    background:#fff;color:var(--text-m);font-family:var(--fd);font-size:12px;
+    padding:11px 20px;border:2px solid var(--cream-d);border-radius:50px;
+    background:#fff;color:var(--text-m);font-family:var(--fd);font-size:11px;
     letter-spacing:.08em;font-weight:600;cursor:pointer;text-transform:uppercase;transition:var(--tr);
   }
   .btn-secondary:hover{border-color:var(--s);color:var(--s);}
 
-  .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);padding:13px 26px;border-radius:50px;font-family:var(--fd);font-size:12px;letter-spacing:.08em;font-weight:700;z-index:9999;box-shadow:0 6px 24px rgba(0,0,0,.22);animation:slideUp .35s ease;text-transform:uppercase;}
+  .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:50px;font-family:var(--fd);font-size:11px;letter-spacing:.08em;font-weight:700;z-index:9999;box-shadow:0 6px 24px rgba(0,0,0,.22);animation:slideUp .35s ease;text-transform:uppercase;}
   .toast-ok{background:var(--green);color:#fff;}
   .toast-err{background:var(--red);color:#fff;}
   @keyframes slideUp{from{opacity:0;transform:translate(-50%,20px);}to{opacity:1;transform:translate(-50%,0);}}
 
-  .preview-box{background:var(--cream);border:1.5px dashed var(--cream-d);border-radius:var(--r);padding:20px 22px;white-space:pre-wrap;font-family:var(--fb);font-size:15px;line-height:1.75;color:var(--text-m);min-height:80px;}
-  .preview-label{font-family:var(--fd);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-l);margin-bottom:10px;}
+  .preview-box{background:var(--cream);border:1.5px dashed var(--cream-d);border-radius:var(--r);padding:18px 20px;white-space:pre-wrap;font-family:var(--fb);font-size:15px;line-height:1.75;color:var(--text-m);min-height:72px;}
+  .preview-label{font-family:var(--fd);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-l);margin-bottom:8px;}
 
-  /* Spinner icon for saving state */
-  .spin-icon{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+  .spin-icon{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
-  /* Preview toggle */
   .preview-toggle{
     background:none;border:1.5px solid var(--cream-d);border-radius:8px;
-    padding:7px 16px;cursor:pointer;font-family:var(--fd);
-    font-size:11px;letter-spacing:.07em;color:var(--text-l);
-    text-transform:uppercase;margin-bottom:0;transition:border-color .2s;
+    padding:6px 14px;cursor:pointer;font-family:var(--fd);
+    font-size:10px;letter-spacing:.07em;color:var(--text-l);
+    text-transform:uppercase;transition:border-color .2s;
   }
   .preview-toggle:hover{border-color:var(--s);color:var(--s);}
 `;
@@ -188,16 +196,10 @@ export default function AdminAddBlogPage() {
       <style>{CSS}</style>
       <Navbar />
 
-      {/* ── Hero — compact, same height as Sacred Books hero ── */}
+      {/* ── Hero — compact, same visual weight as Admin Panel header ── */}
       <div className="hero">
-        <div className="hero-bg">
-          <span className="fl" style={{ fontSize: 32 }}>✍</span>
-          <span className="fl" style={{ fontSize: 28 }}>📖</span>
-          <span className="fl" style={{ fontSize: 24 }}>॥</span>
-          <span className="fl" style={{ fontSize: 30 }}>ॐ</span>
-        </div>
         <div className="hero-inner">
-          <div className="badge">Admin · Blog Management</div>
+          <div className="hero-eyebrow">Admin · Blog Management</div>
           <h1 className="hero-title">Create <span>Blog Post</span></h1>
           <p className="hero-sub">Share spiritual wisdom, temple stories &amp; divine knowledge</p>
         </div>
@@ -260,7 +262,7 @@ export default function AdminAddBlogPage() {
               value={form.description}
               onChange={set('description')}
               rows={12}
-              style={{ minHeight: 260 }}
+              style={{ minHeight: 240 }}
             />
             <div className="char-count">{form.description.length} characters</div>
             {errors.description && <span className="err-msg">{errors.description}</span>}
@@ -272,13 +274,13 @@ export default function AdminAddBlogPage() {
             type="button"
             className="preview-toggle"
             onClick={() => setShowPreview(v => !v)}
-            style={{ marginBottom: showPreview ? 14 : 0 }}
+            style={{ marginBottom: showPreview ? 12 : 0 }}
           >
             {showPreview ? '▲ Hide Preview' : '▼ Show Preview'}
           </button>
 
           {showPreview && (
-            <div style={{ marginTop: 14 }}>
+            <div style={{ marginTop: 12 }}>
               <div className="preview-label">Preview</div>
               <div className="preview-box">
                 {form.description || <span style={{ opacity: .4 }}>Nothing to preview yet…</span>}

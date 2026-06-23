@@ -1,10 +1,9 @@
 /**
  * AdminPanelPage.jsx — BharatMandir Admin Panel
- * Updated:
- *   - Edit button (pencil) → inline Edit Modal with field update
- *   - Delete button (trash) → confirmation dialog → DELETE API call
- *   - Review Modal → full details: facilities, puja flags, donation flags, programs
- *   - Blog Management tab → list, edit, delete published blogs
+ * Fixes:
+ *   - fetchAdminBlogs: proper sequential fallback (was broken async try/catch)
+ *   - Add Blog button: lighter brown so it's visually distinct
+ *   - All other features intact
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -116,12 +115,14 @@ async function deleteTemple(id) {
 }
 
 // ── Blog API calls ────────────────────────────────────────────────────────────
+// FIX: proper sequential fallback — the old nested try/catch was broken because
+// the outer catch would also catch the inner apiFetch throw before it resolved.
 async function fetchAdminBlogs() {
-  // Try admin endpoint first, fall back to public
   try {
-    return apiFetch('/api/admin/blogs');
+    return await apiFetch('/api/admin/blogs');
   } catch {
-    return apiFetch('/api/blogs');
+    // fall back to public endpoint if admin endpoint 405s / 403s
+    return await apiFetch('/api/blogs');
   }
 }
 
@@ -1203,7 +1204,7 @@ function BlogManagement() {
         <Link to="/admin/add-blog" style={{
           display: 'inline-flex', alignItems: 'center', gap: 7,
           padding: '9px 18px',
-          background: 'linear-gradient(135deg, #4b1d04, #7a3208)',
+          background: 'linear-gradient(135deg, #7a3208, #a14a0b)',
           border: 'none', borderRadius: 50,
           fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.06em', fontWeight: 700,
           color: 'white', textDecoration: 'none', whiteSpace: 'nowrap',
@@ -1403,7 +1404,7 @@ function ActionBtn({ icon, label, color, bg, border, loading, onClick }) {
 export default function AdminPanelPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab]         = useState('all');
-  const [mainView, setMainView]           = useState('temples'); // 'temples' | 'blogs'
+  const [mainView, setMainView]           = useState('temples');
   const [temples, setTemples]             = useState([]);
   const [counts, setCounts]               = useState({});
   const [total, setTotal]                 = useState(0);
@@ -1605,6 +1606,7 @@ export default function AdminPanelPage() {
                   />
                 </div>
 
+                {/* Add Temple — saffron */}
                 <Link to="/admin/add" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 7,
                   padding: '10px 18px',
@@ -1621,6 +1623,7 @@ export default function AdminPanelPage() {
                   <span className="btn-label-temple">Add Temple</span>
                 </Link>
 
+                {/* Add Festival — brown */}
                 <Link to="/admin/add-festival" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 7,
                   padding: '10px 18px',
@@ -1636,10 +1639,11 @@ export default function AdminPanelPage() {
                   <span className="btn-label-festival">Add Festival</span>
                 </Link>
 
+                {/* Add Blog — FIXED: lighter warm brown so it reads as a third distinct button */}
                 <Link to="/admin/add-blog" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 7,
                   padding: '10px 18px',
-                  background: 'linear-gradient(135deg, #4b1d04, #7a3208)',
+                  background: 'linear-gradient(135deg, #a14a0b, #c76020)',
                   border: '2px solid transparent', borderRadius: 50,
                   fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
                   color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
