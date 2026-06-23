@@ -42,7 +42,7 @@ const CSS = `
   body{font-family:var(--fb);background:var(--cream);color:var(--text);}
   a{text-decoration:none;color:inherit;}
 
-  .hero{position:relative;background:linear-gradient(160deg,#1A0A00 0%,#3D1F00 35%,#6B3A10 65%,#B84D00 100%);padding:52px 24px 64px;text-align:center;overflow:hidden;}
+  .hero{position:relative;background:linear-gradient(160deg,#1A0A00 0%,#3D1F00 35%,#6B3A10 65%,#B84D00 100%);padding:50px 12px;text-align:center;overflow:hidden;}
   .hero-bg{position:absolute;inset:0;pointer-events:none;}
   .fl{position:absolute;font-size:clamp(18px,3vw,40px);opacity:.1;animation:floatUp 7s ease-in-out infinite;}
   .fl:nth-child(1){top:12%;left:6%;animation-delay:0s;}

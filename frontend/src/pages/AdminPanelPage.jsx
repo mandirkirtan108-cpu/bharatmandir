@@ -1121,14 +1121,14 @@ export default function AdminPanelPage() {
             <Link to="/admin/add-blog" style={{
               display: 'inline-flex', alignItems: 'center', gap: 7,
               padding: '10px 18px',
-              background: 'linear-gradient(135deg, #1e5c3a, #2d8a57)',
+              background: 'linear-gradient(135deg, #7a3208, #a14a0b)',
               border: '2px solid transparent', borderRadius: 50,
               fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
               color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-              boxShadow: '0 2px 12px rgba(30,92,58,.28)', transition: 'all .2s',
+              boxShadow: '0 2px 12px rgba(122,50,8,.28)', transition: 'all .2s',
             }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(30,92,58,.45)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(30,92,58,.28)'; }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(122,50,8,.45)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(122,50,8,.28)'; }}
             >
               <FileText size={15} />
               <span>Add Blog</span>
