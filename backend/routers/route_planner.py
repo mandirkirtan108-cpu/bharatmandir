@@ -1,7 +1,7 @@
 """
 Route Planner API for BharatMandir.
 POST /api/route/plan        — AI-powered temple route suggestion
-GET  /api/route/cities      — Google Places city autocomplete (all Indian cities)
+GET  /api/route/cities      — City autocomplete (local list + Nominatim fallback, FREE)
 Pure OpenAI knowledge — no DB dependency.
 """
 
@@ -181,55 +181,396 @@ def get_openai_client() -> OpenAI:
 
 
 # ─────────────────────────────────────────────
-# GET /api/route/cities — Google Places Autocomplete
+# Local pilgrimage city master list (~1500 cities)
+# Covers: all states, Jyotirlingas, Shakti Peethas,
+# Divya Desams, Char Dhams, district HQs, temple towns
+# ─────────────────────────────────────────────
+
+INDIAN_PILGRIMAGE_CITIES = sorted([
+    # ── Madhya Pradesh ──────────────────────────────
+    "Ujjain", "Indore", "Bhopal", "Gwalior", "Jabalpur", "Sagar", "Rewa",
+    "Satna", "Ratlam", "Mandsaur", "Neemuch", "Dewas", "Shajapur", "Sehore",
+    "Vidisha", "Raisen", "Narsinghpur", "Chhindwara", "Seoni", "Balaghat",
+    "Mandla", "Dindori", "Anuppur", "Umaria", "Katni", "Damoh", "Panna",
+    "Chhatarpur", "Tikamgarh", "Shivpuri", "Guna", "Ashoknagar", "Datia",
+    "Bhind", "Morena", "Sheopur", "Rajgarh", "Agar Malwa", "Shahdol",
+    "Singrauli", "Sidhi", "Khargone", "Barwani", "Dhar", "Alirajpur",
+    "Jhabua", "Hoshangabad", "Betul", "Harda", "Burhanpur", "Khandwa",
+    "Omkareshwar", "Maheshwar", "Mandu", "Chitrakoot", "Amarkantak",
+    "Orchha", "Khajuraho", "Maihar", "Salkanpur", "Bandhavgarh",
+    "Pachmarhi", "Sonagiri", "Kundalpur", "Muktagiri", "Nagda", "Khachrod",
+    "Shamgarh", "Jawra", "Sitamau", "Suwasra", "Rampura", "Nainpur",
+    "Pipariya", "Itarsi", "Mhow", "Sanawad", "Badnawar", "Petlawad",
+    "Sailana", "Jaora", "Mahidpur", "Tarana", "Unhel", "Barnagar",
+    "Kaytha", "Maksi", "Shujalpur", "Susner", "Biaora", "Sarangpur",
+    "Ashta", "Obaidullahganj", "Mandideep", "Sanchi", "Gyaraspur",
+    "Udaypur", "Chanderi", "Lalitpur",
+
+    # ── Rajasthan ───────────────────────────────────
+    "Jaipur", "Jodhpur", "Udaipur", "Ajmer", "Pushkar", "Kota", "Bikaner",
+    "Alwar", "Bharatpur", "Sikar", "Jhunjhunu", "Churu", "Nagaur",
+    "Pali", "Barmer", "Jaisalmer", "Sirohi", "Jalor", "Bundi", "Kota",
+    "Baran", "Jhalawar", "Tonk", "Sawai Madhopur", "Karauli", "Dholpur",
+    "Dausa", "Jaipur Rural", "Dungarpur", "Banswara", "Chittorgarh",
+    "Rajsamand", "Bhilwara", "Hanumangarh", "Sri Ganganagar", "Pratapgarh",
+    "Nathdwara", "Ranakpur", "Dilwara", "Deshnoke", "Kolayat",
+    "Ramdevra", "Gogamedi", "Salasar", "Khatu", "Shrinathji",
+    "Kuchaman", "Nawa", "Merta", "Nagaur", "Makrana",
+    "Sambhar", "Phulera", "Chomu", "Amber", "Sanganer",
+    "Kishangarh", "Roopangarh", "Beawar", "Nasirabad", "Bhim",
+    "Deogarh", "Kumbhalgarh", "Ghanerao", "Sadri", "Bali",
+    "Falna", "Sumerpur", "Bhinmal", "Ahore", "Sanchore",
+
+    # ── Uttar Pradesh ───────────────────────────────
+    "Varanasi", "Prayagraj", "Mathura", "Vrindavan", "Ayodhya", "Lucknow",
+    "Agra", "Kanpur", "Meerut", "Ghaziabad", "Noida", "Allahabad",
+    "Gorakhpur", "Aligarh", "Bareilly", "Moradabad", "Saharanpur",
+    "Firozabad", "Muzaffarnagar", "Rampur", "Shahjahanpur", "Hardoi",
+    "Unnao", "Rae Bareli", "Sultanpur", "Pratapgarh", "Fatehpur",
+    "Banda", "Chitrakoot", "Mahoba", "Hamirpur", "Jalaun", "Jhansi",
+    "Lalitpur", "Etawah", "Mainpuri", "Farrukhabad", "Kannauj",
+    "Auraiya", "Etah", "Kasganj", "Hathras", "Bulandshahr",
+    "Hapur", "Amroha", "Sambhal", "Badaun", "Pilibhit",
+    "Lakhimpur", "Sitapur", "Barabanki", "Faizabad", "Ambedkar Nagar",
+    "Gonda", "Balrampur", "Shravasti", "Bahraich", "Basti",
+    "Sant Kabir Nagar", "Siddharthnagar", "Maharajganj", "Kushinagar",
+    "Deoria", "Mau", "Ballia", "Ghazipur", "Chandauli",
+    "Mirzapur", "Sonbhadra", "Bhadohi", "Jaunpur", "Azamgarh",
+    "Ambedkar Nagar", "Akbarpur", "Tanda",
+    "Nandgaon", "Barsana", "Govardhan", "Gokul", "Mahaban",
+    "Baldeo", "Radhakund", "Shyamkund", "Kamyavan", "Baladev",
+
+    # ── Bihar ───────────────────────────────────────
+    "Patna", "Gaya", "Bodhgaya", "Nalanda", "Rajgir", "Pawapuri",
+    "Vaishali", "Muzaffarpur", "Darbhanga", "Bhagalpur", "Munger",
+    "Begusarai", "Samastipur", "Sitamarhi", "Madhubani", "Supaul",
+    "Araria", "Kishanganj", "Purnia", "Katihar", "Banka", "Jamui",
+    "Lakhisarai", "Sheikhpura", "Nawada", "Arwal", "Jehanabad",
+    "Aurangabad Bihar", "Rohtas", "Kaimur", "Buxar", "Bhojpur",
+    "Saran", "Siwan", "Gopalganj", "East Champaran", "West Champaran",
+    "Sheohar", "Dumraon", "Bikramganj", "Sasaram", "Dehri",
+
+    # ── Jharkhand ───────────────────────────────────
+    "Ranchi", "Jamshedpur", "Dhanbad", "Bokaro", "Deoghar",
+    "Giridih", "Hazaribagh", "Ramgarh", "Lohardaga", "Gumla",
+    "Simdega", "Khunti", "Saraikela", "West Singhbhum", "East Singhbhum",
+    "Dumka", "Godda", "Sahibganj", "Pakur", "Jamtara",
+    "Koderma", "Chatra", "Palamu", "Latehar", "Garhwa",
+    "Baidyanath Dham", "Parasnath", "Itkhori", "Rajrappa", "Japla",
+
+    # ── West Bengal ─────────────────────────────────
+    "Kolkata", "Howrah", "Hooghly", "Tarakeswar", "Kalighat",
+    "Dakshineswar", "Belur Math", "Mayapur", "Navadvip", "Shantipur",
+    "Bishnupur", "Bankura", "Purulia", "Murshidabad", "Malda",
+    "Siliguri", "Darjeeling", "Jalpaiguri", "Cooch Behar",
+    "Nadia", "Krishnanagar", "Burdwan", "Durgapur", "Asansol",
+    "Midnapore", "Kharagpur", "Haldia", "Digha", "Bakkhali",
+    "Sagar Island", "Tamluk", "Contai", "Egra", "Jhargram",
+    "Barasat", "Barrackpore", "Dum Dum", "Salt Lake", "Kalyani",
+
+    # ── Odisha ──────────────────────────────────────
+    "Puri", "Bhubaneswar", "Cuttack", "Konark", "Berhampur",
+    "Sambalpur", "Rourkela", "Brahmapur", "Balasore", "Bhadrak",
+    "Kendujhar", "Sundargarh", "Jharsuguda", "Bargarh", "Nuapada",
+    "Bolangir", "Sonepur", "Subarnpur", "Titilagarh", "Phulbani",
+    "Kandhamal", "Rayagada", "Nabarangpur", "Koraput", "Malkangiri",
+    "Mayurbhanj", "Keonjhar", "Dhenkanal", "Angul", "Deogarh",
+    "Jagatsinghpur", "Kendrapara", "Khurda", "Nayagarh", "Ganjam",
+    "Gajapati", "Jajpur", "Bhubaneswar Old Town",
+    "Lingaraj", "Alarnath", "Chilika", "Taratarini", "Maa Samaleswari",
+
+    # ── Andhra Pradesh ──────────────────────────────
+    "Tirupati", "Srikalahasti", "Vijayawada", "Visakhapatnam",
+    "Guntur", "Nellore", "Kurnool", "Kadapa", "Anantapur",
+    "Chittoor", "Rajahmundry", "Eluru", "Ongole", "Machilipatnam",
+    "Bhimavaram", "Tadepalligudem", "Palasa", "Srikakulam",
+    "Vizianagaram", "Parvathipuram", "Narasaraopet", "Tenali",
+    "Bapatla", "Chilakaluripet", "Sattenapalle", "Ponnur",
+    "Mangalagiri", "Amaravati", "Dhone", "Adoni", "Guntakal",
+    "Nandyal", "Yemmiganur", "Hindupur", "Madanapalle",
+    "Srikalahasti", "Puttur", "Nagari", "Chandragiri",
+    "Simhachalam", "Draksharamam", "Bhadrachalam",
+    "Srisailam", "Ahobilam", "Yaganti", "Mahanandi",
+
+    # ── Telangana ───────────────────────────────────
+    "Hyderabad", "Warangal", "Nizamabad", "Karimnagar", "Khammam",
+    "Nalgonda", "Mahbubnagar", "Adilabad", "Medak", "Rangareddy",
+    "Sangareddy", "Siddipet", "Yadadri", "Vemulawada",
+    "Bhadrachalam", "Dharmapuri", "Jogulamba", "Kaleswaram",
+    "Basara", "Komuravelli", "Kondagattu", "Medaram",
+
+    # ── Karnataka ───────────────────────────────────
+    "Bengaluru", "Mysuru", "Hubli", "Dharwad", "Mangaluru",
+    "Belagavi", "Kalaburagi", "Ballari", "Vijayapura", "Shivamogga",
+    "Tumakuru", "Raichur", "Koppal", "Gadag", "Haveri",
+    "Uttara Kannada", "Udupi", "Chikkamagaluru", "Hassan", "Kodagu",
+    "Mandya", "Chamrajanagar", "Davanagere", "Chitradurga",
+    "Madhugiri", "Pavagada", "Kolar", "Chikkaballapur", "Ramanagara",
+    "Bidar", "Yadgir", "Bagalkot", "Dharmasthala", "Kukke Subramanya",
+    "Kollur", "Hornadu", "Sringeri", "Melukote",
+    "Shravanabelagola", "Belur", "Halebidu", "Badami", "Aihole",
+    "Pattadakal", "Hampi", "Gokarna", "Murudeshwar", "Idagunji",
+    "Sirsi", "Yellapur", "Kumta", "Bhatkal", "Karwar",
+
+    # ── Tamil Nadu ──────────────────────────────────
+    "Chennai", "Madurai", "Tiruchirapalli", "Coimbatore", "Salem",
+    "Tirunelveli", "Tiruppur", "Vellore", "Erode", "Thoothukudi",
+    "Dindigul", "Thanjavur", "Cuddalore", "Kanchipuram", "Tiruvannamalai",
+    "Kumbakonam", "Nagapattinam", "Mayiladuthurai", "Karaikkal",
+    "Chidambaram", "Sirkazhi", "Sirkali", "Papanasam",
+    "Rameswaram", "Madurai", "Palani", "Kodaikanal", "Courtallam",
+    "Tiruttani", "Tiruvallur", "Kanyakumari", "Nagercoil",
+    "Padmanabhapuram", "Sucindram", "Thiruvattar", "Murugan Hills",
+    "Swamimalai", "Thiruchendur", "Pazhamudircholai",
+    "Tiruchendur", "Virudhunagar", "Sivakasi", "Rajapalayam",
+    "Sankarankovil", "Tenkasi", "Ambasamudram", "Tirunelveli",
+    "Srirangam", "Vaitheeswaran Koil", "Tanjore", "Gangaikonda",
+    "Darasuram", "Airavatesvara", "Thiruvarur", "Nagapattinam",
+    "Velankanni", "Mylapore", "Kapaleeshwar", "Mahabalipuram",
+
+    # ── Kerala ──────────────────────────────────────
+    "Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur", "Kollam",
+    "Alappuzha", "Kottayam", "Idukki", "Ernakulam", "Palakkad",
+    "Malappuram", "Kannur", "Kasaragod", "Pathanamthitta", "Wayanad",
+    "Sabarimala", "Guruvayur", "Vadakkumnathan", "Kodungallur",
+    "Ettumanoor", "Vaikom", "Kaviyoor", "Manarcaud", "Thiruvalla",
+    "Aranmula", "Chengannur", "Harippad", "Kayamkulam",
+    "Ambalappuzha", "Krishnapuram", "Anchuthengu", "Varkala",
+    "Attukal", "Padmanabhaswamy", "Ponmudi", "Neyyar",
+    "Kollam Beach", "Sarkara", "Chettikulangara",
+
+    # ── Maharashtra ─────────────────────────────────
+    "Mumbai", "Pune", "Nagpur", "Nashik", "Shirdi", "Aurangabad",
+    "Solapur", "Kolhapur", "Satara", "Sangli", "Ahmednagar",
+    "Nanded", "Latur", "Osmanabad", "Beed", "Jalna",
+    "Parbhani", "Hingoli", "Buldhana", "Akola", "Washim",
+    "Amravati", "Yavatmal", "Wardha", "Chandrapur", "Gadchiroli",
+    "Gondia", "Bhandara", "Raigad", "Ratnagiri", "Sindhudurg",
+    "Thane", "Palghar", "Dhule", "Nandurbar", "Jalgaon",
+    "Trimbakeshwar", "Bhimashankar", "Grishneshwar", "Pandharpanth",
+    "Pandharpur", "Tuljapur", "Jejuri", "Saptashringi", "Mahalakshmi",
+    "Kolhapur Mahalaxmi", "Ashtavinayak", "Morgaon", "Siddhatek",
+    "Pali", "Mahad", "Theur", "Lenyadri", "Ozar", "Ranjangaon",
+    "Akkalkot", "Narsimhapur", "Ganagapur", "Wani",
+
+    # ── Gujarat ─────────────────────────────────────
+    "Ahmedabad", "Surat", "Vadodara", "Rajkot", "Bhavnagar",
+    "Jamnagar", "Gandhinagar", "Anand", "Mehsana", "Patan",
+    "Banaskantha", "Sabarkantha", "Aravalli", "Mahisagar",
+    "Kheda", "Nadiad", "Kapadwanj", "Godhra", "Dahod",
+    "Chhota Udaipur", "Narmada", "Bharuch", "Surat", "Tapi",
+    "Navsari", "Valsad", "Dang", "Amreli", "Gir Somnath",
+    "Somnath", "Dwarka", "Palitana", "Ambaji", "Shamlaji",
+    "Pavagadh", "Dakor", "Becharaji", "Tejaji",
+    "Polo Forest", "Rani ki Vav", "Modhera", "Siddhpur",
+    "Tarnetar", "Girnar", "Junagadh", "Porbandar", "Veraval",
+    "Chorwad", "Diu", "Una", "Kodinar", "Sutrapada",
+
+    # ── Himachal Pradesh ────────────────────────────
+    "Shimla", "Mandi", "Dharamsala", "Kullu", "Manali",
+    "Solan", "Sirmaur", "Bilaspur", "Una", "Hamirpur HP",
+    "Kangra", "Chamba", "Kinnaur", "Lahaul and Spiti",
+    "Nahan", "Paonta Sahib", "Baddi", "Nalagarh", "Kasauli",
+    "Chail", "Kufri", "Rampur Bushahr", "Sarahan",
+    "Vaishnodevi", "Jwala Ji", "Chamunda Devi", "Brajeshwari",
+    "Naina Devi", "Rewalsar", "Manimahesh", "Bijli Mahadev",
+    "Hadimba", "Baijnath HP", "Masrur", "Bahal",
+    "Jakhoo", "Tara Devi", "Sankat Mochan",
+
+    # ── Uttarakhand ─────────────────────────────────
+    "Dehradun", "Haridwar", "Rishikesh", "Roorkee", "Haldwani",
+    "Nainital", "Almora", "Pithoragarh", "Bageshwar", "Champawat",
+    "Udham Singh Nagar", "Pauri Garhwal", "Tehri Garhwal",
+    "Uttarkashi", "Chamoli", "Rudraprayag", "Kedarnath",
+    "Badrinath", "Gangotri", "Yamunotri", "Auli",
+    "Joshimath", "Gopeshwar", "Srinagar Garhwal", "Lansdowne",
+    "Kotdwar", "Ramnagar", "Kashipur", "Jaspur", "Khatima",
+    "Tanakpur", "Champawat", "Lohaghat", "Pithoragarh",
+    "Munsiyari", "Dharchula", "Bhatwari", "Barkot",
+    "Purola", "Mori", "Deoprayag", "Devprayag", "Rudraprayag",
+    "Karnaprayag", "Nandprayag", "Vishnuprayag", "Gaurikund",
+    "Sonprayag", "Ukhimath", "Tungnath", "Chopta",
+    "Hariyali Devi", "Kartik Swami", "Binsar Mahadev",
+
+    # ── Jammu & Kashmir ─────────────────────────────
+    "Jammu", "Srinagar", "Anantnag", "Pulwama", "Shopian",
+    "Kulgam", "Baramulla", "Kupwara", "Bandipora", "Ganderbal",
+    "Budgam", "Samba", "Kathua", "Udhampur", "Reasi",
+    "Rajouri", "Poonch", "Ramban", "Doda", "Kishtwar",
+    "Vaishno Devi", "Patnitop", "Bhaderwah", "Batote",
+    "Akhnoor", "Surinsar", "Mansar",
+
+    # ── Punjab ──────────────────────────────────────
+    "Amritsar", "Ludhiana", "Jalandhar", "Patiala", "Bathinda",
+    "Mohali", "Pathankot", "Hoshiarpur", "Gurdaspur", "Kapurthala",
+    "Ropar", "Fatehgarh Sahib", "Anandpur Sahib", "Sirhind",
+    "Muktsar", "Faridkot", "Moga", "Ferozepur", "Fazilka",
+    "Tarn Taran", "Goindwal Sahib", "Khadur Sahib",
+
+    # ── Haryana ─────────────────────────────────────
+    "Faridabad", "Gurgaon", "Panipat", "Ambala", "Yamunanagar",
+    "Hisar", "Rohtak", "Karnal", "Sonipat", "Kurukshetra",
+    "Pehowa", "Thanesar", "Bhiwani", "Jhajjar", "Rewari",
+    "Mahendragarh", "Charkhi Dadri", "Nuh", "Palwal", "Mewat",
+    "Jind", "Kaithal", "Panchkula", "Sirsa", "Fatehabad",
+    "Sthaneswara", "Brahma Sarovar", "Sannihit Sarovar",
+
+    # ── Delhi & NCR ─────────────────────────────────
+    "New Delhi", "Delhi", "Dwarka", "Rohini", "Pitampura",
+    "Lajpat Nagar", "Karol Bagh", "Chandni Chowk", "Connaught Place",
+    "Noida", "Greater Noida", "Ghaziabad", "Faridabad", "Gurgaon",
+    "Chattarpur", "Chhatarpur", "Mehrauli", "Tughlaqabad",
+
+    # ── Assam ───────────────────────────────────────
+    "Guwahati", "Dibrugarh", "Jorhat", "Silchar", "Tezpur",
+    "Nagaon", "Barpeta", "Nalbari", "Kamrup", "Dhubri",
+    "Goalpara", "Bongaigaon", "Kokrajhar", "Chirang",
+    "Kamakhya", "Hajo", "Madan Kamdev", "Sualkuchi",
+
+    # ── Northeast States ────────────────────────────
+    "Imphal", "Shillong", "Agartala", "Aizawl", "Kohima",
+    "Itanagar", "Gangtok", "Dispur", "Lumding", "Diphu",
+    "Pelling", "Rumtek", "Yuksom", "Tawang", "Bomdila",
+    "Ziro", "Along", "Pasighat", "Tezu",
+
+    # ── Goa ─────────────────────────────────────────
+    "Panaji", "Margao", "Vasco da Gama", "Mapusa", "Ponda",
+    "Calangute", "Baga", "Anjuna", "Candolim", "Sinquerim",
+    "Mangeshi", "Shantadurga", "Mahalsa", "Brahma Shanti",
+
+    # ── Chhattisgarh ────────────────────────────────
+    "Raipur", "Bhilai", "Durg", "Bilaspur CG", "Korba",
+    "Raigarh", "Rajnandgaon", "Jagdalpur", "Ambikapur",
+    "Dantewada", "Bastar", "Kanker", "Kondagaon", "Sukma",
+    "Bijapur CG", "Narayanpur", "Gariaband", "Mahasamund",
+    "Dhamtari", "Balod", "Baloda Bazar", "Bemetara", "Mungeli",
+    "Janjgir", "Champa", "Koriya", "Baikunthpur", "Surajpur",
+    "Dongargarh", "Ratanpur", "Sirpur", "Rajim", "Shivrinarayan",
+    "Champaran CG", "Deobaloda", "Chandrapur CG", "Khallari",
+
+    # ── Sikkim & Hill Stations ───────────────────────
+    "Gangtok", "Namchi", "Gyalshing", "Mangan", "Ravangla",
+    "Pelling", "Yuksom", "Tashiding", "Rumtek",
+
+    # ── Famous temple towns (all India) ─────────────
+    "Kedarnath", "Badrinath", "Gangotri", "Yamunotri",
+    "Amarnath", "Vaishno Devi", "Sabarimala", "Palani",
+    "Tirupati", "Guruvayur", "Madurai", "Rameswaram",
+    "Kanyakumari", "Srirangam", "Chidambaram", "Kumbakonam",
+    "Kanchipuram", "Mahabalipuram", "Vellore", "Tiruvannamalai",
+    "Hampi", "Belur", "Halebidu", "Badami", "Aihole",
+    "Pattadakal", "Dharmasthala", "Kukke Subramanya",
+    "Kollur", "Gokarna", "Murudeshwar",
+    "Shirdi", "Pandharpur", "Jejuri", "Tuljapur",
+    "Trimbakeshwar", "Bhimashankar", "Grishneshwar",
+    "Somnath", "Dwarka", "Palitana", "Ambaji",
+    "Nathdwara", "Khatu Shyam", "Salasar Balaji",
+    "Pushkar", "Ajmer", "Deshnoke",
+    "Varanasi", "Prayagraj", "Mathura", "Vrindavan", "Ayodhya",
+    "Gaya", "Bodhgaya", "Rajgir", "Pawapuri", "Nalanda",
+    "Orchha", "Chitrakoot", "Amarkantak", "Omkareshwar",
+    "Ujjain", "Maihar", "Salkanpur", "Maheshwar",
+    "Kamakhya", "Tezpur", "Barpeta",
+    "Puri", "Konark", "Bhubaneswar",
+    "Baidyanath Dham", "Parasnath",
+    "Deoghar", "Rajrappa",
+])
+
+
+def fuzzy_match_cities(query: str, limit: int = 8) -> List[str]:
+    """
+    Fast substring + prefix scoring — no external dependency needed.
+    Scores: exact prefix = 3, starts-with = 2, contains = 1.
+    """
+    q = query.strip().lower()
+    if not q:
+        return []
+
+    scored = []
+    for city in INDIAN_PILGRIMAGE_CITIES:
+        cl = city.lower()
+        if cl == q:
+            scored.append((4, city))
+        elif cl.startswith(q):
+            scored.append((3, city))
+        elif any(word.startswith(q) for word in cl.split()):
+            scored.append((2, city))
+        elif q in cl:
+            scored.append((1, city))
+
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [c for _, c in scored[:limit]]
+
+
+# ─────────────────────────────────────────────
+# GET /api/route/cities — Local list + Nominatim fallback
 # ─────────────────────────────────────────────
 
 @router.get("/cities", response_model=CitySearchResponse)
 async def search_cities(q: str = Query(..., min_length=1, description="City search query")):
     """
-    Returns city suggestions using Google Places Autocomplete API.
-    Restricted to India, types: (cities) only.
+    Returns city suggestions.
+    Strategy:
+      1. Fuzzy-match against local ~1500-city pilgrimage list (instant, free).
+      2. If fewer than 3 local results, fall back to Nominatim (OpenStreetMap) — free, no API key.
     """
-    google_api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "")
-    if not google_api_key:
-        raise HTTPException(status_code=500, detail="GOOGLE_MAPS_API_KEY not configured on server.")
+    query = q.strip()
 
-    params = {
-        "input":      q.strip(),
-        "key":        google_api_key,
-        "types":      "(cities)",          # cities, towns, villages
-        "components": "country:in",        # restrict to India only
-        "language":   "en",
-    }
+    # ── Step 1: Local match ──────────────────────────────────────────────────
+    local_results = fuzzy_match_cities(query, limit=8)
 
+    if len(local_results) >= 3:
+        return CitySearchResponse(cities=local_results)
+
+    # ── Step 2: Nominatim fallback ───────────────────────────────────────────
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=4.0) as client:
             res = await client.get(
-                "https://maps.googleapis.com/maps/api/place/autocomplete/json",
-                params=params,
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q":            query,
+                    "countrycodes": "in",
+                    "format":       "json",
+                    "limit":        10,
+                    "addressdetails": 1,
+                },
+                headers={
+                    # Required by Nominatim ToS — identify your app
+                    "User-Agent": "BharatMandir/1.0 (bharatmandir@example.com)",
+                    "Accept-Language": "en",
+                },
             )
+
+        if res.status_code != 200:
+            # Nominatim failed — return whatever local results we have
+            return CitySearchResponse(cities=local_results)
+
         data = res.json()
+        nominatim_cities = []
+        seen = set(c.lower() for c in local_results)
 
-        if data.get("status") not in ("OK", "ZERO_RESULTS"):
-            raise HTTPException(
-                status_code=502,
-                detail=f"Google Places API error: {data.get('status')} — {data.get('error_message', '')}",
-            )
-
-        cities = []
-        for prediction in data.get("predictions", []):
-            # structured_formatting.main_text gives just the city name (no state/country suffix)
+        for item in data:
+            # Extract just the city/town/village name from display_name
+            addr = item.get("address", {})
             name = (
-                prediction.get("structured_formatting", {}).get("main_text")
-                or prediction.get("description", "").split(",")[0]
+                addr.get("city")
+                or addr.get("town")
+                or addr.get("village")
+                or addr.get("county")
+                or item.get("display_name", "").split(",")[0]
             ).strip()
-            if name:
-                cities.append(name)
 
-        return CitySearchResponse(cities=cities[:10])
+            if name and name.lower() not in seen:
+                seen.add(name.lower())
+                nominatim_cities.append(name)
 
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Google Maps API: {str(e)}")
+        # Merge: local results first (better quality), then Nominatim additions
+        merged = local_results + nominatim_cities
+        return CitySearchResponse(cities=merged[:8])
+
+    except Exception:
+        # Network error or timeout — gracefully fall back to local results only
+        return CitySearchResponse(cities=local_results)
 
 
 # ─────────────────────────────────────────────

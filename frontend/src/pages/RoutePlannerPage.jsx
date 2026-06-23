@@ -45,7 +45,7 @@ const BOOKING_META = {
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-// ── Google Places-powered City Autocomplete ─────────────────────────────────
+// ── City Autocomplete (Local list + Nominatim, no Google API needed) ────────
 function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
   const [open, setOpen]               = useState(false);
   const [suggestions, setSuggestions] = useState([]);
@@ -55,8 +55,8 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
   const inputRef                      = useRef(null);
   const debounceTimer                 = useRef(null);
   const currentQuery                  = useRef('');
+  const abortController              = useRef(null);
 
-  // Call our backend which proxies to Google Places Autocomplete
   const fetchCities = useCallback(async (query) => {
     if (!query || query.length < 1) {
       setSuggestions([]);
@@ -64,25 +64,34 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
       return;
     }
 
+    // Cancel any in-flight request
+    if (abortController.current) {
+      abortController.current.abort();
+    }
+    abortController.current = new AbortController();
+
     currentQuery.current = query;
     setFetching(true);
 
     try {
       const res = await fetch(
         `${API_BASE}/api/route/cities?q=${encodeURIComponent(query)}`,
-        { method: 'GET' }
+        {
+          method: 'GET',
+          signal: abortController.current.signal,
+        }
       );
 
-      // Discard stale responses
       if (currentQuery.current !== query) return;
-
       if (!res.ok) throw new Error('City search failed');
+
       const data = await res.json();
       const cities = data.cities || [];
 
       setSuggestions(cities);
       setOpen(cities.length > 0);
-    } catch {
+    } catch (err) {
+      if (err.name === 'AbortError') return;
       if (currentQuery.current !== query) return;
       setSuggestions([]);
       setOpen(false);
@@ -104,7 +113,8 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
     }
 
     setFetching(true);
-    debounceTimer.current = setTimeout(() => fetchCities(val.trim()), 300);
+    // 250ms debounce — fast enough for local list, safe for Nominatim 1req/s
+    debounceTimer.current = setTimeout(() => fetchCities(val.trim()), 250);
   };
 
   const handleSelect = (city) => {
@@ -126,6 +136,30 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
     setTimeout(() => setOpen(false), 180);
   };
 
+  // Handle keyboard navigation
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
+  const handleKeyDown = (e) => {
+    if (!open || suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+      e.preventDefault();
+      handleSelect(suggestions[highlightedIndex]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
+  // Reset highlight when suggestions change
+  useEffect(() => { setHighlightedIndex(-1); }, [suggestions]);
+
   useEffect(() => {
     const handler = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -136,9 +170,29 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  useEffect(() => () => clearTimeout(debounceTimer.current), []);
+  useEffect(() => () => {
+    clearTimeout(debounceTimer.current);
+    abortController.current?.abort();
+  }, []);
 
   const isDropdownOpen = open || (fetching && value.length > 0);
+
+  // Highlight the matching portion of text
+  const renderCityName = (city) => {
+    const lower = value.toLowerCase();
+    const idx   = city.toLowerCase().indexOf(lower);
+    if (idx < 0) return <span style={{ fontSize: 14, color: '#3D1F00' }}>{city}</span>;
+    const before = city.slice(0, idx);
+    const match  = city.slice(idx, idx + value.length);
+    const after  = city.slice(idx + value.length);
+    return (
+      <span style={{ fontSize: 14, color: '#3D1F00' }}>
+        {before}
+        <strong style={{ color: '#E8650A' }}>{match}</strong>
+        {after}
+      </span>
+    );
+  };
 
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
@@ -163,6 +217,7 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
           onChange={handleInput}
           onFocus={handleFocus}
           onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           autoComplete="off"
           style={{
@@ -172,7 +227,6 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
           }}
         />
 
-        {/* Spinner while fetching */}
         {fetching && (
           <Loader2
             size={15}
@@ -181,7 +235,6 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
           />
         )}
 
-        {/* Clear button */}
         {value && !fetching && (
           <button
             onMouseDown={(e) => {
@@ -196,6 +249,7 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
               background: 'none', border: 'none', cursor: 'pointer',
               color: '#BBA080', fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0,
             }}
+            aria-label="Clear"
           >×</button>
         )}
       </div>
@@ -224,58 +278,39 @@ function CityAutocomplete({ value, onChange, placeholder, icon, label }) {
             </div>
           )}
 
-          {/* Suggestions list */}
-          {suggestions.map((city, i) => {
-            const lower  = value.toLowerCase();
-            const idx    = city.toLowerCase().indexOf(lower);
-            const before = idx >= 0 ? city.slice(0, idx) : city;
-            const match  = idx >= 0 ? city.slice(idx, idx + value.length) : '';
-            const after  = idx >= 0 ? city.slice(idx + value.length) : '';
-
-            return (
-              <div
-                key={city + i}
-                onMouseDown={(e) => { e.preventDefault(); handleSelect(city); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '11px 16px',
-                  cursor: 'pointer',
-                  borderBottom: i < suggestions.length - 1 ? '1px solid #FDF6EC' : 'none',
-                  background: 'white',
-                  transition: 'background .12s',
-                  fontFamily: UI_FONT,
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#FDF6EC'}
-                onMouseLeave={e => e.currentTarget.style.background = 'white'}
-              >
-                {/* Google Maps pin icon */}
-                <svg width="13" height="16" viewBox="0 0 13 16" fill="none" style={{ flexShrink: 0 }}>
-                  <path d="M6.5 0C2.91 0 0 2.91 0 6.5c0 4.5 6.5 9.5 6.5 9.5S13 11 13 6.5C13 2.91 10.09 0 6.5 0zm0 8.75A2.25 2.25 0 1 1 6.5 4.25a2.25 2.25 0 0 1 0 4.5z" fill="#E8650A"/>
-                </svg>
-                <span style={{ fontSize: 14, color: '#3D1F00' }}>
-                  {before}
-                  {match && <strong style={{ color: '#E8650A' }}>{match}</strong>}
-                  {after}
-                </span>
-              </div>
-            );
-          })}
-
-          {/* Google branding — required by Google's ToS */}
-          {suggestions.length > 0 && (
+          {/* No results */}
+          {!fetching && suggestions.length === 0 && value.length >= 2 && (
             <div style={{
-              padding: '6px 14px 8px',
-              display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-              borderTop: '1px solid #F5EDE0',
+              padding: '13px 16px', color: '#BBA080',
+              fontFamily: UI_FONT, fontSize: 13, fontStyle: 'italic',
             }}>
-              <span style={{ fontFamily: UI_FONT, fontSize: 10, color: '#BBA080', marginRight: 4 }}>powered by</span>
-              <svg height="12" viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg">
-                <text y="15" fontSize="13" fontFamily="Arial" fontWeight="bold">
-                  <tspan fill="#4285F4">G</tspan><tspan fill="#EA4335">o</tspan><tspan fill="#FBBC05">o</tspan><tspan fill="#4285F4">g</tspan><tspan fill="#34A853">l</tspan><tspan fill="#EA4335">e</tspan>
-                </text>
-              </svg>
+              No cities found for "{value}"
             </div>
           )}
+
+          {/* Suggestions */}
+          {suggestions.map((city, i) => (
+            <div
+              key={city + i}
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(city); }}
+              onMouseEnter={() => setHighlightedIndex(i)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '11px 16px',
+                cursor: 'pointer',
+                borderBottom: i < suggestions.length - 1 ? '1px solid #FDF6EC' : 'none',
+                background: highlightedIndex === i ? '#FDF6EC' : 'white',
+                transition: 'background .12s',
+                fontFamily: UI_FONT,
+              }}
+            >
+              {/* Map pin icon */}
+              <svg width="13" height="16" viewBox="0 0 13 16" fill="none" style={{ flexShrink: 0 }}>
+                <path d="M6.5 0C2.91 0 0 2.91 0 6.5c0 4.5 6.5 9.5 6.5 9.5S13 11 13 6.5C13 2.91 10.09 0 6.5 0zm0 8.75A2.25 2.25 0 1 1 6.5 4.25a2.25 2.25 0 0 1 0 4.5z" fill="#E8650A"/>
+              </svg>
+              {renderCityName(city)}
+            </div>
+          ))}
         </div>
       )}
     </div>
