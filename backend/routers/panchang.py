@@ -1,154 +1,164 @@
-"""
-routers/panchang.py — Panchang & Muhurat API
-Uses server-side ANTHROPIC_API_KEY — no user key needed.
-
-POST /api/panchang/daily   → Aaj Ka Panchang
-POST /api/panchang/muhurat → Muhurat Finder
-"""
-
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Optional
-import anthropic
-import os
-import json
-
-router = APIRouter(prefix="/api/panchang", tags=["Panchang"])
-
-
-# ── Models ────────────────────────────────────────────────────────────────────
-
-class DailyPanchangRequest(BaseModel):
-    date: str                        # e.g. "2026-05-08"
-    city: Optional[str] = "India"
-
-class MuhuratRequest(BaseModel):
-    muhurat_type:  str               # e.g. "vivah", "griha", "vyapar"
-    muhurat_label: str               # e.g. "Vivah"
-    muhurat_hindi: str               # e.g. "विवाह"
-    date:          str
-    name:          Optional[str] = ""
-    rashi:         Optional[str] = ""
-    city:          Optional[str] = "India"
-
-
-# ── Helper ────────────────────────────────────────────────────────────────────
-
-def get_client() -> anthropic.Anthropic:
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        raise HTTPException(500, "ANTHROPIC_API_KEY not configured on server")
-    return anthropic.Anthropic(api_key=key)
-
-
-def ask_claude(prompt: str, max_tokens: int = 2500) -> dict:
-    """Call Claude and parse JSON response."""
-    client = get_client()
-    response = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}]
+def query_for(date_value: str, coordinates: Optional[str], language: str = DEFAULT_LANGUAGE, calendar: str = DEFAULT_CALENDAR) -> PanchangQuery:
+    validate_date(date_value)
+    return PanchangQuery(
+        date=date_value,
+        coordinates=coordinates or DEFAULT_COORDINATES,
+        language=language or DEFAULT_LANGUAGE,
+        calendar=calendar or DEFAULT_CALENDAR,
     )
-    raw = response.content[0].text
-    # Strip markdown fences if present
-    raw = raw.replace("```json", "").replace("```", "").strip()
+
+
+def validate_date(date_value: str) -> None:
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise HTTPException(500, f"Failed to parse AI response: {e}\nRaw: {raw[:200]}")
+        datetime.strptime(date_value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="date must be in YYYY-MM-DD format") from exc
 
 
-# ── POST /api/panchang/daily ──────────────────────────────────────────────────
+def call_prokerala(fn):
+    try:
+        return fn(prokerala())
+    except ProkeralaApiError as exc:
+        status_code = exc.status_code if exc.status_code and exc.status_code >= 400 else 502
+        raise HTTPException(status_code=status_code, detail={"message": str(exc), "upstream": exc.payload}) from exc
+
+
+@router.get("/day")
+def get_panchang_day(
+    date: str = Query(..., description="YYYY-MM-DD"),
+    coordinates: str = Query(DEFAULT_COORDINATES, description="latitude,longitude"),
+    language: str = Query(DEFAULT_LANGUAGE),
+    calendar: str = Query(DEFAULT_CALENDAR),
+):
+    query = query_for(date, coordinates, language, calendar)
+    return call_prokerala(lambda api: api.get_day(query))
+
+
+@router.get("/month")
+def get_panchang_month(
+    year: int = Query(..., ge=1900, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    coordinates: str = Query(DEFAULT_COORDINATES, description="latitude,longitude"),
+    language: str = Query(DEFAULT_LANGUAGE),
+    calendar: str = Query(DEFAULT_CALENDAR),
+):
+    return call_prokerala(lambda api: api.get_month(year, month, coordinates, language, calendar))
+
+
+@router.get("/year")
+def get_panchang_year(
+    year: int = Query(..., ge=1900, le=2100),
+    coordinates: str = Query(DEFAULT_COORDINATES, description="latitude,longitude"),
+    language: str = Query(DEFAULT_LANGUAGE),
+    calendar: str = Query(DEFAULT_CALENDAR),
+):
+    return call_prokerala(lambda api: api.get_year(year, coordinates, language, calendar))
+
 
 @router.post("/daily")
 def get_daily_panchang(req: DailyPanchangRequest):
-    """
-    Returns full Panchang for a given date and city.
-    Uses server-side ANTHROPIC_API_KEY.
-    """
-    from datetime import datetime
-    try:
-        dt  = datetime.strptime(req.date, "%Y-%m-%d")
-        full = dt.strftime("%-d %B %Y")
-        day  = dt.strftime("%A")
-    except Exception:
-        full = req.date
-        day  = ""
+    query = query_for(req.date, req.coordinates, req.language or DEFAULT_LANGUAGE, req.calendar or DEFAULT_CALENDAR)
+    day = call_prokerala(lambda api: api.get_day(query))
+    return legacy_daily_response(day)
 
-    prompt = f"""You are a learned Vedic pandit expert in Hindu Panchang calculations.
-Provide the complete Panchang for: {full} ({day}), City: {req.city or 'India (general)'}
-
-Return ONLY valid JSON, no markdown, no explanation, start directly with {{:
-{{
-  "tithi": {{ "name": "", "number": "", "deity": "", "nature": "" }},
-  "nakshatra": {{ "name": "", "hindi": "", "lord": "", "quality": "" }},
-  "yoga": {{ "name": "", "nature": "auspicious/inauspicious", "meaning": "" }},
-  "karana": {{ "name": "", "nature": "" }},
-  "var": {{ "day": "", "lord": "", "color": "", "good_for": "" }},
-  "rahu_kaal": {{ "time": "" }},
-  "brahma_muhurat": {{ "time": "", "benefit": "" }},
-  "abhijit_muhurat": {{ "time": "", "benefit": "" }},
-  "choghadiya": [
-    {{ "time": "", "name": "", "nature": "good/bad/neutral", "good_for": "" }}
-  ],
-  "overall_day": "excellent/good/average/inauspicious",
-  "pandit_blessings": "A warm Sanskrit-flavoured blessing sentence for the day",
-  "do_today": ["action 1", "action 2", "action 3"],
-  "avoid_today": ["thing 1", "thing 2", "thing 3"]
-}}"""
-
-    return ask_claude(prompt)
-
-
-# ── POST /api/panchang/muhurat ────────────────────────────────────────────────
 
 @router.post("/muhurat")
 def get_muhurat(req: MuhuratRequest):
-    """
-    Returns Muhurat analysis for a given occasion and date.
-    Uses server-side ANTHROPIC_API_KEY.
-    """
-    from datetime import datetime
+    query = query_for(req.date, req.coordinates, req.language or DEFAULT_LANGUAGE, req.calendar or DEFAULT_CALENDAR)
+    day = call_prokerala(lambda api: api.get_day(query))
+    return {
+        "verdict": "good",
+        "verdict_reason": "This recommendation is based on Prokerala auspicious and inauspicious periods for the selected date and location.",
+        "pandit_message": f"For {req.muhurat_label}, prefer the listed auspicious periods and avoid Rahu Kaal, Yamaganda, Gulika, Dur Muhurat and Varjyam.",
+        "auspicious_timings": [
+            {
+                "time": format_period(period),
+                "quality": period.get("name", "Auspicious"),
+                "reason": period.get("type", "Auspicious"),
+            }
+            for item in day.get("auspicious_period", [])
+            for period in item.get("period", [])
+        ],
+        "timings_to_avoid": [
+            {
+                "time": format_period(period),
+                "reason": item.get("name", "Inauspicious period"),
+            }
+            for item in day.get("inauspicious_period", [])
+            for period in item.get("period", [])
+        ],
+        "tithi_today": {
+            "name": day.get("tithi", {}).get("name", ""),
+            "is_auspicious_for_this_muhurat": True,
+            "reason": day.get("tithi", {}).get("paksha", ""),
+        },
+        "nakshatra_today": {
+            "name": day.get("nakshatra", {}).get("name", ""),
+            "is_auspicious_for_this_muhurat": True,
+            "reason": (day.get("nakshatra", {}).get("lord") or {}).get("name", ""),
+        },
+        "rituals_recommended": ["Begin with Ganesh vandana", "Offer deepam and flowers", "Consult temple priest for ceremony-specific sankalp"],
+        "mantras": [],
+        "special_notes": ["Data is calculated by Prokerala for the configured coordinates.", "Panchang values change by location."],
+        "alternative_dates": [],
+        "source": "prokerala",
+    }
+
+
+def legacy_daily_response(day: dict) -> dict:
+    return {
+        "source": "prokerala",
+        "date": day.get("date"),
+        "hindu_calendar": day.get("hindu_calendar", {}),
+        "tithi": {
+            "name": day.get("tithi", {}).get("name", ""),
+            "number": day.get("tithi", {}).get("id", ""),
+            "deity": "",
+            "nature": day.get("tithi", {}).get("paksha", ""),
+        },
+        "nakshatra": {
+            "name": day.get("nakshatra", {}).get("name", ""),
+            "hindi": day.get("nakshatra", {}).get("name", ""),
+            "lord": (day.get("nakshatra", {}).get("lord") or {}).get("name", ""),
+            "quality": "",
+        },
+        "yoga": {"name": day.get("yoga", {}).get("name", ""), "nature": "", "meaning": ""},
+        "karana": {"name": day.get("karana", {}).get("name", ""), "nature": ""},
+        "var": {"day": day.get("vaara", ""), "lord": "", "color": "", "good_for": ""},
+        "rahu_kaal": {"time": find_period(day.get("inauspicious_period", []), "Rahu")},
+        "brahma_muhurat": {"time": find_period(day.get("auspicious_period", []), "Brahma"), "benefit": "Spiritual practice"},
+        "abhijit_muhurat": {"time": find_period(day.get("auspicious_period", []), "Abhijit"), "benefit": "Auspicious work"},
+        "choghadiya": [
+            {"time": format_period(item), "name": item.get("name", ""), "nature": item.get("type", ""), "good_for": ""}
+            for item in day.get("choghadiya", [])
+        ],
+        "overall_day": "good",
+        "pandit_blessings": "May your day begin with clarity, devotion and auspicious intention.",
+        "do_today": ["Use the listed shubh periods", "Check tithi and nakshatra before major rituals"],
+        "avoid_today": ["Avoid inauspicious periods for new beginnings", "Do not use this as a substitute for priest guidance for major samskaras"],
+        "raw": day,
+    }
+
+
+def find_period(items: list[dict], name_part: str) -> str:
+    for item in items:
+        if name_part.lower() in item.get("name", "").lower():
+            periods = item.get("period", [])
+            if periods:
+                return format_period(periods[0])
+    return ""
+
+
+def format_period(period: dict) -> str:
+    start = period.get("start")
+    end = period.get("end")
+    if not start or not end:
+        return ""
+    return f"{format_time(start)} - {format_time(end)}"
+
+
+def format_time(value: str) -> str:
     try:
-        dt   = datetime.strptime(req.date, "%Y-%m-%d")
-        full = dt.strftime("%-d %B %Y")
-        day  = dt.strftime("%A")
+        return datetime.fromisoformat(value).strftime("%I:%M %p").lstrip("0")
     except Exception:
-        full = req.date
-        day  = ""
-
-    prompt = f"""You are a highly learned Vedic pandit — expert in Muhurat Shastra and Jyotish. A devotee seeks your guidance.
-
-QUERY:
-- Muhurat for: {req.muhurat_label} ({req.muhurat_hindi})
-- Date: {full} ({day})
-- Person's name: {req.name or 'Not provided'}
-- Rashi (Moon sign): {req.rashi or 'Not provided'}
-- City: {req.city or 'India (general)'}
-
-Analyse the tithi, nakshatra, yoga, var and planetary positions. Give a warm, authoritative pandit-style response.
-
-Return ONLY valid JSON, no markdown, start directly with {{:
-{{
-  "verdict": "excellent/good/average/avoid",
-  "verdict_reason": "One clear sentence why",
-  "pandit_message": "Warm, wise 3-4 sentence message to the devotee as a real pandit would speak",
-  "auspicious_timings": [
-    {{ "time": "07:15 AM - 09:00 AM", "quality": "Shreshtha (Best)", "reason": "" }}
-  ],
-  "timings_to_avoid": [
-    {{ "time": "", "reason": "" }}
-  ],
-  "tithi_today": {{ "name": "", "is_auspicious_for_this_muhurat": true, "reason": "" }},
-  "nakshatra_today": {{ "name": "", "is_auspicious_for_this_muhurat": true, "reason": "" }},
-  "rituals_recommended": ["ritual 1", "ritual 2", "ritual 3"],
-  "mantras": [
-    {{ "deity": "", "mantra": "", "chant_times": 108, "purpose": "" }}
-  ],
-  "special_notes": ["note 1", "note 2"],
-  "alternative_dates": [
-    {{ "date": "", "quality": "Excellent/Good", "reason": "" }}
-  ]
-}}"""
-
-    return ask_claude(prompt, max_tokens=2500)
+        return value

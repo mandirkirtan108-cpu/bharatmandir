@@ -115,6 +115,14 @@ export const routeAPI = {
   presets: ()     => api.get('/api/route/presets'),
 };
 
+export const panchangAPI = {
+  getDay: (date, params = {}) => api.get('/api/panchang/day', { params: { date, ...params } }),
+  getMonth: (year, month, params = {}) => api.get('/api/panchang/month', { params: { year, month, ...params } }),
+  getYear: (year, params = {}) => api.get('/api/panchang/year', { params: { year, ...params } }),
+  getDaily: (data) => api.post('/api/panchang/daily', data),
+  getMuhurat: (data) => api.post('/api/panchang/muhurat', data),
+};
+
 // ── User Auth API ────────────────────────────────────────────────────
 const USER_ACCESS_KEY  = 'bm_user_access_token';
 const USER_REFRESH_KEY = 'bm_user_refresh_token';
