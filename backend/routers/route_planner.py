@@ -1,7 +1,8 @@
 """
 Route Planner API for BharatMandir.
-POST /api/route/plan        — AI-powered temple route suggestion
-GET  /api/route/cities      — City autocomplete (local list + Nominatim fallback, FREE)
+POST /api/route/plan            — AI-powered temple route suggestion
+GET  /api/route/cities          — City autocomplete (local list + Nominatim fallback, FREE)
+POST /api/route/nearby-temples  — Temples within radius of a given temple (AI-powered)
 Pure OpenAI knowledge — no DB dependency.
 """
 
@@ -66,6 +67,25 @@ class RoutePlanResponse(BaseModel):
     optimized_plan:      List[OptimizedStop]
     insights:            List[str]
     travel_time_warning: Optional[str] = None
+
+
+# ── Nearby Temples Models ────────────────────
+class NearbyTempleRequest(BaseModel):
+    temple_name: str
+    location:    str
+    radius_km:   int = 15
+
+
+class NearbyTemple(BaseModel):
+    name:                 str
+    deity:                Optional[str] = None
+    distance_km:          float
+    estimated_visit_time: int           # minutes
+    description:          str
+
+
+class NearbyTemplesResponse(BaseModel):
+    nearby_temples: List[NearbyTemple]
 
 
 # ─────────────────────────────────────────────
@@ -535,14 +555,12 @@ async def search_cities(q: str = Query(..., min_length=1, description="City sear
                     "addressdetails": 1,
                 },
                 headers={
-                    # Required by Nominatim ToS — identify your app
                     "User-Agent": "BharatMandir/1.0 (bharatmandir@example.com)",
                     "Accept-Language": "en",
                 },
             )
 
         if res.status_code != 200:
-            # Nominatim failed — return whatever local results we have
             return CitySearchResponse(cities=local_results)
 
         data = res.json()
@@ -550,7 +568,6 @@ async def search_cities(q: str = Query(..., min_length=1, description="City sear
         seen = set(c.lower() for c in local_results)
 
         for item in data:
-            # Extract just the city/town/village name from display_name
             addr = item.get("address", {})
             name = (
                 addr.get("city")
@@ -564,12 +581,10 @@ async def search_cities(q: str = Query(..., min_length=1, description="City sear
                 seen.add(name.lower())
                 nominatim_cities.append(name)
 
-        # Merge: local results first (better quality), then Nominatim additions
         merged = local_results + nominatim_cities
         return CitySearchResponse(cities=merged[:8])
 
     except Exception:
-        # Network error or timeout — gracefully fall back to local results only
         return CitySearchResponse(cities=local_results)
 
 
@@ -734,6 +749,78 @@ Time budget: {req.time_available} hours
                 )
 
         return RoutePlanResponse(**parsed)
+
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {e}")
+    except openai_lib.APIError as e:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────
+# POST /api/route/nearby-temples
+# ─────────────────────────────────────────────
+
+@router.post("/nearby-temples", response_model=NearbyTemplesResponse)
+async def get_nearby_temples(req: NearbyTempleRequest):
+    """
+    Given a temple name + location, returns up to 8 real nearby temples
+    within radius_km using OpenAI's knowledge, sorted by distance.
+    """
+    client = get_openai_client()
+
+    prompt = f"""You are India's most knowledgeable spiritual travel guide.
+
+TASK: Find temples near "{req.temple_name}" in {req.location}, within {req.radius_km} km.
+
+RULES:
+1. Only include REAL temples that actually exist near this location.
+2. Do NOT invent temples. If fewer than 3 exist nearby, return only what is real.
+3. Exclude the temple itself ({req.temple_name}) from results.
+4. Provide accurate distance estimates based on your knowledge of this area.
+5. Each temple should have a compelling description (1-2 sentences) about its significance.
+6. Return ONLY valid JSON — no markdown, no extra text.
+
+OUTPUT FORMAT (strict JSON):
+{{
+  "nearby_temples": [
+    {{
+      "name": "Temple Name",
+      "deity": "Deity name or null",
+      "distance_km": 2.5,
+      "estimated_visit_time": 30,
+      "description": "Brief spiritual significance and why to visit."
+    }}
+  ]
+}}
+
+Radius: {req.radius_km} km from {req.temple_name}, {req.location}
+Return up to 8 temples, sorted by distance (nearest first)."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            max_tokens=1500,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are India's most knowledgeable spiritual travel guide with deep knowledge "
+                        "of every temple across all states. You only mention temples that truly exist. "
+                        "Respond only with valid JSON."
+                    )
+                },
+                {"role": "user", "content": prompt}
+            ],
+        )
+
+        raw    = response.choices[0].message.content
+        parsed = json.loads(raw)
+        return NearbyTemplesResponse(**parsed)
 
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {e}")
