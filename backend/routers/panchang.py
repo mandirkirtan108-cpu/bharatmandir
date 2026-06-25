@@ -1,3 +1,53 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
+
+from services.prokerala_client import (
+    DEFAULT_CALENDAR,
+    DEFAULT_COORDINATES,
+    DEFAULT_LANGUAGE,
+    PanchangQuery,
+    ProkeralaApiError,
+    ProkeralaClient,
+    ProkeralaConfigError,
+)
+
+
+router = APIRouter(prefix="/api/panchang", tags=["Panchang"])
+
+
+class DailyPanchangRequest(BaseModel):
+    date: str
+    city: Optional[str] = "India"
+    coordinates: Optional[str] = None
+    language: Optional[str] = DEFAULT_LANGUAGE
+    calendar: Optional[str] = DEFAULT_CALENDAR
+
+
+class MuhuratRequest(BaseModel):
+    muhurat_type: str
+    muhurat_label: str
+    muhurat_hindi: str
+    date: str
+    name: Optional[str] = ""
+    rashi: Optional[str] = ""
+    city: Optional[str] = "India"
+    coordinates: Optional[str] = None
+    language: Optional[str] = DEFAULT_LANGUAGE
+    calendar: Optional[str] = DEFAULT_CALENDAR
+
+
+def prokerala() -> ProkeralaClient:
+    try:
+        return ProkeralaClient()
+    except ProkeralaConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 def query_for(date_value: str, coordinates: Optional[str], language: str = DEFAULT_LANGUAGE, calendar: str = DEFAULT_CALENDAR) -> PanchangQuery:
     validate_date(date_value)
     return PanchangQuery(
