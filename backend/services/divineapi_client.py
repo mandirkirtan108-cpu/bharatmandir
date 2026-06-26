@@ -11,9 +11,10 @@ import requests
 from dotenv import load_dotenv
 
 try:
-    from db.panchang_cache import get_cached_panchang, save_cached_panchang
+    from db.panchang_cache import get_cached_panchang, get_cached_panchang_month, save_cached_panchang
 except Exception:
     get_cached_panchang = None
+    get_cached_panchang_month = None
     save_cached_panchang = None
 
 
@@ -159,7 +160,30 @@ class DivineApiClient:
 
         days = []
         missing_dates = []
-        for day in range(1, calendar_module.monthrange(year, month)[1] + 1):
+        total_days = calendar_module.monthrange(year, month)[1]
+        if cache_only:
+            cached_days = self._get_cached_month(year, month, coordinates, language, calendar)
+            for day in range(1, total_days + 1):
+                current = f"{year}-{month:02d}-{day:02d}"
+                cached = cached_days.get(current)
+                if cached:
+                    cached["cache"] = cached.get("cache") or "database"
+                    days.append(cached)
+                else:
+                    missing_dates.append(current)
+            return {
+                "status": "ok",
+                "source": "database-cache",
+                "year": year,
+                "month": month,
+                "coordinates": coordinates,
+                "calendar": calendar,
+                "language": language,
+                "missing_dates": missing_dates,
+                "days": days,
+            }
+
+        for day in range(1, total_days + 1):
             current = f"{year}-{month:02d}-{day:02d}"
             try:
                 days.append(
@@ -218,6 +242,32 @@ class DivineApiClient:
             cached["cache"] = "file"
             return cached
         return None
+
+    def _get_cached_month(self, year: int, month: int, coordinates: str, language: str, calendar: str) -> dict[str, dict[str, Any]]:
+        if get_cached_panchang_month:
+            try:
+                import calendar as calendar_module
+
+                start_date = f"{year}-{month:02d}-01"
+                end_date = f"{year}-{month:02d}-{calendar_module.monthrange(year, month)[1]:02d}"
+                return get_cached_panchang_month(start_date, end_date, coordinates, calendar, language, CACHE_VERSION)
+            except Exception as exc:
+                print(f"Database Panchang month cache read skipped: {exc}")
+        return self._get_cached_month_files(year, month, coordinates, language, calendar)
+
+    def _get_cached_month_files(self, year: int, month: int, coordinates: str, language: str, calendar: str) -> dict[str, dict[str, Any]]:
+        import calendar as calendar_module
+
+        cached_days = {}
+        for day in range(1, calendar_module.monthrange(year, month)[1] + 1):
+            current = f"{year}-{month:02d}-{day:02d}"
+            query = PanchangQuery(date=current, coordinates=coordinates, language=language, calendar=calendar)
+            cache_file = CACHE_DIR / query.cache_key
+            if cache_file.exists():
+                cached = json.loads(cache_file.read_text(encoding="utf-8"))
+                cached["cache"] = "file"
+                cached_days[current] = cached
+        return cached_days
 
     def _save_cached_day(self, query: PanchangQuery, payload: dict[str, Any], cache_file: Path) -> None:
         if save_cached_panchang:

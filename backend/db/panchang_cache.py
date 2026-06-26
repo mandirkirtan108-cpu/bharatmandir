@@ -55,6 +55,33 @@ def get_cached_panchang(
         return row["payload"] if row else None
 
 
+def get_cached_panchang_month(
+    start_date: str,
+    end_date: str,
+    coordinates: str,
+    calendar_type: str,
+    language: str,
+    ayanamsa: int,
+) -> dict[str, dict[str, Any]]:
+    ensure_panchang_cache_table()
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT date::text AS date_key, payload
+            FROM panchang_cache
+            WHERE date >= %s
+              AND date <= %s
+              AND coordinates = %s
+              AND calendar_type = %s
+              AND language = %s
+              AND ayanamsa = %s
+            ORDER BY date
+            """,
+            (start_date, end_date, coordinates, calendar_type, language, ayanamsa),
+        )
+        return {row["date_key"]: row["payload"] for row in cur.fetchall()}
+
+
 def save_cached_panchang(
     date_value: str,
     coordinates: str,
