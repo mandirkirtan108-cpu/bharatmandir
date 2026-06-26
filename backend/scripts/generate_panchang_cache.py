@@ -12,21 +12,22 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
-from services.prokerala_client import DEFAULT_CALENDAR, DEFAULT_COORDINATES, DEFAULT_LANGUAGE, PanchangQuery, ProkeralaClient
+from services.divineapi_client import DEFAULT_CALENDAR, DEFAULT_COORDINATES, DEFAULT_LANGUAGE, PanchangQuery, DivineApiClient
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate Bharat Mandir Panchang cache from Prokerala.")
+    parser = argparse.ArgumentParser(description="Generate Bharat Mandir Panchang cache from DivineAPI Vedic Prakash.")
     parser.add_argument("--year", type=int, required=True)
     parser.add_argument("--coordinates", default=DEFAULT_COORDINATES)
     parser.add_argument("--calendar", default=DEFAULT_CALENDAR)
     parser.add_argument("--language", default=DEFAULT_LANGUAGE)
-    parser.add_argument("--delay", type=float, default=61.0, help="Delay between days. Sandbox/free tier is 5 requests per 60 seconds, and one day uses multiple calls.")
-    parser.add_argument("--include-timing-details", action="store_true", help="Also fetch Choghadiya and Hora. This is slower and more likely to hit sandbox/free-tier limits.")
-    parser.add_argument("--sandbox", action="store_true", help="Generate only January 1 because Prokerala sandbox clients reject other dates.")
+    parser.add_argument("--delay", type=float, default=0.5, help="Delay between days. One cached day uses multiple DivineAPI calls.")
+    parser.add_argument("--skip-choghadiya", action="store_true", help="Do not fetch Choghadiya while generating cache.")
+    parser.add_argument("--skip-festivals", action="store_true", help="Do not fetch date-specific festivals while generating cache.")
+    parser.add_argument("--sandbox", action="store_true", help="Generate only January 1 for a quick credential/API smoke test.")
     args = parser.parse_args()
 
-    client = ProkeralaClient()
+    client = DivineApiClient()
     total = 0
     month_range = [1] if args.sandbox else range(1, 13)
     for month in month_range:
@@ -44,7 +45,8 @@ def main() -> int:
                     language=args.language,
                 ),
                 force_refresh=True,
-                include_timing_details=args.include_timing_details,
+                include_choghadiya=not args.skip_choghadiya,
+                include_festivals=not args.skip_festivals,
             )
             for warning in payload.get("warnings", []):
                 print(f"  warning: {warning['endpoint']} skipped: {warning.get('message')}")

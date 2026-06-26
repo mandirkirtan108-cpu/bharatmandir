@@ -118,7 +118,7 @@ export default function PanchangCalendar() {
               Panchang Calendar
             </h2>
             <p style={{ fontFamily: UI_FONT, color: '#9A7150', fontSize: 14, margin: '4px 0 0' }}>
-              Accurate Prokerala tithi, nakshatra, Hindu calendar and daily timings from backend cache
+              Tithi, nakshatra, Hindu calendar and daily timings served from Bharat Mandir database
             </p>
           </div>
         </div>
@@ -141,7 +141,7 @@ export default function PanchangCalendar() {
                   {MONTH_NAMES[month]} {year}
                 </div>
                 <div style={{ fontFamily: UI_FONT, fontSize: 12, color: 'rgba(255,213,128,0.8)', marginTop: 2 }}>
-                  Amanta calendar - cached from Prokerala
+                  Amanta calendar - cached from Bharat Mandir database
                 </div>
               </div>
               <button onClick={nextMonth} style={navBtnStyle} aria-label="Next month"><ChevronRight size={18} /></button>
@@ -150,6 +150,11 @@ export default function PanchangCalendar() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 4px' }}>
               <button onClick={goToday} style={todayBtnStyle}>Today</button>
               {loading && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#9A7150', fontSize: 12 }}><Loader2 size={14} className="spin-icon" /> Loading month</span>}
+              {!loading && monthData?.missing_dates?.length > 0 && (
+                <span style={{ color: '#b45309', fontSize: 12, fontFamily: UI_FONT }}>
+                  {monthData.missing_dates.length} days not cached
+                </span>
+              )}
             </div>
 
             {error && (
@@ -212,7 +217,7 @@ export default function PanchangCalendar() {
                     <span style={{
                       fontFamily: UI_FONT, fontSize: 9, color: selected ? 'rgba(255,255,255,.82)' : '#9A7150',
                       maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{hinduMonth && hinduDay ? `${hinduMonth} ${hinduDay}` : 'Loading'}</span>
+                    }}>{hinduMonth && hinduDay ? `${hinduMonth} ${hinduDay}` : 'Not cached'}</span>
                   </button>
                 );
               })}
@@ -291,6 +296,20 @@ function DayDetailPanel({ selectedKey, day, loading }) {
           </div>
         ))}
       </div>
+
+      {day.festivals?.length > 0 && (
+        <div style={{ ...panelStyle, background: '#fff7ed' }}>
+          <h3 style={{ fontFamily: 'var(--font-display,serif)', fontSize: 15, fontWeight: 800, color: '#3D1F00', margin: '0 0 12px' }}>
+            Festivals & Vrat
+          </h3>
+          {day.festivals.slice(0, 5).map((festival) => (
+            <div key={festival.name} style={detailRowStyle}>
+              <span style={{ color: '#9A7150', fontWeight: 700 }}>{festival.name}</span>
+              <span style={{ color: '#3D1F00', fontWeight: 700, textAlign: 'right' }}>{festival.date || festival.start_date || selectedKey}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ ...panelStyle, background: '#fffaf2' }}>
         <h3 style={{ fontFamily: 'var(--font-display,serif)', fontSize: 15, fontWeight: 800, color: '#3D1F00', margin: '0 0 12px' }}>

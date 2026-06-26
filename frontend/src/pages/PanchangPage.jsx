@@ -33,6 +33,13 @@ const VERDICT_BG    = { excellent: '#f0fdf4', good: '#eff6ff', average: '#fffbeb
 const VERDICT_ICON  = { excellent: '🌟', good: '✅', average: '⚡', avoid: '❌' };
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const DEFAULT_COORDINATES = '28.6139,77.2090';
+
+function apiErrorMessage(data, fallback) {
+  if (!data?.detail) return fallback;
+  if (typeof data.detail === 'string') return data.detail;
+  return data.detail.message || fallback;
+}
 
 function to12h(timeStr) {
   if (!timeStr) return timeStr;
@@ -144,13 +151,20 @@ export default function PanchangPage() {
   const fetchDailyPanchang = async () => {
     setDailyLoading(true); setDailyResult(null); setError(null);
     try {
+      const trimmedCity = city.trim();
       const res = await fetch(`${API_BASE}/api/panchang/daily`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, city: city || 'India' }),
+        body: JSON.stringify({
+          date,
+          city: trimmedCity || 'India',
+          coordinates: trimmedCity ? null : DEFAULT_COORDINATES,
+          calendar: 'amanta',
+          language: 'en',
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to load Panchang');
+      if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to load Panchang'));
       setDailyResult(data);
     } catch (e) {
       setError('Could not load Panchang: ' + e.message);
@@ -163,6 +177,7 @@ export default function PanchangPage() {
     if (!selected) { setError('Please select an occasion first.'); return; }
     setLoading(true); setResult(null); setError(null);
     try {
+      const trimmedCity = city.trim();
       const res = await fetch(`${API_BASE}/api/panchang/muhurat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,11 +185,17 @@ export default function PanchangPage() {
           muhurat_type:  selected,
           muhurat_label: selectedType?.label || selected,
           muhurat_hindi: selectedType?.hindi || '',
-          date, name: name || '', rashi: rashi || '', city: city || 'India',
+          date,
+          name: name || '',
+          rashi: rashi || '',
+          city: trimmedCity || 'India',
+          coordinates: trimmedCity ? null : DEFAULT_COORDINATES,
+          calendar: 'amanta',
+          language: 'en',
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to get Muhurat');
+      if (!res.ok) throw new Error(apiErrorMessage(data, 'Failed to get Muhurat'));
       setResult(data);
     } catch (e) {
       setError('Could not get Muhurat: ' + e.message);
