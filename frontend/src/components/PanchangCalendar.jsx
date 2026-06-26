@@ -37,6 +37,26 @@ function firstPeriod(items, namePart) {
   return `${formatTime(period.start)} - ${formatTime(period.end)}`;
 }
 
+function calendarCellSubLabel(day) {
+  if (!day) return 'Not cached';
+  const hinduDay = day.hindu_calendar?.day;
+  const hinduMonth = day.hindu_calendar?.month_name;
+  if (hinduMonth && hinduDay) return `${hinduMonth} ${hinduDay}`;
+  if (day.tithi?.paksha) return day.tithi.paksha;
+  if (day.calendar_type) return day.calendar_type;
+  return 'Cached';
+}
+
+function selectedDateMeta(day) {
+  if (!day) return '';
+  const parts = [];
+  if (day.vaara) parts.push(day.vaara);
+  if (day.hindu_calendar?.month_name) parts.push(day.hindu_calendar.month_name);
+  if (day.hindu_calendar?.day) parts.push(String(day.hindu_calendar.day));
+  if (!parts.length && day.tithi?.paksha) parts.push(day.tithi.paksha);
+  return parts.join(' - ');
+}
+
 export default function PanchangCalendar() {
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -184,8 +204,7 @@ export default function PanchangCalendar() {
                 const isSunday = date.getDay() === 0;
                 const isSaturday = date.getDay() === 6;
                 const tithi = day?.tithi?.name || '-';
-                const hinduDay = day?.hindu_calendar?.day;
-                const hinduMonth = day?.hindu_calendar?.month_name;
+                const cellSubLabel = calendarCellSubLabel(day);
 
                 return (
                   <button
@@ -217,7 +236,7 @@ export default function PanchangCalendar() {
                     <span style={{
                       fontFamily: UI_FONT, fontSize: 9, color: selected ? 'rgba(255,255,255,.82)' : '#9A7150',
                       maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{hinduMonth && hinduDay ? `${hinduMonth} ${hinduDay}` : 'Not cached'}</span>
+                    }}>{cellSubLabel}</span>
                   </button>
                 );
               })}
@@ -270,9 +289,11 @@ function DayDetailPanel({ selectedKey, day, loading }) {
         <div style={{ fontFamily: 'var(--font-display,serif)', fontSize: 25, fontWeight: 800, lineHeight: 1.1 }}>
           {selectedKey}
         </div>
-        <div style={{ fontFamily: UI_FONT, fontSize: 13, color: 'rgba(255,213,128,0.8)', marginTop: 5 }}>
-          {day.vaara || '-'} - {day.hindu_calendar?.month_name || '-'} {day.hindu_calendar?.day || ''}
-        </div>
+        {selectedDateMeta(day) && (
+          <div style={{ fontFamily: UI_FONT, fontSize: 13, color: 'rgba(255,213,128,0.8)', marginTop: 5 }}>
+            {selectedDateMeta(day)}
+          </div>
+        )}
       </div>
 
       <div style={panelStyle}>
