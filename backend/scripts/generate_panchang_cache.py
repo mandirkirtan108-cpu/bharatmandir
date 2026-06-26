@@ -21,15 +21,26 @@ def main() -> int:
     parser.add_argument("--coordinates", default=DEFAULT_COORDINATES)
     parser.add_argument("--calendar", default=DEFAULT_CALENDAR)
     parser.add_argument("--language", default=DEFAULT_LANGUAGE)
+    parser.add_argument(
+        "--months",
+        type=int,
+        nargs="+",
+        default=[6, 7],
+        help="Months to generate. Default is June and July only for testing.",
+    )
     parser.add_argument("--delay", type=float, default=0.5, help="Delay between days. One cached day uses multiple DivineAPI calls.")
     parser.add_argument("--skip-choghadiya", action="store_true", help="Do not fetch Choghadiya while generating cache.")
     parser.add_argument("--skip-festivals", action="store_true", help="Do not fetch date-specific festivals while generating cache.")
     parser.add_argument("--sandbox", action="store_true", help="Generate only January 1 for a quick credential/API smoke test.")
     args = parser.parse_args()
 
+    invalid_months = [month for month in args.months if month < 1 or month > 12]
+    if invalid_months:
+        parser.error(f"--months values must be between 1 and 12. Invalid: {invalid_months}")
+
     client = DivineApiClient()
     total = 0
-    month_range = [1] if args.sandbox else range(1, 13)
+    month_range = [1] if args.sandbox else sorted(set(args.months))
     for month in month_range:
         import calendar as calendar_module
 
@@ -52,7 +63,7 @@ def main() -> int:
                 print(f"  warning: {warning['endpoint']} skipped: {warning.get('message')}")
             total += 1
             time.sleep(args.delay)
-    print(f"Generated {total} cached Panchang days for {args.year}.")
+    print(f"Generated {total} cached Panchang days for {args.year}, months: {month_range}.")
     return 0
 
 
