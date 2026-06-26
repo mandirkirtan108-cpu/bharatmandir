@@ -53,6 +53,31 @@ CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "divineapi_cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def normalize_coordinates(coordinates: str) -> str:
+    try:
+        lat, lon = [float(part.strip()) for part in coordinates.split(",", 1)]
+        return f"{lat:.4f},{lon:.4f}"
+    except Exception:
+        return coordinates.strip()
+
+
+def coordinate_variants(coordinates: str) -> list[str]:
+    normalized = normalize_coordinates(coordinates)
+    variants = {coordinates.strip(), normalized}
+    try:
+        lat, lon = [float(part.strip()) for part in coordinates.split(",", 1)]
+        variants.add(f"{lat},{lon}")
+        variants.add(f"{lat:.6f},{lon:.6f}")
+    except Exception:
+        pass
+    return sorted(variants)
+
+
+def cache_key_for(date_value: str, coordinates: str, calendar: str, language: str, ayanamsa: int) -> str:
+    safe_coordinates = normalize_coordinates(coordinates).replace(",", "_").replace(".", "-")
+    return f"{date_value}_{safe_coordinates}_{calendar}_{language}_{ayanamsa}.json"
+
+
 class DivineApiConfigError(RuntimeError):
     pass
 
@@ -76,8 +101,7 @@ class PanchangQuery:
 
     @property
     def cache_key(self) -> str:
-        safe_coordinates = self.coordinates.replace(",", "_").replace(".", "-")
-        return f"{self.date}_{safe_coordinates}_{self.calendar}_{self.language}_{self.ayanamsa}.json"
+        return cache_key_for(self.date, self.coordinates, self.calendar, self.language, self.ayanamsa)
 
     @property
     def date_parts(self) -> tuple[int, int, int]:
@@ -86,7 +110,7 @@ class PanchangQuery:
 
     @property
     def lat_lon(self) -> tuple[str, str]:
-        lat, lon = [part.strip() for part in self.coordinates.split(",", 1)]
+        lat, lon = [part.strip() for part in normalize_coordinates(self.coordinates).split(",", 1)]
         return lat, lon
 
 
@@ -221,7 +245,7 @@ class DivineApiClient:
             "status": "ok",
             "source": "database-cache" if cache_only else "divineapi-cache",
             "year": year,
-            "coordinates": coordinates,
+            "coordinates": normalize_coordinates(coordinates),
             "calendar": calendar,
             "language": language,
             "months": [self.get_month(year, month, coordinates, language, calendar, cache_only) for month in range(1, 13)],
@@ -230,30 +254,43 @@ class DivineApiClient:
     def _get_cached_day(self, query: PanchangQuery, cache_file: Path) -> dict[str, Any] | None:
         if get_cached_panchang:
             try:
-                cached = get_cached_panchang(query.date, query.coordinates, query.calendar, query.language, query.ayanamsa)
+                cached = get_cached_panchang(query.date, normalize_coordinates(query.coordinates), query.calendar, query.language, query.ayanamsa)
                 if cached:
                     cached["cache"] = "database"
                     return cached
             except Exception as exc:
                 print(f"Database Panchang cache read skipped: {exc}")
 
-        if cache_file.exists():
-            cached = json.loads(cache_file.read_text(encoding="utf-8"))
-            cached["cache"] = "file"
-            return cached
+        for candidate in self._cache_file_candidates(query):
+            if candidate.exists():
+                cached = json.loads(candidate.read_text(encoding="utf-8"))
+                cached["cache"] = "file"
+                return cached
         return None
 
     def _get_cached_month(self, year: int, month: int, coordinates: str, language: str, calendar: str) -> dict[str, dict[str, Any]]:
+        cached_days = {}
         if get_cached_panchang_month:
             try:
                 import calendar as calendar_module
 
                 start_date = f"{year}-{month:02d}-01"
                 end_date = f"{year}-{month:02d}-{calendar_module.monthrange(year, month)[1]:02d}"
-                return get_cached_panchang_month(start_date, end_date, coordinates, calendar, language, CACHE_VERSION)
+                cached_days.update(
+                    get_cached_panchang_month(
+                        start_date,
+                        end_date,
+                        normalize_coordinates(coordinates),
+                        calendar,
+                        language,
+                        CACHE_VERSION,
+                    )
+                )
             except Exception as exc:
                 print(f"Database Panchang month cache read skipped: {exc}")
-        return self._get_cached_month_files(year, month, coordinates, language, calendar)
+        file_days = self._get_cached_month_files(year, month, coordinates, language, calendar)
+        file_days.update(cached_days)
+        return file_days
 
     def _get_cached_month_files(self, year: int, month: int, coordinates: str, language: str, calendar: str) -> dict[str, dict[str, Any]]:
         import calendar as calendar_module
@@ -262,22 +299,29 @@ class DivineApiClient:
         for day in range(1, calendar_module.monthrange(year, month)[1] + 1):
             current = f"{year}-{month:02d}-{day:02d}"
             query = PanchangQuery(date=current, coordinates=coordinates, language=language, calendar=calendar)
-            cache_file = CACHE_DIR / query.cache_key
-            if cache_file.exists():
-                cached = json.loads(cache_file.read_text(encoding="utf-8"))
-                cached["cache"] = "file"
-                cached_days[current] = cached
+            for cache_file in self._cache_file_candidates(query):
+                if cache_file.exists():
+                    cached = json.loads(cache_file.read_text(encoding="utf-8"))
+                    cached["cache"] = "file"
+                    cached_days[current] = cached
+                    break
         return cached_days
 
     def _save_cached_day(self, query: PanchangQuery, payload: dict[str, Any], cache_file: Path) -> None:
         if save_cached_panchang:
             try:
-                save_cached_panchang(query.date, query.coordinates, query.calendar, query.language, query.ayanamsa, payload)
+                save_cached_panchang(query.date, normalize_coordinates(query.coordinates), query.calendar, query.language, query.ayanamsa, payload)
                 payload["cache"] = "database"
             except Exception as exc:
                 print(f"Database Panchang cache write skipped: {exc}")
 
         cache_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _cache_file_candidates(self, query: PanchangQuery) -> list[Path]:
+        return [
+            CACHE_DIR / cache_key_for(query.date, coordinates, query.calendar, query.language, query.ayanamsa)
+            for coordinates in coordinate_variants(query.coordinates)
+        ]
 
     def _post(self, label: str, url: str, query: PanchangQuery, include_language: bool = True, include_sign_language: bool = False) -> dict[str, Any]:
         body = self._body(query, include_language=include_language)
@@ -362,7 +406,7 @@ def normalize_day(
 
     return {
         "date": query.date,
-        "coordinates": query.coordinates,
+        "coordinates": normalize_coordinates(query.coordinates),
         "calendar_type": query.calendar,
         "language": query.language,
         "source": "divineapi",
