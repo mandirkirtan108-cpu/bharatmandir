@@ -1,0 +1,812 @@
+{
+  "date": "2026-06-06",
+  "coordinates": "28.6139,77.209",
+  "calendar_type": "amanta",
+  "language": "en",
+  "source": "divineapi",
+  "hindu_calendar": {
+    "name": "Amanta",
+    "month_name": "",
+    "day": "6",
+    "year": "",
+    "year_name": ""
+  },
+  "vaara": "",
+  "tithi": {
+    "id": "6",
+    "name": "Shasthi",
+    "paksha": "Krishna",
+    "start": "2026-06-06 01:21:14",
+    "end": "2026-06-07 02:41:14",
+    "lord": {}
+  },
+  "nakshatra": {
+    "id": "",
+    "name": "",
+    "paksha": "",
+    "start": "",
+    "end": "",
+    "lord": {}
+  },
+  "yoga": {
+    "id": "26",
+    "name": "Indra or Aindra",
+    "paksha": "",
+    "start": "2026-06-05 09:43:14",
+    "end": "2026-06-06 10:05:14",
+    "lord": {}
+  },
+  "karana": {
+    "id": "",
+    "name": "Gar",
+    "paksha": "Krishna",
+    "start": "2026-06-06 01:21:14",
+    "end": "2026-06-06 14:05:14",
+    "lord": {}
+  },
+  "sunrise": "2026-06-06 05:23:00",
+  "sunset": "2026-06-06 19:16:18",
+  "moonrise": "",
+  "moonset": "",
+  "auspicious_period": [
+    {
+      "name": "Brahma Muhurta",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 04:02:07",
+          "end": "2026-06-06 04:42:31"
+        }
+      ]
+    },
+    {
+      "name": "Abhijit Muhurta",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 11:52:07",
+          "end": "2026-06-06 12:47:43"
+        }
+      ]
+    },
+    {
+      "name": "Godhuli Muhurta",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 19:16:46",
+          "end": "2026-06-06 19:36:58"
+        }
+      ]
+    },
+    {
+      "name": "Pratah Sandhya",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 04:22:19",
+          "end": "2026-06-06 05:22:55"
+        }
+      ]
+    },
+    {
+      "name": "Sayahana Sandhya",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 19:16:46",
+          "end": "2026-06-06 20:17:22"
+        }
+      ]
+    },
+    {
+      "name": "Nishita Muhurta",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 23:59:34",
+          "end": "2026-06-07 00:39:58"
+        }
+      ]
+    },
+    {
+      "name": "Vijay Muhurta",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 14:38:55",
+          "end": "2026-06-06 15:34:31"
+        }
+      ]
+    },
+    {
+      "name": "Sarvartha Siddhi Yoga",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 05:22:55",
+          "end": "2026-06-06 06:03:07"
+        }
+      ]
+    },
+    {
+      "name": "Ravi Yoga",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 06:04:07",
+          "end": "2026-06-07 05:22:51"
+        }
+      ]
+    },
+    {
+      "name": "Amrit Kalam",
+      "type": "Auspicious",
+      "period": [
+        {
+          "start": "2026-06-06 20:43:01",
+          "end": "2026-06-06 22:26:25"
+        }
+      ]
+    }
+  ],
+  "inauspicious_period": [
+    {
+      "name": "Rahu Kaal",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-06 08:51:22",
+          "end": "2026-06-06 10:35:36"
+        }
+      ]
+    },
+    {
+      "name": "Gulkai Kaal",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-06 05:22:55",
+          "end": "2026-06-06 07:07:08"
+        }
+      ]
+    },
+    {
+      "name": "Yamaganda",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-06 14:04:04",
+          "end": "2026-06-06 15:48:18"
+        }
+      ]
+    },
+    {
+      "name": "Baana",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-07 04:06:55",
+          "end": "2026-06-07 05:22:51"
+        }
+      ]
+    },
+    {
+      "name": "Panchaka",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-06 19:04:55",
+          "end": "2026-06-07 05:22:51"
+        }
+      ]
+    },
+    {
+      "name": "Varjyam",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-06 10:24:36",
+          "end": "2026-06-06 12:08:44"
+        }
+      ]
+    },
+    {
+      "name": "Dur Muhurtam",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-06 07:14:07",
+          "end": "2026-06-06 08:10:07"
+        }
+      ]
+    },
+    {
+      "name": "Visha Yoga",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-07 02:41:55",
+          "end": "2026-06-07 05:21:55"
+        }
+      ]
+    },
+    {
+      "name": "Vidaal Yoga",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-06 06:04:07",
+          "end": "2026-06-07 05:22:51"
+        }
+      ]
+    },
+    {
+      "name": "Vidaal Yoga Detailed",
+      "type": "Inauspicious",
+      "period": [
+        {
+          "start": "2026-06-06 06:04:07",
+          "end": "2026-06-07 05:22:51"
+        }
+      ]
+    }
+  ],
+  "choghadiya": [
+    {
+      "name": "Kaal",
+      "type": "Inauspicious",
+      "is_day": true,
+      "start": "05:23 AM",
+      "end": "07:07 AM",
+      "time": "05:23 AM to 07:07 AM"
+    },
+    {
+      "name": "Shubh",
+      "type": "Auspicious",
+      "is_day": true,
+      "start": "07:07 AM",
+      "end": "08:51 AM",
+      "time": "07:07 AM to 08:51 AM"
+    },
+    {
+      "name": "Rog",
+      "type": "Inauspicious",
+      "is_day": true,
+      "start": "08:51 AM",
+      "end": "10:35 AM",
+      "time": "08:51 AM to 10:35 AM"
+    },
+    {
+      "name": "Udveg",
+      "type": "Inauspicious",
+      "is_day": true,
+      "start": "10:35 AM",
+      "end": "12:19 PM",
+      "time": "10:35 AM to 12:19 PM"
+    },
+    {
+      "name": "Char",
+      "type": "Good",
+      "is_day": true,
+      "start": "12:19 PM",
+      "end": "02:03 PM",
+      "time": "12:19 PM to 02:03 PM"
+    },
+    {
+      "name": "Labh",
+      "type": "Auspicious",
+      "is_day": true,
+      "start": "02:03 PM",
+      "end": "03:47 PM",
+      "time": "02:03 PM to 03:47 PM"
+    },
+    {
+      "name": "Amrit",
+      "type": "Auspicious",
+      "is_day": true,
+      "start": "03:47 PM",
+      "end": "05:31 PM",
+      "time": "03:47 PM to 05:31 PM"
+    },
+    {
+      "name": "Kaal",
+      "type": "Inauspicious",
+      "is_day": true,
+      "start": "05:31 PM",
+      "end": "07:15 PM",
+      "time": "05:31 PM to 07:15 PM"
+    },
+    {
+      "name": "Labh",
+      "type": "Auspicious",
+      "is_day": false,
+      "start": "07:17 PM",
+      "end": "08:33 PM",
+      "time": "07:17 PM to 08:33 PM"
+    },
+    {
+      "name": "Udveg",
+      "type": "Inauspicious",
+      "is_day": false,
+      "start": "08:33 PM",
+      "end": "09:49 PM",
+      "time": "08:33 PM to 09:49 PM"
+    },
+    {
+      "name": "Shubh",
+      "type": "Auspicious",
+      "is_day": false,
+      "start": "09:49 PM",
+      "end": "11:05 PM",
+      "time": "09:49 PM to 11:05 PM"
+    },
+    {
+      "name": "Amrit",
+      "type": "Auspicious",
+      "is_day": false,
+      "start": "11:05 PM",
+      "end": "12:21 AM Jun 07",
+      "time": "11:05 PM to 12:21 AM Jun 07"
+    },
+    {
+      "name": "Char",
+      "type": "Good",
+      "is_day": false,
+      "start": "12:21 AM",
+      "end": "01:37 AM Jun 07",
+      "time": "12:21 AM to 01:37 AM Jun 07"
+    },
+    {
+      "name": "Rog",
+      "type": "Inauspicious",
+      "is_day": false,
+      "start": "01:37 AM",
+      "end": "02:53 AM Jun 07",
+      "time": "01:37 AM to 02:53 AM Jun 07"
+    },
+    {
+      "name": "Kaal",
+      "type": "Inauspicious",
+      "is_day": false,
+      "start": "02:53 AM",
+      "end": "04:09 AM Jun 07",
+      "time": "02:53 AM to 04:09 AM Jun 07"
+    },
+    {
+      "name": "Labh",
+      "type": "Auspicious",
+      "is_day": false,
+      "start": "04:09 AM",
+      "end": "05:25 AM Jun 07",
+      "time": "04:09 AM to 05:25 AM Jun 07"
+    }
+  ],
+  "festivals": [],
+  "hora": [],
+  "raw": {
+    "panchang": {
+      "sunrise": "2026-06-06 05:23:00",
+      "sunset": "2026-06-06 19:16:18",
+      "nakshatras": {
+        "zodiac_point": [
+          {
+            "sign": "Capricorn",
+            "end_time": "2026-06-06 19:03:00"
+          },
+          {
+            "sign": "Aquarius",
+            "end_time": ""
+          }
+        ],
+        "nakshatra_list": [
+          {
+            "nak_name": "Shravan",
+            "end_time": "2026-06-06 06:03:00"
+          },
+          {
+            "nak_name": "Dhanishta",
+            "end_time": ""
+          }
+        ],
+        "nakshatra_pada": [
+          {
+            "nak_name": "Shravan",
+            "lord": "Moon",
+            "deity": "Vishnu",
+            "element": "Vayu",
+            "symbol": "Ears",
+            "syllables": "खी, खू, खे, खो",
+            "pursuit": "Artha",
+            "gana": "Deva",
+            "direction": "North",
+            "guna": "Tamasik",
+            "body_part": "Ears , Sex organs , Gait",
+            "color": "Light Blue",
+            "nak_number": 22,
+            "nak_pada": 4,
+            "end_time": "2026-06-06 06:03:00",
+            "end_time_seprated": {
+              "day": "06",
+              "month": "06",
+              "year": "2026",
+              "hour": "06",
+              "minute": "03",
+              "second": "00"
+            }
+          },
+          {
+            "nak_name": "Dhanishta",
+            "lord": "Mars",
+            "deity": "Eight Vasus",
+            "element": "Akasha",
+            "symbol": "Flute/Drum",
+            "syllables": "गा, गी, गु, गे",
+            "pursuit": "Dharma",
+            "gana": "Rakshasa",
+            "direction": "East",
+            "guna": "Tamasik",
+            "body_part": "Back & Anus",
+            "color": "Grey/Silver",
+            "nak_number": 23,
+            "nak_pada": 1,
+            "end_time": "2026-06-06 12:34:00",
+            "end_time_seprated": {
+              "day": "06",
+              "month": "06",
+              "year": "2026",
+              "hour": "12",
+              "minute": "34",
+              "second": "00"
+            }
+          },
+          {
+            "nak_name": "Dhanishta",
+            "lord": "Mars",
+            "deity": "Eight Vasus",
+            "element": "Akasha",
+            "symbol": "Flute/Drum",
+            "syllables": "गा, गी, गु, गे",
+            "pursuit": "Dharma",
+            "gana": "Rakshasa",
+            "direction": "East",
+            "guna": "Tamasik",
+            "body_part": "Back & Anus",
+            "color": "Grey/Silver",
+            "nak_number": 23,
+            "nak_pada": 2,
+            "end_time": "2026-06-06 19:03:00",
+            "end_time_seprated": {
+              "day": "06",
+              "month": "06",
+              "year": "2026",
+              "hour": "19",
+              "minute": "03",
+              "second": "00"
+            }
+          },
+          {
+            "nak_name": "Dhanishta",
+            "lord": "Mars",
+            "deity": "Eight Vasus",
+            "element": "Akasha",
+            "symbol": "Flute/Drum",
+            "syllables": "गा, गी, गु, गे",
+            "pursuit": "Dharma",
+            "gana": "Rakshasa",
+            "direction": "East",
+            "guna": "Tamasik",
+            "body_part": "Back & Anus",
+            "color": "Grey/Silver",
+            "nak_number": 23,
+            "nak_pada": 3,
+            "end_time": "2026-06-07 01:31:00",
+            "end_time_seprated": {
+              "day": "07",
+              "month": "06",
+              "year": "2026",
+              "hour": "01",
+              "minute": "31",
+              "second": "00"
+            }
+          },
+          {
+            "nak_name": "Dhanishta",
+            "lord": "Mars",
+            "deity": "Eight Vasus",
+            "element": "Akasha",
+            "symbol": "Flute/Drum",
+            "syllables": "गा, गी, गु, गे",
+            "pursuit": "Dharma",
+            "gana": "Rakshasa",
+            "direction": "East",
+            "guna": "Tamasik",
+            "body_part": "Back & Anus",
+            "color": "Grey/Silver",
+            "nak_number": 23,
+            "nak_pada": 4,
+            "end_time": ""
+          }
+        ]
+      },
+      "sun_nakshatras": {
+        "zodiac_point": [
+          {
+            "sign": "Taurus",
+            "end_time": ""
+          }
+        ],
+        "nakshatra_list": [
+          {
+            "nak_name": "Rohini",
+            "end_time": ""
+          }
+        ],
+        "nakshatra_pada": [
+          {
+            "nak_name": "Rohini",
+            "lord": "Moon",
+            "deity": "Brahma",
+            "element": "Prithvi",
+            "symbol": "Chariot/Temple/Banyan Tree",
+            "syllables": "ओ, वा, वी, वु",
+            "pursuit": "Moksha",
+            "gana": "Manushya",
+            "direction": "East",
+            "guna": "Tamasik",
+            "body_part": "Legs, forehead , ankles ,shins, calves of legs",
+            "color": "Silver/White",
+            "nak_number": 4,
+            "nak_pada": 4,
+            "end_time": ""
+          }
+        ]
+      },
+      "tithis": [
+        {
+          "start_time": "2026-06-06 01:21:14",
+          "end_time": "2026-06-07 02:41:14",
+          "number": "6",
+          "tithi": "Shasthi",
+          "paksha": "Krishna",
+          "type": "Nanda",
+          "deity": "Kartikeya",
+          "vriddhi": "false",
+          "kshaya": "false",
+          "gandanta": {
+            "start_time": "2026-06-06 01:21:14",
+            "end_time": "2026-06-06 01:45:14"
+          },
+          "paksha_randhra": {
+            "start_time": "2026-06-06 01:21:14",
+            "end_time": "2026-06-06 04:57:14"
+          }
+        },
+        {
+          "start_time": "2026-06-07 02:42:14",
+          "end_time": "2026-06-08 03:24:14",
+          "number": "7",
+          "tithi": "Saptami",
+          "paksha": "Krishna",
+          "type": "Bhadra",
+          "deity": "Surya",
+          "vriddhi": "false",
+          "kshaya": "false",
+          "gandanta": [],
+          "paksha_randhra": []
+        }
+      ],
+      "yogas": [
+        {
+          "start_time": "2026-06-05 09:43:14",
+          "end_time": "2026-06-06 10:05:14",
+          "yoga_number": "26",
+          "yoga_name": "Indra or Aindra",
+          "visha_ghatis": []
+        },
+        {
+          "start_time": "2026-06-06 10:05:14",
+          "end_time": "2026-06-07 10:02:14",
+          "yoga_number": "27",
+          "yoga_name": "Vraidhiti",
+          "visha_ghatis": {
+            "start_time": "2026-06-06 10:05:14",
+            "end_time": "2026-06-07 10:02:14"
+          }
+        }
+      ],
+      "karnas": [
+        {
+          "start_time": "2026-06-06 01:21:14",
+          "end_time": "2026-06-06 14:05:14",
+          "tithi": "Shasthi",
+          "paksha": "Krishna",
+          "karana_name": "Gar",
+          "mobility": "Moveable",
+          "rulling_planet": "Jupiter",
+          "devata": "Bhumi",
+          "nature": "Saumya",
+          "bhadra": [],
+          "bhadra_niwas": []
+        },
+        {
+          "start_time": "2026-06-06 14:06:14",
+          "end_time": "2026-06-07 02:41:14",
+          "tithi": "Shasthi",
+          "paksha": "Krishna",
+          "karana_name": "Vanija",
+          "mobility": "Moveable",
+          "rulling_planet": "Venus",
+          "devata": "Devi",
+          "nature": "Saumya",
+          "bhadra": [],
+          "bhadra_niwas": []
+        },
+        {
+          "start_time": "2026-06-07 02:42:14",
+          "end_time": "2026-06-07 15:08:14",
+          "tithi": "Saptami",
+          "paksha": "Krishna",
+          "karana_name": "Vishti",
+          "mobility": "Moveable",
+          "rulling_planet": "Saturn",
+          "devata": "Yama",
+          "nature": "Kroora",
+          "bhadra": {
+            "bhadra_puccha": {
+              "start_time": "2026-06-07 07:45:14",
+              "end_time": "2026-06-07 08:57:14"
+            },
+            "bhadra_mukha": {
+              "start_time": "2026-06-07 08:57:14",
+              "end_time": "2026-06-07 10:57:14"
+            }
+          },
+          "bhadra_niwas": [
+            {
+              "start_time": "2026-06-07 02:42:14",
+              "end_time": "2026-06-07 15:08:14",
+              "zodiac_name": "Aquarius",
+              "bhadra_niwas": "Prithvi",
+              "nature": "Inauspicious"
+            }
+          ]
+        }
+      ]
+    },
+    "auspicious_timings": {
+      "date": "2026-6-6",
+      "sunrise": "2026-06-06 05:22:55",
+      "sunset": "2026-06-06 19:16:46",
+      "brahma_muhurta": {
+        "start_time": "2026-06-06 04:02:07",
+        "end_time": "2026-06-06 04:42:31"
+      },
+      "abhijit_muhurta": {
+        "start_time": "2026-06-06 11:52:07",
+        "end_time": "2026-06-06 12:47:43"
+      },
+      "godhuli_muhurta": {
+        "start_time": "2026-06-06 19:16:46",
+        "end_time": "2026-06-06 19:36:58"
+      },
+      "pratah_sandhya": {
+        "start_time": "2026-06-06 04:22:19",
+        "end_time": "2026-06-06 05:22:55"
+      },
+      "sayahana_sandhya": {
+        "start_time": "2026-06-06 19:16:46",
+        "end_time": "2026-06-06 20:17:22"
+      },
+      "nishita_muhurta": {
+        "start_time": "2026-06-06 23:59:34",
+        "end_time": "2026-06-07 00:39:58"
+      },
+      "vijay_muhurta": {
+        "start_time": "2026-06-06 14:38:55",
+        "end_time": "2026-06-06 15:34:31"
+      },
+      "sarvartha_siddhi_yoga": {
+        "start_time": "2026-06-06 05:22:55",
+        "end_time": "2026-06-06 06:03:07"
+      },
+      "amrit_siddhi_yoga": [],
+      "siddha_yoga": [],
+      "tri_pushkara_yoga": [],
+      "ravi_yoga": [
+        {
+          "start_time": "2026-06-06 06:04:07",
+          "end_time": "2026-06-07 05:22:51"
+        }
+      ],
+      "amrit_kalam": {
+        "start_time": "2026-06-06 20:43:01",
+        "end_time": "2026-06-06 22:26:25"
+      }
+    },
+    "inauspicious_timings": {
+      "date": "2026-06-06",
+      "sunrise": "2026-06-27 05:22:55",
+      "sunset": "2026-06-06 19:16:46",
+      "rahu_kaal": {
+        "start_time": "2026-06-06 08:51:22",
+        "end_time": "2026-06-06 10:35:36"
+      },
+      "gulkai_kaal": {
+        "start_time": "2026-06-06 05:22:55",
+        "end_time": "2026-06-06 07:07:08"
+      },
+      "yamaganda": {
+        "start_time": "2026-06-06 14:04:04",
+        "end_time": "2026-06-06 15:48:18"
+      },
+      "baana": [
+        {
+          "sign": "Nripa",
+          "start_time": "2026-06-07 04:06:55",
+          "end_time": "2026-06-07 05:22:51"
+        }
+      ],
+      "panchaka": {
+        "start_time": "2026-06-06 19:04:55",
+        "end_time": "2026-06-07 05:22:51"
+      },
+      "varjyam": {
+        "start_time": "2026-06-06 10:24:36",
+        "end_time": "2026-06-06 12:08:44"
+      },
+      "dur_muhurtam": [
+        {
+          "start_time": "2026-06-06 07:14:07",
+          "end_time": "2026-06-06 08:10:07"
+        }
+      ],
+      "hutashana_yoga": [],
+      "visha_yoga": {
+        "start_time": "2026-06-07 02:41:55",
+        "end_time": "2026-06-07 05:21:55"
+      },
+      "yamaghata_yoga": [],
+      "dagdha_yoga": [],
+      "samvartaka_yoga": [],
+      "kakracha_yoga": [],
+      "mrityu_yoga": [],
+      "vidaal_yoga": {
+        "start_time": "2026-06-06 06:04:07",
+        "end_time": "2026-06-07 05:22:51"
+      },
+      "aadal_yoga": [],
+      "vidaal_yoga_detailed": [
+        {
+          "start_time": "2026-06-06 06:04:07",
+          "end_time": "2026-06-07 05:22:51"
+        }
+      ],
+      "aadal_yoga_detailed": []
+    },
+    "choghadiya": {
+      "day_choghadiyas": {
+        "Kaal": "05:23 AM to 07:07 AM",
+        "Shubh": "07:07 AM to 08:51 AM",
+        "Rog": "08:51 AM to 10:35 AM",
+        "Udveg": "10:35 AM to 12:19 PM",
+        "Char": "12:19 PM to 02:03 PM",
+        "Labh": "02:03 PM to 03:47 PM",
+        "Amrit": "03:47 PM to 05:31 PM",
+        "Next Kaal": "05:31 PM to 07:15 PM"
+      },
+      "night_choghadiyas": {
+        "Labh": "07:17 PM to 08:33 PM",
+        "Udveg": "08:33 PM to 09:49 PM",
+        "Shubh": "09:49 PM to 11:05 PM",
+        "Amrit": "11:05 PM to 12:21 AM Jun 07",
+        "Char": "12:21 AM to 01:37 AM Jun 07",
+        "Rog": "01:37 AM to 02:53 AM Jun 07",
+        "Kaal": "02:53 AM to 04:09 AM Jun 07",
+        "Next Labh": "04:09 AM to 05:25 AM Jun 07"
+      }
+    },
+    "festivals": {}
+  },
+  "cache": "database"
+}
