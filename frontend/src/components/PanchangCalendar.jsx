@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, CalendarDays, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, Loader2 } from 'lucide-react';
 import { panchangAPI } from '../services/api';
 
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
@@ -30,31 +30,15 @@ function formatTime(value) {
   }
 }
 
-function firstPeriod(items, namePart) {
+function firstPeriodObj(items, namePart) {
   const found = (items || []).find((item) => item.name?.toLowerCase().includes(namePart.toLowerCase()));
-  const period = found?.period?.[0];
-  if (!period) return '-';
-  return `${formatTime(period.start)} - ${formatTime(period.end)}`;
+  return found?.period?.[0] || null;
 }
 
-function calendarCellSubLabel(day) {
-  if (!day) return 'Not cached';
-  const hinduDay = day.hindu_calendar?.day;
-  const hinduMonth = day.hindu_calendar?.month_name;
-  if (hinduMonth && hinduDay) return `${hinduMonth} ${hinduDay}`;
-  if (day.tithi?.paksha) return day.tithi.paksha;
-  if (day.calendar_type) return day.calendar_type;
-  return 'Cached';
-}
-
-function selectedDateMeta(day) {
-  if (!day) return '';
-  const parts = [];
-  if (day.vaara) parts.push(day.vaara);
-  if (day.hindu_calendar?.month_name) parts.push(day.hindu_calendar.month_name);
-  if (day.hindu_calendar?.day) parts.push(String(day.hindu_calendar.day));
-  if (!parts.length && day.tithi?.paksha) parts.push(day.tithi.paksha);
-  return parts.join(' - ');
+function firstPeriodStr(items, namePart) {
+  const p = firstPeriodObj(items, namePart);
+  if (!p) return '-';
+  return `${formatTime(p.start)} - ${formatTime(p.end)}`;
 }
 
 export default function PanchangCalendar() {
@@ -93,7 +77,6 @@ export default function PanchangCalendar() {
         if (active) setLoading(false);
       }
     }
-
     loadMonth();
     return () => { active = false; };
   }, [year, month]);
@@ -105,12 +88,13 @@ export default function PanchangCalendar() {
   }, [monthData]);
 
   const selectedDay = daysByKey.get(selectedKey);
+
   const cells = useMemo(() => {
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const result = [];
-    for (let i = 0; i < firstDay; i += 1) result.push(null);
-    for (let day = 1; day <= daysInMonth; day += 1) result.push(new Date(year, month, day));
+    for (let i = 0; i < firstDay; i++) result.push(null);
+    for (let d = 1; d <= daysInMonth; d++) result.push(new Date(year, month, d));
     return result;
   }, [year, month]);
 
@@ -121,277 +105,373 @@ export default function PanchangCalendar() {
     setSelectedKey(toDateKey(today));
   };
 
+  // Festival dot color map
+  const FESTIVAL_TYPES = {
+    ekadashi: '#e67e22',
+    pradosh: '#9b59b6',
+    purnima: '#8B5CF6',
+    amavasya: '#374151',
+    chaturthi: '#e74c3c',
+    festival: '#16a34a',
+  };
+
+  function getDayDots(day) {
+    if (!day) return [];
+    const dots = [];
+    (day.festivals || []).forEach(f => {
+      const name = (f.name || '').toLowerCase();
+      if (name.includes('ekadashi')) dots.push('#e67e22');
+      else if (name.includes('pradosh') || name.includes('purnima')) dots.push('#9b59b6');
+      else if (name.includes('amavasya')) dots.push('#374151');
+      else if (name.includes('chaturthi')) dots.push('#e74c3c');
+      else dots.push('#16a34a');
+    });
+    return dots.slice(0, 3);
+  }
+
+  // Hindu calendar meta line
+  const hinduMeta = monthData?.hindu_calendar_meta || monthData?.days?.[0]?.hindu_calendar || null;
+
   return (
-    <section style={{ background: '#f8f4ef', padding: '0 0 60px 0' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28, paddingTop: 48 }}>
+    <section style={{ background: '#fff', padding: '0 0 60px 0', borderTop: '1px solid #f0e8da' }}>
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 20px 0' }}>
+
+        {/* Section header label */}
+        <div style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 600, color: '#9A7150', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+          Calendar grid — with festival markers and a real selected-day panel
+        </div>
+
+        {/* Main calendar card */}
+        <div style={{
+          border: '1px solid #e5d9c8',
+          borderRadius: 12,
+          background: '#fff',
+          boxShadow: '0 1px 8px rgba(61,31,0,0.06)',
+          overflow: 'hidden',
+          marginBottom: 28,
+        }}>
+          {/* Month header */}
           <div style={{
-            width: 48, height: 48, borderRadius: 14,
-            background: 'rgba(232,101,10,0.10)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#E8650A',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '16px 20px',
+            borderBottom: '1px solid #f0e8da',
           }}>
-            <CalendarDays size={25} />
+            <button onClick={prevMonth} style={navBtnStyle}><ChevronLeft size={16} /></button>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: UI_FONT, fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>
+                {MONTH_NAMES[month]} {year}
+              </div>
+              <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', marginTop: 2 }}>
+                Amanta calendar · Varanasi
+              </div>
+            </div>
+            <button onClick={nextMonth} style={navBtnStyle}><ChevronRight size={16} /></button>
           </div>
-          <div>
-            <h2 style={{ fontFamily: 'var(--font-display,serif)', fontSize: 24, fontWeight: 800, color: '#7a3208', margin: 0 }}>
-              Panchang Calendar
-            </h2>
-            <p style={{ fontFamily: UI_FONT, color: '#9A7150', fontSize: 14, margin: '4px 0 0' }}>
-              Tithi, nakshatra, Hindu calendar and daily timings served from Bharat Mandir database
-            </p>
+
+          {/* Hindu calendar strip */}
+          {hinduMeta && (
+            <div style={{
+              display: 'flex', gap: 20, padding: '10px 20px',
+              borderBottom: '1px solid #f0e8da',
+              background: '#fdf9f4',
+              fontFamily: UI_FONT, fontSize: 12, color: '#6b7280',
+            }}>
+              {hinduMeta.vikram_samvat && <span><strong style={{ color: '#4b5563' }}>Vikram</strong> {hinduMeta.vikram_samvat}</span>}
+              {hinduMeta.shaka_samvat && <span><strong style={{ color: '#4b5563' }}>Shaka</strong> {hinduMeta.shaka_samvat}</span>}
+              {hinduMeta.maas && <span><strong style={{ color: '#4b5563' }}>Maas</strong> {hinduMeta.maas}</span>}
+              {hinduMeta.ritu && <span><strong style={{ color: '#4b5563' }}>Ritu</strong> {hinduMeta.ritu}</span>}
+            </div>
+          )}
+
+          {/* Loading */}
+          {loading && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 20px', background: '#fdf9f4', borderBottom: '1px solid #f0e8da' }}>
+              <Loader2 size={14} style={{ animation: 'spin .9s linear infinite', color: '#E8650A' }} />
+              <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150' }}>Loading month…</span>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ margin: 16, padding: 12, borderRadius: 8, background: '#fff4f0', color: '#b42020', border: '1px solid rgba(180,32,32,.18)', fontFamily: UI_FONT, fontSize: 13 }}>
+              {error}
+            </div>
+          )}
+
+          {/* Day labels */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '10px 16px 4px' }}>
+            {DAY_LABELS.map((day, index) => (
+              <div key={day} style={{
+                textAlign: 'center', fontFamily: UI_FONT,
+                fontSize: 12, fontWeight: 600,
+                color: index === 0 ? '#B42020' : index === 6 ? '#1A6A3A' : '#6b7280',
+                paddingBottom: 6,
+              }}>{day}</div>
+            ))}
+          </div>
+
+          {/* Calendar grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '0 12px 16px', gap: 3 }}>
+            {cells.map((date, index) => {
+              if (!date) return <div key={`empty-${index}`} />;
+              const key = toDateKey(date);
+              const day = daysByKey.get(key);
+              const selected = key === selectedKey;
+              const isToday = key === toDateKey(today);
+              const isSunday = date.getDay() === 0;
+              const isSaturday = date.getDay() === 6;
+              const tithi = day?.tithi?.name || '';
+              const paksha = day?.tithi?.paksha?.substring(0, 6) || '';
+              const dots = getDayDots(day);
+
+              return (
+                <button
+                  key={key}
+                  onClick={() => setSelectedKey(key)}
+                  style={{
+                    border: selected ? '2px solid #E8650A' : isToday ? '2px solid rgba(232,101,10,0.35)' : '1px solid #f0e4d2',
+                    borderRadius: 8,
+                    background: selected ? '#fff7f0' : '#fff',
+                    cursor: 'pointer',
+                    padding: '8px 4px 7px',
+                    textAlign: 'center',
+                    transition: 'all .12s',
+                    minHeight: 72,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2,
+                    position: 'relative',
+                  }}
+                >
+                  {/* Today pill */}
+                  {isToday && (
+                    <div style={{
+                      position: 'absolute', top: 4, left: '50%', transform: 'translateX(-50%)',
+                      background: '#E8650A', color: 'white',
+                      fontFamily: UI_FONT, fontSize: 9, fontWeight: 700,
+                      borderRadius: 50, padding: '1px 6px', letterSpacing: '.04em',
+                      textTransform: 'uppercase', whiteSpace: 'nowrap',
+                    }}>Today</div>
+                  )}
+                  <span style={{
+                    fontFamily: UI_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1,
+                    color: selected ? '#E8650A' : isSunday ? '#B42020' : isSaturday ? '#1A6A3A' : '#1a1a1a',
+                    marginTop: isToday ? 14 : 0,
+                  }}>{date.getDate()}</span>
+                  {tithi && (
+                    <span style={{
+                      fontFamily: UI_FONT, fontSize: 9, color: '#7a3208',
+                      maxWidth: 66, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      lineHeight: 1.2,
+                    }}>{tithi}</span>
+                  )}
+                  {paksha && (
+                    <span style={{
+                      fontFamily: UI_FONT, fontSize: 9, color: '#9A7150',
+                      maxWidth: 66, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{paksha}</span>
+                  )}
+                  {/* Festival dots */}
+                  {dots.length > 0 && (
+                    <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 2 }}>
+                      {dots.map((color, i) => (
+                        <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
+                      ))}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div style={{
+            display: 'flex', gap: 16, padding: '10px 16px 14px',
+            borderTop: '1px solid #f0e8da',
+            fontFamily: UI_FONT, fontSize: 11, color: '#6b7280',
+            flexWrap: 'wrap',
+          }}>
+            {[
+              { color: '#e67e22', label: 'Ekadashi' },
+              { color: '#9b59b6', label: 'Pradosh / Purnima' },
+              { color: '#374151', label: 'Amavasya' },
+              { color: '#e74c3c', label: 'Chaturthi' },
+              { color: '#16a34a', label: 'Festival' },
+            ].map(({ color, label }) => (
+              <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                {label}
+              </span>
+            ))}
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 22, alignItems: 'start' }} className="panchang-grid">
-          <div style={{
-            background: 'white', borderRadius: 24,
-            boxShadow: '0 8px 40px rgba(61,31,0,0.10)',
-            border: '1px solid rgba(232,101,10,0.12)',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-              padding: '20px 24px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <button onClick={prevMonth} style={navBtnStyle} aria-label="Previous month"><ChevronLeft size={18} /></button>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontFamily: 'var(--font-display,serif)', fontSize: 22, fontWeight: 800, color: '#fff' }}>
-                  {MONTH_NAMES[month]} {year}
-                </div>
-                <div style={{ fontFamily: UI_FONT, fontSize: 12, color: 'rgba(255,213,128,0.8)', marginTop: 2 }}>
-                  Amanta calendar - cached from Bharat Mandir database
-                </div>
+        {/* Selected day panel */}
+        {selectedKey && (
+          <div>
+            {/* Selected date header */}
+            <div style={{ marginBottom: 4 }}>
+              <div style={{ fontFamily: UI_FONT, fontSize: 11, color: '#9A7150', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>
+                SELECTED DATE
+                {selectedDay?.hindu_calendar && (
+                  <span style={{ marginLeft: 16, color: '#4b5563', textTransform: 'none', letterSpacing: 0 }}>
+                    {[selectedDay.hindu_calendar.month_name, selectedDay.hindu_calendar.paksha, selectedDay.tithi?.name, selectedDay.hindu_calendar.day ? `· Day ${selectedDay.hindu_calendar.day} of Vikram ${selectedDay.hindu_calendar.vikram_samvat || '2083'}` : ''].filter(Boolean).join(' ')}
+                  </span>
+                )}
               </div>
-              <button onClick={nextMonth} style={navBtnStyle} aria-label="Next month"><ChevronRight size={18} /></button>
+              <div style={{ fontFamily: UI_FONT, fontSize: 26, fontWeight: 800, color: '#1a1a1a' }}>
+                {parseDateKey(selectedKey).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 4px' }}>
-              <button onClick={goToday} style={todayBtnStyle}>Today</button>
-              {loading && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#9A7150', fontSize: 12 }}><Loader2 size={14} className="spin-icon" /> Loading month</span>}
-              {!loading && monthData?.missing_dates?.length > 0 && (
-                <span style={{ color: '#b45309', fontSize: 12, fontFamily: UI_FONT }}>
-                  {monthData.missing_dates.length} days not cached
-                </span>
-              )}
-            </div>
-
-            {error && (
-              <div style={{ margin: 16, padding: 14, borderRadius: 12, background: '#fff4f0', color: '#b42020', border: '1px solid rgba(180,32,32,.18)' }}>
-                {error}
+            {!selectedDay && !loading && (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#9A7150', fontFamily: UI_FONT, fontSize: 14 }}>
+                Select a day to view Panchang details
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '8px 16px 4px' }}>
-              {DAY_LABELS.map((day, index) => (
-                <div key={day} style={{
-                  textAlign: 'center', fontFamily: UI_FONT,
-                  fontSize: 11, fontWeight: 700, letterSpacing: '.07em',
-                  color: index === 0 ? '#B42020' : index === 6 ? '#1A6A3A' : '#9A7150',
-                  paddingBottom: 6,
-                }}>{day}</div>
-              ))}
-            </div>
+            {selectedDay && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20, marginTop: 20 }} className="panchang-detail-grid">
+                {/* Panchang Vivaran */}
+                <div style={detailCardStyle}>
+                  <div style={detailCardHeaderStyle}>
+                    <span>📋</span> Panchang Vivaran
+                  </div>
+                  {[
+                    ['Tithi', selectedDay.tithi?.name],
+                    ['Paksha', selectedDay.tithi?.paksha],
+                    ['Nakshatra', selectedDay.nakshatra?.name],
+                    ['Yoga', selectedDay.yoga?.name],
+                    ['Karana', selectedDay.karana?.name],
+                    ['Sunrise', formatTime(selectedDay.sunrise)],
+                    ['Sunset', formatTime(selectedDay.sunset)],
+                    ['Moonrise', formatTime(selectedDay.moonrise)],
+                    ['Moonset', formatTime(selectedDay.moonset)],
+                  ].map(([label, value]) => (
+                    <div key={label} style={detailRowStyle}>
+                      <span style={{ color: '#6b7280' }}>{label}</span>
+                      <span style={{ color: '#111827', fontWeight: 600 }}>{value || '-'}</span>
+                    </div>
+                  ))}
+                </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '0 12px 16px', gap: 5 }}>
-              {cells.map((date, index) => {
-                if (!date) return <div key={`empty-${index}`} />;
-                const key = toDateKey(date);
-                const day = daysByKey.get(key);
-                const selected = key === selectedKey;
-                const isToday = key === toDateKey(today);
-                const isSunday = date.getDay() === 0;
-                const isSaturday = date.getDay() === 6;
-                const tithi = day?.tithi?.name || '-';
-                const cellSubLabel = calendarCellSubLabel(day);
+                {/* Key Muhurat */}
+                <div style={detailCardStyle}>
+                  <div style={detailCardHeaderStyle}>
+                    <span>🕐</span> Key Muhurat
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {/* Brahma */}
+                    <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 3 }}>Brahma</div>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#15803d' }}>
+                        {firstPeriodStr(selectedDay.auspicious_period, 'Brahma')}
+                      </div>
+                    </div>
+                    {/* Abhijit */}
+                    <div style={{ background: '#eff6ff', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 600, color: '#2563eb', marginBottom: 3 }}>Abhijit</div>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1d4ed8' }}>
+                        {firstPeriodStr(selectedDay.auspicious_period, 'Abhijit')}
+                      </div>
+                    </div>
+                    {/* Rahu Kaal */}
+                    <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 600, color: '#dc2626', marginBottom: 3 }}>Rahu Kaal</div>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#b91c1c' }}>
+                        {firstPeriodStr(selectedDay.inauspicious_period, 'Rahu')}
+                      </div>
+                    </div>
+                    {/* Yamaganda */}
+                    <div style={{ background: '#fef9ee', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 3 }}>Yamaganda</div>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#78350f' }}>
+                        {firstPeriodStr(selectedDay.inauspicious_period, 'Yamaganda')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setSelectedKey(key)}
-                    style={{
-                      border: selected ? '2px solid #E8650A' : isToday ? '2px solid rgba(232,101,10,0.4)' : '1px solid #f0e4d2',
-                      borderRadius: 12,
-                      background: selected ? 'linear-gradient(135deg,#E8650A,#FF8C2A)' : isToday ? 'rgba(232,101,10,0.07)' : '#fff',
-                      cursor: 'pointer',
-                      padding: '7px 4px 8px',
-                      textAlign: 'center',
-                      transition: 'all .15s',
-                      minHeight: 82,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 3,
-                    }}
-                  >
-                    <span style={{
-                      fontFamily: 'var(--font-display,serif)', fontSize: 16, fontWeight: 800, lineHeight: 1,
-                      color: selected ? '#fff' : isSunday ? '#B42020' : isSaturday ? '#1A6A3A' : '#3D1F00',
-                    }}>{date.getDate()}</span>
-                    <span style={{
-                      fontFamily: UI_FONT, fontSize: 9, color: selected ? 'rgba(255,255,255,.92)' : '#7a3208',
-                      maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{tithi}</span>
-                    <span style={{
-                      fontFamily: UI_FONT, fontSize: 9, color: selected ? 'rgba(255,255,255,.82)' : '#9A7150',
-                      maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{cellSubLabel}</span>
-                  </button>
-                );
-              })}
-            </div>
+                {/* Observances */}
+                <div style={detailCardStyle}>
+                  <div style={detailCardHeaderStyle}>
+                    <span>📿</span> Observances
+                  </div>
+                  {(selectedDay.festivals?.length > 0) ? (
+                    <div style={{ background: '#fef9ee', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
+                      {selectedDay.festivals.slice(0, 3).map((f, i) => (
+                        <div key={i} style={{ fontFamily: UI_FONT, fontSize: 13, color: '#92400e', fontWeight: 600, marginBottom: 4 }}>{f.name}</div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ background: '#f9fafb', borderRadius: 8, padding: '10px 12px', marginBottom: 10, fontFamily: UI_FONT, fontSize: 13, color: '#6b7280' }}>
+                      No major vrat today
+                    </div>
+                  )}
+                  {[
+                    ['Bhadra', selectedDay.bhadra || 'None'],
+                    ['Panchak', selectedDay.panchak || 'None'],
+                    ['Mooli', selectedDay.mooli || 'None'],
+                    ['Disha Shool', selectedDay.disha_shool || 'North'],
+                    ['Chandra Rashi', selectedDay.nakshatra?.rashi || (selectedDay.nakshatra?.lord?.name) || '-'],
+                    ['Surya Rashi', selectedDay.surya_rashi || '-'],
+                  ].map(([label, value]) => (
+                    <div key={label} style={detailRowStyle}>
+                      <span style={{ color: '#6b7280' }}>{label}</span>
+                      <span style={{ color: '#111827', fontWeight: 600 }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-
-          <DayDetailPanel selectedKey={selectedKey} day={selectedDay} loading={loading} />
-        </div>
+        )}
       </div>
 
       <style>{`
-        @media (max-width: 840px) {
-          .panchang-grid { grid-template-columns: 1fr !important; }
-        }
-        .spin-icon { animation: spin .9s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 720px) {
+          .panchang-detail-grid { grid-template-columns: 1fr !important; }
+        }
       `}</style>
     </section>
   );
 }
 
-function DayDetailPanel({ selectedKey, day, loading }) {
-  if (!day && loading) {
-    return (
-      <div style={panelStyle}>
-        <Loader2 size={22} className="spin-icon" />
-        <p style={{ marginTop: 10, color: '#9A7150' }}>Loading selected day...</p>
-      </div>
-    );
-  }
-
-  if (!day) {
-    return (
-      <div style={panelStyle}>
-        <RefreshCw size={20} color="#E8650A" />
-        <p style={{ marginTop: 10, color: '#9A7150' }}>Select a loaded day to view Panchang details.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #3D1F00 0%, #6B3A1F 100%)',
-        borderRadius: 18, padding: '20px 22px', color: 'white',
-      }}>
-        <div style={{ fontFamily: UI_FONT, fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,213,128,0.7)', marginBottom: 4 }}>
-          Selected Date
-        </div>
-        <div style={{ fontFamily: 'var(--font-display,serif)', fontSize: 25, fontWeight: 800, lineHeight: 1.1 }}>
-          {selectedKey}
-        </div>
-        {selectedDateMeta(day) && (
-          <div style={{ fontFamily: UI_FONT, fontSize: 13, color: 'rgba(255,213,128,0.8)', marginTop: 5 }}>
-            {selectedDateMeta(day)}
-          </div>
-        )}
-      </div>
-
-      <div style={panelStyle}>
-        <h3 style={{ fontFamily: 'var(--font-display,serif)', fontSize: 15, fontWeight: 800, color: '#3D1F00', margin: '0 0 12px' }}>
-          Panchang Vivaran
-        </h3>
-        {[
-          ['Tithi', day.tithi?.name],
-          ['Paksha', day.tithi?.paksha],
-          ['Nakshatra', day.nakshatra?.name],
-          ['Yoga', day.yoga?.name],
-          ['Karana', day.karana?.name],
-          ['Sunrise', formatTime(day.sunrise)],
-          ['Sunset', formatTime(day.sunset)],
-          ['Moonrise', formatTime(day.moonrise)],
-          ['Moonset', formatTime(day.moonset)],
-        ].map(([label, value]) => (
-          <div key={label} style={detailRowStyle}>
-            <span style={{ color: '#9A7150', fontWeight: 700 }}>{label}</span>
-            <span style={{ color: '#3D1F00', fontWeight: 700, textAlign: 'right' }}>{value || '-'}</span>
-          </div>
-        ))}
-      </div>
-
-      {day.festivals?.length > 0 && (
-        <div style={{ ...panelStyle, background: '#fff7ed' }}>
-          <h3 style={{ fontFamily: 'var(--font-display,serif)', fontSize: 15, fontWeight: 800, color: '#3D1F00', margin: '0 0 12px' }}>
-            Festivals & Vrat
-          </h3>
-          {day.festivals.slice(0, 5).map((festival) => (
-            <div key={festival.name} style={detailRowStyle}>
-              <span style={{ color: '#9A7150', fontWeight: 700 }}>{festival.name}</span>
-              <span style={{ color: '#3D1F00', fontWeight: 700, textAlign: 'right' }}>{festival.date || festival.start_date || selectedKey}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ ...panelStyle, background: '#fffaf2' }}>
-        <h3 style={{ fontFamily: 'var(--font-display,serif)', fontSize: 15, fontWeight: 800, color: '#3D1F00', margin: '0 0 12px' }}>
-          Key Muhurat
-        </h3>
-        {[
-          ['Abhijit', firstPeriod(day.auspicious_period, 'Abhijit')],
-          ['Brahma', firstPeriod(day.auspicious_period, 'Brahma')],
-          ['Rahu Kaal', firstPeriod(day.inauspicious_period, 'Rahu')],
-          ['Yamaganda', firstPeriod(day.inauspicious_period, 'Yamaganda')],
-        ].map(([label, value]) => (
-          <div key={label} style={detailRowStyle}>
-            <span style={{ color: '#9A7150', fontWeight: 700 }}>{label}</span>
-            <span style={{ color: '#3D1F00', fontWeight: 700, textAlign: 'right' }}>{value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 const navBtnStyle = {
-  width: 36,
-  height: 36,
-  borderRadius: '50%',
-  background: 'rgba(255,255,255,0.1)',
-  border: '1px solid rgba(255,213,128,0.2)',
-  color: '#FFD580',
+  width: 32, height: 32, borderRadius: '50%',
+  background: '#f9f5f0',
+  border: '1px solid #e5d9c8',
+  color: '#6b7280',
   cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  transition: 'background .15s',
+};
+
+const detailCardStyle = {
+  background: '#fff',
+  borderRadius: 10,
+  border: '1px solid #e5d9c8',
+  padding: '16px',
+};
+
+const detailCardHeaderStyle = {
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif',
+  fontSize: 13,
+  fontWeight: 700,
+  color: '#374151',
+  marginBottom: 14,
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'center',
-  transition: 'background .2s',
-};
-
-const todayBtnStyle = {
-  fontFamily: UI_FONT,
-  fontSize: 12,
-  fontWeight: 600,
-  color: '#E8650A',
-  background: 'rgba(232,101,10,0.08)',
-  border: '1px solid rgba(232,101,10,0.2)',
-  borderRadius: 50,
-  padding: '5px 14px',
-  cursor: 'pointer',
-};
-
-const panelStyle = {
-  background: 'white',
-  borderRadius: 18,
-  border: '1px solid #EDE0CC',
-  boxShadow: '0 2px 12px rgba(61,31,0,0.07)',
-  padding: 18,
+  gap: 6,
 };
 
 const detailRowStyle = {
   display: 'flex',
   justifyContent: 'space-between',
-  gap: 12,
-  padding: '9px 0',
-  borderBottom: '1px solid #F5EDE0',
-  fontFamily: UI_FONT,
+  gap: 8,
+  padding: '7px 0',
+  borderBottom: '1px solid #f5ede0',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif',
   fontSize: 13,
 };

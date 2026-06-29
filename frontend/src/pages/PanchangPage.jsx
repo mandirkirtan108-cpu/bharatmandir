@@ -1,23 +1,23 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Calendar, Clock, Star, Sparkles, AlertCircle, Loader2, Sun, CheckCircle } from 'lucide-react';
+import { Sparkles, AlertCircle, Loader2, Sun } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PanchangCalendar from '../components/PanchangCalendar';
 
 const MUHURAT_TYPES = [
-  { id: 'vivah',      emoji: '💍', label: 'Vivah',          hindi: 'विवाह',        desc: 'Marriage ceremony' },
-  { id: 'griha',      emoji: '🏠', label: 'Griha Pravesh',  hindi: 'गृह प्रवेश',   desc: 'New home entry' },
-  { id: 'naamkaran',  emoji: '👶', label: 'Naamkaran',      hindi: 'नामकरण',       desc: 'Baby naming' },
-  { id: 'vyapar',     emoji: '🏪', label: 'Vyapar Aarambh', hindi: 'व्यापार आरंभ', desc: 'Business launch' },
-  { id: 'yatra',      emoji: '✈️', label: 'Yatra',          hindi: 'यात्रा',        desc: 'Journey / travel' },
-  { id: 'vastu',      emoji: '🧱', label: 'Vastu / Bhoomi', hindi: 'वास्तु/भूमि',  desc: 'Construction' },
-  { id: 'vidyarambh', emoji: '📚', label: 'Vidyarambh',     hindi: 'विद्यारंभ',    desc: 'Starting education' },
-  { id: 'vahan',      emoji: '🚗', label: 'Vahan Puja',     hindi: 'वाहन पूजा',    desc: 'New vehicle' },
-  { id: 'mundan',     emoji: '✂️', label: 'Mundan',         hindi: 'मुंडन',        desc: 'First haircut' },
-  { id: 'investment', emoji: '💰', label: 'Nivesh',         hindi: 'निवेश',        desc: 'Investment / gold' },
-  { id: 'chikitsa',   emoji: '🏥', label: 'Chikitsa',       hindi: 'चिकित्सा',     desc: 'Medical procedure' },
-  { id: 'naukri',     emoji: '💼', label: 'Naukri / Job',   hindi: 'नौकरी',        desc: 'Job interview' },
+  { id: 'vivah',      emoji: null, icon: '🏛️', label: 'Vivah',          hindi: 'विवाह' },
+  { id: 'griha',      emoji: null, icon: '🏠', label: 'Griha Pravesh',  hindi: 'गृह प्रवेश' },
+  { id: 'naamkaran',  emoji: null, icon: '👶', label: 'Naamkaran',      hindi: 'नामकरण' },
+  { id: 'vyapar',     emoji: null, icon: '🏪', label: 'Vyapar Aarambh', hindi: 'व्यापार आरंभ' },
+  { id: 'yatra',      emoji: null, icon: '✈️', label: 'Yatra',          hindi: 'यात्रा' },
+  { id: 'vastu',      emoji: null, icon: '🧱', label: 'Vastu',          hindi: 'वास्तु/भूमि' },
+  { id: 'vidyarambh', emoji: null, icon: '📖', label: 'Vidyarambh',     hindi: 'विद्यारंभ' },
+  { id: 'vahan',      emoji: null, icon: '🚗', label: 'Vahan Puja',     hindi: 'वाहन पूजा' },
+  { id: 'mundan',     emoji: null, icon: '✂️', label: 'Mundan',         hindi: 'मुंडन' },
+  { id: 'investment', emoji: null, icon: '💰', label: 'Nivesh',         hindi: 'निवेश' },
+  { id: 'chikitsa',   emoji: null, icon: '🏥', label: 'Chikitsa',       hindi: 'चिकित्सा' },
+  { id: 'naukri',     emoji: null, icon: '💼', label: 'Naukri / Job',   hindi: 'नौकरी' },
 ];
 
 const RASHI_LIST = [
@@ -28,12 +28,10 @@ const RASHI_LIST = [
 
 const TODAY = new Date().toISOString().split('T')[0];
 
-const VERDICT_COLOR = { excellent: '#16a34a', good: '#2563eb', average: '#d97706', avoid: '#dc2626' };
-const VERDICT_BG    = { excellent: '#f0fdf4', good: '#eff6ff', average: '#fffbeb', avoid: '#fef2f2' };
-const VERDICT_ICON  = { excellent: '🌟', good: '✅', average: '⚡', avoid: '❌' };
-
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const DEFAULT_COORDINATES = '28.6139,77.2090';
+
+const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
 
 function apiErrorMessage(data, fallback) {
   if (!data?.detail) return fallback;
@@ -52,101 +50,573 @@ function to12h(timeStr) {
   });
 }
 
-/* ── Shared styles ───────────────────────────────────────────────── */
-const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
+// Choghadiya color mapping
+const CHOGHADIYA_COLORS = {
+  udveg:  { bg: '#f87171', text: '#fff' },
+  char:   { bg: '#34d399', text: '#fff' },
+  labh:   { bg: '#6ee7b7', text: '#064e3b' },
+  amrit:  { bg: '#34d399', text: '#fff' },
+  kaal:   { bg: '#f87171', text: '#fff' },
+  shubh:  { bg: '#86efac', text: '#14532d' },
+  rog:    { bg: '#f87171', text: '#fff' },
+};
 
-function Card({ children, accent, style = {} }) {
-  return (
-    <div style={{
-      background: 'white',
-      borderRadius: 'var(--radius-lg)',
-      padding: '24px 26px',
-      border: `1px solid ${accent || 'var(--cream-dark)'}`,
-      boxShadow: '0 2px 16px var(--shadow)',
-      marginBottom: 20,
-      ...style,
-    }}>
-      {children}
-    </div>
-  );
+function getChogColor(name) {
+  const key = (name || '').toLowerCase();
+  for (const [k, v] of Object.entries(CHOGHADIYA_COLORS)) {
+    if (key.includes(k)) return v;
+  }
+  return { bg: '#fbbf24', text: '#78350f' };
 }
 
-function SectionTitle({ icon, children }) {
-  return (
-    <h3 style={{
-      fontFamily: 'var(--font-display)',
-      fontSize: 15,
-      color: 'var(--brown)',
-      marginBottom: 16,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-    }}>
-      <span style={{
-        width: 28, height: 28,
-        background: 'linear-gradient(135deg,var(--saffron),var(--saffron-dark))',
-        borderRadius: 8,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, fontSize: 14,
-      }}>{icon}</span>
-      {children}
-    </h3>
-  );
-}
+/* ─── TODAY'S PANCHANG SECTION (Screenshot 1) ─────────────── */
+function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCity, onFetch }) {
+  const inputStyle = {
+    padding: '8px 12px', border: '1px solid #e5d9c8', borderRadius: 8,
+    fontFamily: UI_FONT, fontSize: 14, outline: 'none', color: '#1a1a1a', background: '#fff',
+  };
+  const labelStyle = {
+    fontFamily: UI_FONT, fontWeight: 600, fontSize: 11,
+    letterSpacing: '.07em', textTransform: 'uppercase',
+    color: '#6b7280', display: 'block', marginBottom: 5,
+  };
 
-/* ── 3-column timing strip ────────────────────────────────────────── */
-function TimingStrip({ items }) {
+  // Compute current choghadiya slot
+  const nowStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+
   return (
-    <div style={{ display: 'flex', borderRadius: 'var(--radius)', border: '1px solid var(--cream-dark)', overflow: 'hidden' }}>
-      {items.map((item, i) => (
-        <div key={i} style={{
-          flex: 1, padding: '18px 16px', textAlign: 'center',
-          background: item.bg || 'var(--cream)',
-          borderRight: i < items.length - 1 ? '1px solid var(--cream-dark)' : 'none',
-        }}>
-          <p style={{
-            fontFamily: UI_FONT,
-            fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase',
-            color: item.labelColor || 'var(--text-light)', marginBottom: 8, fontWeight: 600,
-          }}>{item.label}</p>
-          <p style={{
-            fontFamily: UI_FONT,
-            fontSize: 22, fontWeight: 700, color: item.color || 'var(--brown)',
-            lineHeight: 1.1, letterSpacing: '-0.02em', whiteSpace: 'nowrap',
-          }}>{item.value}</p>
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 20px 0' }}>
+      {/* Title */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+          <h2 style={{ fontFamily: UI_FONT, fontSize: 22, fontWeight: 800, color: '#1a1a1a', margin: 0 }}>
+            Today's Panchang
+          </h2>
+          <span style={{ fontFamily: 'serif', fontSize: 17, color: '#6b7280' }}>आज का पंचांग</span>
         </div>
-      ))}
+        {dailyResult && (
+          <div style={{ fontFamily: UI_FONT, fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            {city ? ` · ${city}` : ''}
+            {dailyResult.tithi?.name && dailyResult.nakshatra?.name
+              ? ` · ${dailyResult.tithi.paksha || ''} ${dailyResult.tithi.name}`
+              : ''}
+          </div>
+        )}
+      </div>
+
+      {/* Form row */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap' }}>
+        <div>
+          <label style={labelStyle}>Date</label>
+          <input type="date" value={date}
+            onChange={e => setDate(e.target.value)}
+            style={{ ...inputStyle, width: 160 }}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>City</label>
+          <input type="text" value={city} onChange={e => setCity(e.target.value)}
+            placeholder="e.g. Varanasi, Ujjain…"
+            style={{ ...inputStyle, width: 200 }}
+          />
+        </div>
+        <button onClick={onFetch} disabled={dailyLoading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '9px 20px', borderRadius: 8,
+            background: '#E8650A', color: '#fff', border: 'none',
+            fontFamily: UI_FONT, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>
+          {dailyLoading
+            ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Loading…</>
+            : 'Get Panchang'}
+        </button>
+      </div>
+
+      {dailyLoading && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9A7150', fontFamily: UI_FONT }}>
+          <Loader2 size={28} style={{ animation: 'spin .8s linear infinite', color: '#E8650A', marginBottom: 8 }} />
+          <p>Fetching today's Panchang…</p>
+        </div>
+      )}
+
+      {dailyResult && !dailyLoading && (
+        <div style={{ animation: 'fadeDown .4s ease both' }}>
+
+          {/* TODAY AT A GLANCE banner */}
+          {dailyResult.today_at_glance && (
+            <div style={{
+              background: '#fef9ee', border: '1px solid #fde68a',
+              borderLeft: '4px solid #f59e0b',
+              borderRadius: 10, padding: '14px 16px', marginBottom: 22,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Sparkles size={14} color="#f59e0b" />
+                <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#b45309' }}>
+                  TODAY AT A GLANCE
+                </span>
+              </div>
+              <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#78350f', lineHeight: 1.6, margin: 0 }}>
+                {dailyResult.today_at_glance}
+              </p>
+            </div>
+          )}
+
+          {/* 5 Angas grid */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: 10, marginBottom: 22,
+          }} className="panchang-angas">
+            {[
+              { label: 'TITHI',     icon: '🌙', val: dailyResult.tithi?.name,          sub: `${dailyResult.tithi?.nature || dailyResult.tithi?.paksha || ''} · ${dailyResult.tithi?.end_time || ''}` },
+              { label: 'NAKSHATRA', icon: '⭐', val: dailyResult.nakshatra?.name,      sub: `until ${dailyResult.nakshatra?.end_time || ''}` },
+              { label: 'YOGA',      icon: '∞',  val: dailyResult.yoga?.name,           sub: `until ${dailyResult.yoga?.end_time || ''}` },
+              { label: 'KARANA',    icon: '⏹',  val: dailyResult.karana?.name,         sub: `until ${dailyResult.karana?.end_time || ''}` },
+              { label: 'VAAR',      icon: '☀️', val: dailyResult.var?.day,             sub: `Lord: ${dailyResult.var?.lord || ''}` },
+            ].map(a => (
+              <div key={a.label} style={{
+                background: '#fff', borderRadius: 10, padding: '14px 10px',
+                textAlign: 'center', border: '1px solid #e5d9c8',
+              }}>
+                <div style={{ fontSize: 22, marginBottom: 6 }}>{a.icon}</div>
+                <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, color: '#9A7150', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 4 }}>{a.label}</div>
+                <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a', marginBottom: 3 }}>{a.val || '—'}</div>
+                <div style={{ fontFamily: UI_FONT, fontSize: 11, color: '#9A7150' }}>{a.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Day Choghadiya timeline */}
+          {dailyResult.choghadiya?.length > 0 && (
+            <div style={{
+              background: '#fff', border: '1px solid #e5d9c8',
+              borderRadius: 12, padding: '16px 18px', marginBottom: 22,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16 }}>⏱</span>
+                  <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Day Choghadiya</span>
+                </div>
+                <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150' }}>
+                  {to12h(dailyResult.sunrise)} → {to12h(dailyResult.sunset)}
+                </span>
+              </div>
+
+              {/* Color timeline bar */}
+              <div style={{ position: 'relative', marginBottom: 8 }}>
+                {/* Now marker */}
+                <div style={{
+                  position: 'absolute', top: -24, left: '50%', transform: 'translateX(-50%)',
+                  background: '#1a1a1a', color: '#fff',
+                  fontFamily: UI_FONT, fontSize: 11, fontWeight: 700,
+                  padding: '3px 10px', borderRadius: 50, whiteSpace: 'nowrap', zIndex: 2,
+                }}>
+                  Now · {nowStr}
+                </div>
+                {/* Vertical line */}
+                <div style={{
+                  position: 'absolute', top: 0, left: '50%', width: 2,
+                  height: '100%', background: '#1a1a1a', zIndex: 1,
+                }} />
+                {/* Segments */}
+                <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', height: 44 }}>
+                  {dailyResult.choghadiya.map((c, i) => {
+                    const col = getChogColor(c.name);
+                    return (
+                      <div key={i} style={{
+                        flex: 1, background: col.bg,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, color: col.text }}>
+                          {c.name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Time labels */}
+                <div style={{ display: 'flex', marginTop: 4 }}>
+                  {dailyResult.choghadiya.map((c, i) => (
+                    <div key={i} style={{ flex: 1, textAlign: 'left' }}>
+                      <span style={{ fontFamily: UI_FONT, fontSize: 10, color: '#9A7150' }}>
+                        {to12h(c.start_time || c.time?.split(' - ')[0] || '')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Currently in / Next */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10 }}>
+                {dailyResult.current_choghadiya && (
+                  <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a', marginBottom: 4 }}>
+                      CURRENTLY IN
+                    </div>
+                    <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#14532d' }}>
+                      {dailyResult.current_choghadiya.name} · {to12h(dailyResult.current_choghadiya.time)}
+                    </div>
+                  </div>
+                )}
+                {dailyResult.next_choghadiya && (
+                  <div style={{ background: '#f9fafb', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 4 }}>
+                      NEXT
+                    </div>
+                    <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#374151' }}>
+                      {dailyResult.next_choghadiya.name} · {dailyResult.next_choghadiya.in_minutes ? `in ${dailyResult.next_choghadiya.in_minutes} min` : ''}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 3 Key Timings */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 22 }} className="timing-cards">
+            {[
+              {
+                icon: '⬆',
+                label: 'BRAHMA',
+                color: '#16a34a',
+                bg: '#f0fdf4',
+                border: '#bbf7d0',
+                time: to12h(dailyResult.brahma_muhurat?.time) || '—',
+                sub: dailyResult.brahma_muhurat?.benefit || 'Spiritual practice',
+              },
+              {
+                icon: '✳',
+                label: 'ABHIJIT',
+                color: '#2563eb',
+                bg: '#eff6ff',
+                border: '#bfdbfe',
+                time: to12h(dailyResult.abhijit_muhurat?.time) || '—',
+                sub: dailyResult.abhijit_muhurat?.benefit || 'All-purpose auspicious',
+              },
+              {
+                icon: '⊘',
+                label: 'RAHU KAAL',
+                color: '#dc2626',
+                bg: '#fef2f2',
+                border: '#fecaca',
+                time: to12h(dailyResult.rahu_kaal?.time) || '—',
+                sub: 'Avoid new beginnings',
+              },
+            ].map(t => (
+              <div key={t.label} style={{
+                background: t.bg, border: `1px solid ${t.border}`,
+                borderRadius: 10, padding: '14px 16px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: t.color }}>{t.icon}</span>
+                  <span style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: t.color }}>
+                    {t.label}
+                  </span>
+                </div>
+                <div style={{ fontFamily: UI_FONT, fontSize: 20, fontWeight: 800, color: t.color, marginBottom: 4 }}>
+                  {t.time}
+                </div>
+                <div style={{ fontFamily: UI_FONT, fontSize: 12, color: t.color, opacity: 0.8 }}>{t.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ── Loading skeleton ─────────────────────────────────────────────── */
-function LoadingState({ message = 'Consulting the stars…' }) {
+/* ─── MUHURAT FINDER SECTION (Screenshot 3) ────────────────── */
+function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, rashi, setRashi, name, setName, selected, setSelected, onFind }) {
+  const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
+
+  const inputStyle = {
+    width: '100%', padding: '9px 12px',
+    border: '1px solid #e5d9c8', borderRadius: 8,
+    fontFamily: UI_FONT, fontSize: 14, outline: 'none', color: '#1a1a1a', background: '#fff',
+    boxSizing: 'border-box',
+  };
+  const labelStyle = {
+    fontFamily: UI_FONT, fontWeight: 600, fontSize: 11,
+    letterSpacing: '.07em', textTransform: 'uppercase',
+    color: '#6b7280', display: 'block', marginBottom: 5,
+  };
+
   return (
-    <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-      <div style={{ fontSize: 52, marginBottom: 16, animation: 'pulse-om 2s ease-in-out infinite' }}>🛕</div>
-      <p style={{ fontFamily: 'var(--font-hindi)', color: 'var(--text-light)', fontSize: 17 }}>{message}</p>
-      <p style={{ color: 'var(--text-light)', fontSize: 13, marginTop: 6 }}>
-        Calculating auspicious timings based on Vedic astrology
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 20px 60px' }}>
+      <div style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 600, color: '#9A7150', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+        Muhurat Finder — proper icons + a real pandit rule engine
+      </div>
+      <h2 style={{ fontFamily: UI_FONT, fontSize: 22, fontWeight: 800, color: '#1a1a1a', margin: '0 0 4px' }}>
+        Muhurat Finder
+      </h2>
+      <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#6b7280', marginBottom: 22 }}>
+        Find the most auspicious time for your important occasion
       </p>
+
+      {/* Occasion grid — 6 cols */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={labelStyle}>Select Occasion</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }} className="muhurat-occasion-grid">
+          {MUHURAT_TYPES.map(m => (
+            <button key={m.id} onClick={() => setSelected(m.id)} style={{
+              padding: '12px 6px', borderRadius: 8,
+              border: `2px solid ${selected === m.id ? '#E8650A' : '#e5d9c8'}`,
+              background: selected === m.id ? '#fff7f0' : '#fff',
+              cursor: 'pointer', textAlign: 'center',
+              transition: 'all .12s',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+            }}>
+              <span style={{ fontSize: 22 }}>{m.icon}</span>
+              <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, color: selected === m.id ? '#E8650A' : '#374151', lineHeight: 1.2 }}>{m.label}</span>
+              <span style={{ fontFamily: 'serif', fontSize: 10, color: '#9A7150' }}>{m.hindi}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Form row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto', gap: 12, alignItems: 'flex-end', marginBottom: 20 }} className="muhurat-form-row">
+        <div>
+          <label style={labelStyle}>Date</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+        </div>
+        <div>
+          <label style={labelStyle}>City</label>
+          <input type="text" value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Varanasi" style={{ ...inputStyle, width: 160 }} />
+        </div>
+        <div>
+          <label style={labelStyle}>Rashi</label>
+          <select value={rashi} onChange={e => setRashi(e.target.value)} style={{ ...inputStyle }}>
+            <option value="">Select Rashi…</option>
+            {RASHI_LIST.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+        <button onClick={onFind} disabled={loading} style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '9px 20px', borderRadius: 8,
+          background: '#E8650A', color: '#fff', border: 'none',
+          fontFamily: UI_FONT, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}>
+          {loading
+            ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Finding…</>
+            : <><Sparkles size={14} /> Find auspicious muhurat</>}
+        </button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontFamily: UI_FONT, color: '#b91c1c', fontSize: 14, margin: 0 }}>{error}</p>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && !loading && (
+        <div style={{ animation: 'fadeDown .4s ease both' }}>
+
+          {/* NOT RECOMMENDED / WARNING banner */}
+          {result.verdict === 'avoid' && (
+            <div style={{
+              background: '#fff5f5', border: '1px solid #fecaca',
+              borderRadius: 10, padding: '14px 16px', marginBottom: 20,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{
+                  background: '#dc2626', color: '#fff',
+                  fontFamily: UI_FONT, fontSize: 10, fontWeight: 800,
+                  letterSpacing: '.08em', textTransform: 'uppercase',
+                  padding: '3px 10px', borderRadius: 4,
+                }}>NOT RECOMMENDED</span>
+                <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#7f1d1d' }}>
+                  {selectedType?.label} on {new Date(result.date || date).toLocaleDateString('en-US', { weekday: 'long' })} is generally avoided
+                </span>
+              </div>
+              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#991b1b', lineHeight: 1.6, margin: 0, marginBottom: result.next_favorable_date ? 10 : 0 }}>
+                {result.verdict_reason}
+              </p>
+              {result.next_favorable_date && (
+                <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#7f1d1d', margin: 0 }}>
+                  <strong>Next favorable date:</strong> {result.next_favorable_date.date} — {result.next_favorable_date.reason}{' '}
+                  <a href="#" style={{ color: '#E8650A', textDecoration: 'none', fontWeight: 600 }}>Show details →</a>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Good verdict banner */}
+          {result.verdict !== 'avoid' && result.pandit_message && (
+            <div style={{
+              background: result.verdict === 'excellent' ? '#f0fdf4' : '#fffbeb',
+              border: `1px solid ${result.verdict === 'excellent' ? '#86efac' : '#fde68a'}`,
+              borderRadius: 10, padding: '14px 16px', marginBottom: 20,
+            }}>
+              <p style={{ fontFamily: UI_FONT, fontSize: 14, color: result.verdict === 'excellent' ? '#15803d' : '#92400e', margin: 0 }}>
+                {result.pandit_message}
+              </p>
+            </div>
+          )}
+
+          {/* Two-column layout */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22 }} className="muhurat-results-grid">
+
+            {/* LEFT: Today's shubh windows */}
+            <div>
+              <div style={{
+                background: '#fff', border: '1px solid #e5d9c8',
+                borderRadius: 10, padding: '18px', marginBottom: 18,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 15 }}>⏱</span>
+                    <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Today's shubh windows</span>
+                  </div>
+                  <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150' }}>
+                    {result.verdict === 'avoid' ? '(If proceeding anyway)' : ''}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(result.auspicious_timings || []).map((timing, i) => (
+                    <div key={i} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                      padding: '12px 14px', borderRadius: 8,
+                      background: '#fafafa', border: '1px solid #f0e8da',
+                    }}>
+                      <div>
+                        <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a', marginBottom: 2 }}>
+                          {timing.quality || timing.name}
+                        </div>
+                        <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#6b7280' }}>
+                          {timing.reason}
+                        </div>
+                      </div>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap', marginLeft: 12 }}>
+                        {to12h(timing.time)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pandit's note */}
+              {result.special_notes?.length > 0 && (
+                <div style={{
+                  background: '#fffbeb', border: '1px solid #fde68a',
+                  borderRadius: 10, padding: '16px 18px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 16 }}>✨</span>
+                    <span style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#92400e' }}>Pandit's note</span>
+                  </div>
+                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#78350f', lineHeight: 1.7, margin: 0 }}>
+                    {result.special_notes.join(' ')}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT: Day compatibility */}
+            <div style={{
+              background: '#fff', border: '1px solid #e5d9c8',
+              borderRadius: 10, padding: '18px',
+              alignSelf: 'start',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <span style={{ fontSize: 15 }}>🗓</span>
+                <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Day compatibility</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {[
+                  {
+                    label: 'VAAR',
+                    value: result.var_today || result.tithi_today?.vaar || new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+                    status: result.var_auspicious ?? false,
+                  },
+                  {
+                    label: 'TITHI',
+                    value: result.tithi_today?.name || '—',
+                    status: result.tithi_today?.is_auspicious_for_this_muhurat ?? true,
+                  },
+                  {
+                    label: 'NAKSHATRA',
+                    value: result.nakshatra_today?.name || '—',
+                    status: result.nakshatra_today?.is_auspicious_for_this_muhurat ?? true,
+                  },
+                  {
+                    label: 'YOGA',
+                    value: result.yoga_today?.name || '—',
+                    status: result.yoga_today?.is_auspicious ?? true,
+                  },
+                  {
+                    label: 'CHANDRA BALA',
+                    value: result.chandra_bala || 'Favorable',
+                    status: true,
+                  },
+                ].map((item, i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '11px 12px',
+                    background: item.status === false ? '#fef2f2' : '#fafafa',
+                    borderRadius: 6,
+                    border: `1px solid ${item.status === false ? '#fecaca' : '#f0e8da'}`,
+                    marginBottom: 6,
+                  }}>
+                    <div>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 2 }}>
+                        {item.label}
+                      </div>
+                      <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
+                        {item.value}
+                      </div>
+                    </div>
+                    <div>
+                      {item.status === false
+                        ? <span style={{ fontSize: 18 }}>✕</span>
+                        : <span style={{ fontSize: 18, color: '#16a34a' }}>✓</span>
+                      }
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!loading && !result && (
+        <div style={{
+          textAlign: 'center', padding: '40px 20px',
+          background: '#fdf9f4', borderRadius: 10,
+          border: '1px dashed #e5d9c8',
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>🪔</div>
+          <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#9A7150', lineHeight: 1.6 }}>
+            Select an occasion above and click <strong>Find auspicious muhurat</strong>
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
+/* ─── PAGE ROOT ─────────────────────────────────────────────── */
 export default function PanchangPage() {
   const { t } = useTranslation();
-  const [selected,     setSelected]     = useState(null);
-  const [date,         setDate]         = useState(TODAY);
-  const [rashi,        setRashi]        = useState('');
-  const [name,         setName]         = useState('');
-  const [city,         setCity]         = useState('');
-  const [loading,      setLoading]      = useState(false);
-  const [dailyLoading, setDailyLoading] = useState(false);
-  const [result,       setResult]       = useState(null);
-  const [dailyResult,  setDailyResult]  = useState(null);
-  const [error,        setError]        = useState(null);
+  const [date, setDate] = useState(TODAY);
+  const [city, setCity] = useState('');
+  const [rashi, setRashi] = useState('');
+  const [name, setName] = useState('');
+  const [selected, setSelected] = useState(null);
 
-  const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyResult, setDailyResult] = useState(null);
+
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
 
   const fetchDailyPanchang = async () => {
     setDailyLoading(true); setDailyResult(null); setError(null);
@@ -173,6 +643,8 @@ export default function PanchangPage() {
     }
   };
 
+  const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
+
   const findMuhurat = async () => {
     if (!selected) { setError('Please select an occasion first.'); return; }
     setLoading(true); setResult(null); setError(null);
@@ -182,7 +654,7 @@ export default function PanchangPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          muhurat_type:  selected,
+          muhurat_type: selected,
           muhurat_label: selectedType?.label || selected,
           muhurat_hindi: selectedType?.hindi || '',
           date,
@@ -204,536 +676,103 @@ export default function PanchangPage() {
     }
   };
 
-  /* shared input / label styles */
-  const inputStyle = {
-    width: '100%', padding: '11px 14px',
-    border: '2px solid var(--cream-dark)', borderRadius: 'var(--radius)',
-    fontFamily: UI_FONT, fontSize: 14, outline: 'none',
-    transition: 'var(--transition)', color: 'var(--text-dark)', background: 'white',
-  };
-  const labelStyle = {
-    fontFamily: UI_FONT, fontWeight: 600,
-    fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase',
-    color: 'var(--text-light)', display: 'block', marginBottom: 6,
-  };
-
   return (
     <>
       <Navbar />
-      <div style={{ background: 'var(--cream)', minHeight: '100vh', paddingBottom: 80 }}>
+      <div style={{ background: '#fdf9f4', minHeight: '100vh', paddingBottom: 0 }}>
 
-        {/* ── HERO ─────────────────────────────────────────────────────── */}
+        {/* Hero */}
         <section style={{
-          position: 'relative', overflow: 'hidden', color: 'white',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '50px 12px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '100%',
-          boxSizing: 'border-box',
+          padding: '50px 20px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
         }}>
           <div style={{
-            position: 'relative', zIndex: 1,
             width: '100%', maxWidth: 700,
-            padding: '0 24px',
-            boxSizing: 'border-box',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
           }}>
-            {/* Badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
               borderRadius: 50, padding: '5px 16px', marginBottom: 14,
               color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
               textTransform: 'uppercase', fontWeight: 500,
-              backdropFilter: 'blur(8px)',
-              whiteSpace: 'nowrap',
               fontFamily: UI_FONT,
             }}>
-              <Sun size={11} /> {t('panchang.badge')}
+              <Sun size={11} /> {t('panchang.badge', 'Vedic Calendar & Muhurat')}
             </div>
-
-            {/* Title */}
             <h1 style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900,
-              fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
-              marginBottom: 10, marginTop: 0,
+              fontFamily: 'Georgia, serif', fontWeight: 900,
+              fontSize: 'clamp(28px, 5vw, 48px)', lineHeight: 1.1,
+              marginBottom: 10, marginTop: 0, color: '#fff',
               textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-              color: '#ffffff',
-              width: '100%',
             }}>
               AI Pandit Ji —{' '}
               <span style={{ color: '#FFD580' }}>Panchang &amp; Muhurat</span>
             </h1>
-
-            {/* Subtitle */}
             <p style={{
-              color: 'rgba(255,255,255,0.7)', fontSize: 14,
-              width: '100%', maxWidth: 520,
-              margin: '0 0 0 0',
-              fontWeight: 300, lineHeight: 1.7,
-              textAlign: 'center',
+              color: 'rgba(255,255,255,0.7)', fontSize: 15,
+              maxWidth: 520, margin: 0, fontWeight: 300, lineHeight: 1.7,
               fontFamily: UI_FONT,
             }}>
-              {t('panchang.subtitle')}
+              {t('panchang.subtitle', 'Daily Panchang, Choghadiya & personalized Muhurat recommendations based on Vedic astrology')}
             </p>
           </div>
         </section>
 
-        {/* ── PANCHANG CALENDAR ───────────────────────────────────────── */}
+        {/* Today's Panchang */}
+        <div style={{ background: '#fff', borderBottom: '1px solid #f0e8da' }}>
+          <TodaysPanchang
+            dailyResult={dailyResult}
+            dailyLoading={dailyLoading}
+            date={date}
+            city={city}
+            setDate={setDate}
+            setCity={setCity}
+            onFetch={fetchDailyPanchang}
+          />
+        </div>
+
+        {/* Panchang Calendar */}
         <PanchangCalendar />
 
-        <div className="container" style={{ maxWidth: 960, paddingTop: 36 }}>
-
-          {/* ── SECTION 1 — Daily Panchang ─────────────────────────────── */}
-          <Card>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--brown)', marginBottom: 4 }}>
-              {t('panchang.today')}
-            </h2>
-            <p style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-light)', marginBottom: 22 }}>
-              Get today's Tithi, Nakshatra, auspicious timings &amp; Choghadiya
-            </p>
-
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 20 }}>
-              <div>
-                <label style={labelStyle}>Date</label>
-                <input type="date" value={date}
-                  onChange={e => { setDate(e.target.value); setResult(null); setDailyResult(null); }}
-                  style={{ ...inputStyle, width: 180, background: 'var(--cream)' }}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>City</label>
-                <input type="text" value={city} onChange={e => setCity(e.target.value)}
-                  placeholder="e.g. Ujjain, Mumbai…"
-                  style={{ ...inputStyle, width: 210 }}
-                  onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
-                />
-              </div>
-              <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading}
-                style={{ padding: '12px 26px', borderRadius: 50 }}>
-                {dailyLoading
-                  ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading…</>
-                  : <><Calendar size={15} /> Today's Panchang</>}
-              </button>
-            </div>
-
-            {/* Loading */}
-            {dailyLoading && <LoadingState message="Loading today's Panchang…" />}
-
-            {dailyResult && !dailyLoading && (
-              <div style={{ animation: 'fadeDown .5s ease both' }}>
-
-                {/* Overall Day Banner */}
-                <div style={{
-                  background: VERDICT_BG[dailyResult.overall_day] || '#fffbeb',
-                  borderRadius: 'var(--radius)', padding: '16px 20px', marginBottom: 20,
-                  border: `1px solid ${VERDICT_COLOR[dailyResult.overall_day] || '#d97706'}40`,
-                  display: 'flex', alignItems: 'center', gap: 14,
-                }}>
-                  <span style={{ fontSize: 36 }}>{VERDICT_ICON[dailyResult.overall_day] || '🌤️'}</span>
-                  <div>
-                    <p style={{
-                      fontFamily: UI_FONT, fontSize: 11, letterSpacing: '.09em', textTransform: 'uppercase',
-                      color: VERDICT_COLOR[dailyResult.overall_day] || '#d97706', fontWeight: 700, marginBottom: 4,
-                    }}>{dailyResult.overall_day} Day</p>
-                    <p style={{ fontFamily: 'var(--font-hindi)', fontSize: 15, color: 'var(--text-mid)' }}>
-                      {dailyResult.pandit_blessings}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 5 Angas — horizontal scroll on mobile */}
-                <div style={{ overflowX: 'auto', marginBottom: 18, WebkitOverflowScrolling: 'touch' }}>
-                  <div className="panchang-angas" style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(5,1fr)',
-                    gap: 10, minWidth: 480,
-                  }}>
-                    {[
-                      { label: 'Tithi',     icon: '🌙', val: dailyResult.tithi?.name,     sub: dailyResult.tithi?.nature },
-                      { label: 'Nakshatra', icon: '⭐', val: dailyResult.nakshatra?.name, sub: dailyResult.nakshatra?.lord },
-                      { label: 'Yoga',      icon: '🔗', val: dailyResult.yoga?.name,      sub: dailyResult.yoga?.nature },
-                      { label: 'Karana',    icon: '⚡', val: dailyResult.karana?.name,    sub: dailyResult.karana?.nature },
-                      { label: 'Var',       icon: '☀️', val: dailyResult.var?.day,        sub: `Lord: ${dailyResult.var?.lord}` },
-                    ].map(a => (
-                      <div key={a.label} style={{
-                        background: 'var(--cream)', borderRadius: 'var(--radius)',
-                        padding: '12px 8px', textAlign: 'center', border: '1px solid var(--cream-dark)',
-                      }}>
-                        <span style={{ fontSize: 20 }}>{a.icon}</span>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 600, color: 'var(--text-light)', letterSpacing: '.07em', textTransform: 'uppercase', marginTop: 4 }}>{a.label}</p>
-                        <p style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--brown)', fontWeight: 700, marginTop: 2 }}>{a.val}</p>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>{a.sub}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 3 key timings */}
-                <div style={{ marginBottom: 18 }}>
-                  <TimingStrip items={[
-                    { value: to12h(dailyResult.brahma_muhurat?.time) || '—', label: '🌅 Brahma Muhurat', color: '#15803d', labelColor: '#16a34a', bg: '#f0fdf4' },
-                    { value: to12h(dailyResult.abhijit_muhurat?.time) || '—', label: '☀️ Abhijit Muhurat', color: '#075985', labelColor: '#0369a1', bg: '#f0f9ff' },
-                    { value: to12h(dailyResult.rahu_kaal?.time) || '—', label: '🚫 Rahu Kaal', color: '#b91c1c', labelColor: '#dc2626', bg: '#fef2f2' },
-                  ]} />
-                  <div style={{ display: 'flex', gap: 0 }}>
-                    {[
-                      { note: dailyResult.brahma_muhurat?.benefit, color: '#16a34a', bg: '#f0fdf4' },
-                      { note: dailyResult.abhijit_muhurat?.benefit, color: '#0369a1', bg: '#f0f9ff' },
-                      { note: 'Avoid all auspicious work', color: '#dc2626', bg: '#fef2f2' },
-                    ].map((n, i) => (
-                      <div key={i} style={{
-                        flex: 1, padding: '6px 12px 10px',
-                        fontFamily: UI_FONT, fontSize: 11, color: n.color,
-                        textAlign: 'center', lineHeight: 1.4,
-                        borderLeft: i > 0 ? '1px solid var(--cream-dark)' : 'none',
-                        borderBottom: '1px solid var(--cream-dark)',
-                        borderRight: i === 2 ? '1px solid var(--cream-dark)' : 'none',
-                        background: n.bg,
-                        borderBottomLeftRadius: i === 0 ? 'var(--radius)' : 0,
-                        borderBottomRightRadius: i === 2 ? 'var(--radius)' : 0,
-                      }}>{n.note}</div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Choghadiya — border-left strip style, neutral bg */}
-                {dailyResult.choghadiya?.length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <p style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--brown)', marginBottom: 10 }}>
-                      🕐 Choghadiya
-                    </p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {dailyResult.choghadiya.map((c, i) => (
-                        <div key={i} style={{
-                          padding: '8px 12px', borderRadius: 8,
-                          background: 'var(--cream)',
-                          border: '1px solid var(--cream-dark)',
-                          borderLeft: `3px solid ${c.nature === 'good' ? '#16a34a' : c.nature === 'bad' ? '#dc2626' : '#94a3b8'}`,
-                        }}>
-                          <p style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 700, color: c.nature === 'good' ? '#15803d' : c.nature === 'bad' ? '#b91c1c' : 'var(--text-mid)' }}>{c.name}</p>
-                          <p style={{ fontFamily: UI_FONT, fontSize: 11, color: 'var(--text-light)', whiteSpace: 'nowrap', marginTop: 2 }}>{to12h(c.time)}</p>
-                          {c.good_for && <p style={{ fontFamily: UI_FONT, fontSize: 10, color: 'var(--text-light)', marginTop: 2 }}>{c.good_for}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Do / Avoid */}
-                <div className="panchang-do-avoid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  {[
-                    { title: '✅ Do today',    items: dailyResult.do_today,    bg: '#f0fdf4', border: '#86efac', color: '#15803d', hdr: '#16a34a' },
-                    { title: '🚫 Avoid today', items: dailyResult.avoid_today, bg: '#fef2f2', border: '#fca5a5', color: '#b91c1c', hdr: '#dc2626' },
-                  ].map(s => (
-                    <div key={s.title} style={{ background: s.bg, borderRadius: 'var(--radius)', padding: '14px 16px', border: `1px solid ${s.border}` }}>
-                      <p style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: s.hdr, marginBottom: 8 }}>{s.title}</p>
-                      {(s.items || []).map((d, i) => (
-                        <p key={i} style={{ fontFamily: UI_FONT, fontSize: 13, color: s.color, marginBottom: 5, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                          <span style={{ flexShrink: 0 }}>•</span><span>{d}</span>
-                        </p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* ── SECTION 2 — Muhurat Finder ─────────────────────────────── */}
-          <Card>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--brown)', marginBottom: 4 }}>
-              Muhurat Finder
-            </h2>
-            <p style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-light)', marginBottom: 24 }}>
-              Find the most auspicious time for your important occasion
-            </p>
-
-            {/* Occasion grid — fixed 6 cols desktop, no orphans */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>Select Occasion</label>
-              <div className="muhurat-occasion-grid" style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(6, 1fr)',
-                gap: 10,
-              }}>
-                {MUHURAT_TYPES.map(m => (
-                  <button key={m.id} onClick={() => setSelected(m.id)} style={{
-                    padding: '14px 8px', borderRadius: 'var(--radius)',
-                    border: `2px solid ${selected === m.id ? 'var(--saffron)' : 'var(--cream-dark)'}`,
-                    background: selected === m.id ? 'rgba(232,101,10,0.07)' : 'white',
-                    cursor: 'pointer', textAlign: 'center', transition: 'var(--transition)',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                  }}>
-                    <span style={{ fontSize: 24 }}>{m.emoji}</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: selected === m.id ? 'var(--saffron-dark)' : 'var(--brown)', fontWeight: 700, lineHeight: 1.2 }}>{m.label}</span>
-                    <span style={{ fontFamily: 'var(--font-hindi)', fontSize: 10, color: 'var(--text-light)' }}>{m.hindi}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="muhurat-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}>
-              <div>
-                <label style={labelStyle}>Date</label>
-                <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                  style={{ ...inputStyle, background: 'var(--cream)' }} />
-              </div>
-              <div>
-                <label style={labelStyle}>Your Name (optional)</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Rahul Sharma" style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'} />
-              </div>
-              <div>
-                <label style={labelStyle}>Rashi (Moon Sign)</label>
-                <select value={rashi} onChange={e => setRashi(e.target.value)}
-                  style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value="">Select your Rashi…</option>
-                  {RASHI_LIST.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>City</label>
-                <input type="text" value={city} onChange={e => setCity(e.target.value)}
-                  placeholder="e.g. Varanasi…" style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'} />
-              </div>
-            </div>
-
-            <button className="btn-primary" onClick={findMuhurat} disabled={loading}
-              style={{ width: '100%', justifyContent: 'center', padding: '15px', fontSize: 15, borderRadius: 50, gap: 10 }}>
-              {loading
-                ? <><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Muhurat…</>
-                : <><Sparkles size={18} /> Find Auspicious Muhurat</>}
-            </button>
-
-            {/* Empty state — shown before any result */}
-            {!loading && !result && (
-              <div style={{
-                marginTop: 28, textAlign: 'center', padding: '28px 24px',
-                background: 'var(--cream)', borderRadius: 'var(--radius)',
-                border: '1px dashed var(--cream-dark)',
-              }}>
-                <div style={{ fontSize: 36, marginBottom: 10 }}>🪔</div>
-                <p style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--text-light)', lineHeight: 1.6 }}>
-                  Select an occasion above and click <strong>Find Auspicious Muhurat</strong><br />
-                  to see Vedic timing recommendations
-                </p>
-              </div>
-            )}
-          </Card>
-
-          {/* Error */}
-          {error && (
-            <div style={{ background: '#FFF4F4', border: '1px solid #FFCDD2', borderRadius: 'var(--radius)', padding: '14px 18px', marginBottom: 24, display: 'flex', gap: 10 }}>
-              <AlertCircle size={18} color="#D32F2F" style={{ flexShrink: 0, marginTop: 2 }} />
-              <p style={{ fontFamily: UI_FONT, color: '#C62828', fontSize: 14 }}>{error}</p>
-            </div>
-          )}
-
-          {/* Loading */}
-          {loading && <LoadingState />}
-
-          {/* ── Muhurat Results ─────────────────────────────────────────── */}
-          {result && !loading && (
-            <div style={{ animation: 'fadeDown .6s ease both' }}>
-
-              {/* Verdict Banner */}
-              <div style={{
-                background: VERDICT_BG[result.verdict] || '#fffbeb',
-                border: `2px solid ${VERDICT_COLOR[result.verdict] || '#d97706'}40`,
-                borderRadius: 'var(--radius-lg)', padding: '24px 28px', marginBottom: 24,
-                display: 'flex', alignItems: 'flex-start', gap: 18,
-              }}>
-                <span style={{ fontSize: 52 }}>{VERDICT_ICON[result.verdict] || '🌤️'}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                    <span style={{
-                      fontFamily: UI_FONT, fontSize: 11, letterSpacing: '.09em', textTransform: 'uppercase',
-                      fontWeight: 700, color: 'white', background: VERDICT_COLOR[result.verdict] || '#d97706',
-                      padding: '3px 14px', borderRadius: 50,
-                    }}>{result.verdict}</span>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--brown)', fontWeight: 700 }}>
-                      {selectedType?.label} Muhurat
-                    </span>
-                  </div>
-                  <p style={{ fontFamily: UI_FONT, fontSize: 15, color: VERDICT_COLOR[result.verdict] || '#d97706', marginBottom: 10, fontWeight: 600 }}>
-                    {result.verdict_reason}
-                  </p>
-                  <p style={{ fontFamily: 'var(--font-body)', fontSize: 16, color: 'var(--text-mid)', lineHeight: 1.75, fontStyle: 'italic' }}>
-                    "{result.pandit_message}"
-                  </p>
-                </div>
-              </div>
-
-              {/* Main + Sidebar */}
-              <div className="muhurat-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}>
-
-                {/* LEFT */}
-                <div>
-                  {/* Auspicious Timings */}
-                  <Card accent="rgba(34,197,94,0.3)">
-                    <SectionTitle icon={<Clock size={14} color="white" />}>Shubh Muhurat Timings</SectionTitle>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {(result.auspicious_timings || []).map((timing, i) => (
-                        <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #86efac', overflow: 'hidden', background: '#f0fdf4' }}>
-                          <div style={{ display: 'flex', borderBottom: '1px solid #86efac' }}>
-                            <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid #86efac' }}>
-                              <p style={{ fontFamily: UI_FONT, fontSize: 17, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap', marginBottom: 2 }}>{to12h(timing.time)}</p>
-                              <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a' }}>Shubh Timing</p>
-                            </div>
-                            <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#dcfce7' }}>
-                              <p style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#15803d', textAlign: 'center' }}>{timing.quality}</p>
-                            </div>
-                          </div>
-                          <div style={{ padding: '10px 16px' }}>
-                            <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#16a34a', lineHeight: 1.5 }}>{timing.reason}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-
-                  {/* Inauspicious Timings */}
-                  {result.timings_to_avoid?.length > 0 && (
-                    <Card accent="rgba(220,38,38,0.25)">
-                      <SectionTitle icon={<AlertCircle size={14} color="white" />}>Timings to Avoid</SectionTitle>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {result.timings_to_avoid.map((timing, i) => (
-                          <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #fca5a5', overflow: 'hidden', background: '#fef2f2' }}>
-                            <div style={{ display: 'flex', borderBottom: '1px solid #fca5a5' }}>
-                              <div style={{ padding: '10px 16px', borderRight: '1px solid #fca5a5' }}>
-                                <p style={{ fontFamily: UI_FONT, fontSize: 16, fontWeight: 700, color: '#b91c1c', whiteSpace: 'nowrap', marginBottom: 2 }}>{to12h(timing.time)}</p>
-                                <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#dc2626' }}>Avoid</p>
-                              </div>
-                              <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center' }}>
-                                <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#dc2626', lineHeight: 1.4 }}>{timing.reason}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Rituals */}
-                  {result.rituals_recommended?.length > 0 && (
-                    <Card>
-                      <SectionTitle icon={<Star size={14} color="white" />}>Recommended Rituals</SectionTitle>
-                      {result.rituals_recommended.map((ritual, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
-                          <CheckCircle size={16} color="var(--saffron)" style={{ marginTop: 3, flexShrink: 0 }} />
-                          <span style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.6 }}>{ritual}</span>
-                        </div>
-                      ))}
-                    </Card>
-                  )}
-
-                  {/* Mantras */}
-                  {result.mantras?.length > 0 && (
-                    <Card>
-                      <SectionTitle icon="🕉️">Mantras to Chant</SectionTitle>
-                      {result.mantras.map((m, i) => (
-                        <div key={i} className="mantra-card" style={{ marginBottom: 12 }}>
-                          <div className="mantra-title">{m.deity} · Chant {m.chant_times} times</div>
-                          <div className="mantra-sanskrit">{m.mantra}</div>
-                          <div className="mantra-meaning">{m.purpose}</div>
-                        </div>
-                      ))}
-                    </Card>
-                  )}
-                </div>
-
-                {/* RIGHT sidebar */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-                  {/* Planetary Check */}
-                  <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--cream-dark)', padding: '20px', boxShadow: '0 2px 12px var(--shadow)' }}>
-                    <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>🔭 Planetary Check</h3>
-                    {[
-                      { label: 'Tithi',     data: result.tithi_today },
-                      { label: 'Nakshatra', data: result.nakshatra_today },
-                    ].map(item => item.data && (
-                      <div key={item.label} style={{
-                        background: item.data.is_auspicious_for_this_muhurat ? '#f0fdf4' : '#fef2f2',
-                        borderRadius: 10, padding: '12px 14px', marginBottom: 10,
-                        border: `1px solid ${item.data.is_auspicious_for_this_muhurat ? '#86efac' : '#fca5a5'}`,
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 600, color: 'var(--text-light)', letterSpacing: '.06em', textTransform: 'uppercase' }}>{item.label}</span>
-                          <span style={{ fontFamily: UI_FONT, fontSize: 11, color: item.data.is_auspicious_for_this_muhurat ? '#16a34a' : '#dc2626' }}>
-                            {item.data.is_auspicious_for_this_muhurat ? '✅ Auspicious' : '⚠️ Caution'}
-                          </span>
-                        </div>
-                        <p style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 700 }}>{item.data.name}</p>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)', marginTop: 4, lineHeight: 1.5 }}>{item.data.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Alternative Dates */}
-                  {result.alternative_dates?.length > 0 && (
-                    <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--cream-dark)', padding: '20px', boxShadow: '0 2px 12px var(--shadow)' }}>
-                      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>📆 Alternative Dates</h3>
-                      {result.alternative_dates.map((d, i) => (
-                        <div key={i} style={{ padding: '10px 12px', borderRadius: 10, marginBottom: 8, background: 'var(--cream)', border: '1px solid var(--cream-dark)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                            <span style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--brown)', fontWeight: 700 }}>{d.date}</span>
-                            <span style={{ fontFamily: UI_FONT, fontSize: 10, background: 'var(--saffron)', color: 'white', borderRadius: 50, padding: '2px 8px', fontWeight: 700 }}>{d.quality}</span>
-                          </div>
-                          <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)' }}>{d.reason}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Special Notes */}
-                  {result.special_notes?.length > 0 && (
-                    <div style={{
-                      background: 'linear-gradient(135deg,rgba(200,150,12,0.07),rgba(232,101,10,0.04))',
-                      borderRadius: 'var(--radius-lg)', border: '1px solid rgba(200,150,12,0.2)', padding: '20px',
-                    }}>
-                      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 12 }}>💡 Pandit Ji's Notes</h3>
-                      {result.special_notes.map((n, i) => (
-                        <p key={i} style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 8, display: 'flex', gap: 8 }}>
-                          <Star size={12} color="var(--gold)" style={{ marginTop: 4, flexShrink: 0 }} />
-                          {n}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+        {/* Muhurat Finder */}
+        <div style={{ background: '#fff', borderTop: '1px solid #f0e8da' }}>
+          <MuhuratFinder
+            result={result}
+            loading={loading}
+            error={error}
+            date={date}
+            setDate={d => { setDate(d); setResult(null); }}
+            city={city}
+            setCity={setCity}
+            rashi={rashi}
+            setRashi={setRashi}
+            name={name}
+            setName={setName}
+            selected={selected}
+            setSelected={s => { setSelected(s); setResult(null); }}
+            onFind={findMuhurat}
+          />
         </div>
       </div>
 
       <style>{`
-        @keyframes spin      { to { transform: rotate(360deg); } }
-        @keyframes fadeDown  { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes pulse-om  { 0%,100% { transform:scale(1); opacity:.7; } 50% { transform:scale(1.04); opacity:1; } }
+        @keyframes spin     { to { transform: rotate(360deg); } }
+        @keyframes fadeDown { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 
         @media (max-width: 900px) {
           .muhurat-results-grid { grid-template-columns: 1fr !important; }
+          .timing-cards { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 720px) {
-          .muhurat-occasion-grid { grid-template-columns: repeat(4,1fr) !important; }
-          .muhurat-form-grid     { grid-template-columns: 1fr 1fr !important; }
-          .panchang-do-avoid     { grid-template-columns: 1fr !important; }
+          .muhurat-occasion-grid { grid-template-columns: repeat(4, 1fr) !important; }
+          .muhurat-form-row { grid-template-columns: 1fr 1fr !important; }
+          .panchang-angas { grid-template-columns: repeat(3, 1fr) !important; }
         }
         @media (max-width: 480px) {
-          .muhurat-occasion-grid { grid-template-columns: repeat(3,1fr) !important; }
-          .muhurat-form-grid     { grid-template-columns: 1fr !important; }
+          .muhurat-occasion-grid { grid-template-columns: repeat(3, 1fr) !important; }
+          .muhurat-form-row { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
