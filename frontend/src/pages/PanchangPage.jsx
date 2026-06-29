@@ -27,8 +27,10 @@ const RASHI_LIST = [
 ];
 
 const TODAY = new Date().toISOString().split('T')[0];
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const DEFAULT_COORDINATES = '28.6139,77.2090';
+
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
 
 function apiErrorMessage(data, fallback) {
@@ -48,73 +50,15 @@ function to12h(timeStr) {
   });
 }
 
-/**
- * Robustly parse any time string to total minutes since midnight.
- * Handles: "5:14", "05:14", "5:14 AM", "5:14 PM", "17:14"
- * For overnight slots (e.g. 1:38 AM that appear AFTER PM slots),
- * caller must pass addDay=true to get 1440 + minutes.
- */
-function parseTimeToMinutes(t, addDay = false) {
-  if (!t) return null;
-  const str = String(t).trim();
-  const isPM = /PM/i.test(str);
-  const isAM = /AM/i.test(str);
-  const clean = str.replace(/\s*(AM|PM)/i, '').trim();
-  const parts = clean.split(':');
-  let h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1] || '0', 10);
-  if (isNaN(h) || isNaN(m)) return null;
-
-  // 12-hour explicit
-  if (isPM && h !== 12) h += 12;
-  if (isAM && h === 12) h = 0;
-  // If no AM/PM marker but looks like 24h (h >= 13) leave as-is
-  // If h <= 12 and no marker, ambiguous — treat as-is (morning bias)
-
-  const mins = h * 60 + m;
-  return addDay ? mins + 1440 : mins;
-}
-
-/**
- * Given the choghadiya array, compute each slot's start time in minutes
- * correctly handling overnight wrap (slots after midnight get +1440).
- * Returns array of numbers (minutes since midnight, possibly >1440).
- */
-function computeSlotMinutes(choghadiya) {
-  if (!choghadiya || choghadiya.length === 0) return [];
-
-  const slots = choghadiya.map((c) => {
-    const raw = c.start_time || c.time?.split(' - ')[0] || '';
-    return { raw, mins: parseTimeToMinutes(raw) };
-  });
-
-  // Walk through: if a slot's minutes are less than the previous,
-  // it has wrapped past midnight — add 1440.
-  let offset = 0;
-  const result = [];
-  let prev = null;
-  for (const s of slots) {
-    if (s.mins === null) { result.push(null); continue; }
-    let adjusted = s.mins + offset;
-    if (prev !== null && adjusted < prev) {
-      offset += 1440;
-      adjusted += 1440;
-    }
-    prev = adjusted;
-    result.push(adjusted);
-  }
-  return result;
-}
-
-/* ─── PASTEL CHOGHADIYA COLORS ─────────────────────────────── */
+/* ─── PASTEL CHOGHADIYA COLOR MAP (matches Image 1) ────────── */
 const PASTEL_CHOG_COLORS = {
-  udveg: { bg: '#fca5a5', text: '#7f1d1d' },
-  char:  { bg: '#86efac', text: '#14532d' },
-  labh:  { bg: '#86efac', text: '#14532d' },
-  amrit: { bg: '#86efac', text: '#14532d' },
-  kaal:  { bg: '#fca5a5', text: '#7f1d1d' },
-  shubh: { bg: '#bbf7d0', text: '#14532d' },
-  rog:   { bg: '#fca5a5', text: '#7f1d1d' },
+  udveg: { bg: '#f8a5a5', text: '#7f1d1d' },   // soft pink-red
+  char:  { bg: '#86efac', text: '#14532d' },   // mint green
+  labh:  { bg: '#86efac', text: '#14532d' },   // mint green
+  amrit: { bg: '#86efac', text: '#14532d' },   // mint green
+  kaal:  { bg: '#fca5a5', text: '#7f1d1d' },   // light pink-red
+  shubh: { bg: '#bbf7d0', text: '#14532d' },   // pale green
+  rog:   { bg: '#fca5a5', text: '#7f1d1d' },   // light pink-red
 };
 
 function getPastelChogColor(name) {
@@ -122,10 +66,24 @@ function getPastelChogColor(name) {
   for (const [k, v] of Object.entries(PASTEL_CHOG_COLORS)) {
     if (key.includes(k)) return v;
   }
-  return { bg: '#fde68a', text: '#78350f' };
+  return { bg: '#fde68a', text: '#78350f' }; // golden fallback
 }
 
-/* ─── SVG ICONS ─────────────────────────────────────────────── */
+/* ─── Parse "HH:MM" or "H:MM AM/PM" to total minutes ───────── */
+function parseTimeToMinutes(t) {
+  if (!t) return null;
+  const isPM = /PM/i.test(t);
+  const isAM = /AM/i.test(t);
+  const clean = t.replace(/\s*(AM|PM)/i, '').trim();
+  const parts = clean.split(':');
+  let h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1] || '0', 10);
+  if (isPM && h !== 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  return h * 60 + m;
+}
+
+/* ─── SVG ICON MAP ──────────────────────────────────────────── */
 const OCCASION_ICONS = {
   vivah: (
     <svg viewBox="0 0 28 28" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -221,206 +179,7 @@ const OCCASION_ICONS = {
   ),
 };
 
-/* ─── CHOGHADIYA TIMELINE COMPONENT ────────────────────────── */
-function ChoghadiyaTimeline({ choghadiya, sunrise, sunset, currentChog, nextChog }) {
-  if (!choghadiya || choghadiya.length === 0) return null;
-
-  // Each slot width in pixels — wide enough to show label + time
-  const SLOT_WIDTH = 90;
-  const BAR_HEIGHT = 44;
-  const totalWidth = SLOT_WIDTH * choghadiya.length;
-
-  // Compute adjusted minutes for each slot (handles overnight wrap)
-  const slotMins = computeSlotMinutes(choghadiya);
-
-  // Current time in minutes since midnight
-  const now = new Date();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-
-  // Total range = first slot start to (last slot start + one slot duration)
-  const firstMins = slotMins[0];
-  const lastMins  = slotMins[slotMins.length - 1];
-  // Estimate slot duration from first two slots if possible
-  const slotDuration = slotMins.length > 1 && slotMins[1] !== null && slotMins[0] !== null
-    ? slotMins[1] - slotMins[0]
-    : 96; // ~96 min default (1440/15 slots)
-  const rangeMins = (lastMins + slotDuration) - firstMins;
-
-  // Now position: if nowMins < firstMins (before first slot), treat as next day
-  let adjustedNow = nowMins;
-  if (firstMins !== null && nowMins < firstMins - 30) {
-    // We're past midnight, slots started yesterday
-    adjustedNow = nowMins + 1440;
-  }
-
-  // Pixel position of the now-line
-  const nowPx = firstMins !== null && rangeMins > 0
-    ? ((adjustedNow - firstMins) / rangeMins) * totalWidth
-    : -1; // -1 = outside range, hide
-
-  const showNowPin = nowPx >= 0 && nowPx <= totalWidth;
-
-  const nowStr = now.toLocaleTimeString('en-IN', {
-    hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
-  });
-
-  return (
-    <div style={{
-      background: '#fff', border: '1px solid #e5d9c8',
-      borderRadius: 12, padding: '16px 18px', marginBottom: 22,
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>⏱</span>
-          <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Day Choghadiya</span>
-        </div>
-        <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150' }}>
-          {to12h(sunrise)} → {to12h(sunset)}
-        </span>
-      </div>
-
-      {/* Scrollable timeline */}
-      <div style={{
-        overflowX: 'auto',
-        overflowY: 'visible',
-        WebkitOverflowScrolling: 'touch',
-        /* show scrollbar always so user knows it's scrollable */
-        paddingBottom: 6,
-        marginBottom: 4,
-        /* extra top padding for the pill */
-        paddingTop: 36,
-        position: 'relative',
-      }}>
-        {/* Inner fixed-width container */}
-        <div style={{ position: 'relative', width: totalWidth, minWidth: totalWidth }}>
-
-          {/* Now pill */}
-          {showNowPin && (
-            <div style={{
-              position: 'absolute',
-              left: nowPx,
-              top: -32,
-              transform: 'translateX(-50%)',
-              background: '#1a1a1a',
-              color: '#fff',
-              fontFamily: UI_FONT,
-              fontSize: 11,
-              fontWeight: 700,
-              padding: '4px 11px',
-              borderRadius: 50,
-              whiteSpace: 'nowrap',
-              zIndex: 10,
-              pointerEvents: 'none',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.22)',
-            }}>
-              Now · {nowStr}
-            </div>
-          )}
-
-          {/* Vertical now-line */}
-          {showNowPin && (
-            <div style={{
-              position: 'absolute',
-              left: nowPx,
-              top: 0,
-              width: 2,
-              height: BAR_HEIGHT,
-              background: '#1a1a1a',
-              zIndex: 5,
-              transform: 'translateX(-50%)',
-              borderRadius: 1,
-            }} />
-          )}
-
-          {/* Colored segments bar */}
-          <div style={{
-            display: 'flex',
-            borderRadius: 8,
-            overflow: 'hidden',
-            height: BAR_HEIGHT,
-            border: '1px solid #e5d9c8',
-          }}>
-            {choghadiya.map((c, i) => {
-              const col = getPastelChogColor(c.name);
-              return (
-                <div key={i} style={{
-                  width: SLOT_WIDTH,
-                  flexShrink: 0,
-                  background: col.bg,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRight: i < choghadiya.length - 1
-                    ? '1px solid rgba(255,255,255,0.55)'
-                    : 'none',
-                }}>
-                  <span style={{
-                    fontFamily: UI_FONT,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: col.text,
-                    userSelect: 'none',
-                  }}>
-                    {c.name}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Time labels below each slot */}
-          <div style={{ display: 'flex', marginTop: 5 }}>
-            {choghadiya.map((c, i) => {
-              const raw = c.start_time || c.time?.split(' - ')[0] || '';
-              return (
-                <div key={i} style={{ width: SLOT_WIDTH, flexShrink: 0 }}>
-                  <span style={{
-                    fontFamily: UI_FONT,
-                    fontSize: 10,
-                    color: '#9A7150',
-                    display: 'block',
-                    paddingLeft: 4,
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {to12h(raw)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Currently in / Next */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10 }}>
-        {currentChog && (
-          <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a', marginBottom: 4 }}>
-              CURRENTLY IN
-            </div>
-            <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#14532d' }}>
-              {currentChog.name} · {to12h(currentChog.time)}
-            </div>
-          </div>
-        )}
-        {nextChog && (
-          <div style={{ background: '#f9fafb', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 4 }}>
-              NEXT
-            </div>
-            <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#374151' }}>
-              {nextChog.name}
-              {nextChog.in_minutes ? ` · in ${nextChog.in_minutes} min` : ''}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ─── TODAY'S PANCHANG ──────────────────────────────────────── */
+/* ─── TODAY'S PANCHANG SECTION ──────────────────────────────── */
 function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCity, onFetch }) {
   const inputStyle = {
     padding: '8px 12px', border: '1px solid #e5d9c8', borderRadius: 8,
@@ -457,21 +216,25 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <label style={labelStyle}>Date</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ ...inputStyle, width: 160 }} />
+          <input type="date" value={date}
+            onChange={e => setDate(e.target.value)}
+            style={{ ...inputStyle, width: 160 }}
+          />
         </div>
         <div>
           <label style={labelStyle}>City</label>
           <input type="text" value={city} onChange={e => setCity(e.target.value)}
             placeholder="e.g. Varanasi, Ujjain…"
-            style={{ ...inputStyle, width: 200 }} />
+            style={{ ...inputStyle, width: 200 }}
+          />
         </div>
-        <button onClick={onFetch} disabled={dailyLoading} style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '9px 20px', borderRadius: 8,
-          background: '#E8650A', color: '#fff', border: 'none',
-          fontFamily: UI_FONT, fontSize: 14, fontWeight: 600, cursor: 'pointer',
-        }}>
+        <button onClick={onFetch} disabled={dailyLoading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '9px 20px', borderRadius: 8,
+            background: '#E8650A', color: '#fff', border: 'none',
+            fontFamily: UI_FONT, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>
           {dailyLoading
             ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Loading…</>
             : 'Get Panchang'}
@@ -488,7 +251,7 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
       {dailyResult && !dailyLoading && (
         <div style={{ animation: 'fadeDown .4s ease both' }}>
 
-          {/* TODAY AT A GLANCE */}
+          {/* TODAY AT A GLANCE banner */}
           {dailyResult.today_at_glance && (
             <div style={{
               background: '#fef9ee', border: '1px solid #fde68a',
@@ -508,13 +271,16 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
           )}
 
           {/* 5 Angas grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 22 }} className="panchang-angas">
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: 10, marginBottom: 22,
+          }} className="panchang-angas">
             {[
-              { label: 'TITHI',     icon: '🌙', val: dailyResult.tithi?.name,    sub: `${dailyResult.tithi?.nature || dailyResult.tithi?.paksha || ''} · ${dailyResult.tithi?.end_time || ''}` },
-              { label: 'NAKSHATRA', icon: '⭐', val: dailyResult.nakshatra?.name, sub: `until ${dailyResult.nakshatra?.end_time || ''}` },
-              { label: 'YOGA',      icon: '∞',  val: dailyResult.yoga?.name,      sub: `until ${dailyResult.yoga?.end_time || ''}` },
-              { label: 'KARANA',    icon: '⏹',  val: dailyResult.karana?.name,    sub: `until ${dailyResult.karana?.end_time || ''}` },
-              { label: 'VAAR',      icon: '☀️', val: dailyResult.var?.day,        sub: `Lord: ${dailyResult.var?.lord || ''}` },
+              { label: 'TITHI',     icon: '🌙', val: dailyResult.tithi?.name,     sub: `${dailyResult.tithi?.nature || dailyResult.tithi?.paksha || ''} · ${dailyResult.tithi?.end_time || ''}` },
+              { label: 'NAKSHATRA', icon: '⭐', val: dailyResult.nakshatra?.name,  sub: `until ${dailyResult.nakshatra?.end_time || ''}` },
+              { label: 'YOGA',      icon: '∞',  val: dailyResult.yoga?.name,       sub: `until ${dailyResult.yoga?.end_time || ''}` },
+              { label: 'KARANA',    icon: '⏹',  val: dailyResult.karana?.name,     sub: `until ${dailyResult.karana?.end_time || ''}` },
+              { label: 'VAAR',      icon: '☀️', val: dailyResult.var?.day,         sub: `Lord: ${dailyResult.var?.lord || ''}` },
             ].map(a => (
               <div key={a.label} style={{
                 background: '#fff', borderRadius: 10, padding: '14px 10px',
@@ -528,14 +294,156 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
             ))}
           </div>
 
-          {/* Choghadiya Timeline */}
-          <ChoghadiyaTimeline
-            choghadiya={dailyResult.choghadiya}
-            sunrise={dailyResult.sunrise}
-            sunset={dailyResult.sunset}
-            currentChog={dailyResult.current_choghadiya}
-            nextChog={dailyResult.next_choghadiya}
-          />
+          {/* ── Day Choghadiya timeline ── */}
+          {dailyResult.choghadiya?.length > 0 && (
+            <div style={{
+              background: '#fff', border: '1px solid #e5d9c8',
+              borderRadius: 12, padding: '16px 18px', marginBottom: 22,
+            }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16 }}>⏱</span>
+                  <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Day Choghadiya</span>
+                </div>
+                <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150' }}>
+                  {to12h(dailyResult.sunrise)} → {to12h(dailyResult.sunset)}
+                </span>
+              </div>
+
+              {/* Timeline with proportional Now pin */}
+              {(() => {
+                const now = new Date();
+                const nowMins = now.getHours() * 60 + now.getMinutes();
+                const sunriseMins = parseTimeToMinutes(dailyResult.sunrise);
+                const sunsetMins  = parseTimeToMinutes(dailyResult.sunset);
+                const totalMins   = (sunriseMins !== null && sunsetMins !== null) ? sunsetMins - sunriseMins : null;
+                const nowPct = (totalMins && sunriseMins !== null)
+                  ? Math.max(2, Math.min(98, ((nowMins - sunriseMins) / totalMins) * 100))
+                  : 50;
+
+                const nowStr = now.toLocaleTimeString('en-IN', {
+                  hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
+                });
+
+                return (
+                  <div style={{ position: 'relative', marginBottom: 8 }}>
+                    {/* Now pill */}
+                    <div style={{
+                      position: 'absolute',
+                      left: `${nowPct}%`,
+                      top: -28,
+                      transform: 'translateX(-50%)',
+                      background: '#1a1a1a',
+                      color: '#fff',
+                      fontFamily: UI_FONT,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '4px 11px',
+                      borderRadius: 50,
+                      whiteSpace: 'nowrap',
+                      zIndex: 3,
+                      pointerEvents: 'none',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                    }}>
+                      Now · {nowStr}
+                    </div>
+
+                    {/* Vertical now-line */}
+                    <div style={{
+                      position: 'absolute',
+                      left: `${nowPct}%`,
+                      top: 0,
+                      width: 2,
+                      height: 44,
+                      background: '#1a1a1a',
+                      zIndex: 2,
+                      transform: 'translateX(-50%)',
+                      borderRadius: 1,
+                    }} />
+
+                    {/* Segments bar */}
+                    <div style={{
+                      display: 'flex',
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      height: 44,
+                      border: '1px solid #e5d9c8',
+                    }}>
+                      {dailyResult.choghadiya.map((c, i) => {
+                        const col = getPastelChogColor(c.name);
+                        return (
+                          <div key={i} style={{
+                            flex: 1,
+                            background: col.bg,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRight: i < dailyResult.choghadiya.length - 1
+                              ? '1px solid rgba(255,255,255,0.55)'
+                              : 'none',
+                          }}>
+                            <span style={{
+                              fontFamily: UI_FONT,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: col.text,
+                            }}>
+                              {c.name}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Time labels below each segment */}
+                    <div style={{ display: 'flex', marginTop: 5 }}>
+                      {dailyResult.choghadiya.map((c, i) => (
+                        <div key={i} style={{ flex: 1 }}>
+                          <span style={{
+                            fontFamily: UI_FONT,
+                            fontSize: 10,
+                            color: '#9A7150',
+                            display: 'block',
+                            paddingLeft: 2,
+                          }}>
+                            {to12h(c.start_time || c.time?.split(' - ')[0] || '')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Currently in / Next */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
+                {dailyResult.current_choghadiya && (
+                  <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a', marginBottom: 4 }}>
+                      CURRENTLY IN
+                    </div>
+                    <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#14532d' }}>
+                      {dailyResult.current_choghadiya.name} · {to12h(dailyResult.current_choghadiya.time)}
+                    </div>
+                  </div>
+                )}
+                {dailyResult.next_choghadiya && (
+                  <div style={{ background: '#f9fafb', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 4 }}>
+                      NEXT
+                    </div>
+                    <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#374151' }}>
+                      {dailyResult.next_choghadiya.name}
+                      {dailyResult.next_choghadiya.in_minutes
+                        ? ` · in ${dailyResult.next_choghadiya.in_minutes} min`
+                        : ''}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 3 Key Timings */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 22 }} className="timing-cards">
@@ -591,7 +499,7 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
   );
 }
 
-/* ─── MUHURAT FINDER ────────────────────────────────────────── */
+/* ─── MUHURAT FINDER SECTION ────────────────────────────────── */
 function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, rashi, setRashi, name, setName, selected, setSelected, onFind }) {
   const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
 
@@ -609,24 +517,57 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
   };
 
   const compatItems = result ? [
-    { label: 'VAAR',       value: result.var_today || new Date(date).toLocaleDateString('en-US', { weekday: 'long' }), status: result.var_auspicious ?? false },
-    { label: 'TITHI',      value: result.tithi_today?.name || '—',     status: result.tithi_today?.is_auspicious_for_this_muhurat ?? null },
-    { label: 'NAKSHATRA',  value: result.nakshatra_today?.name || '—', status: result.nakshatra_today?.is_auspicious_for_this_muhurat ?? true },
-    { label: 'YOGA',       value: result.yoga_today?.name || '—',      status: result.yoga_today?.is_auspicious ?? true },
-    { label: 'CHANDRA BALA', value: result.chandra_bala || 'Favorable', status: true },
+    {
+      label: 'VAAR',
+      value: result.var_today || result.tithi_today?.vaar || new Date(date).toLocaleDateString('en-US', { weekday: 'long' }),
+      status: result.var_auspicious ?? false,
+    },
+    {
+      label: 'TITHI',
+      value: result.tithi_today?.name || '—',
+      status: result.tithi_today?.is_auspicious_for_this_muhurat ?? null,
+    },
+    {
+      label: 'NAKSHATRA',
+      value: result.nakshatra_today?.name || '—',
+      status: result.nakshatra_today?.is_auspicious_for_this_muhurat ?? true,
+    },
+    {
+      label: 'YOGA',
+      value: result.yoga_today?.name || '—',
+      status: result.yoga_today?.is_auspicious ?? true,
+    },
+    {
+      label: 'CHANDRA BALA',
+      value: result.chandra_bala || 'Favorable',
+      status: true,
+    },
   ] : [];
 
   function CompatIcon({ status }) {
     if (status === false) return (
-      <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#fee2e2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <span style={{
+        width: 22, height: 22, borderRadius: '50%',
+        background: '#fee2e2', border: '1px solid #fca5a5',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 2L8 8M8 2L2 8" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round"/></svg>
       </span>
     );
     if (status === null) return (
-      <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#fef9ee', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#92400e', lineHeight: 1 }}>−</span>
+      <span style={{
+        width: 22, height: 22, borderRadius: '50%',
+        background: '#fef9ee', border: '1px solid #fde68a',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#92400e', lineHeight: 1,
+      }}>−</span>
     );
     return (
-      <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#dcfce7', border: '1px solid #86efac', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <span style={{
+        width: 22, height: 22, borderRadius: '50%',
+        background: '#dcfce7', border: '1px solid #86efac',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 5L4 7.5L8.5 2.5" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </span>
     );
@@ -634,6 +575,7 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 20px 60px' }}>
+      {/* Eyebrow */}
       <div style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 600, color: '#b45309', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }}>
         MUHURAT FINDER — PROPER ICONS + A REAL PANDIT RULE ENGINE
       </div>
@@ -644,6 +586,7 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
         Find the most auspicious time for your important occasion
       </p>
 
+      {/* SELECT OCCASION label */}
       <div style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 10 }}>
         SELECT OCCASION
       </div>
@@ -654,7 +597,8 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
           const isSelected = selected === m.id;
           return (
             <button key={m.id} onClick={() => setSelected(m.id)} style={{
-              padding: '14px 8px 12px', borderRadius: 8,
+              padding: '14px 8px 12px',
+              borderRadius: 8,
               border: `2px solid ${isSelected ? '#c9651a' : '#e2d5c3'}`,
               background: isSelected ? '#fff7f0' : '#fff',
               cursor: 'pointer',
@@ -665,12 +609,16 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
               <span style={{ color: isSelected ? '#c9651a' : '#5a3e28', lineHeight: 1 }}>
                 {OCCASION_ICONS[m.id]}
               </span>
-              <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, color: isSelected ? '#c9651a' : '#1a1a1a', lineHeight: 1.3, textAlign: 'center' }}>
-                {m.label}
-              </span>
-              <span style={{ fontFamily: 'serif', fontSize: 10, color: isSelected ? '#c9651a' : '#9A7150', lineHeight: 1 }}>
-                {m.hindi}
-              </span>
+              <span style={{
+                fontFamily: UI_FONT, fontSize: 11, fontWeight: 700,
+                color: isSelected ? '#c9651a' : '#1a1a1a',
+                lineHeight: 1.3, textAlign: 'center',
+              }}>{m.label}</span>
+              <span style={{
+                fontFamily: 'serif', fontSize: 10,
+                color: isSelected ? '#c9651a' : '#9A7150',
+                lineHeight: 1,
+              }}>{m.hindi}</span>
             </button>
           );
         })}
@@ -680,15 +628,19 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 130 }}>
           <label style={labelStyle}>DATE</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inputStyle, width: 140 }} />
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{ ...inputStyle, width: 140 }} />
         </div>
         <div style={{ minWidth: 130 }}>
           <label style={labelStyle}>CITY</label>
-          <input type="text" value={city} onChange={e => setCity(e.target.value)} placeholder="e.g. Varanasi" style={{ ...inputStyle, width: 140 }} />
+          <input type="text" value={city} onChange={e => setCity(e.target.value)}
+            placeholder="e.g. Varanasi"
+            style={{ ...inputStyle, width: 140 }} />
         </div>
         <div style={{ flex: 1, minWidth: 160 }}>
           <label style={labelStyle}>RASHI</label>
-          <select value={rashi} onChange={e => setRashi(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', appearance: 'auto' }}>
+          <select value={rashi} onChange={e => setRashi(e.target.value)}
+            style={{ ...inputStyle, cursor: 'pointer', appearance: 'auto' }}>
             <option value="">Select Rashi…</option>
             {RASHI_LIST.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
@@ -700,7 +652,7 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
           color: '#fff', border: 'none',
           fontFamily: UI_FONT, fontSize: 14, fontWeight: 700,
           cursor: loading ? 'not-allowed' : 'pointer',
-          whiteSpace: 'nowrap', flexShrink: 0,
+          whiteSpace: 'nowrap', letterSpacing: '.01em', flexShrink: 0,
         }}>
           {loading
             ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Finding…</>
@@ -708,27 +660,40 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
         </button>
       </div>
 
+      {/* Error */}
       {error && !result && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fecaca',
+          borderRadius: 8, padding: '12px 16px', marginBottom: 20,
+          display: 'flex', gap: 10, alignItems: 'flex-start',
+        }}>
           <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
           <p style={{ fontFamily: UI_FONT, color: '#b91c1c', fontSize: 14, margin: 0 }}>{error}</p>
         </div>
       )}
 
+      {/* Results */}
       {result && !loading && (
         <div style={{ animation: 'fadeDown .4s ease both' }}>
 
+          {/* NOT RECOMMENDED banner */}
           {result.verdict === 'avoid' && (
-            <div style={{ background: '#fff8f7', border: '1px solid #fecaca', borderRadius: 10, padding: '16px 18px', marginBottom: 22 }}>
+            <div style={{
+              background: '#fff8f7', border: '1px solid #fecaca',
+              borderRadius: 10, padding: '16px 18px', marginBottom: 22,
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path d="M10 3L18 17H2L10 3Z" stroke="#dc2626" strokeWidth="1.6" strokeLinejoin="round" fill="#fee2e2"/>
                   <path d="M10 9V13" stroke="#dc2626" strokeWidth="1.6" strokeLinecap="round"/>
                   <circle cx="10" cy="15.5" r="0.8" fill="#dc2626"/>
                 </svg>
-                <span style={{ background: '#dc2626', color: '#fff', fontFamily: UI_FONT, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', padding: '3px 10px', borderRadius: 4, flexShrink: 0 }}>
-                  NOT RECOMMENDED
-                </span>
+                <span style={{
+                  background: '#dc2626', color: '#fff',
+                  fontFamily: UI_FONT, fontSize: 10, fontWeight: 800,
+                  letterSpacing: '.1em', textTransform: 'uppercase',
+                  padding: '3px 10px', borderRadius: 4, flexShrink: 0,
+                }}>NOT RECOMMENDED</span>
                 <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#7f1d1d' }}>
                   {selectedType?.label} on {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' })} is generally avoided
                 </span>
@@ -748,35 +713,64 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
             </div>
           )}
 
+          {/* Good verdict banner */}
           {result.verdict !== 'avoid' && result.pandit_message && (
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontFamily: UI_FONT, fontSize: 13, color: '#92400e', lineHeight: 1.6 }}>
+            <div style={{
+              background: '#fffbeb', border: '1px solid #fde68a',
+              borderRadius: 8, padding: '12px 16px', marginBottom: 20,
+              fontFamily: UI_FONT, fontSize: 13, color: '#92400e', lineHeight: 1.6,
+            }}>
               {result.pandit_message}
             </div>
           )}
 
+          {/* Two-column layout */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20, alignItems: 'start' }} className="muhurat-results-grid">
-            {/* LEFT */}
+
+            {/* LEFT — Shubh windows */}
             <div>
-              <div style={{ background: '#fff', border: '1px solid #e2d5c3', borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
+              <div style={{
+                background: '#fff', border: '1px solid #e2d5c3',
+                borderRadius: 10, padding: '18px 20px', marginBottom: 16,
+              }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round">
-                      <circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8L10.5 10"/>
+                      <circle cx="8" cy="8" r="6.5"/>
+                      <path d="M8 4.5V8L10.5 10"/>
                     </svg>
-                    <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Today's shubh windows</span>
+                    <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>
+                      Today's shubh windows
+                    </span>
                   </div>
                   {result.verdict === 'avoid' && (
-                    <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', fontStyle: 'italic' }}>(If proceeding anyway)</span>
+                    <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', fontStyle: 'italic' }}>
+                      (If proceeding anyway)
+                    </span>
                   )}
                 </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(result.auspicious_timings || []).map((timing, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 14px', borderRadius: 7, background: '#f6fdf8', border: '1px solid #d1fae5' }}>
+                    <div key={i} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '11px 14px', borderRadius: 7,
+                      background: '#f6fdf8', border: '1px solid #d1fae5',
+                    }}>
                       <div>
-                        <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#14532d', marginBottom: 2 }}>{timing.quality || timing.name || 'Auspicious'}</div>
-                        <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#6b7280' }}>{timing.reason || ''}</div>
+                        <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#14532d', marginBottom: 2 }}>
+                          {timing.quality || timing.name || 'Auspicious'}
+                        </div>
+                        <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#6b7280' }}>
+                          {timing.reason || ''}
+                        </div>
                       </div>
-                      <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap', marginLeft: 16 }}>{to12h(timing.time)}</div>
+                      <div style={{
+                        fontFamily: UI_FONT, fontSize: 13, fontWeight: 700,
+                        color: '#15803d', whiteSpace: 'nowrap', marginLeft: 16,
+                      }}>
+                        {to12h(timing.time)}
+                      </div>
                     </div>
                   ))}
                   {(!result.auspicious_timings || result.auspicious_timings.length === 0) && (
@@ -787,15 +781,21 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
                 </div>
               </div>
 
+              {/* Pandit's note */}
               {result.special_notes?.length > 0 && (
-                <div style={{ background: '#fffdf5', border: '1px solid #fde68a', borderRadius: 10, padding: '16px 18px' }}>
+                <div style={{
+                  background: '#fffdf5', border: '1px solid #fde68a',
+                  borderRadius: 10, padding: '16px 18px',
+                }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <circle cx="8" cy="8" r="6.5" stroke="#f59e0b" strokeWidth="1.4"/>
                       <path d="M8 4.5V9" stroke="#f59e0b" strokeWidth="1.6" strokeLinecap="round"/>
                       <circle cx="8" cy="11.5" r="0.8" fill="#f59e0b"/>
                     </svg>
-                    <span style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#92400e' }}>Pandit's note</span>
+                    <span style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#92400e' }}>
+                      Pandit's note
+                    </span>
                   </div>
                   <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#78350f', lineHeight: 1.7, margin: 0 }}>
                     {result.special_notes.join(' ')}
@@ -804,24 +804,40 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
               )}
             </div>
 
-            {/* RIGHT */}
-            <div style={{ background: '#fff', border: '1px solid #e2d5c3', borderRadius: 10, padding: '18px 16px' }}>
+            {/* RIGHT — Day compatibility */}
+            <div style={{
+              background: '#fff', border: '1px solid #e2d5c3',
+              borderRadius: 10, padding: '18px 16px',
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="1.5" y="3" width="13" height="12" rx="1.5"/>
                   <path d="M5 1.5V4.5 M11 1.5V4.5 M1.5 7H14.5"/>
                 </svg>
-                <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Day compatibility</span>
+                <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>
+                  Day compatibility
+                </span>
               </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {compatItems.map((item, i) => {
                   const rowBg     = item.status === false ? '#fff5f5' : '#fafaf8';
                   const rowBorder = item.status === false ? '#fecaca' : '#ede8e0';
                   return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: 7, background: rowBg, border: `1px solid ${rowBorder}` }}>
+                    <div key={i} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '10px 12px', borderRadius: 7,
+                      background: rowBg, border: `1px solid ${rowBorder}`,
+                    }}>
                       <div>
-                        <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 3 }}>{item.label}</div>
-                        <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>{item.value}</div>
+                        <div style={{
+                          fontFamily: UI_FONT, fontSize: 10, fontWeight: 700,
+                          letterSpacing: '.08em', textTransform: 'uppercase',
+                          color: '#9A7150', marginBottom: 3,
+                        }}>{item.label}</div>
+                        <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
+                          {item.value}
+                        </div>
                       </div>
                       <CompatIcon status={item.status} />
                     </div>
@@ -833,8 +849,13 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
         </div>
       )}
 
+      {/* Empty state */}
       {!loading && !result && (
-        <div style={{ textAlign: 'center', padding: '48px 20px', background: '#fdf9f4', borderRadius: 10, border: '1px dashed #e2d5c3' }}>
+        <div style={{
+          textAlign: 'center', padding: '48px 20px',
+          background: '#fdf9f4', borderRadius: 10,
+          border: '1px dashed #e2d5c3',
+        }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>🪔</div>
           <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#9A7150', lineHeight: 1.6, margin: 0 }}>
             Select an occasion above and click <strong>Find auspicious muhurat</strong>
@@ -922,7 +943,7 @@ export default function PanchangPage() {
   return (
     <>
       <Navbar />
-      <div style={{ background: '#fdf9f4', minHeight: '100vh' }}>
+      <div style={{ background: '#fdf9f4', minHeight: '100vh', paddingBottom: 0 }}>
 
         {/* Hero */}
         <section style={{
@@ -930,7 +951,10 @@ export default function PanchangPage() {
           padding: '50px 20px',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
         }}>
-          <div style={{ width: '100%', maxWidth: 700, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+          <div style={{
+            width: '100%', maxWidth: 700,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+          }}>
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
@@ -951,7 +975,8 @@ export default function PanchangPage() {
             </h1>
             <p style={{
               color: 'rgba(255,255,255,0.7)', fontSize: 15,
-              maxWidth: 520, margin: 0, fontWeight: 300, lineHeight: 1.7, fontFamily: UI_FONT,
+              maxWidth: 520, margin: 0, fontWeight: 300, lineHeight: 1.7,
+              fontFamily: UI_FONT,
             }}>
               {t('panchang.subtitle', 'Daily Panchang, Choghadiya & personalized Muhurat recommendations based on Vedic astrology')}
             </p>
