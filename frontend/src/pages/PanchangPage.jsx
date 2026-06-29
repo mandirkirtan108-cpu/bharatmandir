@@ -50,15 +50,15 @@ function to12h(timeStr) {
   });
 }
 
-/* ─── PASTEL CHOGHADIYA COLOR MAP (matches Image 1) ────────── */
+/* ─── PASTEL CHOGHADIYA COLOR MAP ────────────────────────────── */
 const PASTEL_CHOG_COLORS = {
-  udveg: { bg: '#f8a5a5', text: '#7f1d1d' },   // soft pink-red
-  char:  { bg: '#86efac', text: '#14532d' },   // mint green
-  labh:  { bg: '#86efac', text: '#14532d' },   // mint green
-  amrit: { bg: '#86efac', text: '#14532d' },   // mint green
-  kaal:  { bg: '#fca5a5', text: '#7f1d1d' },   // light pink-red
-  shubh: { bg: '#bbf7d0', text: '#14532d' },   // pale green
-  rog:   { bg: '#fca5a5', text: '#7f1d1d' },   // light pink-red
+  udveg: { bg: '#f8a5a5', text: '#7f1d1d' },
+  char:  { bg: '#86efac', text: '#14532d' },
+  labh:  { bg: '#86efac', text: '#14532d' },
+  amrit: { bg: '#86efac', text: '#14532d' },
+  kaal:  { bg: '#fca5a5', text: '#7f1d1d' },
+  shubh: { bg: '#bbf7d0', text: '#14532d' },
+  rog:   { bg: '#fca5a5', text: '#7f1d1d' },
 };
 
 function getPastelChogColor(name) {
@@ -66,7 +66,7 @@ function getPastelChogColor(name) {
   for (const [k, v] of Object.entries(PASTEL_CHOG_COLORS)) {
     if (key.includes(k)) return v;
   }
-  return { bg: '#fde68a', text: '#78350f' }; // golden fallback
+  return { bg: '#fde68a', text: '#78350f' };
 }
 
 /* ─── Parse "HH:MM" or "H:MM AM/PM" to total minutes ───────── */
@@ -311,16 +311,57 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
                 </span>
               </div>
 
-              {/* Timeline with proportional Now pin */}
+              {/* ── FIXED: Timeline with proportional Now pin ── */}
               {(() => {
+                const chog = dailyResult.choghadiya;
                 const now = new Date();
                 const nowMins = now.getHours() * 60 + now.getMinutes();
-                const sunriseMins = parseTimeToMinutes(dailyResult.sunrise);
-                const sunsetMins  = parseTimeToMinutes(dailyResult.sunset);
-                const totalMins   = (sunriseMins !== null && sunsetMins !== null) ? sunsetMins - sunriseMins : null;
-                const nowPct = (totalMins && sunriseMins !== null)
-                  ? Math.max(2, Math.min(98, ((nowMins - sunriseMins) / totalMins) * 100))
-                  : 50;
+
+                /*
+                 * FIX: Base the bar span on the actual Choghadiya segment times,
+                 * NOT sunrise/sunset. The bar covers ALL segments (day + night),
+                 * so we use first segment start → last segment start + segment duration.
+                 *
+                 * Each segment's start_time is available as c.start_time or
+                 * c.time?.split(' - ')[0]. We compute segment duration from the
+                 * gap between the first two segments (equal-width segments).
+                 */
+
+                // Extract start time of each segment in minutes
+                const segStartMins = chog.map(c => {
+                  const raw = c.start_time || c.time?.split(' - ')[0] || '';
+                  return parseTimeToMinutes(to12h(raw));
+                }).filter(m => m !== null);
+
+                let nowPct = 50; // fallback
+
+                if (segStartMins.length >= 2) {
+                  const segDuration = segStartMins[1] - segStartMins[0];
+
+                  // Bar starts at first segment start
+                  let barStartMins = segStartMins[0];
+                  // Bar ends at last segment start + one segment duration
+                  let barEndMins = segStartMins[segStartMins.length - 1] + segDuration;
+
+                  // Normalise: adjust nowMins for midnight crossover.
+                  // If barEndMins > 1440 (wraps past midnight), shift nowMins
+                  // forward by 1440 if it's earlier in the day than barStartMins.
+                  let adjustedNow = nowMins;
+                  if (barEndMins > 1440) {
+                    // Timeline crosses midnight
+                    if (adjustedNow < barStartMins) {
+                      // Current time is in the post-midnight portion
+                      adjustedNow += 1440;
+                    }
+                  }
+
+                  const totalSpan = barEndMins - barStartMins;
+                  if (totalSpan > 0) {
+                    nowPct = Math.max(1, Math.min(99,
+                      ((adjustedNow - barStartMins) / totalSpan) * 100
+                    ));
+                  }
+                }
 
                 const nowStr = now.toLocaleTimeString('en-IN', {
                   hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
@@ -370,7 +411,7 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
                       height: 44,
                       border: '1px solid #e5d9c8',
                     }}>
-                      {dailyResult.choghadiya.map((c, i) => {
+                      {chog.map((c, i) => {
                         const col = getPastelChogColor(c.name);
                         return (
                           <div key={i} style={{
@@ -379,7 +420,7 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            borderRight: i < dailyResult.choghadiya.length - 1
+                            borderRight: i < chog.length - 1
                               ? '1px solid rgba(255,255,255,0.55)'
                               : 'none',
                           }}>
@@ -398,7 +439,7 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
 
                     {/* Time labels below each segment */}
                     <div style={{ display: 'flex', marginTop: 5 }}>
-                      {dailyResult.choghadiya.map((c, i) => (
+                      {chog.map((c, i) => (
                         <div key={i} style={{ flex: 1 }}>
                           <span style={{
                             fontFamily: UI_FONT,
