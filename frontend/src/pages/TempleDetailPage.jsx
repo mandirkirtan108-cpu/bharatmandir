@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { templeAPI } from '../services/api';
 import { useTranslatedTemple } from '../hooks/useTranslatedData';
+import { useAppTranslation } from '../hooks/useAppTranslation';
 
 const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -326,7 +326,7 @@ export default function TempleDetailPage() {
   const [showUpiModal, setShowUpiModal] = useState(false);
 
   const { translated: T } = useTranslatedTemple(temple);
-  const { t } = useTranslation();
+  const { t } = useAppTranslation();
 
   useEffect(() => {
     if (!slug || slug === 'undefined') { navigate('/'); return; }

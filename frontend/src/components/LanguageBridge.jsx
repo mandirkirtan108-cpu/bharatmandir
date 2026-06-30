@@ -202,8 +202,15 @@ export default function LanguageBridge() {
       attributeFilter: ATTRS,
     });
 
+    const rerunNow = () => {
+      queueRef.current = [];
+      enqueue(applyImmediate(document.body, safeLang));
+    };
+    window.addEventListener('bharatmandir:language-change', rerunNow);
+
     return () => {
       observer.disconnect();
+      window.removeEventListener('bharatmandir:language-change', rerunNow);
       clearTimeout(timerRef.current);
       queueRef.current = [];
     };

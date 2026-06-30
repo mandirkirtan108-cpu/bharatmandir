@@ -14,6 +14,7 @@ export function LangProvider({ children }) {
     document.documentElement.lang = lang;
     document.documentElement.dir = 'ltr';
     i18n.changeLanguage(lang);
+    window.dispatchEvent(new CustomEvent('bharatmandir:language-change', { detail: { lang } }));
   }, [lang]);
 
   const changeLang = (code) => {
