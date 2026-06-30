@@ -29,7 +29,6 @@ const RASHI_LIST = [
 const TODAY = new Date().toISOString().split('T')[0];
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const DEFAULT_COORDINATES = '28.6139,77.2090';
 
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
 
@@ -180,7 +179,7 @@ const OCCASION_ICONS = {
 };
 
 /* ─── TODAY'S PANCHANG SECTION ──────────────────────────────── */
-function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCity, onFetch }) {
+function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCity, onFetch, cityTouched, setCityTouched }) {
   const inputStyle = {
     padding: '8px 12px', border: '1px solid #e5d9c8', borderRadius: 8,
     fontFamily: UI_FONT, fontSize: 14, outline: 'none', color: '#1a1a1a', background: '#fff',
@@ -190,6 +189,8 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
     letterSpacing: '.07em', textTransform: 'uppercase',
     color: '#6b7280', display: 'block', marginBottom: 5,
   };
+
+  const cityMissing = cityTouched && !city.trim();
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 20px 0' }}>
@@ -213,7 +214,7 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
       </div>
 
       {/* Form row */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 8, flexWrap: 'wrap' }}>
         <div>
           <label style={labelStyle}>Date</label>
           <input type="date" value={date}
@@ -222,24 +223,54 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
           />
         </div>
         <div>
-          <label style={labelStyle}>City</label>
-          <input type="text" value={city} onChange={e => setCity(e.target.value)}
+          <label style={labelStyle}>City *</label>
+          <input
+            type="text"
+            value={city}
+            onChange={e => setCity(e.target.value)}
+            onBlur={() => setCityTouched(true)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                setCityTouched(true);
+                if (city.trim()) onFetch();
+              }
+            }}
             placeholder="e.g. Varanasi, Ujjain…"
-            style={{ ...inputStyle, width: 200 }}
+            required
+            aria-required="true"
+            style={{
+              ...inputStyle,
+              width: 200,
+              borderColor: cityMissing ? '#f8a5a5' : '#e5d9c8',
+            }}
           />
         </div>
-        <button onClick={onFetch} disabled={dailyLoading}
+        <button
+          onClick={() => {
+            setCityTouched(true);
+            if (city.trim()) onFetch();
+          }}
+          disabled={dailyLoading || !city.trim()}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '9px 20px', borderRadius: 8,
-            background: '#E8650A', color: '#fff', border: 'none',
-            fontFamily: UI_FONT, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            background: !city.trim() ? '#E8650A66' : '#E8650A',
+            color: '#fff', border: 'none',
+            fontFamily: UI_FONT, fontSize: 14, fontWeight: 600,
+            cursor: !city.trim() ? 'not-allowed' : 'pointer',
           }}>
           {dailyLoading
             ? <><Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Loading…</>
             : 'Get Panchang'}
         </button>
       </div>
+
+      {cityMissing && (
+        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#dc2626', margin: '0 0 16px' }}>
+          Please enter a city to fetch the Panchang.
+        </p>
+      )}
+      {!cityMissing && <div style={{ marginBottom: 12 }} />}
 
       {dailyLoading && (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: '#9A7150', fontFamily: UI_FONT }}>
@@ -311,57 +342,76 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
                 </span>
               </div>
 
-              {/* ── FIXED: Timeline with proportional Now pin ── */}
+              {/* ── Timeline with index-based (equal-width) Now pin ── */}
               {(() => {
                 const chog = dailyResult.choghadiya;
                 const now = new Date();
                 const nowMins = now.getHours() * 60 + now.getMinutes();
 
                 /*
-                 * FIX: Base the bar span on the actual Choghadiya segment times,
-                 * NOT sunrise/sunset. The bar covers ALL segments (day + night),
-                 * so we use first segment start → last segment start + segment duration.
+                 * FIX: The segment boxes below are rendered with `flex: 1`,
+                 * i.e. EQUAL pixel width regardless of their real-world
+                 * duration (day segments and night segments are NOT the
+                 * same length — day length/8 != night length/8).
                  *
-                 * Each segment's start_time is available as c.start_time or
-                 * c.time?.split(' - ')[0]. We compute segment duration from the
-                 * gap between the first two segments (equal-width segments).
+                 * The old code computed nowPct as a time-proportional
+                 * position across the whole span using a single fixed
+                 * segment duration derived from the first two segments.
+                 * That assumption breaks the moment segment durations
+                 * differ (which they always do between day/night), so the
+                 * "Now" pin drifted away from the box it was actually in.
+                 *
+                 * Correct approach: find which segment "now" falls inside,
+                 * then position the pin at
+                 *   (segmentIndex + fractionWithinSegment) / totalSegments
+                 * — i.e. matched to the EQUAL-WIDTH boxes actually drawn,
+                 * not to absolute elapsed time.
                  */
 
-                // Extract start time of each segment in minutes
                 const segStartMins = chog.map(c => {
                   const raw = c.start_time || c.time?.split(' - ')[0] || '';
                   return parseTimeToMinutes(to12h(raw));
-                }).filter(m => m !== null);
+                });
 
-                let nowPct = 50; // fallback
+                let segmentIndex = -1;
+                let fractionWithin = 0.5;
 
-                if (segStartMins.length >= 2) {
-                  const segDuration = segStartMins[1] - segStartMins[0];
+                for (let i = 0; i < segStartMins.length; i++) {
+                  const start = segStartMins[i];
+                  if (start === null) continue;
+                  const next = segStartMins[i + 1];
+                  const end = next !== null && next !== undefined ? next : start + 120; // fallback ~2hr for last segment
 
-                  // Bar starts at first segment start
-                  let barStartMins = segStartMins[0];
-                  // Bar ends at last segment start + one segment duration
-                  let barEndMins = segStartMins[segStartMins.length - 1] + segDuration;
-
-                  // Normalise: adjust nowMins for midnight crossover.
-                  // If barEndMins > 1440 (wraps past midnight), shift nowMins
-                  // forward by 1440 if it's earlier in the day than barStartMins.
                   let adjustedNow = nowMins;
-                  if (barEndMins > 1440) {
-                    // Timeline crosses midnight
-                    if (adjustedNow < barStartMins) {
-                      // Current time is in the post-midnight portion
-                      adjustedNow += 1440;
-                    }
+                  let adjustedEnd = end;
+                  // handle a segment that crosses midnight
+                  if (end <= start) {
+                    adjustedEnd = end + 1440;
+                    if (adjustedNow < start) adjustedNow += 1440;
                   }
 
-                  const totalSpan = barEndMins - barStartMins;
-                  if (totalSpan > 0) {
-                    nowPct = Math.max(1, Math.min(99,
-                      ((adjustedNow - barStartMins) / totalSpan) * 100
-                    ));
+                  if (adjustedNow >= start && adjustedNow < adjustedEnd) {
+                    segmentIndex = i;
+                    fractionWithin = (adjustedNow - start) / (adjustedEnd - start);
+                    break;
                   }
                 }
+
+                if (segmentIndex === -1) {
+                  // before first segment or after last → clamp to nearest edge
+                  if (segStartMins[0] !== null && nowMins < segStartMins[0]) {
+                    segmentIndex = 0;
+                    fractionWithin = 0;
+                  } else {
+                    segmentIndex = chog.length - 1;
+                    fractionWithin = 1;
+                  }
+                }
+
+                const totalSegments = chog.length;
+                const nowPct = Math.max(1, Math.min(99,
+                  ((segmentIndex + fractionWithin) / totalSegments) * 100
+                ));
 
                 const nowStr = now.toLocaleTimeString('en-IN', {
                   hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
@@ -541,7 +591,7 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
 }
 
 /* ─── MUHURAT FINDER SECTION ────────────────────────────────── */
-function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, rashi, setRashi, name, setName, selected, setSelected, onFind }) {
+function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, rashi, setRashi, name, setName, selected, setSelected, onFind, cityTouched, setCityTouched }) {
   const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
 
   const labelStyle = {
@@ -555,6 +605,15 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
     fontFamily: UI_FONT, fontSize: 14, outline: 'none',
     color: '#1a1a1a', background: '#fff', width: '100%',
     boxSizing: 'border-box',
+  };
+
+  const cityMissing = cityTouched && !city.trim();
+
+  const handleFind = () => {
+    setCityTouched(true);
+    if (!selected) return;
+    if (!city.trim()) return;
+    onFind();
   };
 
   const compatItems = result ? [
@@ -666,17 +725,31 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
       </div>
 
       {/* Form row */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 6, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 130 }}>
           <label style={labelStyle}>DATE</label>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ ...inputStyle, width: 140 }} />
         </div>
         <div style={{ minWidth: 130 }}>
-          <label style={labelStyle}>CITY</label>
-          <input type="text" value={city} onChange={e => setCity(e.target.value)}
+          <label style={labelStyle}>CITY *</label>
+          <input
+            type="text"
+            value={city}
+            onChange={e => setCity(e.target.value)}
+            onBlur={() => setCityTouched(true)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleFind();
+            }}
             placeholder="e.g. Varanasi"
-            style={{ ...inputStyle, width: 140 }} />
+            required
+            aria-required="true"
+            style={{
+              ...inputStyle,
+              width: 140,
+              borderColor: cityMissing ? '#f8a5a5' : '#d1c4b0',
+            }}
+          />
         </div>
         <div style={{ flex: 1, minWidth: 160 }}>
           <label style={labelStyle}>RASHI</label>
@@ -686,13 +759,13 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
             {RASHI_LIST.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
-        <button onClick={onFind} disabled={loading} style={{
+        <button onClick={handleFind} disabled={loading || !city.trim()} style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           padding: '10px 22px', borderRadius: 6,
-          background: loading ? '#c9651a99' : '#c9651a',
+          background: (loading || !city.trim()) ? '#c9651a66' : '#c9651a',
           color: '#fff', border: 'none',
           fontFamily: UI_FONT, fontSize: 14, fontWeight: 700,
-          cursor: loading ? 'not-allowed' : 'pointer',
+          cursor: (loading || !city.trim()) ? 'not-allowed' : 'pointer',
           whiteSpace: 'nowrap', letterSpacing: '.01em', flexShrink: 0,
         }}>
           {loading
@@ -700,6 +773,13 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
             : <><Sparkles size={15} /> Find auspicious muhurat</>}
         </button>
       </div>
+
+      {cityMissing && (
+        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#dc2626', margin: '0 0 16px' }}>
+          Please enter a city to find the Muhurat.
+        </p>
+      )}
+      {!cityMissing && <div style={{ marginBottom: 14 }} />}
 
       {/* Error */}
       {error && !result && (
@@ -912,6 +992,7 @@ export default function PanchangPage() {
   const { t } = useTranslation();
   const [date, setDate]       = useState(TODAY);
   const [city, setCity]       = useState('');
+  const [cityTouched, setCityTouched] = useState(false);
   const [rashi, setRashi]     = useState('');
   const [name, setName]       = useState('');
   const [selected, setSelected] = useState(null);
@@ -924,16 +1005,18 @@ export default function PanchangPage() {
   const [error, setError]     = useState(null);
 
   const fetchDailyPanchang = async () => {
+    const trimmedCity = city.trim();
+    if (!trimmedCity) { setCityTouched(true); return; }
+
     setDailyLoading(true); setDailyResult(null); setError(null);
     try {
-      const trimmedCity = city.trim();
       const res = await fetch(`${API_BASE}/api/panchang/daily`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date,
-          city: trimmedCity || 'India',
-          coordinates: trimmedCity ? null : DEFAULT_COORDINATES,
+          city: trimmedCity,
+          coordinates: null,
           calendar: 'amanta',
           language: 'en',
         }),
@@ -951,10 +1034,12 @@ export default function PanchangPage() {
   const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
 
   const findMuhurat = async () => {
+    const trimmedCity = city.trim();
+    if (!trimmedCity) { setCityTouched(true); return; }
     if (!selected) { setError('Please select an occasion first.'); return; }
+
     setLoading(true); setResult(null); setError(null);
     try {
-      const trimmedCity = city.trim();
       const res = await fetch(`${API_BASE}/api/panchang/muhurat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -965,8 +1050,8 @@ export default function PanchangPage() {
           date,
           name: name || '',
           rashi: rashi || '',
-          city: trimmedCity || 'India',
-          coordinates: trimmedCity ? null : DEFAULT_COORDINATES,
+          city: trimmedCity,
+          coordinates: null,
           calendar: 'amanta',
           language: 'en',
         }),
@@ -1034,6 +1119,8 @@ export default function PanchangPage() {
             setDate={setDate}
             setCity={setCity}
             onFetch={fetchDailyPanchang}
+            cityTouched={cityTouched}
+            setCityTouched={setCityTouched}
           />
         </div>
 
@@ -1057,6 +1144,8 @@ export default function PanchangPage() {
             selected={selected}
             setSelected={s => { setSelected(s); setResult(null); }}
             onFind={findMuhurat}
+            cityTouched={cityTouched}
+            setCityTouched={setCityTouched}
           />
         </div>
       </div>
