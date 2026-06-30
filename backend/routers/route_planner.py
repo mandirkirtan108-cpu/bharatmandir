@@ -1,851 +1,633 @@
 """
 Route Planner API for BharatMandir.
-POST /api/route/plan            — AI-powered temple route suggestion
-GET  /api/route/cities          — City autocomplete (local list + Nominatim fallback, FREE)
-POST /api/route/nearby-temples  — Temples within radius of a given temple (AI-powered)
-Pure OpenAI knowledge — no DB dependency.
+
+This version removes OpenAI from route planning and uses OpenRouteService for:
+- city geocoding
+- actual road distance
+- actual road duration
+- route geometry for the frontend map
+
+Required backend env:
+OPENROUTESERVICE_API_KEY=your_key
 """
 
+from __future__ import annotations
+
+from math import radians, sin, cos, asin, sqrt
+import os
+from typing import Any, Optional
+
+import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional, List
-import os
-import json
-import httpx
-from openai import OpenAI
-import openai as openai_lib
-
-router = APIRouter(
-    prefix="/api/route",
-    tags=["Route Planner"]
-)
 
 
-# ─────────────────────────────────────────────
-# Request / Response Models
-# ─────────────────────────────────────────────
+router = APIRouter(prefix="/api/route", tags=["Route Planner"])
+
+ORS_BASE_URL = "https://api.openrouteservice.org"
+ORS_PROFILE_BY_MODE = {
+    "car": "driving-car",
+    "bike": "cycling-regular",
+    "bus": "driving-car",
+    "train": "driving-car",
+}
+
 
 class RoutePlanRequest(BaseModel):
-    start:          str
-    destination:    str
-    travel_mode:    str                 = "car"
-    time_available: int                 = 6
-    preferences:    Optional[List[str]] = []
+    start: str
+    destination: str
+    travel_mode: str = "car"
+    time_available: int = 6
+    preferences: Optional[list[str]] = []
 
 
 class CitySearchResponse(BaseModel):
-    cities: List[str]
+    cities: list[str]
 
 
 class TempleStop(BaseModel):
-    name:                        str
-    location:                    str
-    distance_from_route_km:      str
+    name: str
+    location: str
+    distance_from_route_km: str
     estimated_stop_time_minutes: int
-    importance:                  str        # "high" / "medium"
-    deity:                       Optional[str] = None
-    why_visit:                   str
+    importance: str
+    deity: Optional[str] = None
+    why_visit: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 class OptimizedStop(BaseModel):
-    stop_number:          int
-    temple_name:          str
-    arrival_time_hint:    Optional[str] = None
+    stop_number: int
+    temple_name: str
+    arrival_time_hint: Optional[str] = None
     arrival_order_reason: str
 
 
 class RouteSummary(BaseModel):
-    start:                 str
-    destination:           str
-    total_distance:        str
+    start: str
+    destination: str
+    total_distance: str
     estimated_travel_time: str
 
 
+class RouteGeometry(BaseModel):
+    type: str
+    coordinates: list
+
+
 class RoutePlanResponse(BaseModel):
-    route_summary:       RouteSummary
-    recommended_temples: List[TempleStop]
-    optimized_plan:      List[OptimizedStop]
-    insights:            List[str]
+    route_summary: RouteSummary
+    recommended_temples: list[TempleStop]
+    optimized_plan: list[OptimizedStop]
+    insights: list[str]
     travel_time_warning: Optional[str] = None
+    route_geometry: Optional[RouteGeometry] = None
+    start_coordinates: Optional[list[float]] = None
+    destination_coordinates: Optional[list[float]] = None
+    provider: str = "openrouteservice"
 
 
-# ── Nearby Temples Models ────────────────────
 class NearbyTempleRequest(BaseModel):
     temple_name: str
-    location:    str
-    radius_km:   int = 15
+    location: str
+    radius_km: int = 15
 
 
 class NearbyTemple(BaseModel):
-    name:                 str
-    deity:                Optional[str] = None
-    distance_km:          float
-    estimated_visit_time: int           # minutes
-    description:          str
+    name: str
+    deity: Optional[str] = None
+    distance_km: float
+    estimated_visit_time: int
+    description: str
 
 
 class NearbyTemplesResponse(BaseModel):
-    nearby_temples: List[NearbyTemple]
+    nearby_temples: list[NearbyTemple]
 
 
-# ─────────────────────────────────────────────
-# Speed lookup (km/h, conservative Indian roads)
-# ─────────────────────────────────────────────
+POPULAR_CITY_HINTS = [
+    "Ujjain",
+    "Indore",
+    "Mandsaur",
+    "Neemuch",
+    "Ratlam",
+    "Bhopal",
+    "Varanasi",
+    "Prayagraj",
+    "Mathura",
+    "Vrindavan",
+    "Ayodhya",
+    "Haridwar",
+    "Rishikesh",
+    "Delhi",
+    "Mumbai",
+    "Shirdi",
+    "Tirupati",
+    "Srikalahasti",
+    "Omkareshwar",
+    "Maheshwar",
+]
 
-SPEED_KMH = {
-    "car":   65,
-    "bike":  55,
-    "train": 75,
-    "bus":   50,
+
+CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
+    frozenset(["mandsaur", "ujjain"]): [
+        {
+            "name": "Shree Pashupatinath Temple",
+            "location": "Mandsaur, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Famous Ashtamukhi Pashupatinath Shiva temple on the Shivna river.",
+            "lat": 24.0714,
+            "lng": 75.0699,
+        },
+        {
+            "name": "Kalika Mata Temple",
+            "location": "Ratlam, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 30,
+            "why_visit": "Important Devi temple in Ratlam, useful as a natural halt on the route.",
+            "lat": 23.3315,
+            "lng": 75.0367,
+        },
+        {
+            "name": "Shree Mahakaleshwar Jyotirlinga",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 90,
+            "why_visit": "One of the 12 Jyotirlingas and the main spiritual destination of Ujjain.",
+            "lat": 23.1828,
+            "lng": 75.7682,
+        },
+        {
+            "name": "Harsiddhi Mata Temple",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "high",
+            "estimated_stop_time_minutes": 40,
+            "why_visit": "Ancient Shaktipeeth near Mahakaleshwar, known for deep stambh and Navratri worship.",
+            "lat": 23.1832,
+            "lng": 75.7653,
+        },
+    ],
+    frozenset(["indore", "ujjain"]): [
+        {
+            "name": "Khajrana Ganesh Temple",
+            "location": "Indore, Madhya Pradesh",
+            "deity": "Ganesh",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "One of Indore's most visited Ganesh temples and a strong start to the journey.",
+            "lat": 22.7196,
+            "lng": 75.9033,
+        },
+        {
+            "name": "Shree Mahakaleshwar Jyotirlinga",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 90,
+            "why_visit": "One of the 12 Jyotirlingas and the most important temple on this corridor.",
+            "lat": 23.1828,
+            "lng": 75.7682,
+        },
+        {
+            "name": "Kal Bhairav Temple",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Bhairav",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 35,
+            "why_visit": "Ancient Bhairav temple, traditionally included in Ujjain darshan.",
+            "lat": 23.2079,
+            "lng": 75.7675,
+        },
+    ],
+    frozenset(["varanasi", "prayagraj"]): [
+        {
+            "name": "Kashi Vishwanath Temple",
+            "location": "Varanasi, Uttar Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 90,
+            "why_visit": "One of the 12 Jyotirlingas and the most sacred temple of Kashi.",
+            "lat": 25.3109,
+            "lng": 83.0107,
+        },
+        {
+            "name": "Vindhyachal Maa Vindhyavasini Temple",
+            "location": "Mirzapur, Uttar Pradesh",
+            "deity": "Devi",
+            "importance": "high",
+            "estimated_stop_time_minutes": 60,
+            "why_visit": "Major Shakti worship site near the Varanasi-Prayagraj route.",
+            "lat": 25.1644,
+            "lng": 82.5076,
+        },
+        {
+            "name": "Triveni Sangam",
+            "location": "Prayagraj, Uttar Pradesh",
+            "deity": "Sacred confluence",
+            "importance": "high",
+            "estimated_stop_time_minutes": 75,
+            "why_visit": "Sacred meeting point of Ganga, Yamuna, and Saraswati.",
+            "lat": 25.4250,
+            "lng": 81.8850,
+        },
+    ],
+    frozenset(["delhi", "mathura"]): [
+        {
+            "name": "Chhatarpur Temple",
+            "location": "Delhi",
+            "deity": "Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Large temple complex in South Delhi before entering the Mathura corridor.",
+            "lat": 28.5077,
+            "lng": 77.1823,
+        },
+        {
+            "name": "Shri Krishna Janmasthan Temple",
+            "location": "Mathura, Uttar Pradesh",
+            "deity": "Krishna",
+            "importance": "high",
+            "estimated_stop_time_minutes": 90,
+            "why_visit": "Traditional birthplace of Lord Krishna and the main sacred stop in Mathura.",
+            "lat": 27.5040,
+            "lng": 77.6695,
+        },
+        {
+            "name": "Dwarkadhish Temple",
+            "location": "Mathura, Uttar Pradesh",
+            "deity": "Krishna",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Historic Krishna temple in the heart of Mathura old city.",
+            "lat": 27.5068,
+            "lng": 77.6842,
+        },
+    ],
+    frozenset(["haridwar", "rishikesh"]): [
+        {
+            "name": "Har Ki Pauri",
+            "location": "Haridwar, Uttarakhand",
+            "deity": "Ganga",
+            "importance": "high",
+            "estimated_stop_time_minutes": 60,
+            "why_visit": "The most sacred ghat in Haridwar, famous for Ganga Aarti.",
+            "lat": 29.9560,
+            "lng": 78.1714,
+        },
+        {
+            "name": "Mansa Devi Temple",
+            "location": "Haridwar, Uttarakhand",
+            "deity": "Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 60,
+            "why_visit": "Popular hill temple overlooking Haridwar.",
+            "lat": 29.9557,
+            "lng": 78.1645,
+        },
+        {
+            "name": "Triveni Ghat",
+            "location": "Rishikesh, Uttarakhand",
+            "deity": "Ganga",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Sacred bathing ghat and evening aarti place in Rishikesh.",
+            "lat": 30.1033,
+            "lng": 78.2998,
+        },
+    ],
 }
 
-def realistic_hours(distance_km: float, mode: str) -> float:
-    speed = SPEED_KMH.get(mode, 60)
-    return round((distance_km / speed) * 1.25, 1)
 
-
-# ─────────────────────────────────────────────
-# Known road distances to prevent GPT hallucination
-# ─────────────────────────────────────────────
-
-KNOWN_ROAD_DISTANCES = {
-    frozenset(["mandsaur", "ujjain"]):        165,
-    frozenset(["indore", "ujjain"]):           56,
-    frozenset(["varanasi", "prayagraj"]):      125,
-    frozenset(["mumbai", "shirdi"]):           240,
-    frozenset(["delhi", "mathura"]):           160,
-    frozenset(["haridwar", "rishikesh"]):       25,
-    frozenset(["tirupati", "srikalahasti"]):    36,
-    frozenset(["indore", "omkareshwar"]):       78,
-    frozenset(["bhopal", "ujjain"]):           186,
-    frozenset(["ratlam", "ujjain"]):            95,
-    frozenset(["mandsaur", "ratlam"]):          68,
-    frozenset(["mandsaur", "neemuch"]):         45,
-}
-
-def get_known_distance(start: str, destination: str):
-    key = frozenset([start.strip().lower(), destination.strip().lower()])
-    return KNOWN_ROAD_DISTANCES.get(key)
-
-
-# ─────────────────────────────────────────────
-# Known highway corridors
-# ─────────────────────────────────────────────
-
-HIGHWAY_CORRIDORS = {
-    frozenset(["mandsaur", "neemuch"]): {
-        "highway": "NH-52",
-        "towns": ["Mandsaur", "Neemuch"],
-        "direction": "south-west",
-        "exclude_note": (
-            "This is a SHORT 45 km direct highway — only 2 cities: Mandsaur and Neemuch. "
-            "Do NOT include temples from Sitamau, Suwasra, Rampura, Shamgarh, or Jawra — "
-            "none of these are on the Mandsaur–Neemuch NH-52 road. "
-            "Only suggest temples physically located IN Mandsaur city or IN Neemuch city."
-        ),
-    },
-    frozenset(["mandsaur", "ujjain"]): {
-        "highway": "NH-52 / SH-31",
-        "towns": ["Mandsaur", "Shamgarh", "Jawra", "Ratlam", "Nagda", "Khachrod", "Ujjain"],
-        "direction": "east then south",
-        "exclude_note": "Do NOT include temples far off this highway corridor.",
-    },
-    frozenset(["indore", "ujjain"]): {
-        "highway": "NH-52",
-        "towns": ["Indore", "Dewas", "Ujjain"],
-        "direction": "north-east",
-        "exclude_note": "Only temples in Indore, Dewas, or Ujjain.",
-    },
-    frozenset(["bhopal", "ujjain"]): {
-        "highway": "SH-18",
-        "towns": ["Bhopal", "Sehore", "Shajapur", "Ujjain"],
-        "direction": "west",
-        "exclude_note": "Only temples along Bhopal–Sehore–Shajapur–Ujjain corridor.",
-    },
-    frozenset(["ratlam", "ujjain"]): {
-        "highway": "NH-52",
-        "towns": ["Ratlam", "Nagda", "Khachrod", "Ujjain"],
-        "direction": "east",
-        "exclude_note": "Only temples along Ratlam–Nagda–Ujjain corridor.",
-    },
-    frozenset(["varanasi", "prayagraj"]): {
-        "highway": "NH-19",
-        "towns": ["Varanasi", "Mirzapur", "Prayagraj"],
-        "direction": "west",
-        "exclude_note": "Only temples along the NH-19 corridor.",
-    },
-    frozenset(["delhi", "mathura"]): {
-        "highway": "NH-19 / Yamuna Expressway",
-        "towns": ["Delhi", "Faridabad", "Palwal", "Mathura"],
-        "direction": "south",
-        "exclude_note": "Only temples along Delhi–Mathura Yamuna Expressway corridor.",
-    },
-    frozenset(["mumbai", "shirdi"]): {
-        "highway": "Mumbai-Nashik Expressway / NH-60",
-        "towns": ["Mumbai", "Thane", "Nashik", "Shirdi"],
-        "direction": "north-east",
-        "exclude_note": "Only temples along Mumbai–Nashik–Shirdi corridor.",
-    },
-}
-
-def get_highway_corridor(start: str, destination: str):
-    key = frozenset([start.strip().lower(), destination.strip().lower()])
-    return HIGHWAY_CORRIDORS.get(key)
-
-
-def get_openai_client() -> OpenAI:
-    api_key = os.environ.get("VITE_OPENAI_API_KEY", "")
+def get_ors_key() -> str:
+    api_key = os.getenv("OPENROUTESERVICE_API_KEY") or os.getenv("ORS_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="VITE_OPENAI_API_KEY not configured on server.")
-    return OpenAI(api_key=api_key)
+        raise HTTPException(
+            status_code=500,
+            detail="OPENROUTESERVICE_API_KEY is not configured on the backend.",
+        )
+    return api_key
 
 
-# ─────────────────────────────────────────────
-# Local pilgrimage city master list (~1500 cities)
-# Covers: all states, Jyotirlingas, Shakti Peethas,
-# Divya Desams, Char Dhams, district HQs, temple towns
-# ─────────────────────────────────────────────
-
-INDIAN_PILGRIMAGE_CITIES = sorted([
-    # ── Madhya Pradesh ──────────────────────────────
-    "Ujjain", "Indore", "Bhopal", "Gwalior", "Jabalpur", "Sagar", "Rewa",
-    "Satna", "Ratlam", "Mandsaur", "Neemuch", "Dewas", "Shajapur", "Sehore",
-    "Vidisha", "Raisen", "Narsinghpur", "Chhindwara", "Seoni", "Balaghat",
-    "Mandla", "Dindori", "Anuppur", "Umaria", "Katni", "Damoh", "Panna",
-    "Chhatarpur", "Tikamgarh", "Shivpuri", "Guna", "Ashoknagar", "Datia",
-    "Bhind", "Morena", "Sheopur", "Rajgarh", "Agar Malwa", "Shahdol",
-    "Singrauli", "Sidhi", "Khargone", "Barwani", "Dhar", "Alirajpur",
-    "Jhabua", "Hoshangabad", "Betul", "Harda", "Burhanpur", "Khandwa",
-    "Omkareshwar", "Maheshwar", "Mandu", "Chitrakoot", "Amarkantak",
-    "Orchha", "Khajuraho", "Maihar", "Salkanpur", "Bandhavgarh",
-    "Pachmarhi", "Sonagiri", "Kundalpur", "Muktagiri", "Nagda", "Khachrod",
-    "Shamgarh", "Jawra", "Sitamau", "Suwasra", "Rampura", "Nainpur",
-    "Pipariya", "Itarsi", "Mhow", "Sanawad", "Badnawar", "Petlawad",
-    "Sailana", "Jaora", "Mahidpur", "Tarana", "Unhel", "Barnagar",
-    "Kaytha", "Maksi", "Shujalpur", "Susner", "Biaora", "Sarangpur",
-    "Ashta", "Obaidullahganj", "Mandideep", "Sanchi", "Gyaraspur",
-    "Udaypur", "Chanderi", "Lalitpur",
-
-    # ── Rajasthan ───────────────────────────────────
-    "Jaipur", "Jodhpur", "Udaipur", "Ajmer", "Pushkar", "Kota", "Bikaner",
-    "Alwar", "Bharatpur", "Sikar", "Jhunjhunu", "Churu", "Nagaur",
-    "Pali", "Barmer", "Jaisalmer", "Sirohi", "Jalor", "Bundi", "Kota",
-    "Baran", "Jhalawar", "Tonk", "Sawai Madhopur", "Karauli", "Dholpur",
-    "Dausa", "Jaipur Rural", "Dungarpur", "Banswara", "Chittorgarh",
-    "Rajsamand", "Bhilwara", "Hanumangarh", "Sri Ganganagar", "Pratapgarh",
-    "Nathdwara", "Ranakpur", "Dilwara", "Deshnoke", "Kolayat",
-    "Ramdevra", "Gogamedi", "Salasar", "Khatu", "Shrinathji",
-    "Kuchaman", "Nawa", "Merta", "Nagaur", "Makrana",
-    "Sambhar", "Phulera", "Chomu", "Amber", "Sanganer",
-    "Kishangarh", "Roopangarh", "Beawar", "Nasirabad", "Bhim",
-    "Deogarh", "Kumbhalgarh", "Ghanerao", "Sadri", "Bali",
-    "Falna", "Sumerpur", "Bhinmal", "Ahore", "Sanchore",
-
-    # ── Uttar Pradesh ───────────────────────────────
-    "Varanasi", "Prayagraj", "Mathura", "Vrindavan", "Ayodhya", "Lucknow",
-    "Agra", "Kanpur", "Meerut", "Ghaziabad", "Noida", "Allahabad",
-    "Gorakhpur", "Aligarh", "Bareilly", "Moradabad", "Saharanpur",
-    "Firozabad", "Muzaffarnagar", "Rampur", "Shahjahanpur", "Hardoi",
-    "Unnao", "Rae Bareli", "Sultanpur", "Pratapgarh", "Fatehpur",
-    "Banda", "Chitrakoot", "Mahoba", "Hamirpur", "Jalaun", "Jhansi",
-    "Lalitpur", "Etawah", "Mainpuri", "Farrukhabad", "Kannauj",
-    "Auraiya", "Etah", "Kasganj", "Hathras", "Bulandshahr",
-    "Hapur", "Amroha", "Sambhal", "Badaun", "Pilibhit",
-    "Lakhimpur", "Sitapur", "Barabanki", "Faizabad", "Ambedkar Nagar",
-    "Gonda", "Balrampur", "Shravasti", "Bahraich", "Basti",
-    "Sant Kabir Nagar", "Siddharthnagar", "Maharajganj", "Kushinagar",
-    "Deoria", "Mau", "Ballia", "Ghazipur", "Chandauli",
-    "Mirzapur", "Sonbhadra", "Bhadohi", "Jaunpur", "Azamgarh",
-    "Ambedkar Nagar", "Akbarpur", "Tanda",
-    "Nandgaon", "Barsana", "Govardhan", "Gokul", "Mahaban",
-    "Baldeo", "Radhakund", "Shyamkund", "Kamyavan", "Baladev",
-
-    # ── Bihar ───────────────────────────────────────
-    "Patna", "Gaya", "Bodhgaya", "Nalanda", "Rajgir", "Pawapuri",
-    "Vaishali", "Muzaffarpur", "Darbhanga", "Bhagalpur", "Munger",
-    "Begusarai", "Samastipur", "Sitamarhi", "Madhubani", "Supaul",
-    "Araria", "Kishanganj", "Purnia", "Katihar", "Banka", "Jamui",
-    "Lakhisarai", "Sheikhpura", "Nawada", "Arwal", "Jehanabad",
-    "Aurangabad Bihar", "Rohtas", "Kaimur", "Buxar", "Bhojpur",
-    "Saran", "Siwan", "Gopalganj", "East Champaran", "West Champaran",
-    "Sheohar", "Dumraon", "Bikramganj", "Sasaram", "Dehri",
-
-    # ── Jharkhand ───────────────────────────────────
-    "Ranchi", "Jamshedpur", "Dhanbad", "Bokaro", "Deoghar",
-    "Giridih", "Hazaribagh", "Ramgarh", "Lohardaga", "Gumla",
-    "Simdega", "Khunti", "Saraikela", "West Singhbhum", "East Singhbhum",
-    "Dumka", "Godda", "Sahibganj", "Pakur", "Jamtara",
-    "Koderma", "Chatra", "Palamu", "Latehar", "Garhwa",
-    "Baidyanath Dham", "Parasnath", "Itkhori", "Rajrappa", "Japla",
-
-    # ── West Bengal ─────────────────────────────────
-    "Kolkata", "Howrah", "Hooghly", "Tarakeswar", "Kalighat",
-    "Dakshineswar", "Belur Math", "Mayapur", "Navadvip", "Shantipur",
-    "Bishnupur", "Bankura", "Purulia", "Murshidabad", "Malda",
-    "Siliguri", "Darjeeling", "Jalpaiguri", "Cooch Behar",
-    "Nadia", "Krishnanagar", "Burdwan", "Durgapur", "Asansol",
-    "Midnapore", "Kharagpur", "Haldia", "Digha", "Bakkhali",
-    "Sagar Island", "Tamluk", "Contai", "Egra", "Jhargram",
-    "Barasat", "Barrackpore", "Dum Dum", "Salt Lake", "Kalyani",
-
-    # ── Odisha ──────────────────────────────────────
-    "Puri", "Bhubaneswar", "Cuttack", "Konark", "Berhampur",
-    "Sambalpur", "Rourkela", "Brahmapur", "Balasore", "Bhadrak",
-    "Kendujhar", "Sundargarh", "Jharsuguda", "Bargarh", "Nuapada",
-    "Bolangir", "Sonepur", "Subarnpur", "Titilagarh", "Phulbani",
-    "Kandhamal", "Rayagada", "Nabarangpur", "Koraput", "Malkangiri",
-    "Mayurbhanj", "Keonjhar", "Dhenkanal", "Angul", "Deogarh",
-    "Jagatsinghpur", "Kendrapara", "Khurda", "Nayagarh", "Ganjam",
-    "Gajapati", "Jajpur", "Bhubaneswar Old Town",
-    "Lingaraj", "Alarnath", "Chilika", "Taratarini", "Maa Samaleswari",
-
-    # ── Andhra Pradesh ──────────────────────────────
-    "Tirupati", "Srikalahasti", "Vijayawada", "Visakhapatnam",
-    "Guntur", "Nellore", "Kurnool", "Kadapa", "Anantapur",
-    "Chittoor", "Rajahmundry", "Eluru", "Ongole", "Machilipatnam",
-    "Bhimavaram", "Tadepalligudem", "Palasa", "Srikakulam",
-    "Vizianagaram", "Parvathipuram", "Narasaraopet", "Tenali",
-    "Bapatla", "Chilakaluripet", "Sattenapalle", "Ponnur",
-    "Mangalagiri", "Amaravati", "Dhone", "Adoni", "Guntakal",
-    "Nandyal", "Yemmiganur", "Hindupur", "Madanapalle",
-    "Srikalahasti", "Puttur", "Nagari", "Chandragiri",
-    "Simhachalam", "Draksharamam", "Bhadrachalam",
-    "Srisailam", "Ahobilam", "Yaganti", "Mahanandi",
-
-    # ── Telangana ───────────────────────────────────
-    "Hyderabad", "Warangal", "Nizamabad", "Karimnagar", "Khammam",
-    "Nalgonda", "Mahbubnagar", "Adilabad", "Medak", "Rangareddy",
-    "Sangareddy", "Siddipet", "Yadadri", "Vemulawada",
-    "Bhadrachalam", "Dharmapuri", "Jogulamba", "Kaleswaram",
-    "Basara", "Komuravelli", "Kondagattu", "Medaram",
-
-    # ── Karnataka ───────────────────────────────────
-    "Bengaluru", "Mysuru", "Hubli", "Dharwad", "Mangaluru",
-    "Belagavi", "Kalaburagi", "Ballari", "Vijayapura", "Shivamogga",
-    "Tumakuru", "Raichur", "Koppal", "Gadag", "Haveri",
-    "Uttara Kannada", "Udupi", "Chikkamagaluru", "Hassan", "Kodagu",
-    "Mandya", "Chamrajanagar", "Davanagere", "Chitradurga",
-    "Madhugiri", "Pavagada", "Kolar", "Chikkaballapur", "Ramanagara",
-    "Bidar", "Yadgir", "Bagalkot", "Dharmasthala", "Kukke Subramanya",
-    "Kollur", "Hornadu", "Sringeri", "Melukote",
-    "Shravanabelagola", "Belur", "Halebidu", "Badami", "Aihole",
-    "Pattadakal", "Hampi", "Gokarna", "Murudeshwar", "Idagunji",
-    "Sirsi", "Yellapur", "Kumta", "Bhatkal", "Karwar",
-
-    # ── Tamil Nadu ──────────────────────────────────
-    "Chennai", "Madurai", "Tiruchirapalli", "Coimbatore", "Salem",
-    "Tirunelveli", "Tiruppur", "Vellore", "Erode", "Thoothukudi",
-    "Dindigul", "Thanjavur", "Cuddalore", "Kanchipuram", "Tiruvannamalai",
-    "Kumbakonam", "Nagapattinam", "Mayiladuthurai", "Karaikkal",
-    "Chidambaram", "Sirkazhi", "Sirkali", "Papanasam",
-    "Rameswaram", "Madurai", "Palani", "Kodaikanal", "Courtallam",
-    "Tiruttani", "Tiruvallur", "Kanyakumari", "Nagercoil",
-    "Padmanabhapuram", "Sucindram", "Thiruvattar", "Murugan Hills",
-    "Swamimalai", "Thiruchendur", "Pazhamudircholai",
-    "Tiruchendur", "Virudhunagar", "Sivakasi", "Rajapalayam",
-    "Sankarankovil", "Tenkasi", "Ambasamudram", "Tirunelveli",
-    "Srirangam", "Vaitheeswaran Koil", "Tanjore", "Gangaikonda",
-    "Darasuram", "Airavatesvara", "Thiruvarur", "Nagapattinam",
-    "Velankanni", "Mylapore", "Kapaleeshwar", "Mahabalipuram",
-
-    # ── Kerala ──────────────────────────────────────
-    "Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur", "Kollam",
-    "Alappuzha", "Kottayam", "Idukki", "Ernakulam", "Palakkad",
-    "Malappuram", "Kannur", "Kasaragod", "Pathanamthitta", "Wayanad",
-    "Sabarimala", "Guruvayur", "Vadakkumnathan", "Kodungallur",
-    "Ettumanoor", "Vaikom", "Kaviyoor", "Manarcaud", "Thiruvalla",
-    "Aranmula", "Chengannur", "Harippad", "Kayamkulam",
-    "Ambalappuzha", "Krishnapuram", "Anchuthengu", "Varkala",
-    "Attukal", "Padmanabhaswamy", "Ponmudi", "Neyyar",
-    "Kollam Beach", "Sarkara", "Chettikulangara",
-
-    # ── Maharashtra ─────────────────────────────────
-    "Mumbai", "Pune", "Nagpur", "Nashik", "Shirdi", "Aurangabad",
-    "Solapur", "Kolhapur", "Satara", "Sangli", "Ahmednagar",
-    "Nanded", "Latur", "Osmanabad", "Beed", "Jalna",
-    "Parbhani", "Hingoli", "Buldhana", "Akola", "Washim",
-    "Amravati", "Yavatmal", "Wardha", "Chandrapur", "Gadchiroli",
-    "Gondia", "Bhandara", "Raigad", "Ratnagiri", "Sindhudurg",
-    "Thane", "Palghar", "Dhule", "Nandurbar", "Jalgaon",
-    "Trimbakeshwar", "Bhimashankar", "Grishneshwar", "Pandharpanth",
-    "Pandharpur", "Tuljapur", "Jejuri", "Saptashringi", "Mahalakshmi",
-    "Kolhapur Mahalaxmi", "Ashtavinayak", "Morgaon", "Siddhatek",
-    "Pali", "Mahad", "Theur", "Lenyadri", "Ozar", "Ranjangaon",
-    "Akkalkot", "Narsimhapur", "Ganagapur", "Wani",
-
-    # ── Gujarat ─────────────────────────────────────
-    "Ahmedabad", "Surat", "Vadodara", "Rajkot", "Bhavnagar",
-    "Jamnagar", "Gandhinagar", "Anand", "Mehsana", "Patan",
-    "Banaskantha", "Sabarkantha", "Aravalli", "Mahisagar",
-    "Kheda", "Nadiad", "Kapadwanj", "Godhra", "Dahod",
-    "Chhota Udaipur", "Narmada", "Bharuch", "Surat", "Tapi",
-    "Navsari", "Valsad", "Dang", "Amreli", "Gir Somnath",
-    "Somnath", "Dwarka", "Palitana", "Ambaji", "Shamlaji",
-    "Pavagadh", "Dakor", "Becharaji", "Tejaji",
-    "Polo Forest", "Rani ki Vav", "Modhera", "Siddhpur",
-    "Tarnetar", "Girnar", "Junagadh", "Porbandar", "Veraval",
-    "Chorwad", "Diu", "Una", "Kodinar", "Sutrapada",
-
-    # ── Himachal Pradesh ────────────────────────────
-    "Shimla", "Mandi", "Dharamsala", "Kullu", "Manali",
-    "Solan", "Sirmaur", "Bilaspur", "Una", "Hamirpur HP",
-    "Kangra", "Chamba", "Kinnaur", "Lahaul and Spiti",
-    "Nahan", "Paonta Sahib", "Baddi", "Nalagarh", "Kasauli",
-    "Chail", "Kufri", "Rampur Bushahr", "Sarahan",
-    "Vaishnodevi", "Jwala Ji", "Chamunda Devi", "Brajeshwari",
-    "Naina Devi", "Rewalsar", "Manimahesh", "Bijli Mahadev",
-    "Hadimba", "Baijnath HP", "Masrur", "Bahal",
-    "Jakhoo", "Tara Devi", "Sankat Mochan",
-
-    # ── Uttarakhand ─────────────────────────────────
-    "Dehradun", "Haridwar", "Rishikesh", "Roorkee", "Haldwani",
-    "Nainital", "Almora", "Pithoragarh", "Bageshwar", "Champawat",
-    "Udham Singh Nagar", "Pauri Garhwal", "Tehri Garhwal",
-    "Uttarkashi", "Chamoli", "Rudraprayag", "Kedarnath",
-    "Badrinath", "Gangotri", "Yamunotri", "Auli",
-    "Joshimath", "Gopeshwar", "Srinagar Garhwal", "Lansdowne",
-    "Kotdwar", "Ramnagar", "Kashipur", "Jaspur", "Khatima",
-    "Tanakpur", "Champawat", "Lohaghat", "Pithoragarh",
-    "Munsiyari", "Dharchula", "Bhatwari", "Barkot",
-    "Purola", "Mori", "Deoprayag", "Devprayag", "Rudraprayag",
-    "Karnaprayag", "Nandprayag", "Vishnuprayag", "Gaurikund",
-    "Sonprayag", "Ukhimath", "Tungnath", "Chopta",
-    "Hariyali Devi", "Kartik Swami", "Binsar Mahadev",
-
-    # ── Jammu & Kashmir ─────────────────────────────
-    "Jammu", "Srinagar", "Anantnag", "Pulwama", "Shopian",
-    "Kulgam", "Baramulla", "Kupwara", "Bandipora", "Ganderbal",
-    "Budgam", "Samba", "Kathua", "Udhampur", "Reasi",
-    "Rajouri", "Poonch", "Ramban", "Doda", "Kishtwar",
-    "Vaishno Devi", "Patnitop", "Bhaderwah", "Batote",
-    "Akhnoor", "Surinsar", "Mansar",
-
-    # ── Punjab ──────────────────────────────────────
-    "Amritsar", "Ludhiana", "Jalandhar", "Patiala", "Bathinda",
-    "Mohali", "Pathankot", "Hoshiarpur", "Gurdaspur", "Kapurthala",
-    "Ropar", "Fatehgarh Sahib", "Anandpur Sahib", "Sirhind",
-    "Muktsar", "Faridkot", "Moga", "Ferozepur", "Fazilka",
-    "Tarn Taran", "Goindwal Sahib", "Khadur Sahib",
-
-    # ── Haryana ─────────────────────────────────────
-    "Faridabad", "Gurgaon", "Panipat", "Ambala", "Yamunanagar",
-    "Hisar", "Rohtak", "Karnal", "Sonipat", "Kurukshetra",
-    "Pehowa", "Thanesar", "Bhiwani", "Jhajjar", "Rewari",
-    "Mahendragarh", "Charkhi Dadri", "Nuh", "Palwal", "Mewat",
-    "Jind", "Kaithal", "Panchkula", "Sirsa", "Fatehabad",
-    "Sthaneswara", "Brahma Sarovar", "Sannihit Sarovar",
-
-    # ── Delhi & NCR ─────────────────────────────────
-    "New Delhi", "Delhi", "Dwarka", "Rohini", "Pitampura",
-    "Lajpat Nagar", "Karol Bagh", "Chandni Chowk", "Connaught Place",
-    "Noida", "Greater Noida", "Ghaziabad", "Faridabad", "Gurgaon",
-    "Chattarpur", "Chhatarpur", "Mehrauli", "Tughlaqabad",
-
-    # ── Assam ───────────────────────────────────────
-    "Guwahati", "Dibrugarh", "Jorhat", "Silchar", "Tezpur",
-    "Nagaon", "Barpeta", "Nalbari", "Kamrup", "Dhubri",
-    "Goalpara", "Bongaigaon", "Kokrajhar", "Chirang",
-    "Kamakhya", "Hajo", "Madan Kamdev", "Sualkuchi",
-
-    # ── Northeast States ────────────────────────────
-    "Imphal", "Shillong", "Agartala", "Aizawl", "Kohima",
-    "Itanagar", "Gangtok", "Dispur", "Lumding", "Diphu",
-    "Pelling", "Rumtek", "Yuksom", "Tawang", "Bomdila",
-    "Ziro", "Along", "Pasighat", "Tezu",
-
-    # ── Goa ─────────────────────────────────────────
-    "Panaji", "Margao", "Vasco da Gama", "Mapusa", "Ponda",
-    "Calangute", "Baga", "Anjuna", "Candolim", "Sinquerim",
-    "Mangeshi", "Shantadurga", "Mahalsa", "Brahma Shanti",
-
-    # ── Chhattisgarh ────────────────────────────────
-    "Raipur", "Bhilai", "Durg", "Bilaspur CG", "Korba",
-    "Raigarh", "Rajnandgaon", "Jagdalpur", "Ambikapur",
-    "Dantewada", "Bastar", "Kanker", "Kondagaon", "Sukma",
-    "Bijapur CG", "Narayanpur", "Gariaband", "Mahasamund",
-    "Dhamtari", "Balod", "Baloda Bazar", "Bemetara", "Mungeli",
-    "Janjgir", "Champa", "Koriya", "Baikunthpur", "Surajpur",
-    "Dongargarh", "Ratanpur", "Sirpur", "Rajim", "Shivrinarayan",
-    "Champaran CG", "Deobaloda", "Chandrapur CG", "Khallari",
-
-    # ── Sikkim & Hill Stations ───────────────────────
-    "Gangtok", "Namchi", "Gyalshing", "Mangan", "Ravangla",
-    "Pelling", "Yuksom", "Tashiding", "Rumtek",
-
-    # ── Famous temple towns (all India) ─────────────
-    "Kedarnath", "Badrinath", "Gangotri", "Yamunotri",
-    "Amarnath", "Vaishno Devi", "Sabarimala", "Palani",
-    "Tirupati", "Guruvayur", "Madurai", "Rameswaram",
-    "Kanyakumari", "Srirangam", "Chidambaram", "Kumbakonam",
-    "Kanchipuram", "Mahabalipuram", "Vellore", "Tiruvannamalai",
-    "Hampi", "Belur", "Halebidu", "Badami", "Aihole",
-    "Pattadakal", "Dharmasthala", "Kukke Subramanya",
-    "Kollur", "Gokarna", "Murudeshwar",
-    "Shirdi", "Pandharpur", "Jejuri", "Tuljapur",
-    "Trimbakeshwar", "Bhimashankar", "Grishneshwar",
-    "Somnath", "Dwarka", "Palitana", "Ambaji",
-    "Nathdwara", "Khatu Shyam", "Salasar Balaji",
-    "Pushkar", "Ajmer", "Deshnoke",
-    "Varanasi", "Prayagraj", "Mathura", "Vrindavan", "Ayodhya",
-    "Gaya", "Bodhgaya", "Rajgir", "Pawapuri", "Nalanda",
-    "Orchha", "Chitrakoot", "Amarkantak", "Omkareshwar",
-    "Ujjain", "Maihar", "Salkanpur", "Maheshwar",
-    "Kamakhya", "Tezpur", "Barpeta",
-    "Puri", "Konark", "Bhubaneswar",
-    "Baidyanath Dham", "Parasnath",
-    "Deoghar", "Rajrappa",
-])
+def route_key(start: str, destination: str) -> frozenset[str]:
+    return frozenset([start.strip().lower(), destination.strip().lower()])
 
 
-def fuzzy_match_cities(query: str, limit: int = 8) -> List[str]:
-    """
-    Fast substring + prefix scoring — no external dependency needed.
-    Scores: exact prefix = 3, starts-with = 2, contains = 1.
-    """
-    q = query.strip().lower()
-    if not q:
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return 2 * radius_km * asin(sqrt(a))
+
+
+def distance_to_polyline_km(lat: float, lng: float, geometry: dict[str, Any]) -> float:
+    coords = geometry.get("coordinates") or []
+    if not coords:
+        return 9999.0
+    sampled = coords[:: max(1, len(coords) // 250)]
+    return min(haversine_km(lat, lng, point[1], point[0]) for point in sampled)
+
+
+def fmt_distance(meters: float) -> str:
+    km = meters / 1000
+    if km < 10:
+        return f"{km:.1f} km"
+    return f"{round(km)} km"
+
+
+def fmt_duration(seconds: float) -> str:
+    minutes = round(seconds / 60)
+    if minutes < 60:
+        return f"~{minutes} minutes"
+    hours = minutes / 60
+    return f"~{hours:.1f} hours"
+
+
+async def ors_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
+    api_key = get_ors_key()
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(
+            f"{ORS_BASE_URL}{path}",
+            params=params,
+            headers={"Authorization": api_key, "Accept": "application/json"},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"OpenRouteService error: {response.text}")
+    return response.json()
+
+
+async def ors_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    api_key = get_ors_key()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{ORS_BASE_URL}{path}",
+            json=payload,
+            headers={
+                "Authorization": api_key,
+                "Accept": "application/json, application/geo+json",
+                "Content-Type": "application/json",
+            },
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"OpenRouteService error: {response.text}")
+    return response.json()
+
+
+async def geocode_city(city: str) -> tuple[float, float, str]:
+    data = await ors_get(
+        "/geocode/search",
+        {
+            "text": f"{city}, India",
+            "boundary.country": "IN",
+            "size": 1,
+        },
+    )
+    features = data.get("features") or []
+    if not features:
+        raise HTTPException(status_code=404, detail=f"Could not find location for {city}.")
+    feature = features[0]
+    lng, lat = feature["geometry"]["coordinates"]
+    label = feature.get("properties", {}).get("label") or city
+    return float(lat), float(lng), label
+
+
+async def get_ors_route(start_lng: float, start_lat: float, dest_lng: float, dest_lat: float, mode: str) -> dict[str, Any]:
+    profile = ORS_PROFILE_BY_MODE.get(mode, "driving-car")
+    return await ors_post(
+        f"/v2/directions/{profile}/geojson",
+        {
+            "coordinates": [[start_lng, start_lat], [dest_lng, dest_lat]],
+            "instructions": False,
+            "preference": "recommended",
+            "units": "km",
+        },
+    )
+
+
+def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any], preferences: list[str]) -> list[TempleStop]:
+    temples = CURATED_ROUTE_TEMPLES.get(route_key(start, destination), [])
+    if not temples:
         return []
 
-    scored = []
-    for city in INDIAN_PILGRIMAGE_CITIES:
-        cl = city.lower()
-        if cl == q:
-            scored.append((4, city))
-        elif cl.startswith(q):
-            scored.append((3, city))
-        elif any(word.startswith(q) for word in cl.split()):
-            scored.append((2, city))
-        elif q in cl:
-            scored.append((1, city))
+    preference_text = " ".join(preferences or []).lower()
+    ranked = []
+    for temple in temples:
+        distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
+        if distance > 15:
+            continue
+        score = 0
+        if temple["importance"] == "high":
+            score += 10
+        if preference_text and temple.get("deity", "").lower() in preference_text:
+            score += 5
+        score -= distance
+        ranked.append((score, distance, temple))
 
-    scored.sort(key=lambda x: (-x[0], x[1]))
-    return [c for _, c in scored[:limit]]
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    output = []
+    for _, distance, temple in ranked[:8]:
+        output.append(
+            TempleStop(
+                name=temple["name"],
+                location=temple["location"],
+                distance_from_route_km=f"{distance:.1f} km",
+                estimated_stop_time_minutes=temple["estimated_stop_time_minutes"],
+                importance=temple["importance"],
+                deity=temple.get("deity"),
+                why_visit=temple["why_visit"],
+                lat=temple["lat"],
+                lng=temple["lng"],
+            )
+        )
+    return output
 
 
-# ─────────────────────────────────────────────
-# GET /api/route/cities — Local list + Nominatim fallback
-# ─────────────────────────────────────────────
+def make_optimized_plan(temples: list[TempleStop]) -> list[OptimizedStop]:
+    plan = []
+    for index, temple in enumerate(temples, start=1):
+        plan.append(
+            OptimizedStop(
+                stop_number=index,
+                temple_name=temple.name,
+                arrival_time_hint=None,
+                arrival_order_reason="Ordered along the verified route and prioritized by spiritual importance.",
+            )
+        )
+    return plan
+
 
 @router.get("/cities", response_model=CitySearchResponse)
 async def search_cities(q: str = Query(..., min_length=1, description="City search query")):
-    """
-    Returns city suggestions.
-    Strategy:
-      1. Fuzzy-match against local ~1500-city pilgrimage list (instant, free).
-      2. If fewer than 3 local results, fall back to Nominatim (OpenStreetMap) — free, no API key.
-    """
     query = q.strip()
+    local = [city for city in POPULAR_CITY_HINTS if query.lower() in city.lower()][:8]
+    if len(local) >= 5:
+        return CitySearchResponse(cities=local)
 
-    # ── Step 1: Local match ──────────────────────────────────────────────────
-    local_results = fuzzy_match_cities(query, limit=8)
-
-    if len(local_results) >= 3:
-        return CitySearchResponse(cities=local_results)
-
-    # ── Step 2: Nominatim fallback ───────────────────────────────────────────
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            res = await client.get(
-                "https://nominatim.openstreetmap.org/search",
-                params={
-                    "q":            query,
-                    "countrycodes": "in",
-                    "format":       "json",
-                    "limit":        10,
-                    "addressdetails": 1,
-                },
-                headers={
-                    "User-Agent": "BharatMandir/1.0 (bharatmandir@example.com)",
-                    "Accept-Language": "en",
-                },
-            )
-
-        if res.status_code != 200:
-            return CitySearchResponse(cities=local_results)
-
-        data = res.json()
-        nominatim_cities = []
-        seen = set(c.lower() for c in local_results)
-
-        for item in data:
-            addr = item.get("address", {})
-            name = (
-                addr.get("city")
-                or addr.get("town")
-                or addr.get("village")
-                or addr.get("county")
-                or item.get("display_name", "").split(",")[0]
-            ).strip()
-
+        data = await ors_get(
+            "/geocode/autocomplete",
+            {
+                "text": query,
+                "boundary.country": "IN",
+                "size": 8,
+            },
+        )
+        seen = {city.lower() for city in local}
+        cities = list(local)
+        for feature in data.get("features", []):
+            props = feature.get("properties", {})
+            name = props.get("locality") or props.get("county") or props.get("name") or props.get("label")
             if name and name.lower() not in seen:
                 seen.add(name.lower())
-                nominatim_cities.append(name)
+                cities.append(name)
+        return CitySearchResponse(cities=cities[:8])
+    except HTTPException:
+        return CitySearchResponse(cities=local)
 
-        merged = local_results + nominatim_cities
-        return CitySearchResponse(cities=merged[:8])
-
-    except Exception:
-        return CitySearchResponse(cities=local_results)
-
-
-# ─────────────────────────────────────────────
-# POST /api/route/plan
-# ─────────────────────────────────────────────
 
 @router.post("/plan", response_model=RoutePlanResponse)
 async def plan_route(req: RoutePlanRequest):
-    client = get_openai_client()
+    start_lat, start_lng, start_label = await geocode_city(req.start)
+    dest_lat, dest_lng, dest_label = await geocode_city(req.destination)
+    route_data = await get_ors_route(start_lng, start_lat, dest_lng, dest_lat, req.travel_mode)
 
-    known_distance_km = get_known_distance(req.start, req.destination)
-    corridor          = get_highway_corridor(req.start, req.destination)
+    features = route_data.get("features") or []
+    if not features:
+        raise HTTPException(status_code=502, detail="OpenRouteService did not return a route.")
 
-    if corridor:
-        corridor_instruction = (
-            f"HIGHWAY CORRIDOR: This route follows {corridor['highway']} going {corridor['direction']}.\n"
-            f"Towns on this road: {' → '.join(corridor['towns'])}\n"
-            f"STRICT RULE: {corridor['exclude_note']}\n"
-            f"Only suggest temples that are physically on or within 10 km of this highway corridor."
+    feature = features[0]
+    geometry = feature.get("geometry") or {}
+    summary = feature.get("properties", {}).get("summary", {})
+    distance_meters = float(summary.get("distance", 0))
+    duration_seconds = float(summary.get("duration", 0))
+
+    temples = get_temples_for_route(req.start, req.destination, geometry, req.preferences or [])
+    optimized_plan = make_optimized_plan(temples)
+
+    travel_warning = None
+    if duration_seconds / 3600 > req.time_available:
+        travel_warning = (
+            f"The verified route takes {fmt_duration(duration_seconds)}, which is longer than "
+            f"your {req.time_available}-hour window. Consider starting earlier or reducing temple stops."
         )
+    if req.travel_mode == "train":
+        train_note = "Train mode uses road routing for map distance. Use the booking link for actual train options."
+        travel_warning = f"{travel_warning} {train_note}" if travel_warning else train_note
+
+    insights = [
+        "Distance and travel time are calculated using OpenRouteService road routing.",
+        "Temple suggestions are filtered from curated verified stops for known spiritual corridors.",
+    ]
+    if not temples:
+        insights.append("No curated temple stops are available for this route yet. Add temple coordinates to improve suggestions.")
     else:
-        corridor_instruction = (
-            f"Only suggest temples that are physically on or within 10 km of the actual road "
-            f"from {req.start} to {req.destination}. Do NOT suggest temples in towns that require "
-            f"a significant detour off the main route."
-        )
+        insights.append("Start early morning so darshan stops do not push the journey into evening traffic.")
 
-    if known_distance_km:
-        realistic_hrs = realistic_hours(known_distance_km, req.travel_mode)
-        distance_instruction = (
-            f"VERIFIED ROAD DISTANCE: {req.start} to {req.destination} = {known_distance_km} km by road. "
-            f"Realistic travel time by {req.travel_mode} = ~{realistic_hrs} hours. "
-            f"USE THESE EXACT VALUES in route_summary. Do not change them."
-        )
-    else:
-        distance_instruction = (
-            f"Estimate the ACTUAL ROAD distance (not straight-line) between {req.start} and {req.destination} "
-            f"using your knowledge of Indian highways and NH routes. "
-            f"Indian roads are never straight — always use road km, not aerial distance."
-        )
+    return RoutePlanResponse(
+        route_summary=RouteSummary(
+            start=req.start,
+            destination=req.destination,
+            total_distance=fmt_distance(distance_meters),
+            estimated_travel_time=fmt_duration(duration_seconds),
+        ),
+        recommended_temples=temples,
+        optimized_plan=optimized_plan,
+        insights=insights,
+        travel_time_warning=travel_warning,
+        route_geometry=RouteGeometry(type=geometry.get("type", "LineString"), coordinates=geometry.get("coordinates", [])),
+        start_coordinates=[start_lng, start_lat],
+        destination_coordinates=[dest_lng, dest_lat],
+        provider="openrouteservice",
+    )
 
-    prompt = f"""You are an expert spiritual travel planner with deep knowledge of every temple in India.
-
-TASK: Plan a temple route from {req.start} to {req.destination} for a spiritual traveller.
-
-═══ CRITICAL RULES ═══
-
-1. DISTANCE & TRAVEL TIME:
-   {distance_instruction}
-   - For car/bike: 60-65 km/h average on Indian roads (traffic, tolls, ghats).
-   - For train: 70-75 km/h. For bus: 50 km/h.
-   - Add 25% buffer for real-world conditions.
-
-2. HIGHWAY CORRIDOR — STRICT:
-   {corridor_instruction}
-
-3. TEMPLES — USE YOUR OWN KNOWLEDGE ONLY:
-   - Use your knowledge of famous, historically significant, and spiritually important
-     temples ONLY in the towns listed in the corridor above.
-   - Do NOT suggest temples in towns that are off this highway/road.
-   - Suggest as many REAL temples as genuinely exist on this route — do NOT invent or stretch.
-     For short routes (under 60 km) with only 2 cities, 3-5 temples is fine.
-     For longer routes (100+ km) with many towns, aim for 6-8 temples.
-     Quality over quantity — only real, significant temples.
-   - Priority order: Jyotirlinga > Shaktipeeth > Ancient/Famous > Local significant temples.
-   - Every temple must be REAL and must actually exist on or near this exact route.
-
-4. TEMPLE QUALITY — only valuable temples:
-   - Include temples that are historically significant, architecturally notable,
-     or spiritually powerful (major festivals, ancient origin, high footfall).
-   - Each temple should have a compelling, specific reason to visit.
-
-5. PREFERENCES: {', '.join(req.preferences) if req.preferences else 'All types of temples welcome'}
-
-6. TIME PLANNING:
-   - User has {req.time_available} hours total.
-   - If drive time alone exceeds this, set travel_time_warning with a friendly message.
-   - Mark temples "high" importance only if they are truly exceptional or Jyotirlinga/Shaktipeeth level.
-
-7. Return ONLY valid JSON — no markdown, no explanation, no extra text.
-
-═══ ROUTE ═══
-From:        {req.start}
-To:          {req.destination}
-Travel mode: {req.travel_mode}
-Time budget: {req.time_available} hours
-
-═══ OUTPUT FORMAT (strict JSON) ═══
-{{
-  "route_summary": {{
-    "start": "{req.start}",
-    "destination": "{req.destination}",
-    "total_distance": "165 km",
-    "estimated_travel_time": "~3.5 hours"
-  }},
-  "recommended_temples": [
-    {{
-      "name": "Temple Name",
-      "location": "City, State",
-      "distance_from_route_km": "2 km",
-      "estimated_stop_time_minutes": 45,
-      "importance": "high",
-      "deity": "Shiva",
-      "why_visit": "One of the 12 Jyotirlingas, ancient 9th century temple..."
-    }}
-  ],
-  "optimized_plan": [
-    {{
-      "stop_number": 1,
-      "temple_name": "Temple Name",
-      "arrival_time_hint": "8:00 AM",
-      "arrival_order_reason": "Visit early to avoid crowds, opens at 6 AM"
-    }}
-  ],
-  "insights": [
-    "Best time to start your journey: early morning (6-7 AM)",
-    "Crowd tip: ...",
-    "Dress code / prasad / festival tip: ..."
-  ],
-  "travel_time_warning": null
-}}"""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            max_tokens=3500,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are India's most knowledgeable spiritual travel guide. "
-                        "You know every significant temple in India — their history, deity, location, "
-                        "significance, and exact position on Indian highways. "
-                        "You always use ACTUAL ROAD distances, never aerial/straight-line distances. "
-                        "Example: Mandsaur to Ujjain is 165 km by road, NOT 75 km. "
-                        "You always suggest at least 6 real, valuable temples along any route. "
-                        "Respond only with valid JSON matching the exact schema given."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-        )
-
-        raw    = response.choices[0].message.content
-        parsed = json.loads(raw)
-
-        if known_distance_km and "route_summary" in parsed:
-            realistic_hrs = realistic_hours(known_distance_km, req.travel_mode)
-            parsed["route_summary"]["total_distance"]        = f"{known_distance_km} km"
-            parsed["route_summary"]["estimated_travel_time"] = f"~{realistic_hrs} hours"
-
-            if realistic_hrs > req.time_available and not parsed.get("travel_time_warning"):
-                parsed["travel_time_warning"] = (
-                    f"The drive from {req.start} to {req.destination} typically takes "
-                    f"~{realistic_hrs} hours by {req.travel_mode}, which is longer than your "
-                    f"{req.time_available}-hour window. Consider an overnight stay or an earlier start."
-                )
-
-        return RoutePlanResponse(**parsed)
-
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {e}")
-    except openai_lib.APIError as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {str(e)}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─────────────────────────────────────────────
-# POST /api/route/nearby-temples
-# ─────────────────────────────────────────────
 
 @router.post("/nearby-temples", response_model=NearbyTemplesResponse)
 async def get_nearby_temples(req: NearbyTempleRequest):
-    """
-    Given a temple name + location, returns up to 8 real nearby temples
-    within radius_km using OpenAI's knowledge, sorted by distance.
-    """
-    client = get_openai_client()
+    all_temples = [temple for temples in CURATED_ROUTE_TEMPLES.values() for temple in temples]
+    current = next((temple for temple in all_temples if temple["name"].lower() == req.temple_name.lower()), None)
+    if not current:
+        return NearbyTemplesResponse(nearby_temples=[])
 
-    prompt = f"""You are India's most knowledgeable spiritual travel guide.
+    nearby = []
+    seen = {req.temple_name.lower()}
+    for temple in all_temples:
+        if temple["name"].lower() in seen:
+            continue
+        distance = haversine_km(current["lat"], current["lng"], temple["lat"], temple["lng"])
+        if distance <= req.radius_km:
+            seen.add(temple["name"].lower())
+            nearby.append(
+                NearbyTemple(
+                    name=temple["name"],
+                    deity=temple.get("deity"),
+                    distance_km=round(distance, 1),
+                    estimated_visit_time=temple.get("estimated_stop_time_minutes", 30),
+                    description=temple["why_visit"],
+                )
+            )
+    nearby.sort(key=lambda temple: temple.distance_km)
+    return NearbyTemplesResponse(nearby_temples=nearby[:8])
 
-TASK: Find temples near "{req.temple_name}" in {req.location}, within {req.radius_km} km.
-
-RULES:
-1. Only include REAL temples that actually exist near this location.
-2. Do NOT invent temples. If fewer than 3 exist nearby, return only what is real.
-3. Exclude the temple itself ({req.temple_name}) from results.
-4. Provide accurate distance estimates based on your knowledge of this area.
-5. Each temple should have a compelling description (1-2 sentences) about its significance.
-6. Return ONLY valid JSON — no markdown, no extra text.
-
-OUTPUT FORMAT (strict JSON):
-{{
-  "nearby_temples": [
-    {{
-      "name": "Temple Name",
-      "deity": "Deity name or null",
-      "distance_km": 2.5,
-      "estimated_visit_time": 30,
-      "description": "Brief spiritual significance and why to visit."
-    }}
-  ]
-}}
-
-Radius: {req.radius_km} km from {req.temple_name}, {req.location}
-Return up to 8 temples, sorted by distance (nearest first)."""
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            max_tokens=1500,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are India's most knowledgeable spiritual travel guide with deep knowledge "
-                        "of every temple across all states. You only mention temples that truly exist. "
-                        "Respond only with valid JSON."
-                    )
-                },
-                {"role": "user", "content": prompt}
-            ],
-        )
-
-        raw    = response.choices[0].message.content
-        parsed = json.loads(raw)
-        return NearbyTemplesResponse(**parsed)
-
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {e}")
-    except openai_lib.APIError as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {str(e)}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─────────────────────────────────────────────
-# GET /api/route/presets
-# ─────────────────────────────────────────────
 
 @router.get("/presets")
 def get_preset_routes():
     return {
         "presets": [
-            { "id": "mandsaur-ujjain",      "from": "Mandsaur", "to": "Ujjain",       "label": "Mandsaur → Ujjain",      "icon": "🕉️", "distance": "~165 km", "highlight": "Pashupatinath + Mahakaleshwar",    "description": "Sacred Shaiva corridor through Malwa" },
-            { "id": "indore-ujjain",         "from": "Indore",   "to": "Ujjain",       "label": "Indore → Ujjain",        "icon": "🔱", "distance": "~56 km",  "highlight": "Mahakaleshwar Jyotirlinga",        "description": "The most sacred Shaiva route in Madhya Pradesh" },
-            { "id": "varanasi-prayagraj",    "from": "Varanasi", "to": "Prayagraj",    "label": "Varanasi → Prayagraj",   "icon": "🪔", "distance": "~125 km", "highlight": "Kashi Vishwanath + Triveni Sangam", "description": "The holiest corridor along the Ganga" },
-            { "id": "mumbai-shirdi",         "from": "Mumbai",   "to": "Shirdi",       "label": "Mumbai → Shirdi",        "icon": "🙏", "distance": "~240 km", "highlight": "Sai Baba Mandir",                  "description": "Maharashtra's most visited pilgrimage route" },
-            { "id": "delhi-mathura",         "from": "Delhi",    "to": "Mathura",      "label": "Delhi → Mathura",        "icon": "🎵", "distance": "~160 km", "highlight": "Krishna Janmabhoomi",              "description": "Braj Bhoomi — birthplace of Lord Krishna" },
-            { "id": "haridwar-rishikesh",    "from": "Haridwar", "to": "Rishikesh",    "label": "Haridwar → Rishikesh",   "icon": "🌊", "distance": "~25 km",  "highlight": "Har Ki Pauri + Triveni Ghat",      "description": "The Ganga's twin sacred towns" },
-            { "id": "tirupati-srikalahasti", "from": "Tirupati", "to": "Srikalahasti", "label": "Tirupati → Srikalahasti","icon": "🏔️", "distance": "~36 km",  "highlight": "Venkateswara + Srikalahasteeswara", "description": "South India's most powerful Shaiva-Vaishnava corridor" },
+            {
+                "id": "mandsaur-ujjain",
+                "from": "Mandsaur",
+                "to": "Ujjain",
+                "label": "Mandsaur -> Ujjain",
+                "icon": "temple",
+                "distance": "OpenRouteService verified",
+                "highlight": "Pashupatinath + Mahakaleshwar",
+                "description": "Sacred Shaiva corridor through Malwa",
+            },
+            {
+                "id": "indore-ujjain",
+                "from": "Indore",
+                "to": "Ujjain",
+                "label": "Indore -> Ujjain",
+                "icon": "route",
+                "distance": "OpenRouteService verified",
+                "highlight": "Mahakaleshwar Jyotirlinga",
+                "description": "Important Ujjain darshan corridor",
+            },
+            {
+                "id": "varanasi-prayagraj",
+                "from": "Varanasi",
+                "to": "Prayagraj",
+                "label": "Varanasi -> Prayagraj",
+                "icon": "river",
+                "distance": "OpenRouteService verified",
+                "highlight": "Kashi Vishwanath + Triveni Sangam",
+                "description": "Sacred Ganga corridor",
+            },
+            {
+                "id": "delhi-mathura",
+                "from": "Delhi",
+                "to": "Mathura",
+                "label": "Delhi -> Mathura",
+                "icon": "music",
+                "distance": "OpenRouteService verified",
+                "highlight": "Krishna Janmabhoomi",
+                "description": "Braj Bhoomi route",
+            },
+            {
+                "id": "haridwar-rishikesh",
+                "from": "Haridwar",
+                "to": "Rishikesh",
+                "label": "Haridwar -> Rishikesh",
+                "icon": "ganga",
+                "distance": "OpenRouteService verified",
+                "highlight": "Har Ki Pauri + Triveni Ghat",
+                "description": "Twin sacred Ganga towns",
+            },
         ]
     }
