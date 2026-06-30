@@ -278,6 +278,8 @@ export default function RoutePlannerPage() {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   const [showMap, setShowMap] = useState(true);
+  const [nearbyTempleData, setNearbyTempleData] = useState({});
+  const [nearbyLoading, setNearbyLoading] = useState(null);
 
   const togglePref = (p) => {
     setForm((f) => ({
@@ -294,6 +296,7 @@ export default function RoutePlannerPage() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setNearbyTempleData({});
     try {
       const res = await fetch(`${API_BASE}/api/route/plan`, {
         method: 'POST',
@@ -326,6 +329,42 @@ export default function RoutePlannerPage() {
       return;
     }
     window.open(buildBookingUrl(form.travel_mode, form.start, form.destination), '_blank', 'noopener,noreferrer');
+  };
+
+  const handleNearbyTemples = async (temple) => {
+    const key = temple.name;
+    if (nearbyTempleData[key]) {
+      setNearbyTempleData((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+
+    setNearbyLoading(key);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/route/nearby-temples`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          temple_name: temple.name,
+          location: temple.location,
+          radius_km: 10,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const detail = typeof data.detail === 'string' ? data.detail : data.detail?.message;
+        throw new Error(detail || 'Failed to load nearby temples');
+      }
+      setNearbyTempleData((prev) => ({ ...prev, [key]: data.nearby_temples || [] }));
+    } catch (e) {
+      setError(e.message || 'Unable to load nearby temples.');
+    } finally {
+      setNearbyLoading(null);
+    }
   };
 
   const handleCopy = () => {
@@ -491,6 +530,32 @@ export default function RoutePlannerPage() {
                         </div>
                         <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', margin: '0 0 8px' }}>{t.location}{t.deity ? ` · ${t.deity}` : ''}</p>
                         <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#5C3D1E', lineHeight: 1.65, margin: 0 }}>{t.why_visit}</p>
+                        <button
+                          onClick={() => handleNearbyTemples(t)}
+                          disabled={nearbyLoading === t.name}
+                          style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10, border: '1px solid #EDE0CC', background: '#FFF9F0', color: '#7a3208', fontFamily: UI_FONT, fontSize: 12, fontWeight: 800, cursor: nearbyLoading === t.name ? 'wait' : 'pointer' }}
+                        >
+                          {nearbyLoading === t.name ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <MapPin size={13} />}
+                          {nearbyTempleData[t.name] ? 'Hide nearby mandir' : 'Nearby mandir within 10 km'}
+                        </button>
+
+                        {nearbyTempleData[t.name] && (
+                          <div style={{ marginTop: 12, borderTop: '1px solid #F2E3CF', paddingTop: 12 }}>
+                            {nearbyTempleData[t.name].length === 0 ? (
+                              <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', margin: 0 }}>No popular nearby mandir found within 10 km.</p>
+                            ) : (
+                              nearbyTempleData[t.name].map((nearby) => (
+                                <div key={`${t.name}-${nearby.name}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid #F8EFE3' }}>
+                                  <div>
+                                    <p style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 800, color: '#3D1F00', margin: 0 }}>{nearby.name}</p>
+                                    <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#9A7150', margin: '3px 0 0' }}>{nearby.deity || 'Temple'} - {nearby.description}</p>
+                                  </div>
+                                  <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, color: '#B84D00', whiteSpace: 'nowrap' }}>{nearby.distance_km} km</span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
