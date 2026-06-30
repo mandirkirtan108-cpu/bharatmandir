@@ -130,7 +130,215 @@ POPULAR_CITY_HINTS = [
 ]
 
 
+CITY_COORDINATE_OVERRIDES = {
+    "udaipur": (24.5854, 73.7125, "Udaipur, Rajasthan, India"),
+    "mandsaur": (24.0768, 75.0693, "Mandsaur, Madhya Pradesh, India"),
+    "neemuch": (24.4651, 74.8722, "Neemuch, Madhya Pradesh, India"),
+    "ratlam": (23.3315, 75.0367, "Ratlam, Madhya Pradesh, India"),
+    "indore": (22.7196, 75.8577, "Indore, Madhya Pradesh, India"),
+    "ujjain": (23.1765, 75.7885, "Ujjain, Madhya Pradesh, India"),
+    "omkareshwar": (22.2456, 76.1519, "Omkareshwar, Madhya Pradesh, India"),
+    "bhopal": (23.2599, 77.4126, "Bhopal, Madhya Pradesh, India"),
+    "varanasi": (25.3176, 82.9739, "Varanasi, Uttar Pradesh, India"),
+    "prayagraj": (25.4358, 81.8463, "Prayagraj, Uttar Pradesh, India"),
+    "mathura": (27.4924, 77.6737, "Mathura, Uttar Pradesh, India"),
+    "delhi": (28.6139, 77.2090, "Delhi, India"),
+    "haridwar": (29.9457, 78.1642, "Haridwar, Uttarakhand, India"),
+    "rishikesh": (30.0869, 78.2676, "Rishikesh, Uttarakhand, India"),
+}
+
+
 CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
+    frozenset(["udaipur", "omkareshwar"]): [
+        {
+            "name": "Eklingji Temple",
+            "location": "Kailashpuri, near Udaipur, Rajasthan",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Historic Mewar Shiva temple near Udaipur and a strong first darshan before entering the Malwa route.",
+            "lat": 24.7467,
+            "lng": 73.7198,
+            "route_order": 1,
+            "max_route_distance_km": 45,
+        },
+        {
+            "name": "Shrinathji Temple",
+            "location": "Nathdwara, Rajasthan",
+            "deity": "Krishna",
+            "importance": "high",
+            "estimated_stop_time_minutes": 75,
+            "why_visit": "One of the most important Krishna temples in Rajasthan, close to the Udaipur side of this journey.",
+            "lat": 24.9285,
+            "lng": 73.8227,
+            "route_order": 2,
+            "max_route_distance_km": 55,
+        },
+        {
+            "name": "Kalika Mata Temple",
+            "location": "Ratlam, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 30,
+            "why_visit": "Important Devi temple in Ratlam and a natural stop while moving from Rajasthan toward Madhya Pradesh.",
+            "lat": 23.3315,
+            "lng": 75.0367,
+            "route_order": 3,
+            "max_route_distance_km": 40,
+        },
+        {
+            "name": "Shree Mahakaleshwar Jyotirlinga",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 90,
+            "why_visit": "One of the 12 Jyotirlingas. It may be a detour from the fastest road, but it is a major spiritual stop worth showing.",
+            "lat": 23.1828,
+            "lng": 75.7682,
+            "route_order": 4,
+            "max_route_distance_km": 95,
+        },
+        {
+            "name": "Harsiddhi Mata Temple",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "high",
+            "estimated_stop_time_minutes": 40,
+            "why_visit": "Ancient Shaktipeeth near Mahakaleshwar, commonly included in Ujjain darshan.",
+            "lat": 23.1832,
+            "lng": 75.7653,
+            "route_order": 5,
+            "max_route_distance_km": 95,
+        },
+        {
+            "name": "Kal Bhairav Temple",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Bhairav",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 35,
+            "why_visit": "A famous Ujjain temple traditionally visited with Mahakaleshwar darshan.",
+            "lat": 23.2079,
+            "lng": 75.7675,
+            "route_order": 6,
+            "max_route_distance_km": 95,
+        },
+        {
+            "name": "Khajrana Ganesh Temple",
+            "location": "Indore, Madhya Pradesh",
+            "deity": "Ganesh",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "One of Indore's most visited Ganesh temples and a strong stop before Omkareshwar.",
+            "lat": 22.7196,
+            "lng": 75.9033,
+            "route_order": 7,
+            "max_route_distance_km": 55,
+        },
+        {
+            "name": "Annapurna Temple",
+            "location": "Indore, Madhya Pradesh",
+            "deity": "Annapurna Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 30,
+            "why_visit": "Well-known Indore temple dedicated to Maa Annapurna, suitable for a peaceful darshan stop.",
+            "lat": 22.6975,
+            "lng": 75.8419,
+            "route_order": 8,
+            "max_route_distance_km": 55,
+        },
+        {
+            "name": "Shri Omkareshwar Jyotirlinga",
+            "location": "Omkareshwar, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 90,
+            "why_visit": "One of the 12 Jyotirlingas and the main destination temple on Mandhata island.",
+            "lat": 22.2456,
+            "lng": 76.1519,
+            "route_order": 9,
+            "max_route_distance_km": 35,
+        },
+        {
+            "name": "Mamleshwar Jyotirlinga Temple",
+            "location": "Omkareshwar, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Ancient Shiva temple across the Narmada, traditionally visited with Omkareshwar Jyotirlinga.",
+            "lat": 22.2437,
+            "lng": 76.1498,
+            "route_order": 10,
+            "max_route_distance_km": 35,
+        },
+    ],
+    frozenset(["neemuch", "ujjain"]): [
+        {
+            "name": "Kileshwar Mahadev Temple",
+            "location": "Neemuch, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 30,
+            "why_visit": "Well-known Shiva temple in Neemuch and a suitable starting darshan before moving toward Ujjain.",
+            "lat": 24.4715,
+            "lng": 74.8724,
+            "route_order": 1,
+        },
+        {
+            "name": "Bhadwa Mata Temple",
+            "location": "Bhadwa Mata, Neemuch, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Important Devi pilgrimage place near Neemuch, visited by devotees for blessings and healing traditions.",
+            "lat": 24.5486,
+            "lng": 74.9640,
+            "route_order": 2,
+        },
+        {
+            "name": "Shree Pashupatinath Temple",
+            "location": "Mandsaur, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Famous Ashtamukhi Pashupatinath Shiva temple on the Shivna river, a major stop between Neemuch and Ujjain.",
+            "lat": 24.0714,
+            "lng": 75.0699,
+            "route_order": 3,
+        },
+        {
+            "name": "Kalika Mata Temple",
+            "location": "Ratlam, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 30,
+            "why_visit": "Important Devi temple in Ratlam and a natural in-between halt before Ujjain.",
+            "lat": 23.3315,
+            "lng": 75.0367,
+            "route_order": 4,
+        },
+        {
+            "name": "Shree Mahakaleshwar Jyotirlinga",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 90,
+            "why_visit": "One of the 12 Jyotirlingas and the main sacred destination in Ujjain.",
+            "lat": 23.1828,
+            "lng": 75.7682,
+            "route_order": 5,
+        },
+        {
+            "name": "Harsiddhi Mata Temple",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "high",
+            "estimated_stop_time_minutes": 40,
+            "why_visit": "Ancient Shaktipeeth near Mahakaleshwar, traditionally included in Ujjain darshan.",
+            "lat": 23.1832,
+            "lng": 75.7653,
+            "route_order": 6,
+        },
+    ],
     frozenset(["mandsaur", "indore"]): [
         {
             "name": "Shree Pashupatinath Temple",
@@ -393,8 +601,23 @@ def get_ors_key() -> str:
     return api_key
 
 
+CITY_ALIASES = {
+    "new delhi": "delhi",
+    "banaras": "varanasi",
+    "kashi": "varanasi",
+    "allahabad": "prayagraj",
+}
+
+
+def normalize_city_key(value: str) -> str:
+    city = (value or "").strip().lower()
+    city = city.split(",")[0].strip()
+    city = " ".join(city.split())
+    return CITY_ALIASES.get(city, city)
+
+
 def route_key(start: str, destination: str) -> frozenset[str]:
-    return frozenset([start.strip().lower(), destination.strip().lower()])
+    return frozenset([normalize_city_key(start), normalize_city_key(destination)])
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -458,6 +681,10 @@ async def ors_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def geocode_city(city: str) -> tuple[float, float, str]:
+    override = CITY_COORDINATE_OVERRIDES.get(city.strip().lower())
+    if override:
+        return override
+
     data = await ors_get(
         "/geocode/search",
         {
@@ -483,22 +710,35 @@ async def get_ors_route(start_lng: float, start_lat: float, dest_lng: float, des
             "coordinates": [[start_lng, start_lat], [dest_lng, dest_lat]],
             "instructions": False,
             "preference": "recommended",
+            "radiuses": [5000, 5000],
             "units": "km",
         },
     )
 
 
+def all_curated_temples() -> list[dict[str, Any]]:
+    temples_by_name: dict[str, dict[str, Any]] = {}
+    for route_temples in CURATED_ROUTE_TEMPLES.values():
+        for temple in route_temples:
+            key = temple["name"].strip().lower()
+            if key not in temples_by_name:
+                temples_by_name[key] = temple
+    return list(temples_by_name.values())
+
+
 def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any], preferences: list[str]) -> list[TempleStop]:
-    temples = CURATED_ROUTE_TEMPLES.get(route_key(start, destination), [])
+    key = route_key(start, destination)
+    temples = CURATED_ROUTE_TEMPLES.get(key)
+    known_route = key in CURATED_ROUTE_TEMPLES
     if not temples:
-        return []
+        temples = all_curated_temples()
 
     preference_text = " ".join(preferences or []).lower()
     ranked = []
-    known_route = route_key(start, destination)
-    max_distance_km = 35 if known_route in CURATED_ROUTE_TEMPLES else 15
+    default_max_distance_km = 35 if known_route else 45
     for temple in temples:
         distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
+        max_distance_km = temple.get("max_route_distance_km", default_max_distance_km)
         if distance > max_distance_km:
             continue
         score = 0
@@ -507,7 +747,7 @@ def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any]
         if preference_text and temple.get("deity", "").lower() in preference_text:
             score += 5
         score -= distance
-        route_order = temple.get("route_order", 999)
+        route_order = temple.get("route_order", 999 if known_route else 100)
         ranked.append((route_order, -score, distance, temple))
 
     ranked.sort(key=lambda item: (item[0], item[2]))
@@ -630,7 +870,7 @@ async def plan_route(req: RoutePlanRequest):
 
 @router.post("/nearby-temples", response_model=NearbyTemplesResponse)
 async def get_nearby_temples(req: NearbyTempleRequest):
-    all_temples = [temple for temples in CURATED_ROUTE_TEMPLES.values() for temple in temples]
+    all_temples = all_curated_temples()
     current = next((temple for temple in all_temples if temple["name"].lower() == req.temple_name.lower()), None)
     if not current:
         return NearbyTemplesResponse(nearby_temples=[])
@@ -660,6 +900,16 @@ async def get_nearby_temples(req: NearbyTempleRequest):
 def get_preset_routes():
     return {
         "presets": [
+            {
+                "id": "udaipur-omkareshwar",
+                "from": "Udaipur",
+                "to": "Omkareshwar",
+                "label": "Udaipur -> Omkareshwar",
+                "icon": "temple",
+                "distance": "OpenRouteService verified",
+                "highlight": "Ujjain + Omkareshwar Jyotirlinga",
+                "description": "Major Shiva corridor with Ujjain detour options",
+            },
             {
                 "id": "mandsaur-ujjain",
                 "from": "Mandsaur",
