@@ -1,88 +1,115 @@
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
-
-// Fix: translate.js is in src/services/, locales are in src/locales/
-import en from '../locales/en.json';
-import hi from '../locales/hi.json';
-import mr from '../locales/mr.json';
-import ta from '../locales/ta.json';
-
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources: {
-      en: { translation: en },
-      hi: { translation: hi },
-      mr: { translation: mr },
-      ta: { translation: ta },
-    },
-    fallbackLng: 'en',
-    lng: 'en',
-    interpolation: { escapeValue: false },
-    detection: {
-      order: ['localStorage'],
-      caches: ['localStorage'],
-      lookupLocalStorage: 'bharatmandir_lang',
-    },
-  });
+import i18n from '../i18n';
+import { translateStaticText } from './siteTranslations';
 
 export default i18n;
 
-// ─── Temple translation helpers ───────────────────────────────────────────────
-const FIELDS_TO_TRANSLATE = [
-  'name', 'name_hindi', 'primary_deity', 'history',
-  'significance', 'description', 'address', 'city', 'state',
-];
+const VALUE_HI = {
+  India: 'भारत',
+  Shiva: 'शिव',
+  'Lord Shiva': 'भगवान शिव',
+  Mahadev: 'महादेव',
+  Vishnu: 'विष्णु',
+  'Lord Vishnu': 'भगवान विष्णु',
+  Krishna: 'कृष्ण',
+  'Lord Krishna': 'भगवान कृष्ण',
+  Rama: 'राम',
+  'Lord Rama': 'भगवान राम',
+  Hanuman: 'हनुमान',
+  Ganesha: 'गणेश',
+  Ganesh: 'गणेश',
+  Devi: 'देवी',
+  Durga: 'दुर्गा',
+  Kali: 'काली',
+  Lakshmi: 'लक्ष्मी',
+  Parvati: 'पार्वती',
+  Kartikeya: 'कार्तिकेय',
+  Shaiva: 'शैव',
+  Vaishnava: 'वैष्णव',
+  Shakta: 'शाक्त',
+  Smarta: 'स्मार्त',
+  Other: 'अन्य',
+  Published: 'प्रकाशित',
+  Draft: 'ड्राफ्ट',
+  Review: 'समीक्षा',
+  Flagged: 'चिह्नित',
+  Archived: 'संग्रहित',
+  Maharashtra: 'महाराष्ट्र',
+  Gujarat: 'गुजरात',
+  Rajasthan: 'राजस्थान',
+  'Madhya Pradesh': 'मध्य प्रदेश',
+  'Uttar Pradesh': 'उत्तर प्रदेश',
+  Uttarakhand: 'उत्तराखंड',
+  Bihar: 'बिहार',
+  Jharkhand: 'झारखंड',
+  Odisha: 'ओडिशा',
+  Karnataka: 'कर्नाटक',
+  Kerala: 'केरल',
+  'Tamil Nadu': 'तमिलनाडु',
+  Telangana: 'तेलंगाना',
+  'Andhra Pradesh': 'आंध्र प्रदेश',
+  Delhi: 'दिल्ली',
+  Haryana: 'हरियाणा',
+  Punjab: 'पंजाब',
+  Ujjain: 'उज्जैन',
+  Varanasi: 'वाराणसी',
+  Ayodhya: 'अयोध्या',
+  Mathura: 'मथुरा',
+  Haridwar: 'हरिद्वार',
+  Rishikesh: 'ऋषिकेश',
+  Dwarka: 'द्वारका',
+  Somnath: 'सोमनाथ',
+  Nashik: 'नाशिक',
+};
 
-async function callTranslateAPI(texts, targetLang) {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) return texts;
+const FIELD_ALIASES = {
+  name: ['name_hindi', 'name_hi'],
+  history: ['history_hindi', 'history_hi'],
+  description: ['description_hindi', 'description_hi'],
+  significance: ['significance_hindi', 'significance_hi'],
+  address: ['address_hindi', 'address_hi'],
+  primary_deity: ['primary_deity_hindi', 'primary_deity_hi'],
+  city: ['city_hindi', 'city_hi'],
+  state: ['state_hindi', 'state_hi'],
+};
 
-  const langNames = { hi: 'Hindi', mr: 'Marathi', ta: 'Tamil' };
-  const langName  = langNames[targetLang] || targetLang;
+function normalize(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
 
-  const prompt = `Translate the following JSON values to ${langName}. Return ONLY a valid JSON object with the same keys, translated values. No explanation or markdown.\n\n${JSON.stringify(texts)}`;
+function translateValue(value, lang) {
+  if (lang !== 'hi' || value == null) return value;
+  if (Array.isArray(value)) return value.map(item => translateValue(item, lang));
+  if (typeof value !== 'string') return value;
 
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data  = await res.json();
-    const raw   = data?.content?.[0]?.text || '{}';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    return JSON.parse(clean);
-  } catch {
-    return texts;
+  const exact = VALUE_HI[normalize(value)];
+  if (exact) return exact;
+
+  const bridged = translateStaticText(value, lang);
+  return bridged;
+}
+
+export function localizeRecord(record, lang) {
+  if (!record || lang === 'en') return record;
+
+  const localized = { ...record };
+
+  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+    const source = aliases.find(alias => record[alias]);
+    if (source) localized[field] = record[source];
   }
+
+  for (const [key, value] of Object.entries(localized)) {
+    localized[key] = translateValue(value, lang);
+  }
+
+  return localized;
 }
 
 export async function translateTemple(temple, lang) {
-  if (!temple || lang === 'en') return temple;
-  const toTranslate = {};
-  for (const field of FIELDS_TO_TRANSLATE) {
-    if (temple[field] && typeof temple[field] === 'string') {
-      toTranslate[field] = temple[field];
-    }
-  }
-  if (Object.keys(toTranslate).length === 0) return temple;
-  const translated = await callTranslateAPI(toTranslate, lang);
-  return { ...temple, ...translated };
+  return localizeRecord(temple, lang);
 }
 
 export async function translateTemples(temples, lang) {
-  if (!temples?.length || lang === 'en') return temples;
-  const results = await Promise.allSettled(
-    temples.map(t => translateTemple(t, lang))
-  );
-  return results.map((r, i) =>
-    r.status === 'fulfilled' ? r.value : temples[i]
-  );
+  if (!Array.isArray(temples)) return temples;
+  return temples.map(temple => localizeRecord(temple, lang));
 }
