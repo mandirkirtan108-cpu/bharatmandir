@@ -477,8 +477,23 @@ def get_ors_key() -> str:
     return api_key
 
 
+CITY_ALIASES = {
+    "new delhi": "delhi",
+    "banaras": "varanasi",
+    "kashi": "varanasi",
+    "allahabad": "prayagraj",
+}
+
+
+def normalize_city_key(value: str) -> str:
+    city = (value or "").strip().lower()
+    city = city.split(",")[0].strip()
+    city = " ".join(city.split())
+    return CITY_ALIASES.get(city, city)
+
+
 def route_key(start: str, destination: str) -> frozenset[str]:
-    return frozenset([start.strip().lower(), destination.strip().lower()])
+    return frozenset([normalize_city_key(start), normalize_city_key(destination)])
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -577,15 +592,26 @@ async def get_ors_route(start_lng: float, start_lat: float, dest_lng: float, des
     )
 
 
+def all_curated_temples() -> list[dict[str, Any]]:
+    temples_by_name: dict[str, dict[str, Any]] = {}
+    for route_temples in CURATED_ROUTE_TEMPLES.values():
+        for temple in route_temples:
+            key = temple["name"].strip().lower()
+            if key not in temples_by_name:
+                temples_by_name[key] = temple
+    return list(temples_by_name.values())
+
+
 def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any], preferences: list[str]) -> list[TempleStop]:
-    temples = CURATED_ROUTE_TEMPLES.get(route_key(start, destination), [])
+    key = route_key(start, destination)
+    temples = CURATED_ROUTE_TEMPLES.get(key)
+    known_route = key in CURATED_ROUTE_TEMPLES
     if not temples:
-        return []
+        temples = all_curated_temples()
 
     preference_text = " ".join(preferences or []).lower()
     ranked = []
-    known_route = route_key(start, destination)
-    max_distance_km = 35 if known_route in CURATED_ROUTE_TEMPLES else 15
+    max_distance_km = 35 if known_route else 45
     for temple in temples:
         distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
         if distance > max_distance_km:
@@ -596,7 +622,7 @@ def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any]
         if preference_text and temple.get("deity", "").lower() in preference_text:
             score += 5
         score -= distance
-        route_order = temple.get("route_order", 999)
+        route_order = temple.get("route_order", 999 if known_route else 100)
         ranked.append((route_order, -score, distance, temple))
 
     ranked.sort(key=lambda item: (item[0], item[2]))
