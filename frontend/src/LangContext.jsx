@@ -1,24 +1,17 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import i18n from './i18n';   
 
 const LangContext = createContext();
 
 export function LangProvider({ children }) {
-  const [lang, setLang] = useState(() => {
-    const saved = localStorage.getItem('bharatmandir_lang') || 'en';
-    return saved === 'hi' ? 'hi' : 'en';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('bharatmandir_lang', lang);
-    document.documentElement.lang = lang;
-    document.documentElement.dir = 'ltr';
-    i18n.changeLanguage(lang);
-    window.dispatchEvent(new CustomEvent('bharatmandir:language-change', { detail: { lang } }));
-  }, [lang]);
+  const [lang, setLang] = useState(
+    localStorage.getItem('bharatmandir_lang') || 'en'
+  );
 
   const changeLang = (code) => {
-    setLang(code === 'hi' ? 'hi' : 'en');
+    setLang(code);
+    localStorage.setItem('bharatmandir_lang', code);
+    i18n.changeLanguage(code);  
   };
 
   return (

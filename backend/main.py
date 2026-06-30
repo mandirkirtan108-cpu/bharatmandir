@@ -17,7 +17,7 @@ from routers import proxy
 from routers.admin_auth import router as admin_auth_router
 from routers.panchang import router as panchang_router
 from routers.user_auth import router as user_auth_router
-from routers.translate import router as translate_router
+from routers.blogs import router as blogs_router
 
 
 load_dotenv()
@@ -79,7 +79,7 @@ app.include_router(spiritual_chat.router)
 app.include_router(panchang_router)
 app.include_router(proxy.router)
 app.include_router(sacred_books_router)
-app.include_router(translate_router)
+app.include_router(blogs_router)
 
 @app.get("/")
 def root():
