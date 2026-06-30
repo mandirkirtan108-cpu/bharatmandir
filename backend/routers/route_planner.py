@@ -130,7 +130,91 @@ POPULAR_CITY_HINTS = [
 ]
 
 
+CITY_COORDINATE_OVERRIDES = {
+    "mandsaur": (24.0768, 75.0693, "Mandsaur, Madhya Pradesh, India"),
+    "neemuch": (24.4651, 74.8722, "Neemuch, Madhya Pradesh, India"),
+    "ratlam": (23.3315, 75.0367, "Ratlam, Madhya Pradesh, India"),
+    "indore": (22.7196, 75.8577, "Indore, Madhya Pradesh, India"),
+    "ujjain": (23.1765, 75.7885, "Ujjain, Madhya Pradesh, India"),
+    "bhopal": (23.2599, 77.4126, "Bhopal, Madhya Pradesh, India"),
+    "varanasi": (25.3176, 82.9739, "Varanasi, Uttar Pradesh, India"),
+    "prayagraj": (25.4358, 81.8463, "Prayagraj, Uttar Pradesh, India"),
+    "mathura": (27.4924, 77.6737, "Mathura, Uttar Pradesh, India"),
+    "delhi": (28.6139, 77.2090, "Delhi, India"),
+    "haridwar": (29.9457, 78.1642, "Haridwar, Uttarakhand, India"),
+    "rishikesh": (30.0869, 78.2676, "Rishikesh, Uttarakhand, India"),
+}
+
+
 CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
+    frozenset(["neemuch", "ujjain"]): [
+        {
+            "name": "Kileshwar Mahadev Temple",
+            "location": "Neemuch, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 30,
+            "why_visit": "Well-known Shiva temple in Neemuch and a suitable starting darshan before moving toward Ujjain.",
+            "lat": 24.4715,
+            "lng": 74.8724,
+            "route_order": 1,
+        },
+        {
+            "name": "Bhadwa Mata Temple",
+            "location": "Bhadwa Mata, Neemuch, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Important Devi pilgrimage place near Neemuch, visited by devotees for blessings and healing traditions.",
+            "lat": 24.5486,
+            "lng": 74.9640,
+            "route_order": 2,
+        },
+        {
+            "name": "Shree Pashupatinath Temple",
+            "location": "Mandsaur, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Famous Ashtamukhi Pashupatinath Shiva temple on the Shivna river, a major stop between Neemuch and Ujjain.",
+            "lat": 24.0714,
+            "lng": 75.0699,
+            "route_order": 3,
+        },
+        {
+            "name": "Kalika Mata Temple",
+            "location": "Ratlam, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 30,
+            "why_visit": "Important Devi temple in Ratlam and a natural in-between halt before Ujjain.",
+            "lat": 23.3315,
+            "lng": 75.0367,
+            "route_order": 4,
+        },
+        {
+            "name": "Shree Mahakaleshwar Jyotirlinga",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 90,
+            "why_visit": "One of the 12 Jyotirlingas and the main sacred destination in Ujjain.",
+            "lat": 23.1828,
+            "lng": 75.7682,
+            "route_order": 5,
+        },
+        {
+            "name": "Harsiddhi Mata Temple",
+            "location": "Ujjain, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "high",
+            "estimated_stop_time_minutes": 40,
+            "why_visit": "Ancient Shaktipeeth near Mahakaleshwar, traditionally included in Ujjain darshan.",
+            "lat": 23.1832,
+            "lng": 75.7653,
+            "route_order": 6,
+        },
+    ],
     frozenset(["mandsaur", "indore"]): [
         {
             "name": "Shree Pashupatinath Temple",
@@ -458,6 +542,10 @@ async def ors_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def geocode_city(city: str) -> tuple[float, float, str]:
+    override = CITY_COORDINATE_OVERRIDES.get(city.strip().lower())
+    if override:
+        return override
+
     data = await ors_get(
         "/geocode/search",
         {
@@ -483,6 +571,7 @@ async def get_ors_route(start_lng: float, start_lat: float, dest_lng: float, des
             "coordinates": [[start_lng, start_lat], [dest_lng, dest_lat]],
             "instructions": False,
             "preference": "recommended",
+            "radiuses": [5000, 5000],
             "units": "km",
         },
     )
