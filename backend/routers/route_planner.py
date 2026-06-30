@@ -141,6 +141,18 @@ CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
             "why_visit": "Famous Ashtamukhi Pashupatinath Shiva temple on the Shivna river, ideal as the starting darshan in Mandsaur.",
             "lat": 24.0714,
             "lng": 75.0699,
+            "route_order": 1,
+        },
+        {
+            "name": "Bahi Parshwanath Jain Temple",
+            "location": "Bahi Parshwanath, near Mandsaur, Madhya Pradesh",
+            "deity": "Parshwanath",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 35,
+            "why_visit": "A known Jain pilgrimage stop near the Mandsaur side of the route, useful before moving toward Ratlam.",
+            "lat": 24.0294,
+            "lng": 75.1561,
+            "route_order": 2,
         },
         {
             "name": "Kalika Mata Temple",
@@ -151,6 +163,18 @@ CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
             "why_visit": "Important Devi temple in Ratlam and a practical spiritual halt between Mandsaur and Indore.",
             "lat": 23.3315,
             "lng": 75.0367,
+            "route_order": 3,
+        },
+        {
+            "name": "Mahalaxmi Temple",
+            "location": "Ratlam, Madhya Pradesh",
+            "deity": "Lakshmi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 25,
+            "why_visit": "Popular local temple in Ratlam that can be visited as an in-between city stop on this journey.",
+            "lat": 23.3310,
+            "lng": 75.0376,
+            "route_order": 4,
         },
         {
             "name": "Khajrana Ganesh Temple",
@@ -161,6 +185,7 @@ CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
             "why_visit": "One of Indore's most visited Ganesh temples, commonly chosen before beginning or completing important journeys.",
             "lat": 22.7196,
             "lng": 75.9033,
+            "route_order": 5,
         },
         {
             "name": "Annapurna Temple",
@@ -171,6 +196,7 @@ CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
             "why_visit": "Well-known Indore temple dedicated to Maa Annapurna, suitable for a peaceful darshan stop in the destination city.",
             "lat": 22.6939,
             "lng": 75.8393,
+            "route_order": 6,
         },
         {
             "name": "Bada Ganpati Temple",
@@ -181,6 +207,7 @@ CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
             "why_visit": "Historic Ganesh temple famous for its large Ganpati idol in old Indore.",
             "lat": 22.7176,
             "lng": 75.8450,
+            "route_order": 7,
         },
     ],
     frozenset(["mandsaur", "ujjain"]): [
@@ -468,9 +495,11 @@ def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any]
 
     preference_text = " ".join(preferences or []).lower()
     ranked = []
+    known_route = route_key(start, destination)
+    max_distance_km = 35 if known_route in CURATED_ROUTE_TEMPLES else 15
     for temple in temples:
         distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
-        if distance > 15:
+        if distance > max_distance_km:
             continue
         score = 0
         if temple["importance"] == "high":
@@ -478,11 +507,12 @@ def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any]
         if preference_text and temple.get("deity", "").lower() in preference_text:
             score += 5
         score -= distance
-        ranked.append((score, distance, temple))
+        route_order = temple.get("route_order", 999)
+        ranked.append((route_order, -score, distance, temple))
 
-    ranked.sort(key=lambda item: (-item[0], item[1]))
+    ranked.sort(key=lambda item: (item[0], item[2]))
     output = []
-    for _, distance, temple in ranked[:8]:
+    for _, _, distance, temple in ranked[:8]:
         output.append(
             TempleStop(
                 name=temple["name"],
