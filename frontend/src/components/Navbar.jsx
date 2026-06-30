@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Menu, X, Navigation, CalendarDays, BookOpen, PenLine, User, LogOut } from 'lucide-react';
+import { Search, Menu, X, Navigation, CalendarDays, Sparkles, BookOpen, User, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useUserAuth } from '../hooks/useUserAuth';
@@ -56,11 +56,11 @@ export default function Navbar() {
   };
 
   const NAV_LINKS = [
-    { to: '/search',          label: '🛕 ' + 'Temples',              icon: <Search size={16} /> },
+    { to: '/search',          label: t('nav.temples', { defaultValue: '🛕 Temples' }), icon: <Search size={16} /> },
     { to: '/route-planner',   label: t('nav.route'),                 icon: <Navigation size={16} /> },
     { to: '/panchang',        label: t('nav.panchang'),              icon: <CalendarDays size={16} /> },
-    { to: '/blog',            label: '📖 Blog',                      icon: <PenLine size={16} /> },
-    { to: '/sacred-books',    label: '📚 Library',                   icon: <BookOpen size={16} /> },
+    { to: '/festivals',       label: t('nav.festivals'),             icon: <Sparkles size={16} /> },
+    { to: '/sacred-books',    label: t('nav.library', { defaultValue: '📚 Library' }), icon: <BookOpen size={16} /> },
     { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'),     icon: null },
   ];
 
@@ -134,10 +134,8 @@ export default function Navbar() {
               value={lang}
               onChange={(e) => changeLang(e.target.value)}
             >
-              <option value="en">🌐 English</option>
-              <option value="hi">🇮🇳 हिंदी</option>
-              <option value="mr">🟠 मराठी</option>
-              <option value="ta">🌺 தமிழ்</option>
+              <option value="en">English</option>
+              <option value="hi">हिंदी</option>
             </select>
 
             {isLoggedIn ? (
@@ -166,7 +164,7 @@ export default function Navbar() {
                     {(user?.name || 'U')[0].toUpperCase()}
                   </span>
                   <span style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user?.name?.split(' ')[0] || 'Profile'}
+                    {user?.name?.split(' ')[0] || t('nav.profile', { defaultValue: 'Profile' })}
                   </span>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                     style={{ opacity: 0.6, transition: 'transform 0.2s', transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
@@ -201,7 +199,7 @@ export default function Navbar() {
                       onMouseLeave={e => e.currentTarget.style.background = isActive('/profile') ? '#FAF6EE' : 'transparent'}
                     >
                       <User size={15} style={{ color: '#C8520A' }} />
-                      My Profile
+                      {t('nav.my_profile', { defaultValue: 'My Profile' })}
                     </Link>
                     <button
                       onClick={handleUserLogout}
@@ -217,7 +215,7 @@ export default function Navbar() {
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <LogOut size={15} />
-                      Sign Out
+                      {t('nav.sign_out', { defaultValue: 'Sign Out' })}
                     </button>
                   </div>
                 )}
@@ -235,7 +233,7 @@ export default function Navbar() {
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                Sign In
+                {t('nav.sign_in', { defaultValue: 'Sign In' })}
               </Link>
             )}
           </div>
@@ -293,7 +291,7 @@ export default function Navbar() {
                 style={{ color: '#ffb050', fontWeight: 600 }}
               >
                 <span className="sidebar-link-icon"><User size={16} /></span>
-                My Profile
+                {t('nav.my_profile', { defaultValue: 'My Profile' })}
               </Link>
               <button
                 onClick={handleUserLogout}
@@ -306,7 +304,7 @@ export default function Navbar() {
                 }}
               >
                 <span className="sidebar-link-icon"><LogOut size={16} /></span>
-                Sign Out
+                {t('nav.sign_out', { defaultValue: 'Sign Out' })}
               </button>
             </>
           )}
@@ -319,7 +317,7 @@ export default function Navbar() {
               style={{ color: '#ffb050', fontWeight: 600 }}
             >
               <span className="sidebar-link-icon"><User size={16} /></span>
-              Sign In
+              {t('nav.sign_in', { defaultValue: 'Sign In' })}
             </Link>
           )}
         </nav>
@@ -330,10 +328,8 @@ export default function Navbar() {
             value={lang}
             onChange={(e) => changeLang(e.target.value)}
           >
-            <option value="en">🌐 English</option>
-            <option value="hi">🇮🇳 हिंदी</option>
-            <option value="mr">🟠 मराठी</option>
-            <option value="ta">🌺 தமிழ்</option>
+            <option value="en">English</option>
+            <option value="hi">हिंदी</option>
           </select>
         </div>
       </aside>
