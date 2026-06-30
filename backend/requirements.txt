@@ -7,6 +7,7 @@ anthropic
 aiofiles
 pillow
 requests
+httpx
 bcrypt
 passlib[bcrypt]
 python-jose[cryptography]
