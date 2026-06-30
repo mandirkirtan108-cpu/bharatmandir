@@ -131,6 +131,58 @@ POPULAR_CITY_HINTS = [
 
 
 CURATED_ROUTE_TEMPLES: dict[frozenset[str], list[dict[str, Any]]] = {
+    frozenset(["mandsaur", "indore"]): [
+        {
+            "name": "Shree Pashupatinath Temple",
+            "location": "Mandsaur, Madhya Pradesh",
+            "deity": "Shiva",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "Famous Ashtamukhi Pashupatinath Shiva temple on the Shivna river, ideal as the starting darshan in Mandsaur.",
+            "lat": 24.0714,
+            "lng": 75.0699,
+        },
+        {
+            "name": "Kalika Mata Temple",
+            "location": "Ratlam, Madhya Pradesh",
+            "deity": "Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 30,
+            "why_visit": "Important Devi temple in Ratlam and a practical spiritual halt between Mandsaur and Indore.",
+            "lat": 23.3315,
+            "lng": 75.0367,
+        },
+        {
+            "name": "Khajrana Ganesh Temple",
+            "location": "Indore, Madhya Pradesh",
+            "deity": "Ganesh",
+            "importance": "high",
+            "estimated_stop_time_minutes": 45,
+            "why_visit": "One of Indore's most visited Ganesh temples, commonly chosen before beginning or completing important journeys.",
+            "lat": 22.7196,
+            "lng": 75.9033,
+        },
+        {
+            "name": "Annapurna Temple",
+            "location": "Indore, Madhya Pradesh",
+            "deity": "Annapurna Devi",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 35,
+            "why_visit": "Well-known Indore temple dedicated to Maa Annapurna, suitable for a peaceful darshan stop in the destination city.",
+            "lat": 22.6939,
+            "lng": 75.8393,
+        },
+        {
+            "name": "Bada Ganpati Temple",
+            "location": "Indore, Madhya Pradesh",
+            "deity": "Ganesh",
+            "importance": "medium",
+            "estimated_stop_time_minutes": 25,
+            "why_visit": "Historic Ganesh temple famous for its large Ganpati idol in old Indore.",
+            "lat": 22.7176,
+            "lng": 75.8450,
+        },
+    ],
     frozenset(["mandsaur", "ujjain"]): [
         {
             "name": "Shree Pashupatinath Temple",
@@ -334,8 +386,7 @@ def distance_to_polyline_km(lat: float, lng: float, geometry: dict[str, Any]) ->
     return min(haversine_km(lat, lng, point[1], point[0]) for point in sampled)
 
 
-def fmt_distance(meters: float) -> str:
-    km = meters / 1000
+def fmt_distance(km: float) -> str:
     if km < 10:
         return f"{km:.1f} km"
     return f"{round(km)} km"
@@ -504,7 +555,7 @@ async def plan_route(req: RoutePlanRequest):
     feature = features[0]
     geometry = feature.get("geometry") or {}
     summary = feature.get("properties", {}).get("summary", {})
-    distance_meters = float(summary.get("distance", 0))
+    distance_km = float(summary.get("distance", 0))
     duration_seconds = float(summary.get("duration", 0))
 
     temples = get_temples_for_route(req.start, req.destination, geometry, req.preferences or [])
@@ -533,7 +584,7 @@ async def plan_route(req: RoutePlanRequest):
         route_summary=RouteSummary(
             start=req.start,
             destination=req.destination,
-            total_distance=fmt_distance(distance_meters),
+            total_distance=fmt_distance(distance_km),
             estimated_travel_time=fmt_duration(duration_seconds),
         ),
         recommended_temples=temples,
