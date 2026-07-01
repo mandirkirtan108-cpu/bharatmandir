@@ -847,7 +847,18 @@ async def fetch_osm_temples_along_route(
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(OVERPASS_URL, data={"data": query})
+            response = await client.post(
+                OVERPASS_URL,
+                data={"data": query},
+                headers={
+                    # Overpass's Apache front-end 406-rejects requests without
+                    # a descriptive User-Agent — this is required by their
+                    # fair-use policy, not optional.
+                    "User-Agent": "BharatMandir/1.0 (temple route planner; https://bharatmandir.app)",
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
         if response.status_code >= 400:
             print(f"[route_planner] Overpass returned HTTP {response.status_code}: {response.text[:300]}")
             return []
