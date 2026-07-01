@@ -7,6 +7,11 @@ This version removes OpenAI from route planning and uses OpenRouteService for:
 - actual road duration
 - route geometry for the frontend map
 
+It also adds DYNAMIC temple discovery for ANY route (not just curated pairs)
+using OpenStreetMap's free Overpass API. Curated temples (with rich,
+hand-written descriptions) are still used first for known corridors, and
+OSM results fill in / extend the list for every other route.
+
 Required backend env:
 OPENROUTESERVICE_API_KEY=your_key
 """
@@ -32,6 +37,10 @@ ORS_PROFILE_BY_MODE = {
     "train": "driving-car",
 }
 
+# Overpass is a free, keyless API on top of OpenStreetMap data.
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+MAX_TEMPLES_IN_RESPONSE = 8
+
 
 class RoutePlanRequest(BaseModel):
     start: str
@@ -55,6 +64,7 @@ class TempleStop(BaseModel):
     why_visit: str
     lat: Optional[float] = None
     lng: Optional[float] = None
+    source: str = "curated"
 
 
 class OptimizedStop(BaseModel):
@@ -726,33 +736,188 @@ def all_curated_temples() -> list[dict[str, Any]]:
     return list(temples_by_name.values())
 
 
-def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any], preferences: list[str]) -> list[TempleStop]:
+# ---------------------------------------------------------------------------
+# Dynamic temple discovery via OpenStreetMap Overpass API
+# This is what makes the planner work for ANY route, not just curated pairs.
+# ---------------------------------------------------------------------------
+
+def sample_route_points(geometry: dict[str, Any], interval_km: float = 20.0, max_points: int = 25) -> list[tuple[float, float]]:
+    """Pick evenly spaced (lat, lng) points along the route polyline."""
+    coords = geometry.get("coordinates") or []
+    if not coords:
+        return []
+
+    points: list[tuple[float, float]] = [(coords[0][1], coords[0][0])]
+    cumulative = 0.0
+    last_lat, last_lng = coords[0][1], coords[0][0]
+
+    for lng, lat in coords[1:]:
+        cumulative += haversine_km(last_lat, last_lng, lat, lng)
+        if cumulative >= interval_km:
+            points.append((lat, lng))
+            cumulative = 0.0
+        last_lat, last_lng = lat, lng
+
+    last_point = (coords[-1][1], coords[-1][0])
+    if points[-1] != last_point:
+        points.append(last_point)
+
+    if len(points) > max_points:
+        step = len(points) / max_points
+        points = [points[int(i * step)] for i in range(max_points)]
+
+    return points
+
+
+def _osm_importance(tags: dict[str, str]) -> str:
+    if tags.get("wikipedia") or tags.get("wikidata") or tags.get("tourism") == "attraction" or tags.get("historic"):
+        return "high"
+    return "medium"
+
+
+def _osm_location_label(tags: dict[str, str], fallback: str) -> str:
+    parts = [
+        tags.get("addr:suburb") or tags.get("addr:city") or tags.get("addr:town"),
+        tags.get("addr:state"),
+    ]
+    parts = [p for p in parts if p]
+    if parts:
+        return ", ".join(parts)
+    return fallback
+
+
+def _osm_deity(tags: dict[str, str]) -> Optional[str]:
+    denomination = tags.get("denomination")
+    if denomination:
+        return denomination.replace("_", " ").title()
+    return None
+
+
+def _osm_why_visit(tags: dict[str, str]) -> str:
+    if tags.get("wikipedia") or tags.get("wikidata"):
+        return "A notable Hindu temple along this route, documented for its historic or cultural significance."
+    if tags.get("historic"):
+        return "A historic Hindu temple located along this route, worth a quick darshan stop."
+    return "A Hindu temple located along this route, suitable for a brief darshan stop."
+
+
+async def fetch_osm_temples_along_route(
+    geometry: dict[str, Any],
+    search_radius_km: float = 6.0,
+    sample_interval_km: float = 20.0,
+    route_fallback_label: str = "Along the route",
+) -> list[dict[str, Any]]:
+    """Query OpenStreetMap Overpass API for Hindu temples near the route polyline."""
+    points = sample_route_points(geometry, interval_km=sample_interval_km)
+    if not points:
+        return []
+
+    radius_m = int(search_radius_km * 1000)
+    around_clauses = "\n".join(
+        f'node(around:{radius_m},{lat:.5f},{lng:.5f})["amenity"="place_of_worship"]["religion"="hindu"];'
+        for lat, lng in points
+    )
+    query = f"""
+    [out:json][timeout:25];
+    (
+      {around_clauses}
+    );
+    out body;
+    """
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(OVERPASS_URL, data={"data": query})
+        if response.status_code >= 400:
+            return []
+        data = response.json()
+    except Exception:
+        # Overpass can be slow/rate-limited; fail soft so route planning still works.
+        return []
+
+    seen_ids: set[int] = set()
+    temples: list[dict[str, Any]] = []
+    for element in data.get("elements", []):
+        osm_id = element.get("id")
+        if osm_id in seen_ids:
+            continue
+        tags = element.get("tags", {}) or {}
+        name = tags.get("name") or tags.get("name:en")
+        lat = element.get("lat")
+        lng = element.get("lon")
+        if not name or lat is None or lng is None:
+            continue
+        seen_ids.add(osm_id)
+        temples.append(
+            {
+                "name": name.strip(),
+                "location": _osm_location_label(tags, route_fallback_label),
+                "deity": _osm_deity(tags),
+                "importance": _osm_importance(tags),
+                "estimated_stop_time_minutes": 30,
+                "why_visit": _osm_why_visit(tags),
+                "lat": float(lat),
+                "lng": float(lng),
+                "source": "osm",
+            }
+        )
+
+    return temples
+
+
+async def get_temples_for_route(
+    start: str,
+    destination: str,
+    geometry: dict[str, Any],
+    preferences: list[str],
+) -> list[TempleStop]:
     key = route_key(start, destination)
-    temples = CURATED_ROUTE_TEMPLES.get(key)
-    known_route = key in CURATED_ROUTE_TEMPLES
-    if not temples:
-        temples = all_curated_temples()
+    curated = CURATED_ROUTE_TEMPLES.get(key, [])
+    known_route = bool(curated)
 
     preference_text = " ".join(preferences or []).lower()
-    ranked = []
-    default_max_distance_km = 35 if known_route else 45
-    for temple in temples:
+    default_max_distance_km = 35 if known_route else 20
+
+    ranked: list[tuple[int, float, float, dict[str, Any]]] = []
+    curated_names_seen: set[str] = set()
+
+    for temple in curated:
         distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
         max_distance_km = temple.get("max_route_distance_km", default_max_distance_km)
         if distance > max_distance_km:
             continue
-        score = 0
-        if temple["importance"] == "high":
-            score += 10
-        if preference_text and temple.get("deity", "").lower() in preference_text:
+        score = 10 if temple["importance"] == "high" else 5
+        if preference_text and (temple.get("deity") or "").lower() in preference_text:
             score += 5
         score -= distance
-        route_order = temple.get("route_order", 999 if known_route else 100)
-        ranked.append((route_order, -score, distance, temple))
+        route_order = temple.get("route_order", 999)
+        ranked.append((route_order, -score, distance, {**temple, "source": "curated"}))
+        curated_names_seen.add(temple["name"].strip().lower())
+
+    # Always try OSM too — it fills gaps for known routes and is the ONLY
+    # source of temples for routes that have no curated data at all.
+    if len(ranked) < MAX_TEMPLES_IN_RESPONSE:
+        osm_temples = await fetch_osm_temples_along_route(
+            geometry,
+            search_radius_km=6.0 if known_route else 8.0,
+            route_fallback_label=f"Between {start} and {destination}",
+        )
+        for temple in osm_temples:
+            if temple["name"].strip().lower() in curated_names_seen:
+                continue
+            distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
+            max_distance_km = 8.0 if known_route else 10.0
+            if distance > max_distance_km:
+                continue
+            score = 10 if temple["importance"] == "high" else 3
+            if preference_text and (temple.get("deity") or "").lower() in preference_text:
+                score += 5
+            score -= distance
+            ranked.append((500, -score, distance, temple))
 
     ranked.sort(key=lambda item: (item[0], item[2]))
-    output = []
-    for _, _, distance, temple in ranked[:8]:
+    output: list[TempleStop] = []
+    for _, _, distance, temple in ranked[:MAX_TEMPLES_IN_RESPONSE]:
         output.append(
             TempleStop(
                 name=temple["name"],
@@ -764,6 +929,7 @@ def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any]
                 why_visit=temple["why_visit"],
                 lat=temple["lat"],
                 lng=temple["lng"],
+                source=temple.get("source", "curated"),
             )
         )
     return output
@@ -772,12 +938,17 @@ def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any]
 def make_optimized_plan(temples: list[TempleStop]) -> list[OptimizedStop]:
     plan = []
     for index, temple in enumerate(temples, start=1):
+        reason = (
+            "Ordered along the verified route and prioritized by spiritual importance."
+            if temple.source == "curated"
+            else "Found via OpenStreetMap near this route and ordered by distance from the road."
+        )
         plan.append(
             OptimizedStop(
                 stop_number=index,
                 temple_name=temple.name,
                 arrival_time_hint=None,
-                arrival_order_reason="Ordered along the verified route and prioritized by spiritual importance.",
+                arrival_order_reason=reason,
             )
         )
     return plan
@@ -828,7 +999,7 @@ async def plan_route(req: RoutePlanRequest):
     distance_km = float(summary.get("distance", 0))
     duration_seconds = float(summary.get("duration", 0))
 
-    temples = get_temples_for_route(req.start, req.destination, geometry, req.preferences or [])
+    temples = await get_temples_for_route(req.start, req.destination, geometry, req.preferences or [])
     optimized_plan = make_optimized_plan(temples)
 
     travel_warning = None
@@ -843,10 +1014,10 @@ async def plan_route(req: RoutePlanRequest):
 
     insights = [
         "Distance and travel time are calculated using OpenRouteService road routing.",
-        "Temple suggestions are filtered from curated verified stops for known spiritual corridors.",
+        "Temple suggestions combine curated verified stops with live OpenStreetMap data along the route.",
     ]
     if not temples:
-        insights.append("No curated temple stops are available for this route yet. Add temple coordinates to improve suggestions.")
+        insights.append("No temples were found close enough to this route. Try increasing your time budget or picking a different corridor.")
     else:
         insights.append("Start early morning so darshan stops do not push the journey into evening traffic.")
 
