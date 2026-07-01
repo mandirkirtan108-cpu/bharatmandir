@@ -52,9 +52,10 @@ class TempleStop(BaseModel):
     estimated_stop_time_minutes: int
     importance: str
     deity: Optional[str] = None
-    why_visit: str
+    why_visit: str = "A place of worship located along your route."
     lat: Optional[float] = None
     lng: Optional[float] = None
+    source: str = "curated"
 
 
 class OptimizedStop(BaseModel):
@@ -716,6 +717,91 @@ async def get_ors_route(start_lng: float, start_lat: float, dest_lng: float, des
     )
 
 
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OSM_TEMPLE_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+OSM_CACHE_TTL_SECONDS = 60 * 60 * 24  # 24 hours
+
+
+def sample_route_points(geometry: dict[str, Any], max_points: int = 25) -> list[tuple[float, float]]:
+    """Sample evenly spaced points along the route polyline for corridor search."""
+    coords = geometry.get("coordinates") or []
+    if not coords:
+        return []
+    step = max(1, len(coords) // max_points)
+    return [(lat, lng) for lng, lat in coords[::step]]
+
+
+async def fetch_osm_temples_along_route(
+    geometry: dict[str, Any],
+    buffer_km: float = 12,
+) -> list[dict[str, Any]]:
+    """Query OpenStreetMap Overpass API for hindu places of worship near the route."""
+    import time
+
+    cache_key = f"{buffer_km}:{str(geometry.get('coordinates'))[:200]}"
+    cached = OSM_TEMPLE_CACHE.get(cache_key)
+    if cached and (time.time() - cached[0]) < OSM_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    sampled_points = sample_route_points(geometry, max_points=25)
+    if not sampled_points:
+        return []
+
+    around_clauses = "\n".join(
+        f'node["amenity"="place_of_worship"]["religion"="hindu"](around:{int(buffer_km * 1000)},{lat},{lng});'
+        for lat, lng in sampled_points
+    )
+
+    query = f"""
+    [out:json][timeout:25];
+    (
+      {around_clauses}
+    );
+    out body;
+    """
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(OVERPASS_URL, data={"data": query})
+        if response.status_code != 200:
+            return []
+        data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+
+    temples: list[dict[str, Any]] = []
+    seen_ids = set()
+    for element in data.get("elements", []):
+        element_id = element.get("id")
+        if element_id in seen_ids:
+            continue
+        tags = element.get("tags", {})
+        name = tags.get("name") or tags.get("name:en")
+        if not name or len(name.strip()) < 4:
+            continue
+        lat = element.get("lat")
+        lng = element.get("lon")
+        if lat is None or lng is None:
+            continue
+        seen_ids.add(element_id)
+        temples.append(
+            {
+                "name": name.strip(),
+                "lat": lat,
+                "lng": lng,
+                "location": tags.get("addr:city") or tags.get("addr:district") or tags.get("addr:state") or "",
+                "deity": tags.get("dedication"),
+                "importance": "medium",
+                "estimated_stop_time_minutes": 25,
+                "why_visit": "A place of worship located along your route.",
+                "source": "osm",
+            }
+        )
+
+    OSM_TEMPLE_CACHE[cache_key] = (time.time(), temples)
+    return temples
+
+
 def all_curated_temples() -> list[dict[str, Any]]:
     temples_by_name: dict[str, dict[str, Any]] = {}
     for route_temples in CURATED_ROUTE_TEMPLES.values():
@@ -726,25 +812,44 @@ def all_curated_temples() -> list[dict[str, Any]]:
     return list(temples_by_name.values())
 
 
-def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any], preferences: list[str]) -> list[TempleStop]:
+def get_temples_for_route(
+    start: str,
+    destination: str,
+    geometry: dict[str, Any],
+    preferences: list[str],
+    osm_temples: list[dict[str, Any]] | None = None,
+) -> list[TempleStop]:
     key = route_key(start, destination)
-    temples = CURATED_ROUTE_TEMPLES.get(key)
+    curated_temples = CURATED_ROUTE_TEMPLES.get(key) or []
     known_route = key in CURATED_ROUTE_TEMPLES
-    if not temples:
-        temples = all_curated_temples()
+
+    # Curated temples come first (better descriptions, manual route_order).
+    # OSM temples fill in every real temple along the route that isn't already curated.
+    combined = list(curated_temples)
+    curated_names = {t["name"].strip().lower() for t in curated_temples}
+
+    for osm_temple in osm_temples or []:
+        if osm_temple["name"].strip().lower() in curated_names:
+            continue
+        combined.append(osm_temple)
+
+    if not combined:
+        combined = all_curated_temples()
 
     preference_text = " ".join(preferences or []).lower()
     ranked = []
     default_max_distance_km = 35 if known_route else 45
-    for temple in temples:
+    for temple in combined:
+        if temple.get("lat") is None or temple.get("lng") is None:
+            continue
         distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
         max_distance_km = temple.get("max_route_distance_km", default_max_distance_km)
         if distance > max_distance_km:
             continue
         score = 0
-        if temple["importance"] == "high":
+        if temple.get("importance") == "high":
             score += 10
-        if preference_text and temple.get("deity", "").lower() in preference_text:
+        if preference_text and (temple.get("deity") or "").lower() in preference_text:
             score += 5
         score -= distance
         route_order = temple.get("route_order", 999 if known_route else 100)
@@ -752,18 +857,19 @@ def get_temples_for_route(start: str, destination: str, geometry: dict[str, Any]
 
     ranked.sort(key=lambda item: (item[0], item[2]))
     output = []
-    for _, _, distance, temple in ranked[:8]:
+    for _, _, distance, temple in ranked[:15]:
         output.append(
             TempleStop(
                 name=temple["name"],
-                location=temple["location"],
+                location=temple.get("location", ""),
                 distance_from_route_km=f"{distance:.1f} km",
-                estimated_stop_time_minutes=temple["estimated_stop_time_minutes"],
-                importance=temple["importance"],
+                estimated_stop_time_minutes=temple.get("estimated_stop_time_minutes", 30),
+                importance=temple.get("importance", "medium"),
                 deity=temple.get("deity"),
-                why_visit=temple["why_visit"],
+                why_visit=temple.get("why_visit", "A place of worship located along your route."),
                 lat=temple["lat"],
                 lng=temple["lng"],
+                source=temple.get("source", "curated"),
             )
         )
     return output
@@ -828,7 +934,9 @@ async def plan_route(req: RoutePlanRequest):
     distance_km = float(summary.get("distance", 0))
     duration_seconds = float(summary.get("duration", 0))
 
-    temples = get_temples_for_route(req.start, req.destination, geometry, req.preferences or [])
+    osm_temples = await fetch_osm_temples_along_route(geometry, buffer_km=12)
+
+    temples = get_temples_for_route(req.start, req.destination, geometry, req.preferences or [], osm_temples)
     optimized_plan = make_optimized_plan(temples)
 
     travel_warning = None
@@ -843,10 +951,10 @@ async def plan_route(req: RoutePlanRequest):
 
     insights = [
         "Distance and travel time are calculated using OpenRouteService road routing.",
-        "Temple suggestions are filtered from curated verified stops for known spiritual corridors.",
+        "Temple suggestions combine curated verified stops with live OpenStreetMap data along your route.",
     ]
     if not temples:
-        insights.append("No curated temple stops are available for this route yet. Add temple coordinates to improve suggestions.")
+        insights.append("No temple stops were found near this route. Try a shorter or more populated corridor.")
     else:
         insights.append("Start early morning so darshan stops do not push the journey into evening traffic.")
 
