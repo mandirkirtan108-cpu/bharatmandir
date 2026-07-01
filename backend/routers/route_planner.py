@@ -18,6 +18,7 @@ OPENROUTESERVICE_API_KEY=your_key
 
 from __future__ import annotations
 
+import asyncio
 from math import radians, sin, cos, asin, sqrt
 import os
 from typing import Any, Optional
@@ -712,6 +713,36 @@ async def geocode_city(city: str) -> tuple[float, float, str]:
     return float(lat), float(lng), label
 
 
+async def reverse_geocode_place(lat: float, lng: float) -> Optional[str]:
+    """Resolve a lat/lng to a short, human place name (e.g. 'Sarangpur, Madhya Pradesh')
+    using ORS reverse geocoding. Used to fill in real locations for OSM temples
+    that have no addr:* tags of their own."""
+    try:
+        data = await ors_get(
+            "/geocode/reverse",
+            {
+                "point.lat": lat,
+                "point.lon": lng,
+                "size": 1,
+                "boundary.country": "IN",
+            },
+        )
+    except Exception as exc:
+        print(f"[route_planner] Reverse geocode failed for ({lat}, {lng}): {exc!r}")
+        return None
+
+    features = data.get("features") or []
+    if not features:
+        return None
+    props = features[0].get("properties", {})
+    locality = props.get("locality") or props.get("localadmin") or props.get("county")
+    region = props.get("region")
+    parts = [p for p in (locality, region) if p]
+    if parts:
+        return ", ".join(parts)
+    return props.get("label")
+
+
 async def get_ors_route(start_lng: float, start_lat: float, dest_lng: float, dest_lat: float, mode: str) -> dict[str, Any]:
     profile = ORS_PROFILE_BY_MODE.get(mode, "driving-car")
     return await ors_post(
@@ -790,7 +821,10 @@ def _osm_importance(tags: dict[str, str]) -> str:
     return "medium"
 
 
-def _osm_location_label(tags: dict[str, str], fallback: str) -> str:
+def _osm_addr_location(tags: dict[str, str]) -> Optional[str]:
+    """Real address from OSM tags, if present. Returns None if the node has
+    no addr:* tags — caller should reverse-geocode in that case rather than
+    showing a vague 'between X and Y' placeholder."""
     parts = [
         tags.get("addr:suburb") or tags.get("addr:city") or tags.get("addr:town"),
         tags.get("addr:state"),
@@ -798,7 +832,7 @@ def _osm_location_label(tags: dict[str, str], fallback: str) -> str:
     parts = [p for p in parts if p]
     if parts:
         return ", ".join(parts)
-    return fallback
+    return None
 
 
 def _osm_deity(tags: dict[str, str]) -> Optional[str]:
@@ -887,7 +921,7 @@ async def fetch_osm_temples_along_route(
         temples.append(
             {
                 "name": name.strip(),
-                "location": _osm_location_label(tags, route_fallback_label),
+                "location": _osm_addr_location(tags),
                 "deity": _osm_deity(tags),
                 "importance": _osm_importance(tags),
                 "estimated_stop_time_minutes": 30,
@@ -898,7 +932,26 @@ async def fetch_osm_temples_along_route(
             }
         )
 
+    await _fill_missing_locations(temples, route_fallback_label)
     return temples
+
+
+async def _fill_missing_locations(temples: list[dict[str, Any]], fallback_label: str, max_concurrency: int = 5) -> None:
+    """Reverse-geocode every temple that has no addr:* tag, so the UI shows
+    a real place name instead of a generic 'Between X and Y' placeholder.
+    Runs with bounded concurrency to stay within ORS rate limits."""
+    to_resolve = [t for t in temples if not t.get("location")]
+    if not to_resolve:
+        return
+
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def resolve(temple: dict[str, Any]) -> None:
+        async with semaphore:
+            label = await reverse_geocode_place(temple["lat"], temple["lng"])
+            temple["location"] = label or fallback_label
+
+    await asyncio.gather(*(resolve(t) for t in to_resolve))
 
 
 async def get_temples_for_route(
