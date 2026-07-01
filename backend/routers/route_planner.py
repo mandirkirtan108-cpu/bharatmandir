@@ -717,7 +717,15 @@ async def get_ors_route(start_lng: float, start_lat: float, dest_lng: float, des
     )
 
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+import logging
+
+logger = logging.getLogger("route_planner")
+
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
+]
 OSM_TEMPLE_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 OSM_CACHE_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 
@@ -735,16 +743,23 @@ async def fetch_osm_temples_along_route(
     geometry: dict[str, Any],
     buffer_km: float = 12,
 ) -> list[dict[str, Any]]:
-    """Query OpenStreetMap Overpass API for hindu places of worship near the route."""
+    """Query OpenStreetMap Overpass API for hindu places of worship near the route.
+
+    Tries multiple public Overpass mirrors in order since the primary server
+    can be rate-limited or temporarily unavailable. Always sends a User-Agent
+    header, since Overpass commonly rejects/blocks requests without one.
+    """
     import time
 
     cache_key = f"{buffer_km}:{str(geometry.get('coordinates'))[:200]}"
     cached = OSM_TEMPLE_CACHE.get(cache_key)
     if cached and (time.time() - cached[0]) < OSM_CACHE_TTL_SECONDS:
+        logger.info("OSM temples: cache hit (%d temples)", len(cached[1]))
         return cached[1]
 
     sampled_points = sample_route_points(geometry, max_points=25)
     if not sampled_points:
+        logger.warning("OSM temples: no route points to sample")
         return []
 
     around_clauses = "\n".join(
@@ -760,13 +775,31 @@ async def fetch_osm_temples_along_route(
     out body;
     """
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(OVERPASS_URL, data={"data": query})
-        if response.status_code != 200:
-            return []
-        data = response.json()
-    except (httpx.HTTPError, ValueError):
+    headers = {
+        "User-Agent": "BharatMandir-RoutePlanner/1.0 (https://bharatmandir.app)",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    data = None
+    last_error = None
+    for mirror_url in OVERPASS_URLS:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(mirror_url, data={"data": query}, headers=headers)
+            if response.status_code != 200:
+                last_error = f"{mirror_url} returned status {response.status_code}"
+                logger.warning("OSM temples: %s", last_error)
+                continue
+            data = response.json()
+            logger.info("OSM temples: successfully queried %s", mirror_url)
+            break
+        except (httpx.HTTPError, ValueError) as exc:
+            last_error = f"{mirror_url} failed: {exc}"
+            logger.warning("OSM temples: %s", last_error)
+            continue
+
+    if data is None:
+        logger.error("OSM temples: all Overpass mirrors failed. Last error: %s", last_error)
         return []
 
     temples: list[dict[str, Any]] = []
@@ -798,6 +831,7 @@ async def fetch_osm_temples_along_route(
             }
         )
 
+    logger.info("OSM temples: found %d temples along route", len(temples))
     OSM_TEMPLE_CACHE[cache_key] = (time.time(), temples)
     return temples
 
@@ -939,6 +973,9 @@ async def plan_route(req: RoutePlanRequest):
     temples = get_temples_for_route(req.start, req.destination, geometry, req.preferences or [], osm_temples)
     optimized_plan = make_optimized_plan(temples)
 
+    osm_count = len(osm_temples)
+    osm_used_count = sum(1 for t in temples if t.source == "osm")
+
     travel_warning = None
     if duration_seconds / 3600 > req.time_available:
         travel_warning = (
@@ -952,6 +989,7 @@ async def plan_route(req: RoutePlanRequest):
     insights = [
         "Distance and travel time are calculated using OpenRouteService road routing.",
         "Temple suggestions combine curated verified stops with live OpenStreetMap data along your route.",
+        f"[debug] OSM query found {osm_count} temples near route, {osm_used_count} included in results.",
     ]
     if not temples:
         insights.append("No temple stops were found near this route. Try a shorter or more populated corridor.")
