@@ -1033,14 +1033,30 @@ async def get_temples_for_route(
     preferences: list[str],
 ) -> list[TempleStop]:
     key = route_key(start, destination)
-    curated = CURATED_ROUTE_TEMPLES.get(key, [])
-    known_route = bool(curated)
+    route_specific = CURATED_ROUTE_TEMPLES.get(key, [])
+    known_route = bool(route_specific)
+
+    # Curated data is hand-written per city-pair, but a road trip from say
+    # Chittaurgarh to Dewas will legitimately pass close to Mandsaur or
+    # Neemuch even though nobody wrote a "Chittaurgarh-Dewas" entry. So we
+    # pool EVERY curated temple as a candidate for EVERY route, and let the
+    # actual perpendicular distance to the polyline decide whether it
+    # qualifies — famous stops (Jyotirlingas, Shaktipeeths, Pashupatinath...)
+    # should show up whenever the route genuinely passes near them.
+    route_specific_names = {t["name"].strip().lower() for t in route_specific}
+    curated = list(route_specific)
+    for temple in all_curated_temples():
+        if temple["name"].strip().lower() not in route_specific_names:
+            curated.append({**temple, "is_route_specific": False})
+    for temple in curated:
+        temple.setdefault("is_route_specific", temple["name"].strip().lower() in route_specific_names)
 
     thinned, cumulative = build_route_position_index(geometry)
     total_route_km = cumulative[-1] if cumulative else 0.0
 
     preference_text = " ".join(preferences or []).lower()
-    default_max_distance_km = 35 if known_route else 20
+    route_specific_max_distance_km = 35 if known_route else 20
+    GENERAL_CURATED_MAX_DISTANCE_KM = 25.0  # famous temples not tied to this exact pair
 
     # candidates: (score, perp_distance_km, position_km, temple)
     candidates: list[tuple[float, float, float, dict[str, Any]]] = []
@@ -1048,10 +1064,15 @@ async def get_temples_for_route(
 
     for temple in curated:
         perp_distance, position_km = locate_on_route(temple["lat"], temple["lng"], thinned, cumulative)
-        max_distance_km = temple.get("max_route_distance_km", default_max_distance_km)
+        if temple.get("max_route_distance_km") is not None:
+            max_distance_km = temple["max_route_distance_km"]
+        elif temple.get("is_route_specific"):
+            max_distance_km = route_specific_max_distance_km
+        else:
+            max_distance_km = GENERAL_CURATED_MAX_DISTANCE_KM
         if perp_distance > max_distance_km:
             continue
-        score = 10 if temple["importance"] == "high" else 5
+        score = 20 if temple["importance"] == "high" else 8
         if preference_text and (temple.get("deity") or "").lower() in preference_text:
             score += 5
         score -= perp_distance
