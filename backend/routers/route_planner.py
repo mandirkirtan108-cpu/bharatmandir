@@ -769,6 +769,21 @@ def sample_route_points(geometry: dict[str, Any], interval_km: float = 20.0, max
     return points
 
 
+HINDU_NAME_HINTS = ("mandir", "temple", "devi", "shiv", "mahadev", "hanuman", "durga", "ganesh", "kali", "vishnu")
+
+
+def _looks_hindu(tags: dict[str, str]) -> bool:
+    """OSM tagging for Indian temples is inconsistent — many nodes are
+    amenity=place_of_worship but have NO religion tag at all. So we also
+    accept anything whose name strongly suggests a Hindu temple."""
+    if tags.get("religion") == "hindu":
+        return True
+    if tags.get("religion"):
+        return False  # explicitly tagged as some OTHER religion, skip
+    name = (tags.get("name") or "").lower()
+    return any(hint in name for hint in HINDU_NAME_HINTS)
+
+
 def _osm_importance(tags: dict[str, str]) -> str:
     if tags.get("wikipedia") or tags.get("wikidata") or tags.get("tourism") == "attraction" or tags.get("historic"):
         return "high"
@@ -812,9 +827,14 @@ async def fetch_osm_temples_along_route(
     if not points:
         return []
 
+    # NOTE: we deliberately do NOT filter by religion=hindu inside the
+    # Overpass query itself — a lot of Indian temple nodes have no religion
+    # tag at all, and a server-side filter would silently drop them. We pull
+    # all place_of_worship nodes near the route and filter client-side in
+    # _looks_hindu() instead (tag if present, else name heuristics).
     radius_m = int(search_radius_km * 1000)
     around_clauses = "\n".join(
-        f'node(around:{radius_m},{lat:.5f},{lng:.5f})["amenity"="place_of_worship"]["religion"="hindu"];'
+        f'node(around:{radius_m},{lat:.5f},{lng:.5f})["amenity"="place_of_worship"];'
         for lat, lng in points
     )
     query = f"""
@@ -829,10 +849,13 @@ async def fetch_osm_temples_along_route(
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(OVERPASS_URL, data={"data": query})
         if response.status_code >= 400:
+            print(f"[route_planner] Overpass returned HTTP {response.status_code}: {response.text[:300]}")
             return []
         data = response.json()
-    except Exception:
-        # Overpass can be slow/rate-limited; fail soft so route planning still works.
+    except Exception as exc:
+        # Overpass can be slow/rate-limited/unreachable from some hosts.
+        # Logged (not silently swallowed) so this is debuggable in prod logs.
+        print(f"[route_planner] Overpass request failed: {exc!r}")
         return []
 
     seen_ids: set[int] = set()
@@ -842,6 +865,8 @@ async def fetch_osm_temples_along_route(
         if osm_id in seen_ids:
             continue
         tags = element.get("tags", {}) or {}
+        if not _looks_hindu(tags):
+            continue
         name = tags.get("name") or tags.get("name:en")
         lat = element.get("lat")
         lng = element.get("lon")
@@ -998,6 +1023,10 @@ async def plan_route(req: RoutePlanRequest):
     summary = feature.get("properties", {}).get("summary", {})
     distance_km = float(summary.get("distance", 0))
     duration_seconds = float(summary.get("duration", 0))
+    if duration_seconds < 0 or distance_km < 0:
+        # Should never happen — log the raw summary so this is debuggable
+        # if ORS ever returns something unexpected for a given profile.
+        print(f"[route_planner] Unexpected negative summary from ORS: {summary}")
 
     temples = await get_temples_for_route(req.start, req.destination, geometry, req.preferences or [])
     optimized_plan = make_optimized_plan(temples)
