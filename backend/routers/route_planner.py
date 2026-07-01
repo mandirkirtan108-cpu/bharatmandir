@@ -647,6 +647,78 @@ def distance_to_polyline_km(lat: float, lng: float, geometry: dict[str, Any]) ->
     return min(haversine_km(lat, lng, point[1], point[0]) for point in sampled)
 
 
+def build_route_position_index(geometry: dict[str, Any]) -> tuple[list[list[float]], list[float]]:
+    """Thin the route polyline to ~250 points and precompute cumulative
+    distance (km from start) at each thinned point. Used to figure out
+    WHERE ALONG the route (not just how close to it) a given temple sits,
+    so results can be spread from start to destination instead of
+    clustering wherever the road happens to pass through a dense city."""
+    coords = geometry.get("coordinates") or []
+    if not coords:
+        return [], []
+    thinned = coords[:: max(1, len(coords) // 250)]
+    if thinned[-1] != coords[-1]:
+        thinned.append(coords[-1])
+    cumulative = [0.0]
+    for i in range(1, len(thinned)):
+        lng1, lat1 = thinned[i - 1]
+        lng2, lat2 = thinned[i]
+        cumulative.append(cumulative[-1] + haversine_km(lat1, lng1, lat2, lng2))
+    return thinned, cumulative
+
+
+def locate_on_route(lat: float, lng: float, thinned: list[list[float]], cumulative: list[float]) -> tuple[float, float]:
+    """Returns (perpendicular_distance_km, position_along_route_km)."""
+    if not thinned:
+        return 9999.0, 0.0
+    best_i = 0
+    best_d = float("inf")
+    for i, (c_lng, c_lat) in enumerate(thinned):
+        d = haversine_km(lat, lng, c_lat, c_lng)
+        if d < best_d:
+            best_d = d
+            best_i = i
+    return best_d, cumulative[best_i]
+
+
+def diversify_by_route_position(
+    candidates: list[tuple[float, float, float, dict[str, Any]]],
+    desired_count: int,
+    total_route_km: float,
+) -> list[tuple[float, float, float, dict[str, Any]]]:
+    """candidates: list of (score, perp_distance_km, position_km, temple), already
+    sorted best-score-first. Greedily picks the best-scoring temple in each
+    'slot' along the route so the final list spans start -> destination
+    instead of bunching up near whichever end has the densest OSM data."""
+    if not candidates:
+        return []
+
+    min_spacing_km = max(15.0, (total_route_km / max(desired_count, 1)) * 0.6)
+    selected: list[tuple[float, float, float, dict[str, Any]]] = []
+    selected_positions: list[float] = []
+
+    for cand in candidates:
+        pos = cand[2]
+        if all(abs(pos - p) >= min_spacing_km for p in selected_positions):
+            selected.append(cand)
+            selected_positions.append(pos)
+        if len(selected) >= desired_count:
+            return selected
+
+    # Not enough well-spaced options — fill remaining slots with the next
+    # best-scoring candidates regardless of spacing.
+    selected_ids = {id(c) for c in selected}
+    for cand in candidates:
+        if id(cand) in selected_ids:
+            continue
+        selected.append(cand)
+        selected_ids.add(id(cand))
+        if len(selected) >= desired_count:
+            break
+
+    return selected
+
+
 def fmt_distance(km: float) -> str:
     if km < 10:
         return f"{km:.1f} km"
@@ -964,54 +1036,64 @@ async def get_temples_for_route(
     curated = CURATED_ROUTE_TEMPLES.get(key, [])
     known_route = bool(curated)
 
+    thinned, cumulative = build_route_position_index(geometry)
+    total_route_km = cumulative[-1] if cumulative else 0.0
+
     preference_text = " ".join(preferences or []).lower()
     default_max_distance_km = 35 if known_route else 20
 
-    ranked: list[tuple[int, float, float, dict[str, Any]]] = []
+    # candidates: (score, perp_distance_km, position_km, temple)
+    candidates: list[tuple[float, float, float, dict[str, Any]]] = []
     curated_names_seen: set[str] = set()
 
     for temple in curated:
-        distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
+        perp_distance, position_km = locate_on_route(temple["lat"], temple["lng"], thinned, cumulative)
         max_distance_km = temple.get("max_route_distance_km", default_max_distance_km)
-        if distance > max_distance_km:
+        if perp_distance > max_distance_km:
             continue
         score = 10 if temple["importance"] == "high" else 5
         if preference_text and (temple.get("deity") or "").lower() in preference_text:
             score += 5
-        score -= distance
-        route_order = temple.get("route_order", 999)
-        ranked.append((route_order, -score, distance, {**temple, "source": "curated"}))
+        score -= perp_distance
+        candidates.append((score, perp_distance, position_km, {**temple, "source": "curated"}))
         curated_names_seen.add(temple["name"].strip().lower())
 
     # Always try OSM too — it fills gaps for known routes and is the ONLY
     # source of temples for routes that have no curated data at all.
-    if len(ranked) < MAX_TEMPLES_IN_RESPONSE:
-        osm_temples = await fetch_osm_temples_along_route(
-            geometry,
-            search_radius_km=6.0 if known_route else 8.0,
-            route_fallback_label=f"Between {start} and {destination}",
-        )
-        for temple in osm_temples:
-            if temple["name"].strip().lower() in curated_names_seen:
-                continue
-            distance = distance_to_polyline_km(temple["lat"], temple["lng"], geometry)
-            max_distance_km = 8.0 if known_route else 10.0
-            if distance > max_distance_km:
-                continue
-            score = 10 if temple["importance"] == "high" else 3
-            if preference_text and (temple.get("deity") or "").lower() in preference_text:
-                score += 5
-            score -= distance
-            ranked.append((500, -score, distance, temple))
+    osm_temples = await fetch_osm_temples_along_route(
+        geometry,
+        search_radius_km=6.0 if known_route else 8.0,
+        route_fallback_label=f"Between {start} and {destination}",
+    )
+    for temple in osm_temples:
+        if temple["name"].strip().lower() in curated_names_seen:
+            continue
+        perp_distance, position_km = locate_on_route(temple["lat"], temple["lng"], thinned, cumulative)
+        max_distance_km = 8.0 if known_route else 10.0
+        if perp_distance > max_distance_km:
+            continue
+        score = 10 if temple["importance"] == "high" else 3
+        if preference_text and (temple.get("deity") or "").lower() in preference_text:
+            score += 5
+        score -= perp_distance
+        candidates.append((score, perp_distance, position_km, temple))
 
-    ranked.sort(key=lambda item: (item[0], item[2]))
+    # Best score first, so diversify_by_route_position greedily keeps the
+    # strongest option in each part of the route.
+    candidates.sort(key=lambda item: -item[0])
+
+    selected = diversify_by_route_position(candidates, MAX_TEMPLES_IN_RESPONSE, total_route_km)
+
+    # Present stops in the order the traveller will actually reach them.
+    selected.sort(key=lambda item: item[2])
+
     output: list[TempleStop] = []
-    for _, _, distance, temple in ranked[:MAX_TEMPLES_IN_RESPONSE]:
+    for _, perp_distance, _position_km, temple in selected:
         output.append(
             TempleStop(
                 name=temple["name"],
                 location=temple["location"],
-                distance_from_route_km=f"{distance:.1f} km",
+                distance_from_route_km=f"{perp_distance:.1f} km",
                 estimated_stop_time_minutes=temple["estimated_stop_time_minutes"],
                 importance=temple["importance"],
                 deity=temple.get("deity"),
