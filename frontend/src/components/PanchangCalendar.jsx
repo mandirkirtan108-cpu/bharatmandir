@@ -45,8 +45,8 @@ function firstPeriodStr(items, namePart) {
 // Tithi-linked observances (Ekadashi, Purnima, Amavasya, Chaturthi) get their
 // own color so they read as calendar "phases". Everything else (Diwali,
 // Ram Navami, Holi, Raksha Bandhan, Ganesh Chaturthi's actual festival entry,
-// etc.) is treated as a "named festival" and gets its name printed on the
-// cell, not just a dot — that's the part that was missing.
+// etc.) is treated as a "named festival" and gets its full name printed on
+// the cell (wrapped across lines, not truncated).
 const FESTIVAL_PHASE_MATCHERS = [
   { test: (n) => n.includes('ekadashi'), color: '#e67e22', label: 'Ekadashi' },
   { test: (n) => n.includes('pradosh') || n.includes('purnima'), color: '#9b59b6', label: 'Pradosh / Purnima' },
@@ -130,7 +130,7 @@ export default function PanchangCalendar() {
 
   // Split a day's festivals into "named" (Diwali, Ram Navami, ...) vs
   // "tithi phase" (Ekadashi, Purnima, ...) so the cell can show the named
-  // ones as text and the phase ones as a small dot.
+  // ones as text (wrapped, fully readable) and the phase ones as a small dot.
   function splitDayFestivals(day) {
     const named = [];
     const phaseDots = [];
@@ -245,10 +245,10 @@ export default function PanchangCalendar() {
                     borderRadius: 8,
                     background: selected ? '#fff7f0' : primaryNamed ? '#f9fdf9' : '#fff',
                     cursor: 'pointer',
-                    padding: '8px 4px 7px',
+                    padding: '8px 4px 8px',
                     textAlign: 'center',
                     transition: 'all .12s',
-                    minHeight: 84,
+                    minHeight: primaryNamed ? 106 : 84,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -285,21 +285,27 @@ export default function PanchangCalendar() {
                     }}>{paksha}</span>
                   )}
 
-                  {/* Named festival label — e.g. "Ram Navami", "Diwali" */}
+                  {/* Named festival label — FULL NAME, wrapped across lines
+                      instead of being clipped with an ellipsis, so e.g.
+                      "Jagannath Rathyatra" reads clearly instead of
+                      "Jagannath ..." */}
                   {primaryNamed && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, maxWidth: 68, marginTop: 1 }}>
-                      <span style={{
-                        fontFamily: UI_FONT, fontSize: 8.5, fontWeight: 700,
+                    <div style={{ width: '100%', marginTop: 2, padding: '0 2px' }}>
+                      <div style={{
+                        fontFamily: UI_FONT, fontSize: 8.5, fontWeight: 700, lineHeight: 1.2,
                         color: '#15803d', background: `${primaryNamed.color}1a`,
                         border: `1px solid ${primaryNamed.color}40`,
-                        borderRadius: 4, padding: '1px 4px',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        maxWidth: extraNamedCount > 0 ? 50 : 66,
-                      }}>{primaryNamed.name}</span>
+                        borderRadius: 4, padding: '2px 4px',
+                        whiteSpace: 'normal', wordBreak: 'break-word',
+                        textAlign: 'center',
+                      }}>{primaryNamed.name}</div>
                       {extraNamedCount > 0 && (
-                        <span style={{ fontFamily: UI_FONT, fontSize: 8, fontWeight: 700, color: '#9A7150', flexShrink: 0 }}>
-                          +{extraNamedCount}
-                        </span>
+                        <div style={{
+                          fontFamily: UI_FONT, fontSize: 8, fontWeight: 700,
+                          color: '#9A7150', textAlign: 'center', marginTop: 2,
+                        }}>
+                          +{extraNamedCount} more
+                        </div>
                       )}
                     </div>
                   )}
@@ -329,7 +335,7 @@ export default function PanchangCalendar() {
                 fontFamily: UI_FONT, fontSize: 9, fontWeight: 700, color: '#15803d',
                 background: '#16a34a1a', border: '1px solid #16a34a40', borderRadius: 4, padding: '1px 5px',
               }}>Diwali</span>
-              Named festival (shown by name)
+              Named festival (shown by full name)
             </span>
             {[
               { color: '#e67e22', label: 'Ekadashi' },
