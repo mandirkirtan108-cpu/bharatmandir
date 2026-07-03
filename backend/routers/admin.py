@@ -21,7 +21,6 @@ All routes require JWT Bearer token (Authorization: Bearer <token>)
 import os
 import uuid
 import re
-import shutil
 import random
 from typing import Optional, List
 
@@ -90,6 +89,7 @@ def ensure_media_table():
     Uses file_url column to match your existing schema.
     """
     with get_db_cursor() as cur:
+        cur.execute("ALTER TABLE temples ADD COLUMN IF NOT EXISTS hero_image_public_id TEXT;")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS temple_media (
                 id                    SERIAL PRIMARY KEY,
@@ -114,6 +114,25 @@ def save_upload(file_bytes: bytes, filename: str, prefix: str = "", resource_typ
     Returns {"url": <secure CDN url>, "public_id": <cloudinary public id>}.
     """
     return upload_file(file_bytes, filename, prefix=prefix, resource_type=resource_type)
+
+
+async def upload_admin_file(file: UploadFile, prefix: str, resource_type: str = "image") -> dict:
+    allowed = ALLOWED_VIDEO if resource_type == "video" else ALLOWED_IMAGE
+    if file.content_type not in allowed:
+        raise HTTPException(
+            400,
+            "Invalid type. Use JPEG/PNG/WebP/GIF for images or MP4/WebM/OGG for videos",
+        )
+
+    data = await file.read()
+    limit = MAX_VID if resource_type == "video" else MAX_IMG
+    if len(data) > limit:
+        raise HTTPException(400, f"File too large - max {'200 MB' if resource_type == 'video' else '10 MB'}")
+
+    try:
+        return save_upload(data, file.filename, prefix=prefix, resource_type=resource_type)
+    except RuntimeError as exc:
+        raise HTTPException(500, str(exc))
 
 
 # ─────────────────────────────────────────────
@@ -267,6 +286,7 @@ async def create_temple(
 
     # ── Step 6: Media ─────────────────────────
     hero_image:            Optional[UploadFile] = File(None),
+    gallery_images:        List[UploadFile] = File(default=[]),
     hero_image_url:        Optional[str]  = Form(None),
     video_aarti_url:       Optional[str]  = Form(None),
     video_intro_url:       Optional[str]  = Form(None),
@@ -326,6 +346,8 @@ async def create_temple(
     custom_designation:    Optional[str]  = Form(None),   # ← NEW
     custom_facility:       Optional[str]  = Form(None),   # ← NEW
 ):
+    ensure_media_table()
+
     base_slug = slugify(name, city)
     state_code = state.strip()[:2].upper()
     mkt_id = f"MKT-{state_code}-{random.randint(1000, 9999)}"
@@ -333,12 +355,7 @@ async def create_temple(
     hero_url = None
     hero_public_id = None
     if hero_image and hero_image.filename:
-        if hero_image.content_type not in ALLOWED_IMAGE:
-            raise HTTPException(400, "Hero image must be JPEG, PNG, WebP, or GIF")
-        data = await hero_image.read()
-        if len(data) > MAX_IMG:
-            raise HTTPException(400, "Hero image too large — max 10 MB")
-        uploaded = save_upload(data, hero_image.filename, prefix=f"{base_slug}-hero-", resource_type="image")
+        uploaded = await upload_admin_file(hero_image, prefix=f"{base_slug}-hero-", resource_type="image")
         hero_url = uploaded["url"]
         hero_public_id = uploaded["public_id"]
     elif hero_image_url:
@@ -485,6 +502,24 @@ async def create_temple(
                 "UPDATE temples SET hero_image_public_id = %s WHERE id = %s",
                 (hero_public_id, row["id"]),
             )
+
+        for index, gallery_image in enumerate([f for f in gallery_images if f and f.filename], start=1):
+            uploaded = await upload_admin_file(
+                gallery_image,
+                prefix=f"{base_slug}-gallery-{index}-",
+                resource_type="image",
+            )
+            cur.execute("""
+                INSERT INTO temple_media
+                    (temple_id, media_type, file_url, file_name, caption, is_hero, sort_order, cloudinary_public_id)
+                VALUES (%s, 'image', %s, %s, NULL, FALSE, %s, %s)
+            """, (
+                row["id"],
+                uploaded["url"],
+                gallery_image.filename,
+                index,
+                uploaded["public_id"],
+            ))
 
     return {
         "success":   True,
@@ -781,13 +816,8 @@ async def upload_media(
     if not is_image and not is_video:
         raise HTTPException(400, "Invalid type. Use JPEG/PNG/WebP/GIF or MP4/WebM/OGG")
 
-    data  = await file.read()
-    limit = MAX_VID if is_video else MAX_IMG
-    if len(data) > limit:
-        raise HTTPException(400, f"File too large — max {'200 MB' if is_video else '10 MB'}")
-
     mtype    = "video" if is_video else "image"
-    uploaded = save_upload(data, file.filename, prefix=f"temple-{temple_id}-", resource_type=mtype)
+    uploaded = await upload_admin_file(file, prefix=f"temple-{temple_id}-", resource_type=mtype)
     file_url  = uploaded["url"]
     public_id = uploaded["public_id"]
 
@@ -901,11 +931,7 @@ async def upload_video(
     if video_slot not in VALID_VIDEO_SLOTS:
         raise HTTPException(422, "video_slot must be: aarti | intro | 360")
 
-    data = await file.read()
-    if len(data) > MAX_VID:
-        raise HTTPException(400, "Video too large — max 200 MB")
-
-    uploaded = save_upload(data, file.filename, prefix=f"temple-{temple_id}-{video_slot}-", resource_type="video")
+    uploaded = await upload_admin_file(file, prefix=f"temple-{temple_id}-{video_slot}-", resource_type="video")
     video_url = uploaded["url"]
     col = VALID_VIDEO_SLOTS[video_slot]
 

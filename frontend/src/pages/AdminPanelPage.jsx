@@ -1889,8 +1889,9 @@ function TempleRow({ t, i, total, actionLoading, onReview, onEdit, onDelete, onQ
 }
 
 function TempleThumb({ t }) {
+  const src = t.hero_image_url?.startsWith('http') ? t.hero_image_url : `${API_BASE}${t.hero_image_url}`;
   return t.hero_image_url ? (
-    <img src={`${API_BASE}${t.hero_image_url}`} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+    <img src={src} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
       onError={e => { e.target.style.display = 'none'; }} />
   ) : (
     <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--cream-dark)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🏛️</div>

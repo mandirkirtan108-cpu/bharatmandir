@@ -750,24 +750,12 @@ export default function AdminAddTemplePage() {
 
     // Slot 0 = hero/cover image, sent with the create request itself.
     if (photos[0]?.file) fd.append('hero_image', photos[0].file);
+    photos.slice(1).filter(Boolean).forEach(slot => {
+      fd.append('gallery_images', slot.file);
+    });
 
     try {
       const res = await adminAPI.createTemple(fd);
-      const templeId = res.data.temple_id;
-
-      // Slots 1..5 = gallery photos, uploaded once the temple exists.
-      const galleryPhotos = photos.slice(1).filter(Boolean);
-      if (templeId && galleryPhotos.length) {
-        await Promise.all(galleryPhotos.map((slot, i) => {
-          const mediaForm = new FormData();
-          mediaForm.append('file', slot.file);
-          mediaForm.append('is_hero', 'false');
-          mediaForm.append('sort_order', String(i + 1));
-          return adminAPI.uploadMedia(templeId, mediaForm).catch(err => {
-            console.error('Gallery photo upload failed:', err);
-          });
-        }));
-      }
 
       setQrId(res.data.mkt_id);
       setSubmitted(true);
