@@ -356,8 +356,10 @@ class DivineApiClient:
         lat, lon = query.lat_lon
         body = {
             "api_key": self.api_key,
-            "day": str(day),
-            "month": str(month),
+            # DivineAPI's own docs show these zero-padded (e.g. "05" not "5");
+            # sending zero-padded values matches their documented examples exactly.
+            "day": f"{day:02d}",
+            "month": f"{month:02d}",
             "year": str(year),
             "place": query.place,
             "lat": lat,
@@ -477,6 +479,16 @@ def _normalize_anga(item: dict[str, Any], prefix: str) -> dict[str, Any]:
 
 
 def _normalize_periods(data: dict[str, Any], period_type: str) -> list[dict[str, Any]]:
+    """DivineAPI's auspicious/inauspicious-timings responses are keyed by the
+    muhurat's raw slug (e.g. "brahma_muhurta", "gulkai_kaal") at the top level
+    of `data`, with each value being either a single {start_time,end_time}
+    dict, a list of such dicts, or an empty list when not applicable that day.
+    We keep both the raw `slug` (exact API field name) and a human `name`
+    (title-cased) so callers can do exact lookups instead of fuzzy text
+    matching. `type` here is only ever the literal "Auspicious"/"Inauspicious"
+    passed in by the caller — it is NOT a specific muhurat type, callers
+    should not rely on it for a descriptive label.
+    """
     periods = []
     for key, value in data.items():
         if key in {"date", "sunrise", "sunset"} or not value:
@@ -489,9 +501,9 @@ def _normalize_periods(data: dict[str, Any], period_type: str) -> list[dict[str,
             start = _first_value(item, "start", "start_time")
             end = _first_value(item, "end", "end_time")
             if start and end:
-                normalized.append({"start": start, "end": end})
+                normalized.append({"start": start, "end": end, "sign": item.get("sign")})
         if normalized:
-            periods.append({"name": _label(key), "type": period_type, "period": normalized})
+            periods.append({"name": _label(key), "slug": key, "type": period_type, "period": normalized})
     return periods
 
 
@@ -525,6 +537,7 @@ def _normalize_festivals(data: dict[str, Any]) -> list[dict[str, Any]]:
         festivals.append(
             {
                 "name": _label(key),
+                "slug": key,
                 "date": value.get("date"),
                 "start_date": value.get("start_date"),
                 "end_date": value.get("end_date"),

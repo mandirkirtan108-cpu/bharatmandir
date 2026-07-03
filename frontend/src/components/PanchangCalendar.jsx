@@ -41,6 +41,29 @@ function firstPeriodStr(items, namePart) {
   return `${formatTime(p.start)} - ${formatTime(p.end)}`;
 }
 
+// ─── Festival classification: color + whether it's a "named" festival ──────
+// Tithi-linked observances (Ekadashi, Purnima, Amavasya, Chaturthi) get their
+// own color so they read as calendar "phases". Everything else (Diwali,
+// Ram Navami, Holi, Raksha Bandhan, Ganesh Chaturthi's actual festival entry,
+// etc.) is treated as a "named festival" and gets its name printed on the
+// cell, not just a dot — that's the part that was missing.
+const FESTIVAL_PHASE_MATCHERS = [
+  { test: (n) => n.includes('ekadashi'), color: '#e67e22', label: 'Ekadashi' },
+  { test: (n) => n.includes('pradosh') || n.includes('purnima'), color: '#9b59b6', label: 'Pradosh / Purnima' },
+  { test: (n) => n.includes('amavasya'), color: '#374151', label: 'Amavasya' },
+  { test: (n) => n.includes('chaturthi') && !n.includes('ganesh'), color: '#e74c3c', label: 'Chaturthi' },
+];
+
+function classifyFestival(f) {
+  const name = (f.name || '').toLowerCase();
+  for (const matcher of FESTIVAL_PHASE_MATCHERS) {
+    if (matcher.test(name)) return { color: matcher.color, isNamedFestival: false };
+  }
+  // Anything else (Diwali, Ram Navami, Holi, Raksha Bandhan, Janmashtami,
+  // Ganesh Chaturthi, Navratri, temple-specific festivals, etc.)
+  return { color: '#16a34a', isNamedFestival: true };
+}
+
 export default function PanchangCalendar() {
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -105,32 +128,19 @@ export default function PanchangCalendar() {
     setSelectedKey(toDateKey(today));
   };
 
-  // Festival dot color map
-  const FESTIVAL_TYPES = {
-    ekadashi: '#e67e22',
-    pradosh: '#9b59b6',
-    purnima: '#8B5CF6',
-    amavasya: '#374151',
-    chaturthi: '#e74c3c',
-    festival: '#16a34a',
-  };
-
-  function getDayDots(day) {
-    if (!day) return [];
-    const dots = [];
-    (day.festivals || []).forEach(f => {
-      const name = (f.name || '').toLowerCase();
-      if (name.includes('ekadashi')) dots.push('#e67e22');
-      else if (name.includes('pradosh') || name.includes('purnima')) dots.push('#9b59b6');
-      else if (name.includes('amavasya')) dots.push('#374151');
-      else if (name.includes('chaturthi')) dots.push('#e74c3c');
-      else dots.push('#16a34a');
+  // Split a day's festivals into "named" (Diwali, Ram Navami, ...) vs
+  // "tithi phase" (Ekadashi, Purnima, ...) so the cell can show the named
+  // ones as text and the phase ones as a small dot.
+  function splitDayFestivals(day) {
+    const named = [];
+    const phaseDots = [];
+    (day?.festivals || []).forEach((f) => {
+      const { color, isNamedFestival } = classifyFestival(f);
+      if (isNamedFestival) named.push({ ...f, color });
+      else phaseDots.push(color);
     });
-    return dots.slice(0, 3);
+    return { named, phaseDots: phaseDots.slice(0, 3) };
   }
-
-  // Hindu calendar meta line
-  const hinduMeta = monthData?.hindu_calendar_meta || monthData?.days?.[0]?.hindu_calendar || null;
 
   return (
     <section style={{ background: '#fff', padding: '0 0 60px 0', borderTop: '1px solid #f0e8da' }}>
@@ -138,7 +148,7 @@ export default function PanchangCalendar() {
 
         {/* Section header label */}
         <div style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 600, color: '#9A7150', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-          Calendar grid — with festival markers and a real selected-day panel
+          Calendar grid — with festival names, tithi phases and a real selected-day panel
         </div>
 
         {/* Main calendar card */}
@@ -169,17 +179,17 @@ export default function PanchangCalendar() {
           </div>
 
           {/* Hindu calendar strip */}
-          {hinduMeta && (
+          {monthData?.hindu_calendar_meta && (
             <div style={{
               display: 'flex', gap: 20, padding: '10px 20px',
               borderBottom: '1px solid #f0e8da',
               background: '#fdf9f4',
               fontFamily: UI_FONT, fontSize: 12, color: '#6b7280',
             }}>
-              {hinduMeta.vikram_samvat && <span><strong style={{ color: '#4b5563' }}>Vikram</strong> {hinduMeta.vikram_samvat}</span>}
-              {hinduMeta.shaka_samvat && <span><strong style={{ color: '#4b5563' }}>Shaka</strong> {hinduMeta.shaka_samvat}</span>}
-              {hinduMeta.maas && <span><strong style={{ color: '#4b5563' }}>Maas</strong> {hinduMeta.maas}</span>}
-              {hinduMeta.ritu && <span><strong style={{ color: '#4b5563' }}>Ritu</strong> {hinduMeta.ritu}</span>}
+              {monthData.hindu_calendar_meta.vikram_samvat && <span><strong style={{ color: '#4b5563' }}>Vikram</strong> {monthData.hindu_calendar_meta.vikram_samvat}</span>}
+              {monthData.hindu_calendar_meta.shaka_samvat && <span><strong style={{ color: '#4b5563' }}>Shaka</strong> {monthData.hindu_calendar_meta.shaka_samvat}</span>}
+              {monthData.hindu_calendar_meta.maas && <span><strong style={{ color: '#4b5563' }}>Maas</strong> {monthData.hindu_calendar_meta.maas}</span>}
+              {monthData.hindu_calendar_meta.ritu && <span><strong style={{ color: '#4b5563' }}>Ritu</strong> {monthData.hindu_calendar_meta.ritu}</span>}
             </div>
           )}
 
@@ -221,21 +231,24 @@ export default function PanchangCalendar() {
               const isSaturday = date.getDay() === 6;
               const tithi = day?.tithi?.name || '';
               const paksha = day?.tithi?.paksha?.substring(0, 6) || '';
-              const dots = getDayDots(day);
+              const { named, phaseDots } = splitDayFestivals(day);
+              const primaryNamed = named[0];
+              const extraNamedCount = named.length - 1;
 
               return (
                 <button
                   key={key}
                   onClick={() => setSelectedKey(key)}
+                  title={named.length > 0 ? named.map((f) => f.name).join(', ') : undefined}
                   style={{
                     border: selected ? '2px solid #E8650A' : isToday ? '2px solid rgba(232,101,10,0.35)' : '1px solid #f0e4d2',
                     borderRadius: 8,
-                    background: selected ? '#fff7f0' : '#fff',
+                    background: selected ? '#fff7f0' : primaryNamed ? '#f9fdf9' : '#fff',
                     cursor: 'pointer',
                     padding: '8px 4px 7px',
                     textAlign: 'center',
                     transition: 'all .12s',
-                    minHeight: 72,
+                    minHeight: 84,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -271,10 +284,30 @@ export default function PanchangCalendar() {
                       maxWidth: 66, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>{paksha}</span>
                   )}
-                  {/* Festival dots */}
-                  {dots.length > 0 && (
+
+                  {/* Named festival label — e.g. "Ram Navami", "Diwali" */}
+                  {primaryNamed && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, maxWidth: 68, marginTop: 1 }}>
+                      <span style={{
+                        fontFamily: UI_FONT, fontSize: 8.5, fontWeight: 700,
+                        color: '#15803d', background: `${primaryNamed.color}1a`,
+                        border: `1px solid ${primaryNamed.color}40`,
+                        borderRadius: 4, padding: '1px 4px',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        maxWidth: extraNamedCount > 0 ? 50 : 66,
+                      }}>{primaryNamed.name}</span>
+                      {extraNamedCount > 0 && (
+                        <span style={{ fontFamily: UI_FONT, fontSize: 8, fontWeight: 700, color: '#9A7150', flexShrink: 0 }}>
+                          +{extraNamedCount}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tithi-phase dots (Ekadashi / Purnima / Amavasya / Chaturthi) */}
+                  {phaseDots.length > 0 && (
                     <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 2 }}>
-                      {dots.map((color, i) => (
+                      {phaseDots.map((color, i) => (
                         <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
                       ))}
                     </div>
@@ -289,14 +322,20 @@ export default function PanchangCalendar() {
             display: 'flex', gap: 16, padding: '10px 16px 14px',
             borderTop: '1px solid #f0e8da',
             fontFamily: UI_FONT, fontSize: 11, color: '#6b7280',
-            flexWrap: 'wrap',
+            flexWrap: 'wrap', alignItems: 'center',
           }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{
+                fontFamily: UI_FONT, fontSize: 9, fontWeight: 700, color: '#15803d',
+                background: '#16a34a1a', border: '1px solid #16a34a40', borderRadius: 4, padding: '1px 5px',
+              }}>Diwali</span>
+              Named festival (shown by name)
+            </span>
             {[
               { color: '#e67e22', label: 'Ekadashi' },
               { color: '#9b59b6', label: 'Pradosh / Purnima' },
               { color: '#374151', label: 'Amavasya' },
               { color: '#e74c3c', label: 'Chaturthi' },
-              { color: '#16a34a', label: 'Festival' },
             ].map(({ color, label }) => (
               <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
@@ -399,9 +438,12 @@ export default function PanchangCalendar() {
                   </div>
                   {(selectedDay.festivals?.length > 0) ? (
                     <div style={{ background: '#fef9ee', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
-                      {selectedDay.festivals.slice(0, 3).map((f, i) => (
+                      {selectedDay.festivals.slice(0, 6).map((f, i) => (
                         <div key={i} style={{ fontFamily: UI_FONT, fontSize: 13, color: '#92400e', fontWeight: 600, marginBottom: 4 }}>{f.name}</div>
                       ))}
+                      {selectedDay.festivals.length > 6 && (
+                        <div style={{ fontFamily: UI_FONT, fontSize: 11, color: '#b45309' }}>+{selectedDay.festivals.length - 6} more</div>
+                      )}
                     </div>
                   ) : (
                     <div style={{ background: '#f9fafb', borderRadius: 8, padding: '10px 12px', marginBottom: 10, fontFamily: UI_FONT, fontSize: 13, color: '#6b7280' }}>
