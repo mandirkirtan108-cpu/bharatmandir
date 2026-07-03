@@ -37,6 +37,17 @@ function apiErrorMessage(data, fallback) {
   return data.detail.message || fallback;
 }
 
+// ─── Strip internal/vendor references from any free-text the backend
+// returns (e.g. special_notes, today_at_glance). We never want to expose
+// which third-party data provider powers the calculations in the UI copy.
+function sanitizeApiText(text) {
+  if (!text) return text;
+  return text
+    .replace(/\bDivine\s*API\b/gi, 'our Panchang engine')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function to12h(timeStr) {
   if (!timeStr) return timeStr;
   if (/am|pm/i.test(timeStr)) return timeStr;
@@ -215,7 +226,7 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
                 <Sparkles size={14} color="#f59e0b" />
                 <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#b45309' }}>TODAY AT A GLANCE</span>
               </div>
-              <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#78350f', lineHeight: 1.6, margin: 0 }}>{dailyResult.today_at_glance}</p>
+              <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#78350f', lineHeight: 1.6, margin: 0 }}>{sanitizeApiText(dailyResult.today_at_glance)}</p>
             </div>
           )}
 
@@ -575,11 +586,11 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
                 </span>
               </div>
               {result.verdict_reason && (
-                <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#991b1b', lineHeight: 1.65, margin: '0 0 10px' }}>{result.verdict_reason}</p>
+                <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#991b1b', lineHeight: 1.65, margin: '0 0 10px' }}>{sanitizeApiText(result.verdict_reason)}</p>
               )}
               {result.next_favorable_date && (
                 <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#7f1d1d', margin: 0 }}>
-                  <strong>Next favorable date:</strong>{' '}{result.next_favorable_date.date} — {result.next_favorable_date.reason}{' '}
+                  <strong>Next favorable date:</strong>{' '}{result.next_favorable_date.date} — {sanitizeApiText(result.next_favorable_date.reason)}{' '}
                   <a href="#" onClick={e => e.preventDefault()} style={{ color: '#c9651a', textDecoration: 'none', fontWeight: 600 }}>Show details →</a>
                 </p>
               )}
@@ -590,7 +601,7 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
           {result.pandit_message && (
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>🌟</span>
-              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#92400e', lineHeight: 1.65, margin: 0 }}>{result.pandit_message}</p>
+              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#92400e', lineHeight: 1.65, margin: 0 }}>{sanitizeApiText(result.pandit_message)}</p>
             </div>
           )}
 
@@ -624,14 +635,17 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
                 </div>
               </div>
 
-              {/* Pandit's note */}
+              {/* Pandit's note — free text from the backend, sanitized so it
+                  never surfaces the underlying data vendor's name */}
               {result.special_notes?.length > 0 && (
                 <div style={{ background: '#fffdf5', border: '1px solid #fde68a', borderRadius: 10, padding: '16px 18px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#f59e0b" strokeWidth="1.4"/><path d="M8 4.5V9" stroke="#f59e0b" strokeWidth="1.6" strokeLinecap="round"/><circle cx="8" cy="11.5" r="0.8" fill="#f59e0b"/></svg>
                     <span style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#92400e' }}>Pandit's note</span>
                   </div>
-                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#78350f', lineHeight: 1.7, margin: 0 }}>{result.special_notes.join(' ')}</p>
+                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#78350f', lineHeight: 1.7, margin: 0 }}>
+                    {sanitizeApiText(result.special_notes.join(' '))}
+                  </p>
                 </div>
               )}
             </div>
