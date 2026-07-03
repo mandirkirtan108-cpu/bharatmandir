@@ -650,13 +650,26 @@ export default function AdminAddTemplePage() {
   function goStep(n) { if (n <= step) setStep(n); }
 
   // ── Photos ────────────────────────────────────────────────────────────────────
+  // Each slot holds { file, previewUrl } so the real File can be uploaded on submit.
   function handlePhotoChange(e, idx) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPhotos(prev => { const a = [...prev]; a[idx] = url; return a; });
+    const previewUrl = URL.createObjectURL(file);
+    setPhotos(prev => {
+      const a = [...prev];
+      if (a[idx]?.previewUrl) URL.revokeObjectURL(a[idx].previewUrl);
+      a[idx] = { file, previewUrl };
+      return a;
+    });
   }
-  function removePhoto(idx) { setPhotos(prev => { const a=[...prev]; a[idx]=null; return a; }); }
+  function removePhoto(idx) {
+    setPhotos(prev => {
+      const a = [...prev];
+      if (a[idx]?.previewUrl) URL.revokeObjectURL(a[idx].previewUrl);
+      a[idx] = null;
+      return a;
+    });
+  }
 
   // ── Priests ───────────────────────────────────────────────────────────────────
   const addPriest    = () => setPriests(p => [...p, initPriest()]);
@@ -734,8 +747,28 @@ export default function AdminAddTemplePage() {
       ...DONATION_CATS.map(d=>d.key),'accept_online_donations',
     ];
     boolFields.forEach(k => fd.append(k, form[k] ? 'true' : 'false'));
+
+    // Slot 0 = hero/cover image, sent with the create request itself.
+    if (photos[0]?.file) fd.append('hero_image', photos[0].file);
+
     try {
       const res = await adminAPI.createTemple(fd);
+      const templeId = res.data.temple_id;
+
+      // Slots 1..5 = gallery photos, uploaded once the temple exists.
+      const galleryPhotos = photos.slice(1).filter(Boolean);
+      if (templeId && galleryPhotos.length) {
+        await Promise.all(galleryPhotos.map((slot, i) => {
+          const mediaForm = new FormData();
+          mediaForm.append('file', slot.file);
+          mediaForm.append('is_hero', 'false');
+          mediaForm.append('sort_order', String(i + 1));
+          return adminAPI.uploadMedia(templeId, mediaForm).catch(err => {
+            console.error('Gallery photo upload failed:', err);
+          });
+        }));
+      }
+
       setQrId(res.data.mkt_id);
       setSubmitted(true);
       window.scrollTo({ top:0, behavior:'smooth' });
@@ -1383,11 +1416,11 @@ export default function AdminAddTemplePage() {
                     <span>First photo will be set as the <strong>hero/cover image</strong>. Upload high-quality JPG or PNG photos (max 10MB each).</span>
                   </div>
                   <div className="photo-grid">
-                    {photos.map((url, idx) => (
-                      <div key={idx} className={`photo-slot${url?' has-img':''}`}>
-                        {url ? (
+                    {photos.map((slot, idx) => (
+                      <div key={idx} className={`photo-slot${slot?' has-img':''}`}>
+                        {slot ? (
                           <>
-                            <div className="ps-preview" style={{ background:`url(${url}) center/cover` }} />
+                            <div className="ps-preview" style={{ background:`url(${slot.previewUrl}) center/cover` }} />
                             <button className="ps-remove" onClick={()=>removePhoto(idx)}>×</button>
                           </>
                         ) : (

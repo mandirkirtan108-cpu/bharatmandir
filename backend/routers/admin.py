@@ -37,6 +37,7 @@ from db.queries import (
     replace_puja_schedule,
 )
 from routers.admin_auth import get_current_admin
+from services.cloudinary_service import upload_file, delete_file
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -91,27 +92,28 @@ def ensure_media_table():
     with get_db_cursor() as cur:
         cur.execute("""
             CREATE TABLE IF NOT EXISTS temple_media (
-                id          SERIAL PRIMARY KEY,
-                temple_id   INTEGER NOT NULL REFERENCES temples(id) ON DELETE CASCADE,
-                media_type  VARCHAR(10) NOT NULL CHECK (media_type IN ('image','video')),
-                file_url    TEXT NOT NULL,
-                file_name   TEXT,
-                caption     TEXT,
-                is_hero     BOOLEAN DEFAULT FALSE,
-                sort_order  INTEGER DEFAULT 0,
-                uploaded_at TIMESTAMPTZ DEFAULT NOW()
+                id                    SERIAL PRIMARY KEY,
+                temple_id             INTEGER NOT NULL REFERENCES temples(id) ON DELETE CASCADE,
+                media_type            VARCHAR(10) NOT NULL CHECK (media_type IN ('image','video')),
+                file_url              TEXT NOT NULL,
+                file_name             TEXT,
+                caption               TEXT,
+                is_hero               BOOLEAN DEFAULT FALSE,
+                sort_order            INTEGER DEFAULT 0,
+                cloudinary_public_id  TEXT,
+                uploaded_at           TIMESTAMPTZ DEFAULT NOW()
             );
             CREATE INDEX IF NOT EXISTS idx_tmedia_tid ON temple_media(temple_id);
+            ALTER TABLE temple_media ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT;
         """)
 
 
-def save_upload(file_bytes: bytes, filename: str, prefix: str = "") -> str:
-    """Save bytes to UPLOAD_DIR and return the public /uploads/... URL."""
-    ext   = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
-    fname = f"{prefix}{uuid.uuid4().hex[:10]}.{ext}"
-    with open(os.path.join(UPLOAD_DIR, fname), "wb") as f:
-        f.write(file_bytes)
-    return f"/uploads/{fname}"
+def save_upload(file_bytes: bytes, filename: str, prefix: str = "", resource_type: str = "image") -> dict:
+    """
+    Upload bytes to Cloudinary (replaces the old local-disk /uploads storage).
+    Returns {"url": <secure CDN url>, "public_id": <cloudinary public id>}.
+    """
+    return upload_file(file_bytes, filename, prefix=prefix, resource_type=resource_type)
 
 
 # ─────────────────────────────────────────────
@@ -329,13 +331,16 @@ async def create_temple(
     mkt_id = f"MKT-{state_code}-{random.randint(1000, 9999)}"
 
     hero_url = None
+    hero_public_id = None
     if hero_image and hero_image.filename:
         if hero_image.content_type not in ALLOWED_IMAGE:
             raise HTTPException(400, "Hero image must be JPEG, PNG, WebP, or GIF")
         data = await hero_image.read()
         if len(data) > MAX_IMG:
             raise HTTPException(400, "Hero image too large — max 10 MB")
-        hero_url = save_upload(data, hero_image.filename, prefix=f"{base_slug}-hero-")
+        uploaded = save_upload(data, hero_image.filename, prefix=f"{base_slug}-hero-", resource_type="image")
+        hero_url = uploaded["url"]
+        hero_public_id = uploaded["public_id"]
     elif hero_image_url:
         hero_url = hero_image_url
 
@@ -474,6 +479,12 @@ async def create_temple(
             _v(custom_designation), _v(custom_facility),   # ← NEW values
         ])
         row = cur.fetchone()
+
+        if hero_public_id:
+            cur.execute(
+                "UPDATE temples SET hero_image_public_id = %s WHERE id = %s",
+                (hero_public_id, row["id"]),
+            )
 
     return {
         "success":   True,
@@ -705,49 +716,34 @@ def delete_temple(
     """
     with get_db_cursor() as cur:
 
-        # 1. Confirm temple exists and grab hero image path
+        # 1. Confirm temple exists and grab hero image info
         cur.execute(
-            "SELECT id, name, slug, hero_image_url FROM temples WHERE id = %s",
+            "SELECT id, name, slug, hero_image_url, hero_image_public_id FROM temples WHERE id = %s",
             (temple_id,)
         )
         temple = cur.fetchone()
         if not temple:
             raise HTTPException(status_code=404, detail="Temple not found")
 
-        # 2. Collect media file paths before deletion
+        # 2. Collect media rows before deletion
         try:
             cur.execute(
-                "SELECT file_url FROM temple_media WHERE temple_id = %s",
+                "SELECT file_url, media_type, cloudinary_public_id FROM temple_media WHERE temple_id = %s",
                 (temple_id,)
             )
             media_rows = cur.fetchall()
         except Exception:
             media_rows = []  # table may not exist yet — safe to ignore
 
-        # 3. Delete hero image file from disk
-        if temple["hero_image_url"]:
-            hero_path = os.path.join(
-                UPLOAD_DIR,
-                temple["hero_image_url"].replace("/uploads/", "", 1)
-            )
-            if os.path.exists(hero_path):
-                try:
-                    os.remove(hero_path)
-                except Exception:
-                    pass  # never block the delete over a missing file
+        # 3. Delete hero image from Cloudinary
+        if temple.get("hero_image_public_id"):
+            delete_file(temple["hero_image_public_id"], resource_type="image")
 
-        # 4. Delete all media files from disk
+        # 4. Delete all media assets from Cloudinary
         for m in media_rows:
-            if m.get("file_url"):
-                fpath = os.path.join(
-                    UPLOAD_DIR,
-                    m["file_url"].replace("/uploads/", "", 1)
-                )
-                if os.path.exists(fpath):
-                    try:
-                        os.remove(fpath)
-                    except Exception:
-                        pass
+            if m.get("cloudinary_public_id"):
+                rtype = "video" if m.get("media_type") == "video" else "image"
+                delete_file(m["cloudinary_public_id"], resource_type=rtype)
 
         # 5. Delete from DB — CASCADE handles all child tables
         cur.execute(
@@ -791,26 +787,29 @@ async def upload_media(
         raise HTTPException(400, f"File too large — max {'200 MB' if is_video else '10 MB'}")
 
     mtype    = "video" if is_video else "image"
-    file_url = save_upload(data, file.filename, prefix=f"temple-{temple_id}-")
+    uploaded = save_upload(data, file.filename, prefix=f"temple-{temple_id}-", resource_type=mtype)
+    file_url  = uploaded["url"]
+    public_id = uploaded["public_id"]
 
     with get_db_cursor() as cur:
         cur.execute("SELECT id FROM temples WHERE id = %s", (temple_id,))
         if not cur.fetchone():
-            fpath = os.path.join(UPLOAD_DIR, file_url.lstrip("/uploads/"))
-            if os.path.exists(fpath):
-                os.remove(fpath)
+            delete_file(public_id, resource_type=mtype)
             raise HTTPException(404, "Temple not found")
 
         if is_hero and is_image:
             cur.execute("UPDATE temple_media SET is_hero = FALSE WHERE temple_id = %s", (temple_id,))
-            cur.execute("UPDATE temples SET hero_image_url = %s WHERE id = %s", (file_url, temple_id))
+            cur.execute(
+                "UPDATE temples SET hero_image_url = %s, hero_image_public_id = %s WHERE id = %s",
+                (file_url, public_id, temple_id),
+            )
 
         cur.execute("""
             INSERT INTO temple_media
-                (temple_id, media_type, file_url, file_name, caption, is_hero, sort_order)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (temple_id, media_type, file_url, file_name, caption, is_hero, sort_order, cloudinary_public_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
-        """, (temple_id, mtype, file_url, file.filename, caption, is_hero, sort_order))
+        """, (temple_id, mtype, file_url, file.filename, caption, is_hero, sort_order, public_id))
         media_id = cur.fetchone()["id"]
 
     return {
@@ -863,15 +862,17 @@ def delete_media(
 ):
     ensure_media_table()
     with get_db_cursor() as cur:
-        cur.execute("SELECT file_url, temple_id FROM temple_media WHERE id = %s", (media_id,))
+        cur.execute(
+            "SELECT file_url, temple_id, media_type, cloudinary_public_id FROM temple_media WHERE id = %s",
+            (media_id,)
+        )
         m = cur.fetchone()
         if not m:
             raise HTTPException(404, "Media not found")
 
-        relative = m["file_url"].replace("/uploads/", "", 1)
-        fpath = os.path.join(UPLOAD_DIR, relative)
-        if os.path.exists(fpath):
-            os.remove(fpath)
+        if m.get("cloudinary_public_id"):
+            rtype = "video" if m.get("media_type") == "video" else "image"
+            delete_file(m["cloudinary_public_id"], resource_type=rtype)
 
         cur.execute("DELETE FROM temple_media WHERE id = %s", (media_id,))
 
@@ -904,15 +905,14 @@ async def upload_video(
     if len(data) > MAX_VID:
         raise HTTPException(400, "Video too large — max 200 MB")
 
-    video_url = save_upload(data, file.filename, prefix=f"temple-{temple_id}-{video_slot}-")
+    uploaded = save_upload(data, file.filename, prefix=f"temple-{temple_id}-{video_slot}-", resource_type="video")
+    video_url = uploaded["url"]
     col = VALID_VIDEO_SLOTS[video_slot]
 
     with get_db_cursor() as cur:
         cur.execute("SELECT id FROM temples WHERE id = %s", (temple_id,))
         if not cur.fetchone():
-            fpath = os.path.join(UPLOAD_DIR, video_url.replace("/uploads/", "", 1))
-            if os.path.exists(fpath):
-                os.remove(fpath)
+            delete_file(uploaded["public_id"], resource_type="video")
             raise HTTPException(404, "Temple not found")
 
         cur.execute(f"UPDATE temples SET {col} = %s WHERE id = %s", (video_url, temple_id))

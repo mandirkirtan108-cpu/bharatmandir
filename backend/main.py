@@ -18,6 +18,7 @@ from routers.admin_auth import router as admin_auth_router
 from routers.panchang import router as panchang_router
 from routers.user_auth import router as user_auth_router
 from routers.blogs import router as blogs_router
+from services import cloudinary_service  # noqa: F401 — initializes Cloudinary config on import
 
 
 load_dotenv()

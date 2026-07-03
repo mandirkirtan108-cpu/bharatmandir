@@ -279,6 +279,19 @@ def get_temple(slug: str):
         if d.get(f):
             d[f] = str(d[f])
 
+    # Gallery images (Cloudinary URLs) for the temple detail page.
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("""
+                SELECT id, media_type, file_url, caption, is_hero, sort_order
+                FROM temple_media
+                WHERE temple_id = %s AND media_type = 'image'
+                ORDER BY is_hero DESC, sort_order ASC, uploaded_at ASC
+            """, (d["id"],))
+            d["gallery"] = [dict(m) for m in cur.fetchall()]
+    except Exception:
+        d["gallery"] = []  # table may not exist yet on a fresh DB — safe fallback
+
     return d
 
 

@@ -203,6 +203,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .upi-cancel{width:100%;padding:11px;border-radius:9px;border:1.5px solid #EDE3CE;background:#fff;font-size:13px;font-weight:600;color:#7A5538;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;}
 .upi-cancel:hover{background:#F7F0E2;}
 
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px;}
+.gallery-item{aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:#F7F0E2;}
+.gallery-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s;}
+.gallery-item:hover img{transform:scale(1.05);}
+
 @media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;}.hero-body{padding-left:20px;padding-right:20px;}}
 @media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}}
 `;
@@ -361,6 +366,7 @@ export default function TempleDetailPage() {
   if (!T) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/></div></>);
 
   const heroImg   = proxyImageUrl(T.hero_image_url);
+  const gallery   = Array.isArray(T.gallery) ? T.gallery : [];
   const openTime  = formatTime(T.opening_time);
   const closeTime = formatTime(T.closing_time);
   const acStart   = formatTime(T.afternoon_closure_start);
@@ -406,6 +412,7 @@ export default function TempleDetailPage() {
 
   const navItems = [
     { id:'overview',   label: t('detail.info_title'),         show: true },
+    { id:'gallery',    label: t('detail.gallery_title', { defaultValue: 'Gallery' }), show: gallery.length>0 },
     { id:'history',    label: t('detail.history_title'),      show: v(T.history)||v(T.significance)||v(T.puranic_stories) },
     { id:'puja',       label: t('detail.puja_nav'),           show: pujaSchedule.length>0 || pujaServices.length>0 },
     { id:'mantras',    label: t('detail.mantras_title'),      show: mantras.length>0 },
@@ -560,6 +567,25 @@ export default function TempleDetailPage() {
             </div>
           </ReadMore>
         </div>
+
+        {/* ── GALLERY ── */}
+        {gallery.length > 0 && (
+          <div className="sec" id="gallery">
+            <div className="sec-h"><div className="sec-icon">📷</div>{t('detail.gallery_title', { defaultValue: 'Photo Gallery' })}</div>
+            <div className="gallery-grid">
+              {gallery.map(img => (
+                <div key={img.id} className="gallery-item">
+                  <img
+                    src={img.file_url}
+                    alt={img.caption || T.name}
+                    loading="lazy"
+                    onError={e => { e.currentTarget.parentElement.style.display = 'none'; }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── HISTORY & SIGNIFICANCE ── */}
         {(v(T.history)||v(T.significance)||v(T.sthala_purana)||v(T.puranic_stories)||v(T.history_hindi)) && (
