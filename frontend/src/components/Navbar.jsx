@@ -241,11 +241,16 @@ export default function Navbar() {
           </div>
 
           {/* Hamburger — mobile only */}
+          {/* FIX: marginLeft 'auto' pins this to the right edge on mobile.
+              Previously marginLeft:12 relied on the .nav-actions-desktop
+              blocks (hidden on mobile via CSS) to push it right — with
+              those gone, it just sat next to the logo. 'auto' guarantees
+              it's flush right regardless of what else is visible. */}
           <button
             className="nav-hamburger"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            style={{ marginLeft: 12 }}
+            style={{ marginLeft: 'auto' }}
           >
             <Menu size={24} />
           </button>
