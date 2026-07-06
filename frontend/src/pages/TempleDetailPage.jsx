@@ -108,7 +108,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .hero-address{font-size:14px;color:rgba(255,255,255,.65);display:flex;align-items:center;justify-content:center;gap:6px;font-family:'DM Sans',sans-serif;flex-wrap:wrap;}
 
 /* STICKY NAV */
-.snav{position:sticky;top:0;z-index:50;background:rgba(250,246,238,.97);backdrop-filter:blur(16px);border-bottom:1px solid #EDE3CE;display:flex;padding:0 52px;box-shadow:0 2px 10px rgba(44,21,0,.07);overflow-x:auto;scrollbar-width:none;}
+.snav{position:sticky;top:0;z-index:50;background:rgba(250,246,238,.97);backdrop-filter:blur(16px);border-bottom:1px solid #EDE3CE;display:flex;justify-content:center;padding:0 52px;box-shadow:0 2px 10px rgba(44,21,0,.07);overflow-x:auto;scrollbar-width:none;}
 .snav::-webkit-scrollbar{display:none;}
 .snav-item{padding:14px 16px;font-size:13px;font-weight:500;color:#7A5538;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s;flex-shrink:0;font-family:'DM Sans',sans-serif;}
 .snav-item:hover{color:#4A2C10;}
@@ -263,7 +263,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .lightbox-thumb.on{border-color:#FFD580;opacity:1;}
 .lightbox-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
 
-@media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;}.hero-body{padding-left:20px;padding-right:20px;}}
+@media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;justify-content:flex-start;}.hero-body{padding-left:20px;padding-right:20px;}}
 @media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}.lightbox{padding:12px;}.lightbox-stage{height:calc(100vh - 24px);}.lightbox-arrow{width:38px;height:48px;font-size:26px;}.lightbox-arrow.left{left:6px;}.lightbox-arrow.right{right:6px;}.lightbox-close{top:4px;right:4px;}}
 `;
 
