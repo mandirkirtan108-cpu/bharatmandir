@@ -216,7 +216,7 @@ def temples_nearby(
 # GET /api/temples/{slug}  — full detail
 # ─────────────────────────────────────────────
 
-@router.get("/{slug}", response_model=TempleDetail)
+@router.get("/{slug}")
 def get_temple(slug: str):
     with get_db_cursor() as cur:
         cur.execute("""
