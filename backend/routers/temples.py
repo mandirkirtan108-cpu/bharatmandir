@@ -285,12 +285,34 @@ def get_temple(slug: str):
             cur.execute("""
                 SELECT id, media_type, file_url, caption, is_hero, sort_order
                 FROM temple_media
-                WHERE temple_id = %s AND media_type = 'image'
+                WHERE temple_id = %s
+                  AND media_type = 'image'
+                  AND file_url IS NOT NULL
+                  AND file_url <> ''
                 ORDER BY is_hero DESC, sort_order ASC, uploaded_at ASC
             """, (d["id"],))
-            d["gallery"] = [dict(m) for m in cur.fetchall()]
+            gallery = [dict(m) for m in cur.fetchall()]
     except Exception:
-        d["gallery"] = []  # table may not exist yet on a fresh DB — safe fallback
+        gallery = []
+
+    if d.get("hero_image_url"):
+        gallery.insert(0, {
+            "id": "hero",
+            "media_type": "image",
+            "file_url": d["hero_image_url"],
+            "caption": d.get("name"),
+            "is_hero": True,
+            "sort_order": -1,
+        })
+
+    seen_urls = set()
+    d["gallery"] = []
+    for item in gallery:
+        url = item.get("file_url")
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        d["gallery"].append(item)
 
     return d
 
