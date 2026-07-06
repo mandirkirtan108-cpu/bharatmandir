@@ -467,24 +467,11 @@ export default function TempleDetailPage() {
   const [error,        setError]        = useState(null);
   const [activeNav,    setActiveNav]    = useState('overview');
   const [showUpiModal, setShowUpiModal] = useState(false);
-  const [activeHero,   setActiveHero]   = useState(0);
   const [lightboxIndex,setLightboxIndex]= useState(null);
 
   const { translated: T } = useTranslatedTemple(temple);
   const { t } = useTranslation();
   const gallery = buildGallery(T);
-
-  useEffect(() => {
-    setActiveHero(0);
-  }, [slug]);
-
-  useEffect(() => {
-    if (gallery.length < 2) return undefined;
-    const timer = window.setInterval(() => {
-      setActiveHero(index => (index + 1) % gallery.length);
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [gallery.length]);
 
   useEffect(() => {
     if (!slug || slug === 'undefined') { navigate('/'); return; }
@@ -518,7 +505,7 @@ export default function TempleDetailPage() {
   if (error)   return (<><style>{CSS}</style><Navbar/><div className="err"><div style={{fontSize:60}}>🛕</div><h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28}}>{t('detail.temple_not_found')}</h2><p style={{color:'#A07050'}}>{error}</p><button style={{marginTop:16,padding:'10px 22px',background:'#C8520A',color:'#fff',border:'none',borderRadius:9,cursor:'pointer',fontSize:14}} onClick={()=>navigate('/')}>{t('detail.back_home')}</button></div></>);
   if (!T) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/></div></>);
 
-  const activeHeroIndex = gallery.length ? Math.min(activeHero, gallery.length - 1) : 0;
+  const heroImg = proxyImageUrl(T.hero_image_url);
   const openTime  = formatTime(T.opening_time);
   const closeTime = formatTime(T.closing_time);
   const acStart   = formatTime(T.afternoon_closure_start);
@@ -620,12 +607,7 @@ export default function TempleDetailPage() {
 
       {/* ══ HERO ══ */}
       <div className="hero">
-        <HeroCarousel
-          images={gallery}
-          activeIndex={activeHeroIndex}
-          onSelect={setActiveHero}
-          alt={T.name}
-        />
+        {heroImg ? <HeroImage src={heroImg} alt={T.name} /> : <div className="hero-diya">🪔</div>}
         <div className="hero-grad"/>
         <div className="hero-body">
           <div className="hero-bc">
