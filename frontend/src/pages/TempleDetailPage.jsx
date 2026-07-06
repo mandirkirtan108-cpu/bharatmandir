@@ -82,9 +82,16 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 /* HERO */
 .hero{position:relative;height:72vh;min-height:460px;max-height:640px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;background:#0D0500;transform:translateZ(0);isolation:isolate;}
 .hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;transition:opacity .8s;}
+.hero-slide{opacity:0;transform:scale(1.02);transition:opacity .7s ease,transform 3.8s ease;}
+.hero-slide.on{opacity:1;transform:scale(1);}
 .hero-grad{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,5,0,.08) 0%,rgba(10,5,0,0) 25%,rgba(10,5,0,.55) 60%,rgba(10,5,0,.95) 100%);pointer-events:none;}
 .hero-diya{position:absolute;top:24%;left:50%;transform:translateX(-50%);font-size:52px;animation:diya 3s ease-in-out infinite;z-index:2;}
 .hero-body{position:relative;z-index:3;padding:0 52px 56px;width:100%;text-align:center;animation:up .6s ease .1s both;}
+.hero-gallery-nav{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:4;display:flex;gap:8px;align-items:center;justify-content:center;max-width:min(720px,calc(100% - 32px));overflow-x:auto;padding:3px;scrollbar-width:none;}
+.hero-gallery-nav::-webkit-scrollbar{display:none;}
+.hero-dot{width:38px;height:26px;border:1.5px solid rgba(255,255,255,.38);border-radius:7px;padding:0;background:rgba(255,255,255,.12);overflow:hidden;cursor:pointer;opacity:.68;transition:opacity .18s,border-color .18s,transform .18s;flex:0 0 auto;}
+.hero-dot img{width:100%;height:100%;object-fit:cover;display:block;}
+.hero-dot:hover,.hero-dot.on{opacity:1;border-color:#FFD580;transform:translateY(-1px);}
 
 .hero-bc{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.09em;margin-bottom:12px;flex-wrap:wrap;font-family:'DM Sans',sans-serif;font-weight:500;}
 .hero-bc a{color:inherit;text-decoration:none;transition:color .2s;}.hero-bc a:hover{color:rgba(255,255,255,.75);}
@@ -251,6 +258,38 @@ function HeroImage({ src, alt }) {
   return <img src={src} alt={alt} className="hero-img" onError={e => e.currentTarget.style.display='none'} />;
 }
 
+function HeroCarousel({ images, activeIndex, onSelect, alt }) {
+  if (!images.length) return <div className="hero-diya">🪔</div>;
+  return (
+    <>
+      {images.map((img, index) => (
+        <img
+          key={img.id || img.file_url || index}
+          src={img.file_url}
+          alt={img.caption || alt}
+          className={`hero-img hero-slide${index === activeIndex ? ' on' : ''}`}
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
+      ))}
+      {images.length > 1 && (
+        <div className="hero-gallery-nav" aria-label="Temple hero photos">
+          {images.map((img, index) => (
+            <button
+              key={img.id || img.file_url || index}
+              type="button"
+              className={`hero-dot${index === activeIndex ? ' on' : ''}`}
+              onClick={() => onSelect(index)}
+              aria-label={`Show temple photo ${index + 1}`}
+            >
+              <img src={img.file_url} alt="" />
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function II({ label, value, full, icon }) {
   if (!v(value)) return null;
   return (
@@ -363,9 +402,23 @@ export default function TempleDetailPage() {
   const [error,        setError]        = useState(null);
   const [activeNav,    setActiveNav]    = useState('overview');
   const [showUpiModal, setShowUpiModal] = useState(false);
+  const [activeHero,   setActiveHero]   = useState(0);
 
   const { translated: T } = useTranslatedTemple(temple);
   const { t } = useTranslation();
+  const gallery = buildGallery(T);
+
+  useEffect(() => {
+    setActiveHero(0);
+  }, [slug]);
+
+  useEffect(() => {
+    if (gallery.length < 2) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveHero(index => (index + 1) % gallery.length);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [gallery.length]);
 
   useEffect(() => {
     if (!slug || slug === 'undefined') { navigate('/'); return; }
@@ -399,8 +452,7 @@ export default function TempleDetailPage() {
   if (error)   return (<><style>{CSS}</style><Navbar/><div className="err"><div style={{fontSize:60}}>🛕</div><h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28}}>{t('detail.temple_not_found')}</h2><p style={{color:'#A07050'}}>{error}</p><button style={{marginTop:16,padding:'10px 22px',background:'#C8520A',color:'#fff',border:'none',borderRadius:9,cursor:'pointer',fontSize:14}} onClick={()=>navigate('/')}>{t('detail.back_home')}</button></div></>);
   if (!T) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/></div></>);
 
-  const heroImg   = proxyImageUrl(T.hero_image_url);
-  const gallery   = buildGallery(T);
+  const activeHeroIndex = gallery.length ? Math.min(activeHero, gallery.length - 1) : 0;
   const openTime  = formatTime(T.opening_time);
   const closeTime = formatTime(T.closing_time);
   const acStart   = formatTime(T.afternoon_closure_start);
@@ -492,7 +544,12 @@ export default function TempleDetailPage() {
 
       {/* ══ HERO ══ */}
       <div className="hero">
-        {heroImg ? <HeroImage src={heroImg} alt={T.name} /> : <div className="hero-diya">🪔</div>}
+        <HeroCarousel
+          images={gallery}
+          activeIndex={activeHeroIndex}
+          onSelect={setActiveHero}
+          alt={T.name}
+        />
         <div className="hero-grad"/>
         <div className="hero-body">
           <div className="hero-bc">
