@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -91,6 +91,113 @@ def describe_muhurat(slug: str, raw_name: str) -> dict:
     return {"label": clean, "reason": clean}
 
 
+# ─── Birth-based compatibility (Tara Bala / Chandra Bala) ──────────────────
+# Which people's birth details a given occasion needs. Keys match the
+# muhurat_type ids the frontend sends (see MUHURAT_TYPES on the frontend).
+EVENT_PERSON_ROLES = {
+    "vivah":       [("groom", "Groom"), ("bride", "Bride")],
+    "griha":       [("primary", "Primary Family Member")],
+    "vyapar":      [("primary", "Primary Partner")],
+    "naamkaran":   [("child", "Child")],
+    "mundan":      [("child", "Child")],
+    "vidyarambh":  [("child", "Child")],
+    "vastu":       [("primary", "Owner")],
+    "yatra":       [("self", "Traveler")],
+    "vahan":       [("self", "Owner")],
+    "investment":  [("self", "Investor")],
+    "chikitsa":    [("self", "Patient")],
+    "naukri":      [("self", "Candidate")],
+}
+
+NAKSHATRA_ORDER = [
+    "Ashwini", "Bharani", "Krittika", "Rohini", "Mrigashira", "Ardra",
+    "Punarvasu", "Pushya", "Ashlesha", "Magha", "Purva Phalguni", "Uttara Phalguni",
+    "Hasta", "Chitra", "Swati", "Vishakha", "Anuradha", "Jyeshtha",
+    "Mula", "Purva Ashadha", "Uttara Ashadha", "Shravana", "Dhanishta", "Shatabhisha",
+    "Purva Bhadrapada", "Uttara Bhadrapada", "Revati",
+]
+
+RASHI_ORDER = [
+    "Mesha", "Vrishabha", "Mithuna", "Karka", "Simha", "Kanya",
+    "Tula", "Vrishchika", "Dhanu", "Makara", "Kumbha", "Meena",
+]
+
+TARA_NAMES = ["Janma", "Sampat", "Vipat", "Kshema", "Pratyak", "Sadhaka", "Vadha", "Mitra", "Ati Mitra"]
+# Classical Tara Bala rule: counting from the birth Nakshatra, the 3rd
+# (Vipat), 5th (Pratyak) and 7th (Vadha) taras in each 9-cycle are inauspicious.
+TARA_INAUSPICIOUS = {3, 5, 7}
+
+# Classical Chandra Bala rule: transit Moon in houses 1, 3, 6, 7, 10, 11 from
+# the natal Moon sign (Janma Rashi) is favourable for new undertakings.
+CHANDRA_BALA_GOOD_HOUSES = {1, 3, 6, 7, 10, 11}
+
+
+def _nakshatra_index(name: str) -> Optional[int]:
+    clean = (name or "").strip().lower()
+    if not clean:
+        return None
+    for i, n in enumerate(NAKSHATRA_ORDER):
+        if n.lower() == clean or n.lower() in clean or clean in n.lower():
+            return i
+    return None
+
+
+def _rashi_for_nakshatra(name: str) -> Optional[str]:
+    """Approximate a Moon sign from a Nakshatra name, using the rashi that
+    contains the START of that nakshatra's span (each nakshatra is 13°20',
+    each rashi is 30°). A handful of nakshatras straddle two rashis depending
+    on pada, which we don't have from the Panchang API — this gives the
+    correct rashi for the majority of that nakshatra's span."""
+    idx = _nakshatra_index(name)
+    if idx is None:
+        return None
+    start_degree = idx * (360 / 27)
+    rashi_idx = int(start_degree // 30) % 12
+    return RASHI_ORDER[rashi_idx]
+
+
+def compute_tara_bala(birth_nakshatra: str, day_nakshatra: str) -> dict:
+    bi = _nakshatra_index(birth_nakshatra)
+    di = _nakshatra_index(day_nakshatra)
+    if bi is None or di is None:
+        return {"available": False}
+    diff = (di - bi) % 27
+    tara_number = (diff % 9) + 1
+    return {
+        "available": True,
+        "tara_number": tara_number,
+        "label": TARA_NAMES[tara_number - 1],
+        "is_auspicious": tara_number not in TARA_INAUSPICIOUS,
+    }
+
+
+def compute_chandra_bala(birth_nakshatra: str, day_nakshatra: str) -> dict:
+    birth_rashi = _rashi_for_nakshatra(birth_nakshatra)
+    day_rashi = _rashi_for_nakshatra(day_nakshatra)
+    if not birth_rashi or not day_rashi:
+        return {"available": False}
+    bi = RASHI_ORDER.index(birth_rashi)
+    di = RASHI_ORDER.index(day_rashi)
+    house = ((di - bi) % 12) + 1
+    return {
+        "available": True,
+        "house": house,
+        "birth_rashi": birth_rashi,
+        "day_rashi": day_rashi,
+        "is_auspicious": house in CHANDRA_BALA_GOOD_HOUSES,
+    }
+
+
+class PersonBirthDetails(BaseModel):
+    role: str
+    role_label: Optional[str] = ""
+    name: Optional[str] = ""
+    dob: str
+    tob: Optional[str] = ""
+    birth_place: str
+    birth_coordinates: Optional[str] = None
+
+
 class DailyPanchangRequest(BaseModel):
     date: str
     city: Optional[str] = "India"
@@ -105,6 +212,7 @@ class MuhuratRequest(BaseModel):
     muhurat_label: str
     muhurat_hindi: str
     date: str
+    # Legacy fields, kept for backward compatibility with older clients.
     name: Optional[str] = ""
     rashi: Optional[str] = ""
     city: Optional[str] = "India"
@@ -112,6 +220,10 @@ class MuhuratRequest(BaseModel):
     language: Optional[str] = DEFAULT_LANGUAGE
     calendar: Optional[str] = DEFAULT_CALENDAR
     refresh: Optional[bool] = False
+    # Event-specific birth details (e.g. bride+groom for Vivah, primary
+    # member for Griha Pravesh). Muhurat is computed from these, not the
+    # legacy name/rashi fields, whenever persons are provided.
+    persons: Optional[List[PersonBirthDetails]] = None
 
 
 def divineapi() -> DivineApiClient:
@@ -225,6 +337,7 @@ def get_muhurat(req: MuhuratRequest):
         resolve_place(req.city),
     )
     day = call_divineapi(lambda api: api.get_day(query, force_refresh=bool(req.refresh), cache_only=not bool(req.refresh)))
+    day_nakshatra_name = day.get("nakshatra", {}).get("name", "")
 
     auspicious_timings = []
     for item in day.get("auspicious_period", []):
@@ -256,9 +369,68 @@ def get_muhurat(req: MuhuratRequest):
                 "reason": info["label"],
             })
 
+    # ── Per-person birth-based compatibility (Tara Bala / Chandra Bala) ──
+    # Each person's janma nakshatra is derived live from their birth
+    # date+time+place (can't be pre-cached like daily Panchang, since birth
+    # dates are arbitrary), then compared against the muhurat date's
+    # nakshatra to work out the two classical strength checks.
+    person_compatibility = []
+    any_person_inauspicious = False
+    for person in (req.persons or []):
+        birth_coords = resolve_coordinates(person.birth_place, person.birth_coordinates)
+        birth_place = resolve_place(person.birth_place)
+        try:
+            birth_moment = call_divineapi(
+                lambda api, p=person, c=birth_coords, pl=birth_place: api.get_birth_moment(p.dob, p.tob, c, pl)
+            )
+        except HTTPException as exc:
+            person_compatibility.append({
+                "role": person.role,
+                "role_label": person.role_label or person.role.title(),
+                "name": person.name or "",
+                "error": "Could not calculate birth Nakshatra for this person.",
+            })
+            continue
+
+        birth_nakshatra_name = birth_moment.get("nakshatra", {}).get("name", "")
+        tara_bala = compute_tara_bala(birth_nakshatra_name, day_nakshatra_name)
+        chandra_bala = compute_chandra_bala(birth_nakshatra_name, day_nakshatra_name)
+
+        is_favorable = True
+        if tara_bala.get("available") and not tara_bala["is_auspicious"]:
+            is_favorable = False
+        if chandra_bala.get("available") and not chandra_bala["is_auspicious"]:
+            is_favorable = False
+        if not is_favorable:
+            any_person_inauspicious = True
+
+        person_compatibility.append({
+            "role": person.role,
+            "role_label": person.role_label or person.role.title(),
+            "name": person.name or "",
+            "birth_nakshatra": birth_nakshatra_name,
+            "tara_bala": tara_bala,
+            "chandra_bala": chandra_bala,
+            "is_favorable": is_favorable,
+        })
+
+    verdict = "avoid" if any_person_inauspicious else "good"
+    if any_person_inauspicious:
+        weak_people = ", ".join(
+            p["role_label"] for p in person_compatibility if p.get("is_favorable") is False
+        )
+        verdict_reason = (
+            f"Tara Bala/Chandra Bala is currently unfavourable for {weak_people} on this date. "
+            "A different date is recommended for this occasion."
+        )
+    else:
+        verdict_reason = "This recommendation is based on auspicious/inauspicious periods for the selected date and location" + (
+            ", cross-checked against the birth Nakshatra of the people involved." if person_compatibility else "."
+        )
+
     return {
-        "verdict": "good",
-        "verdict_reason": "This recommendation is based on DivineAPI auspicious and inauspicious periods for the selected date and location.",
+        "verdict": verdict,
+        "verdict_reason": verdict_reason,
         "pandit_message": f"For {req.muhurat_label}, prefer the listed auspicious periods and avoid Rahu Kaal, Yamaganda, Gulika Kaal, Dur Muhurat and Varjyam.",
         "auspicious_timings": auspicious_timings,
         "timings_to_avoid": timings_to_avoid,
@@ -268,13 +440,14 @@ def get_muhurat(req: MuhuratRequest):
             "reason": day.get("tithi", {}).get("paksha", ""),
         },
         "nakshatra_today": {
-            "name": day.get("nakshatra", {}).get("name", ""),
-            "is_auspicious_for_this_muhurat": True,
+            "name": day_nakshatra_name,
+            "is_auspicious_for_this_muhurat": not any_person_inauspicious,
             "reason": (day.get("nakshatra", {}).get("lord") or {}).get("name", ""),
         },
+        "person_compatibility": person_compatibility,
         "rituals_recommended": ["Begin with Ganesh vandana", "Offer deepam and flowers", "Consult temple priest for ceremony-specific sankalp"],
         "mantras": [],
-        "special_notes": ["Data is calculated by DivineAPI for the configured coordinates.", "Panchang values change by location."],
+        "special_notes": ["Data is calculated for the configured coordinates.", "Panchang values change by location."],
         "alternative_dates": [],
         "source": "divineapi",
     }

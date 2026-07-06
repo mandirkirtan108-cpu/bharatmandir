@@ -52,6 +52,13 @@ FESTIVALS_URL = os.getenv(
 CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "divineapi_cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Separate cache namespace for one-off "birth moment" lookups (used to derive a
+# person's janma nakshatra/rashi for Muhurat compatibility). These are keyed
+# by exact date+time+coordinates and are NOT related to the daily Panchang
+# cache above, so they never collide with it.
+BIRTH_CACHE_DIR = CACHE_DIR / "birth_moments"
+BIRTH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def normalize_coordinates(coordinates: str) -> str:
     try:
@@ -78,6 +85,26 @@ def cache_key_for(date_value: str, coordinates: str, calendar: str, language: st
     return f"{date_value}_{safe_coordinates}_{calendar}_{language}_{ayanamsa}.json"
 
 
+def _parse_hour_minute(time_value: str | None) -> tuple[int, int]:
+    """Parse a 24h 'HH:MM' string (as produced by an <input type=time>).
+    Falls back to noon when no time is given, since we still need a fixed
+    moment to query the Nakshatra/Tithi for that date."""
+    if not time_value:
+        return 12, 0
+    try:
+        parts = str(time_value).strip().split(":")
+        hour = max(0, min(23, int(parts[0])))
+        minute = max(0, min(59, int(parts[1]))) if len(parts) > 1 else 0
+        return hour, minute
+    except Exception:
+        return 12, 0
+
+
+def _birth_cache_key(date_value: str, hour: int, minute: int, coordinates: str) -> str:
+    safe_coordinates = normalize_coordinates(coordinates).replace(",", "_").replace(".", "-")
+    return f"{date_value}_{hour:02d}-{minute:02d}_{safe_coordinates}.json"
+
+
 class DivineApiConfigError(RuntimeError):
     pass
 
@@ -98,6 +125,11 @@ class PanchangQuery:
     place: str = DEFAULT_PLACE
     tzone: str = DEFAULT_TZONE
     ayanamsa: int = CACHE_VERSION
+    # Only set for birth-moment lookups (see DivineApiClient.get_birth_moment).
+    # Daily Panchang queries leave these as None so existing behaviour/cache
+    # keys are unaffected.
+    hour: str | None = None
+    minute: str | None = None
 
     @property
     def cache_key(self) -> str:
@@ -251,6 +283,55 @@ class DivineApiClient:
             "months": [self.get_month(year, month, coordinates, language, calendar, cache_only) for month in range(1, 13)],
         }
 
+    def get_birth_moment(
+        self,
+        date_value: str,
+        time_value: str | None,
+        coordinates: str,
+        place: str,
+    ) -> dict[str, Any]:
+        """Look up the Nakshatra/Tithi ruling a specific birth date+time+place.
+
+        This powers Muhurat compatibility (Tara Bala / Chandra Bala) for a
+        person's birth details. It is intentionally separate from get_day():
+        birth dates are arbitrary and one-off, so they can't be pre-cached the
+        way daily Panchang is, and we only need the Nakshatra/Tithi anga here
+        (not choghadiya/festivals/auspicious-timings).
+        """
+        hour, minute = _parse_hour_minute(time_value)
+        query = PanchangQuery(
+            date=date_value,
+            coordinates=coordinates or DEFAULT_COORDINATES,
+            place=place or DEFAULT_PLACE,
+            hour=str(hour),
+            minute=str(minute),
+        )
+
+        cache_file = BIRTH_CACHE_DIR / _birth_cache_key(date_value, hour, minute, query.coordinates)
+        if cache_file.exists():
+            try:
+                return json.loads(cache_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        panchang = self._post("panchang", FIND_PANCHANG_URL, query, include_sign_language=True)
+        data = _data(panchang)
+        nakshatra = _current_or_first(data.get("nakshatras") or data.get("nakshatra"))
+        tithi = _current_or_first(data.get("tithis") or data.get("tithi"))
+        result = {
+            "date": date_value,
+            "hour": hour,
+            "minute": minute,
+            "coordinates": normalize_coordinates(query.coordinates),
+            "nakshatra": _normalize_anga(nakshatra, "nakshatra"),
+            "tithi": _normalize_anga(tithi, "tithi"),
+        }
+        try:
+            cache_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+        return result
+
     def _get_cached_day(self, query: PanchangQuery, cache_file: Path) -> dict[str, Any] | None:
         if get_cached_panchang:
             try:
@@ -366,6 +447,9 @@ class DivineApiClient:
             "lon": lon,
             "tzone": str(query.tzone),
         }
+        if query.hour is not None:
+            body["hour"] = query.hour
+            body["min"] = query.minute or "0"
         if include_language:
             body["lan"] = query.language
         return body
