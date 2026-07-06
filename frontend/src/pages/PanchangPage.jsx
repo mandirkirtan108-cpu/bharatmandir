@@ -20,11 +20,27 @@ const MUHURAT_TYPES = [
   { id: 'naukri',     icon: '💼', label: 'Naukri / Job',   hindi: 'नौकरी' },
 ];
 
-const RASHI_LIST = [
-  'मेष (Aries)', 'वृषभ (Taurus)', 'मिथुन (Gemini)', 'कर्क (Cancer)',
-  'सिंह (Leo)', 'कन्या (Virgo)', 'तुला (Libra)', 'वृश्चिक (Scorpio)',
-  'धनु (Sagittarius)', 'मकर (Capricorn)', 'कुंभ (Aquarius)', 'मीन (Pisces)',
-];
+// Which people's birth details each occasion needs — mirrors
+// EVENT_PERSON_ROLES on the backend (backend/routers/panchang.py). Muhurat
+// is now calculated from these birth date/time/place, not a generic Rashi.
+const EVENT_PERSON_ROLES = {
+  vivah:      [{ role: 'groom',   label: 'Groom' },   { role: 'bride', label: 'Bride' }],
+  griha:      [{ role: 'primary', label: 'Primary Family Member' }],
+  vyapar:     [{ role: 'primary', label: 'Primary Partner' }],
+  naamkaran:  [{ role: 'child',   label: "Child" }],
+  mundan:     [{ role: 'child',   label: "Child" }],
+  vidyarambh: [{ role: 'child',   label: "Child" }],
+  vastu:      [{ role: 'primary', label: 'Owner' }],
+  yatra:      [{ role: 'self',    label: 'Traveler' }],
+  vahan:      [{ role: 'self',    label: 'Owner' }],
+  investment: [{ role: 'self',    label: 'Investor' }],
+  chikitsa:   [{ role: 'self',    label: 'Patient' }],
+  naukri:     [{ role: 'self',    label: 'Candidate' }],
+};
+
+function emptyPerson() {
+  return { name: '', dob: '', tob: '', birthPlace: '' };
+}
 
 const TODAY = new Date().toISOString().split('T')[0];
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -392,8 +408,9 @@ function TodaysPanchang({ dailyResult, dailyLoading, date, city, setDate, setCit
 }
 
 /* ─── MUHURAT FINDER SECTION ────────────────────────────────── */
-function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, rashi, setRashi, name, setName, selected, setSelected, onFind, cityTouched, setCityTouched }) {
+function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, personsByRole, updatePerson, personsTouched, setPersonsTouched, selected, setSelected, onFind, cityTouched, setCityTouched }) {
   const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
+  const requiredPersons = selected ? (EVENT_PERSON_ROLES[selected] || []) : [];
 
   const labelStyle = { fontFamily: UI_FONT, fontWeight: 600, fontSize: 11, letterSpacing: '.07em', textTransform: 'uppercase', color: '#6b7280', display: 'block', marginBottom: 5 };
   const inputStyle = { padding: '10px 12px', border: '1px solid #d1c4b0', borderRadius: 6, fontFamily: UI_FONT, fontSize: 14, outline: 'none', color: '#1a1a1a', background: '#fff', width: '100%', boxSizing: 'border-box' };
@@ -402,6 +419,7 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
 
   const handleFind = () => {
     setCityTouched(true);
+    setPersonsTouched(true);
     if (!selected) return;
     if (!city.trim()) return;
     onFind();
@@ -429,7 +447,6 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
     { label: 'TITHI',        value: result.tithi_today?.name || '—',     status: result.tithi_today?.is_auspicious_for_this_muhurat ?? null },
     { label: 'NAKSHATRA',    value: result.nakshatra_today?.name || '—', status: result.nakshatra_today?.is_auspicious_for_this_muhurat ?? true },
     { label: 'YOGA',         value: result.yoga_today?.name || '—',      status: result.yoga_today?.is_auspicious ?? true },
-    { label: 'CHANDRA BALA', value: result.chandra_bala || 'Favorable',  status: true },
   ] : [];
 
   /*
@@ -505,15 +522,15 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
         })}
       </div>
 
-      {/* Form row */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 6, flexWrap: 'wrap' }}>
+      {/* Date + City row */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 130 }}>
-          <label style={labelStyle}>DATE</label>
+          <label style={labelStyle}>EVENT DATE</label>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
             style={{ ...inputStyle, width: 140 }} />
         </div>
         <div style={{ minWidth: 130 }}>
-          <label style={labelStyle}>CITY *</label>
+          <label style={labelStyle}>EVENT CITY *</label>
           <input
             type="text"
             value={city}
@@ -532,20 +549,64 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
             }}
           />
         </div>
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <label style={labelStyle}>RASHI</label>
-          <select value={rashi} onChange={e => setRashi(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', appearance: 'auto' }}>
-            <option value="">Select Rashi…</option>
-            {RASHI_LIST.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
+      </div>
+
+      {/* Birth details — which people are asked for depends on the occasion */}
+      {selected && requiredPersons.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 4 }}>
+            Birth Details {requiredPersons.length > 1 ? '(required for both)' : '(required)'}
+          </div>
+          <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', margin: '0 0 12px' }}>
+            Muhurat is personalized using Tara Bala &amp; Chandra Bala calculated from birth date, time and place.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: requiredPersons.length > 1 ? '1fr 1fr' : '1fr', gap: 14 }} className="muhurat-persons-grid">
+            {requiredPersons.map(({ role, label }) => {
+              const p = personsByRole[role] || emptyPerson();
+              const missingDob = personsTouched && !p.dob?.trim();
+              const missingPlace = personsTouched && !p.birthPlace?.trim();
+              return (
+                <div key={role} style={{ background: '#fdf9f4', border: '1px solid #e2d5c3', borderRadius: 8, padding: '14px 16px' }}>
+                  <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#5a3e28', marginBottom: 10 }}>{label}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <label style={labelStyle}>NAME</label>
+                      <input type="text" value={p.name} onChange={e => updatePerson(role, 'name', e.target.value)}
+                        placeholder="Optional" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>DATE OF BIRTH *</label>
+                      <input type="date" value={p.dob} onChange={e => updatePerson(role, 'dob', e.target.value)}
+                        style={{ ...inputStyle, borderColor: missingDob ? '#f8a5a5' : '#d1c4b0' }} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={labelStyle}>TIME OF BIRTH</label>
+                      <input type="time" value={p.tob} onChange={e => updatePerson(role, 'tob', e.target.value)}
+                        style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>PLACE OF BIRTH *</label>
+                      <input type="text" value={p.birthPlace} onChange={e => updatePerson(role, 'birthPlace', e.target.value)}
+                        placeholder="City, State" style={{ ...inputStyle, borderColor: missingPlace ? '#f8a5a5' : '#d1c4b0' }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <button onClick={handleFind} disabled={loading || !city.trim()} style={{
+      )}
+
+      <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'flex-end' }}>
+        <button onClick={handleFind} disabled={loading || !city.trim() || !selected} style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           padding: '10px 22px', borderRadius: 6,
-          background: (loading || !city.trim()) ? '#c9651a66' : '#c9651a',
+          background: (loading || !city.trim() || !selected) ? '#c9651a66' : '#c9651a',
           color: '#fff', border: 'none',
           fontFamily: UI_FONT, fontSize: 14, fontWeight: 700,
-          cursor: (loading || !city.trim()) ? 'not-allowed' : 'pointer',
+          cursor: (loading || !city.trim() || !selected) ? 'not-allowed' : 'pointer',
           whiteSpace: 'nowrap', letterSpacing: '.01em', flexShrink: 0,
         }}>
           {loading
@@ -555,8 +616,13 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
       </div>
 
       {cityMissing && (
-        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#dc2626', margin: '0 0 16px' }}>
+        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#dc2626', margin: '0 0 16px', textAlign: 'right' }}>
           Please enter a city to find the Muhurat.
+        </p>
+      )}
+      {personsTouched && requiredPersons.some(({ role }) => !(personsByRole[role]?.dob?.trim()) || !(personsByRole[role]?.birthPlace?.trim())) && (
+        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#dc2626', margin: '0 0 16px', textAlign: 'right' }}>
+          Please fill date of birth and place of birth for everyone listed above.
         </p>
       )}
       {!cityMissing && <div style={{ marginBottom: 14 }} />}
@@ -680,6 +746,45 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, r
                 })}
               </div>
             </div>
+
+            {/* Birth-based Tara Bala / Chandra Bala per person */}
+            {result.person_compatibility?.length > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #e2d5c3', borderRadius: 10, padding: '18px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8L10.5 10"/></svg>
+                  <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Birth compatibility</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {result.person_compatibility.map((p, i) => (
+                    <div key={i} style={{
+                      padding: '10px 12px', borderRadius: 8,
+                      background: p.is_favorable === false ? '#fff5f5' : '#fafaf8',
+                      border: `1px solid ${p.is_favorable === false ? '#fecaca' : '#f0ebe3'}`,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 700, color: '#1a1a1a' }}>
+                          {p.role_label}{p.name ? ` — ${p.name}` : ''}
+                        </span>
+                        {p.error ? null : <CompatBadge status={p.is_favorable} />}
+                      </div>
+                      {p.error ? (
+                        <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#b91c1c' }}>{p.error}</div>
+                      ) : (
+                        <div style={{ fontFamily: UI_FONT, fontSize: 11, color: '#9A7150', lineHeight: 1.6 }}>
+                          Janma Nakshatra: <strong style={{ color: '#5a3e28' }}>{p.birth_nakshatra || '—'}</strong>
+                          {p.tara_bala?.available && (
+                            <> · Tara Bala: <strong style={{ color: p.tara_bala.is_auspicious ? '#16a34a' : '#dc2626' }}>{p.tara_bala.label}</strong></>
+                          )}
+                          {p.chandra_bala?.available && (
+                            <> · Chandra Bala: <strong style={{ color: p.chandra_bala.is_auspicious ? '#16a34a' : '#dc2626' }}>House {p.chandra_bala.house}</strong></>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -702,14 +807,22 @@ export default function PanchangPage() {
   const [date, setDate]       = useState(TODAY);
   const [city, setCity]       = useState('');
   const [cityTouched, setCityTouched] = useState(false);
-  const [rashi, setRashi]     = useState('');
-  const [name, setName]       = useState('');
+  const [personsByRole, setPersonsByRole] = useState({});
+  const [personsTouched, setPersonsTouched] = useState(false);
   const [selected, setSelected] = useState(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyResult, setDailyResult]   = useState(null);
   const [loading, setLoading]   = useState(false);
   const [result, setResult]     = useState(null);
   const [error, setError]       = useState(null);
+
+  const updatePerson = (role, field, value) => {
+    setPersonsByRole(prev => ({
+      ...prev,
+      [role]: { ...(prev[role] || emptyPerson()), [field]: value },
+    }));
+    setResult(null);
+  };
 
   const fetchDailyPanchang = async () => {
     const trimmedCity = city.trim();
@@ -736,14 +849,33 @@ export default function PanchangPage() {
   };
 
   const selectedType = MUHURAT_TYPES.find(m => m.id === selected);
+  const requiredPersons = selected ? (EVENT_PERSON_ROLES[selected] || []) : [];
+
+  const personsIncomplete = requiredPersons.some(({ role }) => {
+    const p = personsByRole[role] || {};
+    return !p.dob?.trim() || !p.birthPlace?.trim();
+  });
 
   const findMuhurat = async () => {
     const trimmedCity = city.trim();
     if (!trimmedCity) { setCityTouched(true); return; }
     if (!selected) { setError('Please select an occasion first.'); return; }
+    if (personsIncomplete) { setPersonsTouched(true); return; }
 
     setLoading(true); setResult(null); setError(null);
     try {
+      const persons = requiredPersons.map(({ role, label }) => {
+        const p = personsByRole[role] || {};
+        return {
+          role,
+          role_label: label,
+          name: p.name || '',
+          dob: p.dob,
+          tob: p.tob || '',
+          birth_place: p.birthPlace,
+        };
+      });
+
       const res = await fetch(`${API_BASE}/api/panchang/muhurat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -752,12 +884,11 @@ export default function PanchangPage() {
           muhurat_label: selectedType?.label || selected,
           muhurat_hindi: selectedType?.hindi || '',
           date,
-          name: name || '',
-          rashi: rashi || '',
           city: trimmedCity,
           coordinates: null,
           calendar: 'amanta',
           language: 'en',
+          persons,
         }),
       });
       const data = await res.json();
@@ -805,9 +936,10 @@ export default function PanchangPage() {
           <MuhuratFinder
             result={result} loading={loading} error={error}
             date={date} setDate={d => { setDate(d); setResult(null); }}
-            city={city} setCity={setCity} rashi={rashi} setRashi={setRashi}
-            name={name} setName={setName}
-            selected={selected} setSelected={s => { setSelected(s); setResult(null); }}
+            city={city} setCity={setCity}
+            personsByRole={personsByRole} updatePerson={updatePerson}
+            personsTouched={personsTouched} setPersonsTouched={setPersonsTouched}
+            selected={selected} setSelected={s => { setSelected(s); setResult(null); setPersonsTouched(false); }}
             onFind={findMuhurat}
             cityTouched={cityTouched}
             setCityTouched={setCityTouched}
@@ -821,6 +953,7 @@ export default function PanchangPage() {
         @media (max-width: 900px) {
           .muhurat-results-grid { grid-template-columns: 1fr !important; }
           .timing-cards         { grid-template-columns: 1fr !important; }
+          .muhurat-persons-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 720px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(4, 1fr) !important; }
