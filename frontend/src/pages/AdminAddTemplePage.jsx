@@ -505,6 +505,7 @@ export default function AdminAddTemplePage() {
   const [submitted, setSubmitted] = useState(false);
   const [qrId, setQrId]       = useState('');
   const [btnShake, setBtnShake] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const [showCustomDesignation, setShowCustomDesignation] = useState(false);
   const [customDesignationText, setCustomDesignationText] = useState('');
@@ -710,8 +711,11 @@ export default function AdminAddTemplePage() {
 
   // ── Submit ────────────────────────────────────────────────────────────────────
   async function submitForm() {
+    if (submitting) return;
     if (!validate(9)) { triggerErrorFeedback(); return; }
     if (!allConsents) return;
+    setSubmitting(true);
+
     const fd = new FormData();
     fd.append('name', form.name);
     fd.append('city', form.city);
@@ -749,8 +753,15 @@ export default function AdminAddTemplePage() {
     boolFields.forEach(k => fd.append(k, form[k] ? 'true' : 'false'));
 
     // Slot 0 = hero/cover image, sent with the create request itself.
-    if (photos[0]?.file) fd.append('hero_image', photos[0].file);
+    const heroFile = photos[0]?.file;
+    const seenFiles = new Set();
+    if (heroFile) {
+      fd.append('hero_image', heroFile);
+      seenFiles.add(heroFile);
+    }
     photos.slice(1).filter(Boolean).forEach(slot => {
+      if (!slot.file || seenFiles.has(slot.file)) return;
+      seenFiles.add(slot.file);
       fd.append('gallery_images', slot.file);
     });
 
@@ -762,6 +773,8 @@ export default function AdminAddTemplePage() {
       window.scrollTo({ top:0, behavior:'smooth' });
     } catch (err) {
       alert('Error saving temple: ' + (err.response?.data?.detail || err.message || 'Unknown error'));
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -1602,8 +1615,8 @@ export default function AdminAddTemplePage() {
                 <div className="form-nav">
                   <button className="btn-back" onClick={()=>prevStep(9)}>← Back</button>
                   <div className="step-indicator">Step 9 of 9</div>
-                  <button className={`btn-submit${btnShake?' shake':''}`} disabled={!allConsents} onClick={submitForm}>
-                    🕉️ Save Temple to BharatMandir
+                  <button className={'btn-submit' + (btnShake ? ' shake' : '')} disabled={!allConsents || submitting} onClick={submitForm}>
+                    {submitting ? 'Saving Temple...' : 'Save Temple to BharatMandir'}
                   </button>
                 </div>
               </div>
