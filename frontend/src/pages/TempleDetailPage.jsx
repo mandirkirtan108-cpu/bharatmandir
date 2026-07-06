@@ -9,6 +9,40 @@ import { useTranslatedTemple } from '../hooks/useTranslatedData';
 const MONTHS = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 function proxyImageUrl(url) { return url || null; }
+function imageUrlFromMedia(item) {
+  if (!item) return null;
+  if (typeof item === 'string') return item;
+  return item.file_url || item.url || item.image_url || item.secure_url || null;
+}
+function buildGallery(temple) {
+  const rows = Array.isArray(temple?.gallery) ? temple.gallery : [];
+  const images = [];
+  const seen = new Set();
+
+  const pushImage = (item, fallbackId) => {
+    const url = imageUrlFromMedia(item);
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    images.push({
+      id: item?.id ?? fallbackId,
+      file_url: url,
+      caption: item?.caption || temple?.name || 'Temple image',
+      is_hero: Boolean(item?.is_hero),
+    });
+  };
+
+  if (temple?.hero_image_url) {
+    pushImage({
+      id: 'hero',
+      file_url: temple.hero_image_url,
+      caption: temple.name,
+      is_hero: true,
+    }, 'hero');
+  }
+
+  rows.forEach((item, index) => pushImage(item, `gallery-${index}`));
+  return images;
+}
 function formatTime(t) {
   if (!t) return null;
   const p = String(t).split(':');
@@ -366,7 +400,7 @@ export default function TempleDetailPage() {
   if (!T) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/></div></>);
 
   const heroImg   = proxyImageUrl(T.hero_image_url);
-  const gallery   = Array.isArray(T.gallery) ? T.gallery : [];
+  const gallery   = buildGallery(T);
   const openTime  = formatTime(T.opening_time);
   const closeTime = formatTime(T.closing_time);
   const acStart   = formatTime(T.afternoon_closure_start);
