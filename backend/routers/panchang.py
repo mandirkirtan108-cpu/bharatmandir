@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -157,6 +157,10 @@ def _rashi_for_nakshatra(name: str) -> Optional[str]:
 
 
 def compute_tara_bala(birth_nakshatra: str, day_nakshatra: str) -> dict:
+    """FALLBACK ONLY. Real Tara Bala comes from DivineAPI's
+    find-chandrabalam-and-tarabalam endpoint (see check_bala_favorability
+    below) — this manual nakshatra-count version is used only if that call
+    fails (plan/network issue), so the feature still returns something."""
     bi = _nakshatra_index(birth_nakshatra)
     di = _nakshatra_index(day_nakshatra)
     if bi is None or di is None:
@@ -172,6 +176,7 @@ def compute_tara_bala(birth_nakshatra: str, day_nakshatra: str) -> dict:
 
 
 def compute_chandra_bala(birth_nakshatra: str, day_nakshatra: str) -> dict:
+    """FALLBACK ONLY — see compute_tara_bala's note above."""
     birth_rashi = _rashi_for_nakshatra(birth_nakshatra)
     day_rashi = _rashi_for_nakshatra(day_nakshatra)
     if not birth_rashi or not day_rashi:
@@ -192,10 +197,199 @@ class PersonBirthDetails(BaseModel):
     role: str
     role_label: Optional[str] = ""
     name: Optional[str] = ""
+    gender: Optional[str] = "male"  # Kundali API (Basic Astro Details / Ashtakoot Milan) requires this
     dob: str
     tob: Optional[str] = ""
     birth_place: str
     birth_coordinates: Optional[str] = None
+
+
+def _names_match(a: str, b: str) -> bool:
+    """Loose match for Rashi/Nakshatra names — DivineAPI endpoints don't
+    always spell the same nakshatra identically across endpoints (e.g.
+    'Ardhra' vs 'Ardra', 'Mrigashirsha' vs 'Mrigashira')."""
+    a_clean, b_clean = (a or "").strip().lower(), (b or "").strip().lower()
+    if not a_clean or not b_clean:
+        return False
+    return a_clean == b_clean or a_clean in b_clean or b_clean in a_clean
+
+
+def resolve_person_signature(person: PersonBirthDetails) -> dict:
+    """Get a person's real birth Moonsign (Janma Rashi) + Nakshatra.
+
+    Tries the Kundali 'Basic Astrological Details' endpoint first (the
+    endpoint actually designed for this — exact, needs gender). Falls back to
+    reusing the Panchang 'find-panchang' call at the birth moment (gives
+    Nakshatra only; Rashi is then approximated) if the Kundali endpoint isn't
+    available on the current plan or the call fails for any reason.
+    """
+    birth_coords = resolve_coordinates(person.birth_place, person.birth_coordinates)
+    birth_place = resolve_place(person.birth_place)
+    try:
+        astro = call_divineapi(lambda api: api.get_basic_astro_details({
+            "name": person.name,
+            "gender": person.gender,
+            "dob": person.dob,
+            "tob": person.tob,
+            "coordinates": birth_coords,
+            "place": birth_place,
+        }))
+        if astro.get("moonsign") and astro.get("nakshatra"):
+            return {"moonsign": astro["moonsign"], "nakshatra": astro["nakshatra"], "source": "kundli"}
+    except HTTPException:
+        pass
+
+    try:
+        birth_moment = call_divineapi(lambda api: api.get_birth_moment(person.dob, person.tob, birth_coords, birth_place))
+        nak_name = birth_moment.get("nakshatra", {}).get("name", "")
+        return {"moonsign": _rashi_for_nakshatra(nak_name) or "", "nakshatra": nak_name, "source": "approximation"}
+    except HTTPException:
+        return {"moonsign": "", "nakshatra": "", "source": "unavailable"}
+
+
+def check_bala_favorability(person_signature: dict, bala: dict) -> dict:
+    """Check a person's real birth Rashi/Nakshatra against a date's real
+    Chandrabalam/Tarabalam favourable lists (from DivineAPI). This is the
+    authoritative version of the Tara Bala / Chandra Bala check."""
+    moonsign = person_signature.get("moonsign", "")
+    nakshatra = person_signature.get("nakshatra", "")
+    chandra_list = bala.get("chandrabalam_current", [])
+    tara_list = bala.get("tarabalam_current", [])
+
+    chandra_favorable = any(_names_match(moonsign, r) for r in chandra_list) if moonsign else None
+    tara_favorable = any(_names_match(nakshatra, n) for n in tara_list) if nakshatra else None
+
+    return {
+        "available": moonsign != "" or nakshatra != "",
+        "moonsign": moonsign,
+        "nakshatra": nakshatra,
+        "chandra_bala": {"available": chandra_favorable is not None, "is_auspicious": bool(chandra_favorable)},
+        "tara_bala": {"available": tara_favorable is not None, "is_auspicious": bool(tara_favorable)},
+        "is_favorable": (chandra_favorable is not False) and (tara_favorable is not False),
+    }
+
+
+# ─── Classical date-selection rules, used to SCORE candidate dates when
+# searching for the best upcoming Muhurat (not just checking one date) ──────
+# These are commonly-cited Vedic muhurta guidelines. They're heuristics, not
+# a substitute for a family priest's judgement for major samskaras.
+WEEKDAY_RULES = {
+    # muhurat_type: (favourable weekdays, weekdays to avoid)
+    "vivah":      ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Tuesday", "Saturday", "Sunday"}),
+    "griha":      ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Tuesday", "Saturday", "Sunday"}),
+    "vyapar":     ({"Wednesday", "Thursday", "Friday"},           {"Tuesday", "Saturday"}),
+    "naamkaran":  ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Tuesday", "Saturday", "Sunday"}),
+    "vidyarambh": ({"Wednesday", "Thursday", "Friday"},           {"Tuesday", "Saturday", "Sunday"}),
+    "mundan":     ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Tuesday", "Saturday", "Sunday"}),
+    "vahan":      ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Tuesday", "Saturday", "Sunday"}),
+    "vastu":      ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Tuesday", "Saturday"}),
+    "investment": ({"Thursday", "Friday"},                        {"Tuesday", "Saturday"}),
+    "chikitsa":   ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Tuesday", "Saturday", "Sunday"}),
+    "naukri":     ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Tuesday", "Saturday"}),
+    "yatra":      ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Saturday"}),
+}
+
+# Nakshatras classically considered favourable for each occasion.
+FAVORABLE_NAKSHATRAS = {
+    "vivah":      {"Rohini", "Mrigashira", "Magha", "Uttara Phalguni", "Hasta", "Swati", "Anuradha", "Mula", "Uttara Ashadha", "Uttara Bhadrapada", "Revati"},
+    "griha":      {"Rohini", "Mrigashira", "Uttara Phalguni", "Uttara Ashadha", "Uttara Bhadrapada", "Revati", "Chitra", "Anuradha"},
+    "vyapar":     {"Ashwini", "Pushya", "Hasta", "Chitra", "Swati", "Anuradha", "Revati"},
+    "naamkaran":  {"Ashwini", "Punarvasu", "Pushya", "Hasta", "Swati", "Anuradha", "Shravana", "Revati"},
+    "vidyarambh": {"Ashwini", "Punarvasu", "Pushya", "Hasta", "Chitra", "Swati", "Shravana"},
+    "mundan":     {"Pushya", "Magha", "Uttara Phalguni", "Hasta", "Swati", "Anuradha", "Shravana", "Revati"},
+    "vastu":      {"Rohini", "Mrigashira", "Uttara Phalguni", "Uttara Ashadha", "Uttara Bhadrapada"},
+    "yatra":      {"Ashwini", "Pushya", "Hasta", "Anuradha", "Revati", "Shravana"},
+    "vahan":      {"Ashwini", "Rohini", "Mrigashira", "Pushya", "Uttara Phalguni", "Hasta", "Chitra", "Revati"},
+    "investment": {"Pushya", "Hasta", "Chitra", "Swati", "Anuradha", "Shravana"},
+    "chikitsa":   {"Ashwini", "Pushya", "Hasta", "Swati", "Shravana"},
+    "naukri":     {"Ashwini", "Pushya", "Hasta", "Chitra", "Swati", "Anuradha", "Shravana", "Revati"},
+}
+
+# Rikta ("empty") tithis — 4th, 9th, 14th of either paksha — are avoided for
+# most new beginnings, along with Amavasya (new moon).
+RIKTA_TITHI_NAMES = {"chaturthi", "navami", "chaturdashi"}
+
+
+def _is_tithi_favorable(tithi_name: str) -> bool:
+    clean = (tithi_name or "").strip().lower()
+    if not clean:
+        return True
+    if "amavasya" in clean:
+        return False
+    return not any(rikta in clean for rikta in RIKTA_TITHI_NAMES)
+
+
+def score_candidate_date(
+    muhurat_type: str,
+    weekday: str,
+    tithi_name: str,
+    nakshatra_name: str,
+    person_balas: list[dict],
+) -> dict:
+    """Score one candidate date for a given occasion. Higher is better.
+    person_balas: [{"role_label":..., "tara_bala":..., "chandra_bala":...}]
+    for people whose birth details were supplied — used to prefer dates that
+    are also favourable for everyone involved.
+    """
+    good_days, avoid_days = WEEKDAY_RULES.get(muhurat_type, (set(), set()))
+    favorable_nakshatras = FAVORABLE_NAKSHATRAS.get(muhurat_type, set())
+
+    score = 0
+    reasons = []
+
+    if weekday in avoid_days:
+        score -= 3
+        reasons.append(f"{weekday} is generally avoided for this occasion")
+    elif weekday in good_days:
+        score += 2
+        reasons.append(f"{weekday} is a favourable weekday for this occasion")
+
+    tithi_ok = _is_tithi_favorable(tithi_name)
+    if not tithi_ok:
+        score -= 3
+        reasons.append(f"Tithi {tithi_name} is a Rikta/Amavasya tithi, best avoided")
+    elif tithi_name:
+        score += 1
+
+    nak_clean = (nakshatra_name or "")
+    if any(fav.lower() in nak_clean.lower() or nak_clean.lower() in fav.lower() for fav in favorable_nakshatras):
+        score += 2
+        reasons.append(f"Nakshatra {nakshatra_name} is favourable for this occasion")
+
+    person_flags = []
+    for pb in person_balas:
+        person_ok = True
+        if pb.get("tara_bala", {}).get("available"):
+            if pb["tara_bala"]["is_auspicious"]:
+                score += 1
+            else:
+                score -= 2
+                person_ok = False
+        if pb.get("chandra_bala", {}).get("available"):
+            if pb["chandra_bala"]["is_auspicious"]:
+                score += 1
+            else:
+                score -= 2
+                person_ok = False
+        person_flags.append(person_ok)
+        if not person_ok:
+            reasons.append(f"Tara/Chandra Bala unfavourable for {pb.get('role_label', pb.get('role'))}")
+
+    if score >= 6:
+        verdict = "excellent"
+    elif score >= 3:
+        verdict = "good"
+    elif score >= 0:
+        verdict = "fair"
+    else:
+        verdict = "avoid"
+
+    return {
+        "score": score,
+        "verdict": verdict,
+        "reasons": reasons,
+        "all_persons_favorable": all(person_flags) if person_flags else True,
+    }
 
 
 class DailyPanchangRequest(BaseModel):
@@ -223,6 +417,19 @@ class MuhuratRequest(BaseModel):
     # Event-specific birth details (e.g. bride+groom for Vivah, primary
     # member for Griha Pravesh). Muhurat is computed from these, not the
     # legacy name/rashi fields, whenever persons are provided.
+    persons: Optional[List[PersonBirthDetails]] = None
+
+
+class BestDatesRequest(BaseModel):
+    muhurat_type: str
+    muhurat_label: str
+    muhurat_hindi: str
+    city: Optional[str] = "India"
+    coordinates: Optional[str] = None
+    language: Optional[str] = DEFAULT_LANGUAGE
+    calendar: Optional[str] = DEFAULT_CALENDAR
+    start_date: Optional[str] = None    # defaults to tomorrow if not given
+    range_days: Optional[int] = 45      # how many days ahead to search (max 90)
     persons: Optional[List[PersonBirthDetails]] = None
 
 
@@ -449,6 +656,167 @@ def get_muhurat(req: MuhuratRequest):
         "mantras": [],
         "special_notes": ["Data is calculated for the configured coordinates.", "Panchang values change by location."],
         "alternative_dates": [],
+        "source": "divineapi",
+    }
+
+
+@router.post("/muhurat/best-dates")
+def find_best_muhurat_dates(req: BestDatesRequest):
+    """Instead of judging a single date, scan a window of upcoming dates and
+    recommend the best ones for the requested occasion — this is what
+    'find the perfect date for this event' actually needs.
+
+    Compatibility is checked using DivineAPI's real Kundali + Chandrabalam/
+    Tarabalam endpoints (Vedic Prakash plan) wherever available, falling back
+    to a manual nakshatra-count approximation only if those calls fail.
+    """
+    range_days = max(1, min(int(req.range_days or 45), 90))
+    start = req.start_date or (datetime.now().date() + timedelta(days=1)).isoformat()
+    try:
+        start_dt = datetime.strptime(start, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="start_date must be in YYYY-MM-DD format") from exc
+
+    event_coordinates = resolve_coordinates(req.city, req.coordinates)
+    event_place = resolve_place(req.city)
+    persons = req.persons or []
+
+    # Each person's real birth Moonsign + Nakshatra only needs to be resolved
+    # ONCE, then reused for every candidate date's Chandrabalam/Tarabalam check.
+    person_signatures = []
+    for person in persons:
+        sig = resolve_person_signature(person)
+        person_signatures.append({
+            "role": person.role,
+            "role_label": person.role_label or person.role.title(),
+            "name": person.name or "",
+            **sig,
+        })
+
+    # For Vivah with exactly a bride+groom, run the real 36-point Ashtakoot
+    # Milan ONCE — this is a fixed birth-chart compatibility, not date-dependent,
+    # so it doesn't belong inside the per-date scan below.
+    ashtakoot_milan = None
+    if req.muhurat_type == "vivah" and len(persons) == 2:
+        groom = next((p for p in persons if p.role == "groom"), persons[0])
+        bride = next((p for p in persons if p.role == "bride"), persons[1])
+        try:
+            def _person_payload(p: PersonBirthDetails) -> dict:
+                return {
+                    "name": p.name, "gender": p.gender, "dob": p.dob, "tob": p.tob,
+                    "coordinates": resolve_coordinates(p.birth_place, p.birth_coordinates),
+                    "place": resolve_place(p.birth_place),
+                }
+            ashtakoot_milan = call_divineapi(
+                lambda api: api.get_ashtakoot_milan(_person_payload(groom), _person_payload(bride))
+            )
+        except HTTPException:
+            ashtakoot_milan = None
+
+    candidates = []
+    for offset in range(range_days):
+        current_date = (start_dt + timedelta(days=offset)).isoformat()
+        try:
+            basic = call_divineapi(lambda api, d=current_date: api.get_panchang_basic(d, event_coordinates, event_place))
+        except HTTPException:
+            continue  # skip dates we can't get data for rather than failing the whole search
+
+        weekday = basic.get("vaara") or datetime.strptime(current_date, "%Y-%m-%d").strftime("%A")
+        tithi_name = basic.get("tithi", {}).get("name", "")
+        nakshatra_name = basic.get("nakshatra", {}).get("name", "")
+
+        # Real Chandrabalam/Tarabalam for this date (one call covers every person).
+        bala = None
+        try:
+            bala = call_divineapi(lambda api, d=current_date: api.get_chandrabalam_tarabalam(d, event_coordinates, event_place))
+        except HTTPException:
+            bala = None
+
+        person_balas = []
+        for sig in person_signatures:
+            if bala is not None:
+                check = check_bala_favorability(sig, bala)
+                person_balas.append({
+                    "role": sig["role"], "role_label": sig["role_label"],
+                    "tara_bala": check["tara_bala"], "chandra_bala": check["chandra_bala"],
+                })
+            else:
+                # Fallback: manual nakshatra-count approximation
+                tara = compute_tara_bala(sig["nakshatra"], nakshatra_name) if sig["nakshatra"] else {"available": False}
+                chandra = compute_chandra_bala(sig["nakshatra"], nakshatra_name) if sig["nakshatra"] else {"available": False}
+                person_balas.append({"role": sig["role"], "role_label": sig["role_label"], "tara_bala": tara, "chandra_bala": chandra})
+
+        scored = score_candidate_date(req.muhurat_type, weekday, tithi_name, nakshatra_name, person_balas)
+
+        # Fold the Ashtakoot Milan result into Vivah scoring (fixed across all
+        # dates, but still worth surfacing as a reason on every candidate).
+        if ashtakoot_milan is not None:
+            points = ashtakoot_milan.get("points_obtained") or 0
+            if points >= 28:
+                scored["score"] += 3
+                scored["reasons"].append(f"Ashtakoot Milan: {points}/36 — excellent compatibility")
+            elif points >= 18:
+                scored["score"] += 1
+                scored["reasons"].append(f"Ashtakoot Milan: {points}/36 — acceptable compatibility")
+            else:
+                scored["score"] -= 3
+                scored["reasons"].append(f"Ashtakoot Milan: {points}/36 — below the traditional 18-point threshold")
+            if ashtakoot_milan.get("nadi_dosha"):
+                scored["score"] -= 2
+                scored["reasons"].append("Nadi Dosha present in the match")
+
+        candidates.append({
+            "date": current_date,
+            "weekday": weekday,
+            "tithi": tithi_name,
+            "nakshatra": nakshatra_name,
+            **scored,
+        })
+
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+    top = [c for c in candidates if c["verdict"] != "avoid"][:5]
+    if not top:
+        top = candidates[:3]  # nothing great found — still show the least-bad options
+
+    # Fetch the actual auspicious time windows only for the shortlisted dates
+    # (full get_day() is 4x the cost of get_panchang_basic, so we don't run it
+    # for every scanned date).
+    recommended_dates = []
+    for c in top:
+        query = query_for(c["date"], event_coordinates, req.language or DEFAULT_LANGUAGE, req.calendar or DEFAULT_CALENDAR, event_place)
+        try:
+            day = call_divineapi(lambda api, q=query: api.get_day(q, force_refresh=False, cache_only=False))
+            timings = []
+            for item in day.get("auspicious_period", []):
+                info = describe_muhurat(item.get("slug", ""), item.get("name", ""))
+                for period in item.get("period", []):
+                    time_str = format_period(period)
+                    if time_str:
+                        timings.append({"time": time_str, "quality": info["label"], "reason": info["reason"]})
+        except HTTPException:
+            timings = []
+
+        recommended_dates.append({
+            "date": c["date"],
+            "weekday": c["weekday"],
+            "tithi": c["tithi"],
+            "nakshatra": c["nakshatra"],
+            "score": c["score"],
+            "verdict": c["verdict"],
+            "reasons": c["reasons"],
+            "best_timings": timings,
+        })
+
+    return {
+        "muhurat_type": req.muhurat_type,
+        "muhurat_label": req.muhurat_label,
+        "search_range": {"from": start_dt.isoformat(), "to": (start_dt + timedelta(days=range_days - 1)).isoformat()},
+        "persons": [
+            {"role": s["role"], "role_label": s["role_label"], "name": s["name"], "birth_nakshatra": s["nakshatra"], "birth_rashi": s["moonsign"], "data_source": s["source"]}
+            for s in person_signatures
+        ],
+        "ashtakoot_milan": ashtakoot_milan,
+        "recommended_dates": recommended_dates,
         "source": "divineapi",
     }
 
