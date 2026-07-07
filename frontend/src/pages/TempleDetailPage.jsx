@@ -82,9 +82,16 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 /* HERO */
 .hero{position:relative;height:72vh;min-height:460px;max-height:640px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;background:#0D0500;transform:translateZ(0);isolation:isolate;}
 .hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;transition:opacity .8s;}
+.hero-slide{opacity:0;transform:scale(1.02);transition:opacity .7s ease,transform 3.8s ease;}
+.hero-slide.on{opacity:1;transform:scale(1);}
 .hero-grad{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,5,0,.08) 0%,rgba(10,5,0,0) 25%,rgba(10,5,0,.55) 60%,rgba(10,5,0,.95) 100%);pointer-events:none;}
 .hero-diya{position:absolute;top:24%;left:50%;transform:translateX(-50%);font-size:52px;animation:diya 3s ease-in-out infinite;z-index:2;}
 .hero-body{position:relative;z-index:3;padding:0 52px 56px;width:100%;text-align:center;animation:up .6s ease .1s both;}
+.hero-gallery-nav{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:4;display:flex;gap:8px;align-items:center;justify-content:center;max-width:min(720px,calc(100% - 32px));overflow-x:auto;padding:3px;scrollbar-width:none;}
+.hero-gallery-nav::-webkit-scrollbar{display:none;}
+.hero-dot{width:38px;height:26px;border:1.5px solid rgba(255,255,255,.38);border-radius:7px;padding:0;background:rgba(255,255,255,.12);overflow:hidden;cursor:pointer;opacity:.68;transition:opacity .18s,border-color .18s,transform .18s;flex:0 0 auto;}
+.hero-dot img{width:100%;height:100%;object-fit:cover;display:block;}
+.hero-dot:hover,.hero-dot.on{opacity:1;border-color:#FFD580;transform:translateY(-1px);}
 
 .hero-bc{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.09em;margin-bottom:12px;flex-wrap:wrap;font-family:'DM Sans',sans-serif;font-weight:500;}
 .hero-bc a{color:inherit;text-decoration:none;transition:color .2s;}.hero-bc a:hover{color:rgba(255,255,255,.75);}
@@ -101,7 +108,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .hero-address{font-size:14px;color:rgba(255,255,255,.65);display:flex;align-items:center;justify-content:center;gap:6px;font-family:'DM Sans',sans-serif;flex-wrap:wrap;}
 
 /* STICKY NAV */
-.snav{position:sticky;top:0;z-index:50;background:rgba(250,246,238,.97);backdrop-filter:blur(16px);border-bottom:1px solid #EDE3CE;display:flex;padding:0 52px;box-shadow:0 2px 10px rgba(44,21,0,.07);overflow-x:auto;scrollbar-width:none;}
+.snav{position:sticky;top:0;z-index:50;background:rgba(250,246,238,.97);backdrop-filter:blur(16px);border-bottom:1px solid #EDE3CE;display:flex;justify-content:center;padding:0 52px;box-shadow:0 2px 10px rgba(44,21,0,.07);overflow-x:auto;scrollbar-width:none;}
 .snav::-webkit-scrollbar{display:none;}
 .snav-item{padding:14px 16px;font-size:13px;font-weight:500;color:#7A5538;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s;flex-shrink:0;font-family:'DM Sans',sans-serif;}
 .snav-item:hover{color:#4A2C10;}
@@ -238,17 +245,114 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .upi-cancel:hover{background:#F7F0E2;}
 
 .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:14px;}
-.gallery-item{aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:#F7F0E2;}
+.gallery-item{aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:#F7F0E2;border:0;padding:0;cursor:pointer;}
 .gallery-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s;}
 .gallery-item:hover img{transform:scale(1.05);}
 
-@media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;}.hero-body{padding-left:20px;padding-right:20px;}}
-@media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}}
+.lightbox{position:fixed;inset:0;background:rgba(10,5,0,.88);z-index:300;display:flex;align-items:center;justify-content:center;padding:22px;animation:fadeIn .18s ease;}
+.lightbox-stage{position:relative;width:min(1080px,100%);height:min(760px,calc(100vh - 44px));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+.lightbox-img-wrap{position:relative;flex:1;width:100%;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:14px;background:rgba(255,255,255,.05);}
+.lightbox-img{max-width:100%;max-height:100%;object-fit:contain;display:block;}
+.lightbox-close{position:absolute;top:0;right:0;width:40px;height:40px;border-radius:999px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff;font-size:24px;line-height:1;cursor:pointer;z-index:2;}
+.lightbox-arrow{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:54px;border-radius:999px;border:1px solid rgba(255,255,255,.26);background:rgba(0,0,0,.35);color:#fff;font-size:30px;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;}
+.lightbox-arrow.left{left:12px;}
+.lightbox-arrow.right{right:12px;}
+.lightbox-caption{color:rgba(255,255,255,.82);font-size:13px;text-align:center;}
+.lightbox-strip{width:100%;display:flex;gap:9px;overflow-x:auto;padding:2px 4px 6px;scrollbar-width:thin;}
+.lightbox-thumb{width:66px;height:50px;border-radius:8px;border:2px solid rgba(255,255,255,.22);padding:0;overflow:hidden;background:rgba(255,255,255,.08);cursor:pointer;flex:0 0 auto;opacity:.7;}
+.lightbox-thumb.on{border-color:#FFD580;opacity:1;}
+.lightbox-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+
+@media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;justify-content:flex-start;}.hero-body{padding-left:20px;padding-right:20px;}}
+@media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}.lightbox{padding:12px;}.lightbox-stage{height:calc(100vh - 24px);}.lightbox-arrow{width:38px;height:48px;font-size:26px;}.lightbox-arrow.left{left:6px;}.lightbox-arrow.right{right:6px;}.lightbox-close{top:4px;right:4px;}}
 `;
 
 function HeroImage({ src, alt }) {
   if (!src) return null;
   return <img src={src} alt={alt} className="hero-img" onError={e => e.currentTarget.style.display='none'} />;
+}
+
+function HeroCarousel({ images, activeIndex, onSelect, alt }) {
+  if (!images.length) return <div className="hero-diya">🪔</div>;
+  return (
+    <>
+      {images.map((img, index) => (
+        <img
+          key={img.id || img.file_url || index}
+          src={img.file_url}
+          alt={img.caption || alt}
+          className={`hero-img hero-slide${index === activeIndex ? ' on' : ''}`}
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
+      ))}
+      {images.length > 1 && (
+        <div className="hero-gallery-nav" aria-label="Temple hero photos">
+          {images.map((img, index) => (
+            <button
+              key={img.id || img.file_url || index}
+              type="button"
+              className={`hero-dot${index === activeIndex ? ' on' : ''}`}
+              onClick={() => onSelect(index)}
+              aria-label={`Show temple photo ${index + 1}`}
+            >
+              <img src={img.file_url} alt="" />
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function GalleryLightbox({ images, activeIndex, onSelect, onClose, title }) {
+  const safeIndex = images.length ? Math.min(activeIndex, images.length - 1) : 0;
+  const active = images[safeIndex];
+  const prev = () => onSelect((safeIndex - 1 + images.length) % images.length);
+  const next = () => onSelect((safeIndex + 1) % images.length);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') prev();
+      if (e.key === 'ArrowRight') next();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  if (!active) return null;
+  return (
+    <div className="lightbox" onClick={onClose}>
+      <div className="lightbox-stage" onClick={e => e.stopPropagation()}>
+        <button type="button" className="lightbox-close" onClick={onClose} aria-label="Close gallery">×</button>
+        {images.length > 1 && (
+          <button type="button" className="lightbox-arrow left" onClick={prev} aria-label="Previous photo">‹</button>
+        )}
+        <div className="lightbox-img-wrap">
+          <img className="lightbox-img" src={active.file_url} alt={active.caption || title} />
+        </div>
+        {images.length > 1 && (
+          <button type="button" className="lightbox-arrow right" onClick={next} aria-label="Next photo">›</button>
+        )}
+        <div className="lightbox-caption">{safeIndex + 1} / {images.length}</div>
+        {images.length > 1 && (
+          <div className="lightbox-strip">
+            {images.map((img, index) => (
+              <button
+                key={img.id || img.file_url || index}
+                type="button"
+                className={`lightbox-thumb${index === safeIndex ? ' on' : ''}`}
+                onClick={() => onSelect(index)}
+                aria-label={`Open photo ${index + 1}`}
+              >
+                <img src={img.file_url} alt="" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function II({ label, value, full, icon }) {
@@ -363,9 +467,11 @@ export default function TempleDetailPage() {
   const [error,        setError]        = useState(null);
   const [activeNav,    setActiveNav]    = useState('overview');
   const [showUpiModal, setShowUpiModal] = useState(false);
+  const [lightboxIndex,setLightboxIndex]= useState(null);
 
   const { translated: T } = useTranslatedTemple(temple);
   const { t } = useTranslation();
+  const gallery = buildGallery(T);
 
   useEffect(() => {
     if (!slug || slug === 'undefined') { navigate('/'); return; }
@@ -399,8 +505,7 @@ export default function TempleDetailPage() {
   if (error)   return (<><style>{CSS}</style><Navbar/><div className="err"><div style={{fontSize:60}}>🛕</div><h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28}}>{t('detail.temple_not_found')}</h2><p style={{color:'#A07050'}}>{error}</p><button style={{marginTop:16,padding:'10px 22px',background:'#C8520A',color:'#fff',border:'none',borderRadius:9,cursor:'pointer',fontSize:14}} onClick={()=>navigate('/')}>{t('detail.back_home')}</button></div></>);
   if (!T) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/></div></>);
 
-  const heroImg   = proxyImageUrl(T.hero_image_url);
-  const gallery   = buildGallery(T);
+  const heroImg = proxyImageUrl(T.hero_image_url);
   const openTime  = formatTime(T.opening_time);
   const closeTime = formatTime(T.closing_time);
   const acStart   = formatTime(T.afternoon_closure_start);
@@ -487,6 +592,16 @@ export default function TempleDetailPage() {
           payeeName={T.name}
           onClose={() => setShowUpiModal(false)}
           tFn={t}
+        />
+      )}
+
+      {lightboxIndex !== null && (
+        <GalleryLightbox
+          images={gallery}
+          activeIndex={lightboxIndex}
+          onSelect={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          title={T.name}
         />
       )}
 
@@ -607,15 +722,21 @@ export default function TempleDetailPage() {
           <div className="sec" id="gallery">
             <div className="sec-h"><div className="sec-icon">📷</div>{t('detail.gallery_title', { defaultValue: 'Photo Gallery' })}</div>
             <div className="gallery-grid">
-              {gallery.map(img => (
-                <div key={img.id} className="gallery-item">
+              {gallery.map((img, index) => (
+                <button
+                  key={img.id}
+                  type="button"
+                  className="gallery-item"
+                  onClick={() => setLightboxIndex(index)}
+                  aria-label={`Open ${img.caption || T.name} photo ${index + 1}`}
+                >
                   <img
                     src={img.file_url}
                     alt={img.caption || T.name}
                     loading="lazy"
-                    onError={e => { e.currentTarget.parentElement.style.display = 'none'; }}
+                    onError={e => { e.currentTarget.closest('.gallery-item').style.display = 'none'; }}
                   />
-                </div>
+                </button>
               ))}
             </div>
           </div>

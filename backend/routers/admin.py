@@ -91,6 +91,11 @@ def ensure_media_table():
     with get_db_cursor() as cur:
         cur.execute("ALTER TABLE temples ADD COLUMN IF NOT EXISTS hero_image_public_id TEXT;")
         cur.execute("""
+            ALTER TABLE temples
+              ALTER COLUMN latitude TYPE NUMERIC(11,8) USING latitude::numeric(11,8),
+              ALTER COLUMN longitude TYPE NUMERIC(11,8) USING longitude::numeric(11,8);
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS temple_media (
                 id                    SERIAL PRIMARY KEY,
                 temple_id             INTEGER NOT NULL REFERENCES temples(id) ON DELETE CASCADE,
@@ -133,6 +138,13 @@ async def upload_admin_file(file: UploadFile, prefix: str, resource_type: str = 
         return save_upload(data, file.filename, prefix=prefix, resource_type=resource_type)
     except RuntimeError as exc:
         raise HTTPException(500, str(exc))
+
+
+def validate_coordinates(latitude: Optional[float], longitude: Optional[float]) -> None:
+    if latitude is not None and not (-90 <= latitude <= 90):
+        raise HTTPException(422, "latitude must be between -90 and 90")
+    if longitude is not None and not (-180 <= longitude <= 180):
+        raise HTTPException(422, "longitude must be between -180 and 180")
 
 
 # ─────────────────────────────────────────────
@@ -347,6 +359,7 @@ async def create_temple(
     custom_facility:       Optional[str]  = Form(None),   # ← NEW
 ):
     ensure_media_table()
+    validate_coordinates(latitude, longitude)
 
     base_slug = slugify(name, city)
     state_code = state.strip()[:2].upper()
