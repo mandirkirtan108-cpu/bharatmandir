@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import json
+import os
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -19,6 +21,8 @@ from services.divineapi_client import (
 
 
 router = APIRouter(prefix="/api/panchang", tags=["Panchang"])
+
+CLAUDE_MODEL = os.getenv("MUHURAT_CLAUDE_MODEL", "claude-haiku-4-5")
 
 
 CITY_COORDINATES = {
@@ -497,6 +501,122 @@ def call_divineapi(fn):
         raise HTTPException(status_code=status_code, detail={"message": str(exc), "upstream": exc.payload}) from exc
 
 
+def first_text(*values) -> str:
+    for value in values:
+        if value in (None, "", []):
+            continue
+        if isinstance(value, dict):
+            nested = first_text(*value.values())
+            if nested:
+                return nested
+        elif isinstance(value, list):
+            nested = first_text(*value)
+            if nested:
+                return nested
+        else:
+            return str(value).strip()
+    return ""
+
+
+def raw_panchang(day: dict) -> dict:
+    raw = day.get("raw", {}).get("panchang", {})
+    return raw if isinstance(raw, dict) else {}
+
+
+def raw_nakshatra(day: dict) -> dict:
+    raw = raw_panchang(day).get("nakshatras", {})
+    if isinstance(raw, dict):
+        for key in ("nakshatra_pada", "nakshatra_list"):
+            values = raw.get(key)
+            if isinstance(values, list) and values:
+                return values[0] if isinstance(values[0], dict) else {}
+    return {}
+
+
+def format_optional_time(value: str) -> str:
+    return format_time(value) if value else "Not available"
+
+
+def display_period(period: dict) -> str:
+    text = format_period(period)
+    return text if text else "Not available"
+
+
+def parse_clock_minutes(value: str) -> Optional[int]:
+    if not value:
+        return None
+    raw = str(value).split(" to ", 1)[0].strip()
+    raw = raw.split(" Jul ", 1)[0].strip()
+    for fmt in ("%I:%M %p", "%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            parsed = datetime.strptime(raw, fmt)
+            return parsed.hour * 60 + parsed.minute
+        except ValueError:
+            continue
+    try:
+        parsed = datetime.fromisoformat(raw)
+        return parsed.hour * 60 + parsed.minute
+    except Exception:
+        return None
+
+
+def current_next_choghadiya(choghadiya: list[dict]) -> tuple[dict | None, dict | None]:
+    if not choghadiya:
+        return None, None
+    now = datetime.now().hour * 60 + datetime.now().minute
+    parsed = []
+    for item in choghadiya:
+        start = parse_clock_minutes(item.get("start") or item.get("time"))
+        end = parse_clock_minutes(item.get("end") or (str(item.get("time", "")).split(" to ", 1)[1] if " to " in str(item.get("time", "")) else ""))
+        if start is None or end is None:
+            continue
+        if end <= start:
+            end += 1440
+        adjusted_now = now + 1440 if now < start and end > 1440 else now
+        parsed.append((item, start, end, adjusted_now))
+        if start <= adjusted_now < end:
+            return item, next((n[0] for n in parsed if n[1] > adjusted_now), None)
+    future = [(item, start) for item, start, _end, _now in parsed if start > now]
+    return None, min(future, key=lambda row: row[1])[0] if future else (choghadiya[0] if choghadiya else None)
+
+
+def safe_reasons(values: list[str], fallback: str) -> list[str]:
+    cleaned = [str(v).strip() for v in values if str(v or "").strip()]
+    return cleaned or [fallback]
+
+
+def call_claude_muhurat(evidence: dict) -> dict | None:
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+    try:
+        from anthropic import Anthropic
+
+        client = Anthropic(api_key=api_key)
+        prompt = (
+            "You are assisting a Hindu muhurat finder. Use ONLY the provided DivineAPI evidence and deterministic scores. "
+            "Do not invent dates, times, tithis, nakshatras, or doshas. Rank the given candidate dates for the requested occasion. "
+            "Return strict JSON only with this shape: "
+            '{"recommended_dates":[{"date":"YYYY-MM-DD","verdict":"excellent|good|fair|avoid","ai_summary":"short reason","reasons":["reason"],"best_timing_notes":["note"]}],"overall_note":"short note"}.\n\n'
+            f"EVIDENCE:\n{json.dumps(evidence, ensure_ascii=False, default=str)[:90000]}"
+        )
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1800,
+            temperature=0.2,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text").strip()
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1:
+            return None
+        parsed = json.loads(text[start : end + 1])
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        return None
+
+
 @router.get("/day")
 def get_panchang_day(
     date: str = Query(..., description="YYYY-MM-DD"),
@@ -790,16 +910,18 @@ def find_best_muhurat_dates(req: BestDatesRequest):
         })
 
     candidates.sort(key=lambda c: c["score"], reverse=True)
-    top = [c for c in candidates if c["verdict"] != "avoid"][:5]
-    if not top:
-        top = candidates[:3]  # nothing great found — still show the least-bad options
+    evidence_pool = [c for c in candidates if c["verdict"] != "avoid"][:12]
+    if not evidence_pool:
+        evidence_pool = candidates[:8]
 
     # Fetch the actual auspicious time windows only for the shortlisted dates
     # (full get_day() is 4x the cost of get_panchang_basic, so we don't run it
     # for every scanned date).
     recommended_dates = []
-    for c in top:
+    claude_candidates = []
+    for c in evidence_pool:
         query = query_for(c["date"], event_coordinates, req.language or DEFAULT_LANGUAGE, req.calendar or DEFAULT_CALENDAR, event_place)
+        day = None
         try:
             day = call_divineapi(lambda api, q=query: api.get_day(q, force_refresh=False, cache_only=False))
             timings = []
@@ -812,16 +934,76 @@ def find_best_muhurat_dates(req: BestDatesRequest):
         except HTTPException:
             timings = []
 
-        recommended_dates.append({
+        timings_to_avoid = []
+        if day:
+            for item in day.get("inauspicious_period", []):
+                info = describe_muhurat(item.get("slug", ""), item.get("name", ""))
+                for period in item.get("period", []):
+                    time_str = format_period(period)
+                    if time_str:
+                        timings_to_avoid.append({"time": time_str, "name": info["label"], "reason": info["reason"]})
+
+        full_candidate = {
             "date": c["date"],
             "weekday": c["weekday"],
-            "tithi": c["tithi"],
-            "nakshatra": c["nakshatra"],
+            "tithi": first_text(c["tithi"], (day or {}).get("tithi", {}).get("name")),
+            "nakshatra": first_text(c["nakshatra"], (day or {}).get("nakshatra", {}).get("name")),
+            "yoga": (day or {}).get("yoga", {}).get("name", ""),
+            "karana": (day or {}).get("karana", {}).get("name", ""),
             "score": c["score"],
             "verdict": c["verdict"],
-            "reasons": c["reasons"],
+            "reasons": safe_reasons(c["reasons"], "Shortlisted after Panchang, Tara Bala and Chandra Bala checks."),
             "best_timings": timings,
+            "timings_to_avoid": timings_to_avoid,
+            "festivals": [f.get("name", "") for f in (day or {}).get("festivals", []) if f.get("name")],
+        }
+        recommended_dates.append(full_candidate)
+        claude_candidates.append({
+            **full_candidate,
+            "divineapi_day": {
+                "hindu_calendar": (day or {}).get("hindu_calendar", {}),
+                "sunrise": (day or {}).get("sunrise", ""),
+                "sunset": (day or {}).get("sunset", ""),
+                "auspicious_period": (day or {}).get("auspicious_period", []),
+                "inauspicious_period": (day or {}).get("inauspicious_period", []),
+                "choghadiya": (day or {}).get("choghadiya", []),
+                "festivals": (day or {}).get("festivals", []),
+            },
         })
+
+    claude_result = call_claude_muhurat({
+        "occasion": {"type": req.muhurat_type, "label": req.muhurat_label, "hindi": req.muhurat_hindi},
+        "location": {"city": req.city, "coordinates": event_coordinates, "place": event_place},
+        "search_range": {"from": start_dt.isoformat(), "to": (start_dt + timedelta(days=range_days - 1)).isoformat()},
+        "persons": person_signatures,
+        "ashtakoot_milan": ashtakoot_milan,
+        "candidate_dates": claude_candidates,
+    })
+
+    if claude_result and isinstance(claude_result.get("recommended_dates"), list):
+        by_date = {item["date"]: item for item in recommended_dates}
+        ordered = []
+        seen = set()
+        for ai_item in claude_result["recommended_dates"]:
+            date_key = ai_item.get("date")
+            if date_key not in by_date or date_key in seen:
+                continue
+            merged = {**by_date[date_key]}
+            if ai_item.get("verdict") in {"excellent", "good", "fair", "avoid"}:
+                merged["verdict"] = ai_item["verdict"]
+            merged["ai_summary"] = ai_item.get("ai_summary") or ""
+            merged["ai_timing_notes"] = ai_item.get("best_timing_notes") or []
+            merged["reasons"] = safe_reasons(ai_item.get("reasons") or merged["reasons"], "Recommended after checking Panchang and Muhurat factors.")
+            ordered.append(merged)
+            seen.add(date_key)
+        ordered.extend(item for item in recommended_dates if item["date"] not in seen)
+        recommended_dates = ordered[:5]
+        calculation_source = "divineapi+claude"
+        overall_note = claude_result.get("overall_note", "")
+    else:
+        recommended_dates = recommended_dates[:5]
+        calculation_source = "divineapi+rules"
+        overall_note = "Claude is not configured or did not return valid JSON, so deterministic Panchang scoring was used."
 
     return {
         "muhurat_type": req.muhurat_type,
@@ -833,48 +1015,94 @@ def find_best_muhurat_dates(req: BestDatesRequest):
         ],
         "ashtakoot_milan": ashtakoot_milan,
         "recommended_dates": recommended_dates,
+        "calculation_source": calculation_source,
+        "overall_note": overall_note,
         "source": "divineapi",
     }
 
 
 def legacy_daily_response(day: dict) -> dict:
     tithi, nakshatra, yoga, karana = day.get("tithi", {}), day.get("nakshatra", {}), day.get("yoga", {}), day.get("karana", {})
+    raw = raw_panchang(day)
+    raw_nak = raw_nakshatra(day)
+    date_value = day.get("date", "")
+    vaara = first_text(day.get("vaara"), datetime.strptime(date_value, "%Y-%m-%d").strftime("%A") if date_value else "")
+    choghadiya = [
+        {
+            "time": display_period(item),
+            "start_time": first_text(item.get("start")),
+            "end_time": first_text(item.get("end")),
+            "name": first_text(item.get("name"), "Choghadiya"),
+            "nature": first_text(item.get("type"), "Good"),
+            "good_for": "Use for routine auspicious work" if item.get("type") != "Inauspicious" else "Avoid new beginnings",
+            "is_day": item.get("is_day"),
+        }
+        for item in day.get("choghadiya", [])
+    ]
+    current_chog, next_chog = current_next_choghadiya(choghadiya)
+    festivals = [
+        {
+            "name": first_text(f.get("name"), f.get("slug"), "Festival"),
+            "date": first_text(f.get("date"), f.get("start_date"), date_value),
+            "image": f.get("image") or "",
+            "slug": f.get("slug") or "",
+        }
+        for f in day.get("festivals", [])
+    ]
+    tithi_name = first_text(tithi.get("name"), raw.get("tithi", {}).get("name"), "Tithi data not available")
+    nak_name = first_text(nakshatra.get("name"), raw_nak.get("nak_name"), raw_nak.get("name"), "Nakshatra data not available")
+    yoga_name = first_text(yoga.get("name"), "Yoga data not available")
+    karana_name = first_text(karana.get("name"), "Karana data not available")
     return {
         "source": "divineapi",
-        "date": day.get("date"),
-        "hindu_calendar": day.get("hindu_calendar", {}),
+        "date": date_value,
+        "hindu_calendar": {
+            **(day.get("hindu_calendar", {}) or {}),
+            "name": first_text((day.get("hindu_calendar", {}) or {}).get("name"), "Amanta"),
+            "month_name": first_text((day.get("hindu_calendar", {}) or {}).get("month_name"), raw.get("chandramasa"), "Hindu month not available"),
+            "day": first_text((day.get("hindu_calendar", {}) or {}).get("day"), tithi.get("id"), ""),
+            "year": first_text((day.get("hindu_calendar", {}) or {}).get("year"), raw.get("samvat"), ""),
+        },
+        "today_at_glance": (
+            f"{vaara}: {tithi_name}, {nak_name}. "
+            f"Sunrise {format_optional_time(day.get('sunrise', ''))}, sunset {format_optional_time(day.get('sunset', ''))}. "
+            f"{'Festival: ' + festivals[0]['name'] + '.' if festivals else 'No major festival returned for this date.'}"
+        ),
         "tithi": {
-            "name": tithi.get("name", ""),
-            "number": tithi.get("id", ""),
+            "name": tithi_name,
+            "number": first_text(tithi.get("id"), ""),
             "deity": "",
-            "nature": tithi.get("paksha", ""),
-            "paksha": tithi.get("paksha", ""),
-            "end_time": format_time(tithi.get("end", "")) if tithi.get("end") else "",
+            "nature": first_text(tithi.get("paksha"), "Paksha not available"),
+            "paksha": first_text(tithi.get("paksha"), ""),
+            "end_time": format_optional_time(tithi.get("end", "")),
         },
         "nakshatra": {
-            "name": nakshatra.get("name", ""),
-            "hindi": nakshatra.get("name", ""),
-            "lord": (nakshatra.get("lord") or {}).get("name", ""),
-            "quality": "",
-            "end_time": format_time(nakshatra.get("end", "")) if nakshatra.get("end") else "",
+            "name": nak_name,
+            "hindi": nak_name,
+            "lord": first_text((nakshatra.get("lord") or {}).get("name"), raw_nak.get("lord"), "Lord not available"),
+            "quality": first_text(raw_nak.get("gana"), raw_nak.get("guna"), "Quality not available"),
+            "end_time": format_optional_time(first_text(nakshatra.get("end"), raw_nak.get("end_time"))),
         },
         "yoga": {
-            "name": yoga.get("name", ""), "nature": "", "meaning": "",
-            "end_time": format_time(yoga.get("end", "")) if yoga.get("end") else "",
+            "name": yoga_name, "nature": "Yoga", "meaning": "Daily Panchang yoga",
+            "end_time": format_optional_time(yoga.get("end", "")),
         },
         "karana": {
-            "name": karana.get("name", ""), "nature": "",
-            "end_time": format_time(karana.get("end", "")) if karana.get("end") else "",
+            "name": karana_name, "nature": first_text(karana.get("paksha"), "Karana"),
+            "end_time": format_optional_time(karana.get("end", "")),
         },
-        "var": {"day": day.get("vaara", ""), "lord": day.get("vaara_lord", ""), "color": "", "good_for": ""},
-        "rahu_kaal": {"time": find_period(day.get("inauspicious_period", []), "rahu_kalam", "rahu_kaal")},
-        "brahma_muhurat": {"time": find_period(day.get("auspicious_period", []), "brahma_muhurta"), "benefit": "Spiritual practice"},
-        "abhijit_muhurat": {"time": find_period(day.get("auspicious_period", []), "abhijit_muhurta"), "benefit": "Auspicious work"},
-        "choghadiya": [
-            {"time": format_period(item), "name": item.get("name", ""), "nature": item.get("type", ""), "good_for": ""}
-            for item in day.get("choghadiya", [])
-        ],
-        "festivals": day.get("festivals", []),
+        "var": {"day": vaara, "lord": first_text(day.get("vaara_lord"), WEEKDAY_LORDS.get(vaara), "Lord not available"), "color": "", "good_for": "Daily worship and routine planning"},
+        "sunrise": day.get("sunrise", ""),
+        "sunset": day.get("sunset", ""),
+        "moonrise": day.get("moonrise", ""),
+        "moonset": day.get("moonset", ""),
+        "rahu_kaal": {"time": first_text(find_period(day.get("inauspicious_period", []), "rahu_kalam", "rahu_kaal"), "Not available")},
+        "brahma_muhurat": {"time": first_text(find_period(day.get("auspicious_period", []), "brahma_muhurta"), "Not available"), "benefit": "Spiritual practice"},
+        "abhijit_muhurat": {"time": first_text(find_period(day.get("auspicious_period", []), "abhijit_muhurta"), "Not available"), "benefit": "Auspicious work"},
+        "choghadiya": choghadiya,
+        "current_choghadiya": current_chog,
+        "next_choghadiya": next_chog,
+        "festivals": festivals,
         "overall_day": "good",
         "pandit_blessings": "May your day begin with clarity, devotion and auspicious intention.",
         "do_today": ["Use the listed shubh periods", "Check tithi and nakshatra before major rituals"],

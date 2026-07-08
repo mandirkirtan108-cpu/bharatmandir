@@ -797,12 +797,12 @@ def _current_or_first(items: Any) -> dict[str, Any]:
 
 
 def _hindu_calendar(query: PanchangQuery, panchang: dict[str, Any], tithi: dict[str, Any]) -> dict[str, Any]:
-    chandramasa = _first_value(panchang, "chandramasa", "lunar_month", "hindu_month")
-    samvat = _first_value(panchang, "samvat", "vikram_samvat", "shaka_samvat")
+    chandramasa = _first_value(panchang, "chandramasa", "lunar_month", "hindu_month", "masa", "maas")
+    samvat = _first_value(panchang, "samvat", "vikram_samvat", "shaka_samvat", "vikram_samvat_year")
     day_value = _first_value(tithi, "number", "tithi_number", "day")
     return {
         "name": query.calendar.title(),
-        "month_name": chandramasa,
+        "month_name": chandramasa or "",
         "day": day_value,
         "year": samvat,
         "year_name": "",
@@ -815,8 +815,10 @@ def _normalize_anga(item: dict[str, Any] | str, prefix: str) -> dict[str, Any]:
     if not isinstance(item, dict):
         item = {}
     lord = _first_value(item, "lord", "nak_lord", "ruling_planet")
+    if isinstance(lord, dict):
+        lord = _first_value(lord, "name", "lord", "planet")
     return {
-        "id": _first_value(item, "id", "number", f"{prefix}_number"),
+        "id": _first_value(item, "id", "number", f"{prefix}_number", "nak_number"),
         "name": _first_value(item, "name", f"{prefix}", f"{prefix}_name", "nak_name", "karana_name", "yoga_name"),
         "paksha": _first_value(item, "paksha"),
         "start": _first_value(item, "start", "start_time"),
@@ -878,6 +880,22 @@ def _normalize_choghadiya(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _normalize_festivals(data: dict[str, Any]) -> list[dict[str, Any]]:
     festivals = []
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            name = _first_value(item, "name", "festival_name", "title", "slug")
+            festivals.append(
+                {
+                    "name": name or "Festival",
+                    "slug": _first_value(item, "slug", "key") or str(name).lower().replace(" ", "_"),
+                    "date": item.get("date"),
+                    "start_date": item.get("start_date"),
+                    "end_date": item.get("end_date"),
+                    "image": item.get("image") or item.get("start_image") or item.get("end_image"),
+                }
+            )
+        return festivals
     for key, value in data.items():
         if not isinstance(value, dict):
             continue

@@ -64,8 +64,19 @@ function sanitizeApiText(text) {
     .trim();
 }
 
+function show(value, fallback = 'Not available') {
+  const text = String(value ?? '').trim();
+  return text && text !== '—' ? text : fallback;
+}
+
+function joinParts(parts, fallback = 'Not available') {
+  const clean = parts.map(p => String(p ?? '').trim()).filter(Boolean);
+  return clean.length ? clean.join(' · ') : fallback;
+}
+
 function to12h(timeStr) {
   if (!timeStr) return timeStr;
+  if (timeStr === 'Not available') return timeStr;
   if (/am|pm/i.test(timeStr)) return timeStr;
   return timeStr.replace(/(\d{1,2}):(\d{2})/g, (_, h, m) => {
     const hour = parseInt(h, 10);
