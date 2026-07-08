@@ -48,6 +48,27 @@ FESTIVALS_URL = os.getenv(
     "DIVINE_FESTIVALS_URL",
     "https://astroapi-3.divineapi.com/indian-api/v1/date-specific-festivals",
 )
+# Real Chandrabalam/Tarabalam favourability lists for a date — replaces the
+# manual nakshatra-count approximation previously used for compatibility.
+CHANDRABALAM_TARABALAM_URL = os.getenv(
+    "DIVINE_CHANDRABALAM_TARABALAM_URL",
+    "https://astroapi-2.divineapi.com/indian-api/v2/find-chandrabalam-and-tarabalam",
+)
+# Panchak-free windows for a date (relevant for Griha Pravesh / Vastu).
+PANCHAK_RAHITA_URL = os.getenv(
+    "DIVINE_PANCHAK_RAHITA_URL",
+    "https://astroapi-3.divineapi.com/indian-api/v1/panchak-rahita",
+)
+# Kundali API — exact birth Moonsign (Janma Rashi) + Nakshatra for a person.
+BASIC_ASTRO_DETAILS_URL = os.getenv(
+    "DIVINE_BASIC_ASTRO_DETAILS_URL",
+    "https://astroapi-3.divineapi.com/indian-api/v3/basic-astro-details",
+)
+# Kundali Matching API — classical 36-point guna milan for Vivah.
+ASHTAKOOT_MILAN_URL = os.getenv(
+    "DIVINE_ASHTAKOOT_MILAN_URL",
+    "https://astroapi-3.divineapi.com/indian-api/v2/ashtakoot-milan",
+)
 
 CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "divineapi_cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -283,6 +304,33 @@ class DivineApiClient:
             "months": [self.get_month(year, month, coordinates, language, calendar, cache_only) for month in range(1, 13)],
         }
 
+    def get_panchang_basic(self, date_value: str, coordinates: str, place: str) -> dict[str, Any]:
+        """Cheap Vaar/Tithi/Nakshatra-only lookup for a single date, used when
+        scanning a date range to shortlist Muhurat candidates (see
+        routers/panchang.py find_best_dates). Reuses the full-day cache when
+        already available so scanning a date already cached costs nothing;
+        otherwise makes ONE lightweight call (not the 4 calls get_day makes)
+        and does not touch the main daily cache."""
+        query = PanchangQuery(date=date_value, coordinates=coordinates or DEFAULT_COORDINATES, place=place or DEFAULT_PLACE)
+        cache_file = CACHE_DIR / query.cache_key
+        cached = self._get_cached_day(query, cache_file)
+        if cached:
+            return {
+                "vaara": cached.get("vaara", ""),
+                "tithi": cached.get("tithi", {}),
+                "nakshatra": cached.get("nakshatra", {}),
+            }
+
+        panchang = self._post("panchang", FIND_PANCHANG_URL, query, include_sign_language=True)
+        data = _data(panchang)
+        tithi = _current_or_first(data.get("tithis") or data.get("tithi"))
+        nakshatra = _current_or_first(data.get("nakshatras") or data.get("nakshatra"))
+        return {
+            "vaara": _first_value(data, "vaar", "vaara", "weekday", "day"),
+            "tithi": _normalize_anga(tithi, "tithi"),
+            "nakshatra": _normalize_anga(nakshatra, "nakshatra"),
+        }
+
     def get_birth_moment(
         self,
         date_value: str,
@@ -331,6 +379,157 @@ class DivineApiClient:
         except Exception:
             pass
         return result
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.access_token}", "Accept": "application/json"}
+
+    def get_chandrabalam_tarabalam(self, date_value: str, coordinates: str, place: str) -> dict[str, Any]:
+        """Real Chandrabalam/Tarabalam favourability lists for one date
+        (Vedic Prakash plan). Returns which Rashis (Chandrabalam) and which
+        Nakshatras (Tarabalam) are currently favourable — this REPLACES the
+        manual nakshatra-count Tara Bala / Chandra Bala approximation: we
+        just check whether a person's birth Rashi/Nakshatra is in these lists.
+        One call covers every person being checked against this same date, so
+        it's cached per date+coordinates (not per person).
+        """
+        query = PanchangQuery(date=date_value, coordinates=coordinates or DEFAULT_COORDINATES, place=place or DEFAULT_PLACE)
+        cache_file = CACHE_DIR / ("bala_" + query.cache_key)
+        if cache_file.exists():
+            try:
+                return json.loads(cache_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        body = self._body(query, include_language=True)
+        response = requests.post(CHANDRABALAM_TARABALAM_URL, data=body, headers=self._headers(), timeout=30)
+        self._raise_for_response(response)
+        payload = response.json()
+        if payload.get("success") in (0, False):
+            raise DivineApiError(payload.get("message") or "Chandrabalam/Tarabalam request failed.", response.status_code, payload)
+
+        data = payload.get("data", {})
+        result = {
+            "chandrabalam_current": (data.get("chandrabalams") or {}).get("current", []),
+            "chandrabalam_upto": (data.get("chandrabalams") or {}).get("upto", ""),
+            "tarabalam_current": (data.get("tarabalams") or {}).get("current", []),
+            "tarabalam_upto": (data.get("tarabalams") or {}).get("upto", ""),
+        }
+        try:
+            cache_file.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+        return result
+
+    def get_panchaka_rahita(self, date_value: str, coordinates: str, place: str) -> dict[str, Any]:
+        """Panchak-free time windows for a date — relevant for Griha Pravesh
+        and Vastu muhurats, which classically avoid Panchak dosha periods."""
+        query = PanchangQuery(date=date_value, coordinates=coordinates or DEFAULT_COORDINATES, place=place or DEFAULT_PLACE)
+        lat, lon = query.lat_lon
+        day, month, year = query.date_parts
+        body = {
+            "api_key": self.api_key,
+            "day": f"{day:02d}",
+            "month": f"{month:02d}",
+            "year": str(year),
+            "Place": query.place,  # NOTE: this endpoint's docs use capital "Place"
+            "lat": lat,
+            "lon": lon,
+            "tzone": str(query.tzone),
+            "lan": DEFAULT_LANGUAGE,
+        }
+        response = requests.post(PANCHAK_RAHITA_URL, data=body, headers=self._headers(), timeout=30)
+        self._raise_for_response(response)
+        payload = response.json()
+        if payload.get("success") in (0, False):
+            raise DivineApiError(payload.get("message") or "Panchak Rahita request failed.", response.status_code, payload)
+        return payload.get("data", {})
+
+    def get_basic_astro_details(self, person: dict) -> dict[str, Any]:
+        """Kundali API — a person's exact birth Moonsign (Janma Rashi) and
+        Nakshatra. This REPLACES the get_birth_moment() reuse-of-Panchang
+        hack: this is the endpoint actually designed for birth-chart lookups.
+
+        `person` dict needs: name, gender, dob ('YYYY-MM-DD'), tob ('HH:MM' or
+        empty), coordinates ('lat,lon'), place, tzone (optional).
+        """
+        hour, minute = _parse_hour_minute(person.get("tob"))
+        year, month, day = (int(part) for part in person["dob"].split("-"))
+        lat, lon = [part.strip() for part in (person.get("coordinates") or DEFAULT_COORDINATES).split(",", 1)]
+        body = {
+            "api_key": self.api_key,
+            "full_name": person.get("name") or "Native",
+            "day": f"{day:02d}",
+            "month": f"{month:02d}",
+            "year": str(year),
+            "hour": str(hour),
+            "min": str(minute),
+            "sec": "0",
+            "gender": (person.get("gender") or "male").lower(),
+            "place": person.get("place") or DEFAULT_PLACE,
+            "lat": lat,
+            "lon": lon,
+            "tzone": str(person.get("tzone") or DEFAULT_TZONE),
+            "lan": DEFAULT_LANGUAGE,
+        }
+        response = requests.post(BASIC_ASTRO_DETAILS_URL, data=body, headers=self._headers(), timeout=30)
+        self._raise_for_response(response)
+        payload = response.json()
+        if payload.get("success") in (0, False):
+            raise DivineApiError(payload.get("message") or "Basic Astrological Details request failed.", response.status_code, payload)
+        data = payload.get("data", {})
+        return {
+            "moonsign": data.get("moonsign", ""),
+            "nakshatra": data.get("nakshatra", ""),
+            "sunsign": data.get("sunsign", ""),
+        }
+
+    def get_ashtakoot_milan(self, groom: dict, bride: dict) -> dict[str, Any]:
+        """Kundali Matching API — classical 36-point guna milan between two
+        birth charts. Used for Vivah instead of a manual compatibility
+        formula: this draws on each partner's complete kundali, the same way
+        a traditional Jyotishi's matching report would."""
+
+        def _person_fields(prefix: str, person: dict, default_gender: str) -> dict[str, str]:
+            hour, minute = _parse_hour_minute(person.get("tob"))
+            year, month, day = (int(part) for part in person["dob"].split("-"))
+            lat, lon = [part.strip() for part in (person.get("coordinates") or DEFAULT_COORDINATES).split(",", 1)]
+            return {
+                f"{prefix}_full_name": person.get("name") or prefix.upper(),
+                f"{prefix}_day": f"{day:02d}",
+                f"{prefix}_month": f"{month:02d}",
+                f"{prefix}_year": str(year),
+                f"{prefix}_hour": str(hour),
+                f"{prefix}_min": str(minute),
+                f"{prefix}_sec": "0",
+                f"{prefix}_gender": (person.get("gender") or default_gender).lower(),
+                f"{prefix}_place": person.get("place") or DEFAULT_PLACE,
+                f"{prefix}_lat": lat,
+                f"{prefix}_lon": lon,
+                f"{prefix}_tzone": str(person.get("tzone") or DEFAULT_TZONE),
+            }
+
+        body = {"api_key": self.api_key, "lan": DEFAULT_LANGUAGE}
+        body.update(_person_fields("p1", groom, "male"))
+        body.update(_person_fields("p2", bride, "female"))
+
+        response = requests.post(ASHTAKOOT_MILAN_URL, data=body, headers=self._headers(), timeout=30)
+        self._raise_for_response(response)
+        payload = response.json()
+        if payload.get("success") in (0, False):
+            raise DivineApiError(payload.get("message") or "Ashtakoot Milan request failed.", response.status_code, payload)
+
+        data = payload.get("data", {})
+        result = data.get("ashtakoot_milan_result", {})
+        return {
+            "points_obtained": result.get("points_obtained"),
+            "max_points": result.get("max_ponits") or result.get("max_points") or 36,
+            "is_compatible": str(result.get("is_compatible", "")).lower() == "true",
+            "summary": result.get("content", ""),
+            "manglik_dosha": data.get("manglik_dosha", {}),
+            "nadi_dosha": str(data.get("nadi_dosha", "")).lower() == "true",
+            "bhakoot_dosha": str(data.get("bhakoot_dosha", "")).lower() == "true",
+            "koota_breakdown": data.get("ashtakoot_milan", {}),
+        }
 
     def _get_cached_day(self, query: PanchangQuery, cache_file: Path) -> dict[str, Any] | None:
         if get_cached_panchang:

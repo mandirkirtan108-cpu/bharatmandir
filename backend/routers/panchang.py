@@ -577,20 +577,20 @@ def get_muhurat(req: MuhuratRequest):
             })
 
     # ── Per-person birth-based compatibility (Tara Bala / Chandra Bala) ──
-    # Each person's janma nakshatra is derived live from their birth
-    # date+time+place (can't be pre-cached like daily Panchang, since birth
-    # dates are arbitrary), then compared against the muhurat date's
-    # nakshatra to work out the two classical strength checks.
+    # Each person's real birth Rashi/Nakshatra is resolved live (Kundali API,
+    # falling back to the manual approximation if unavailable), then checked
+    # against this date's real Chandrabalam/Tarabalam favourable lists.
+    day_bala = None
+    try:
+        day_bala = call_divineapi(lambda api: api.get_chandrabalam_tarabalam(req.date, resolve_coordinates(req.city, req.coordinates), resolve_place(req.city)))
+    except HTTPException:
+        day_bala = None
+
     person_compatibility = []
     any_person_inauspicious = False
     for person in (req.persons or []):
-        birth_coords = resolve_coordinates(person.birth_place, person.birth_coordinates)
-        birth_place = resolve_place(person.birth_place)
-        try:
-            birth_moment = call_divineapi(
-                lambda api, p=person, c=birth_coords, pl=birth_place: api.get_birth_moment(p.dob, p.tob, c, pl)
-            )
-        except HTTPException as exc:
+        sig = resolve_person_signature(person)
+        if not sig.get("nakshatra") and not sig.get("moonsign"):
             person_compatibility.append({
                 "role": person.role,
                 "role_label": person.role_label or person.role.title(),
@@ -599,9 +599,12 @@ def get_muhurat(req: MuhuratRequest):
             })
             continue
 
-        birth_nakshatra_name = birth_moment.get("nakshatra", {}).get("name", "")
-        tara_bala = compute_tara_bala(birth_nakshatra_name, day_nakshatra_name)
-        chandra_bala = compute_chandra_bala(birth_nakshatra_name, day_nakshatra_name)
+        if day_bala is not None:
+            check = check_bala_favorability(sig, day_bala)
+            tara_bala, chandra_bala = check["tara_bala"], check["chandra_bala"]
+        else:
+            tara_bala = compute_tara_bala(sig["nakshatra"], day_nakshatra_name)
+            chandra_bala = compute_chandra_bala(sig["nakshatra"], day_nakshatra_name)
 
         is_favorable = True
         if tara_bala.get("available") and not tara_bala["is_auspicious"]:
@@ -615,7 +618,9 @@ def get_muhurat(req: MuhuratRequest):
             "role": person.role,
             "role_label": person.role_label or person.role.title(),
             "name": person.name or "",
-            "birth_nakshatra": birth_nakshatra_name,
+            "birth_nakshatra": sig["nakshatra"],
+            "birth_rashi": sig["moonsign"],
+            "data_source": sig["source"],
             "tara_bala": tara_bala,
             "chandra_bala": chandra_bala,
             "is_favorable": is_favorable,

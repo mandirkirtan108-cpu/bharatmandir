@@ -39,7 +39,7 @@ const EVENT_PERSON_ROLES = {
 };
 
 function emptyPerson() {
-  return { name: '', dob: '', tob: '', birthPlace: '' };
+  return { name: '', gender: 'male', dob: '', tob: '', birthPlace: '' };
 }
 
 const TODAY = new Date().toISOString().split('T')[0];
@@ -425,30 +425,6 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, p
     onFind();
   };
 
-  /* ── Compact compat icon (inline) ── */
-  function CompatBadge({ status }) {
-    if (status === false) return (
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fee2e2', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 1.5L7.5 7.5M7.5 1.5L1.5 7.5" stroke="#ef4444" strokeWidth="1.6" strokeLinecap="round"/></svg>
-      </span>
-    );
-    if (status === null) return (
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#f3f4f6', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#9ca3af', lineHeight: 1 }}>−</span>
-    );
-    return (
-      <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#dcfce7', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5L3.5 6.5L7.5 2" stroke="#16a34a" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      </span>
-    );
-  }
-
-  const compatItems = result ? [
-    { label: 'VAAR',         value: result.var_today || result.tithi_today?.vaar || new Date(date).toLocaleDateString('en-US', { weekday: 'long' }), status: result.var_auspicious ?? false },
-    { label: 'TITHI',        value: result.tithi_today?.name || '—',     status: result.tithi_today?.is_auspicious_for_this_muhurat ?? null },
-    { label: 'NAKSHATRA',    value: result.nakshatra_today?.name || '—', status: result.nakshatra_today?.is_auspicious_for_this_muhurat ?? true },
-    { label: 'YOGA',         value: result.yoga_today?.name || '—',      status: result.yoga_today?.is_auspicious ?? true },
-  ] : [];
-
   /*
    * Render a single auspicious timing card:
    *   [name / quality]    [time range]
@@ -522,11 +498,11 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, p
         })}
       </div>
 
-      {/* Date + City row */}
+      {/* Search-from date + City row */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 130 }}>
-          <label style={labelStyle}>EVENT DATE</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+          <label style={labelStyle}>SEARCH FROM</label>
+          <input type="date" value={date} min={TODAY} onChange={e => setDate(e.target.value)}
             style={{ ...inputStyle, width: 140 }} />
         </div>
         <div style={{ minWidth: 130 }}>
@@ -551,6 +527,10 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, p
         </div>
       </div>
 
+      <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', margin: '-12px 0 20px' }}>
+        We'll search the next 45 days from this date and recommend the best ones — not just check one day.
+      </p>
+
       {/* Birth details — which people are asked for depends on the occasion */}
       {selected && requiredPersons.length > 0 && (
         <div style={{ marginBottom: 22 }}>
@@ -568,11 +548,19 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, p
               return (
                 <div key={role} style={{ background: '#fdf9f4', border: '1px solid #e2d5c3', borderRadius: 8, padding: '14px 16px' }}>
                   <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#5a3e28', marginBottom: 10 }}>{label}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10, marginBottom: 10 }}>
                     <div>
                       <label style={labelStyle}>NAME</label>
                       <input type="text" value={p.name} onChange={e => updatePerson(role, 'name', e.target.value)}
                         placeholder="Optional" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>GENDER *</label>
+                      <select value={p.gender || 'male'} onChange={e => updatePerson(role, 'gender', e.target.value)}
+                        style={{ ...inputStyle, cursor: 'pointer', appearance: 'auto' }}>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
                     </div>
                     <div>
                       <label style={labelStyle}>DATE OF BIRTH *</label>
@@ -610,8 +598,8 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, p
           whiteSpace: 'nowrap', letterSpacing: '.01em', flexShrink: 0,
         }}>
           {loading
-            ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Finding…</>
-            : <><Sparkles size={15} /> Find auspicious muhurat</>}
+            ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Searching next 45 days…</>
+            : <><Sparkles size={15} /> Find best muhurat dates</>}
         </button>
       </div>
 
@@ -637,154 +625,107 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, p
       {result && !loading && (
         <div style={{ animation: 'fadeDown .4s ease both' }}>
 
-          {/* ── NOT RECOMMENDED banner ── */}
-          {result.verdict === 'avoid' && (
-            <div style={{ background: '#fff8f7', border: '1px solid #fecaca', borderRadius: 10, padding: '16px 18px', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-                  <path d="M10 3L18 17H2L10 3Z" stroke="#dc2626" strokeWidth="1.6" strokeLinejoin="round" fill="#fee2e2"/>
-                  <path d="M10 9V13" stroke="#dc2626" strokeWidth="1.6" strokeLinecap="round"/>
-                  <circle cx="10" cy="15.5" r="0.8" fill="#dc2626"/>
-                </svg>
-                <span style={{ background: '#dc2626', color: '#fff', fontFamily: UI_FONT, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', padding: '3px 10px', borderRadius: 4, flexShrink: 0 }}>NOT RECOMMENDED</span>
-                <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#7f1d1d' }}>
-                  {selectedType?.label} on {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' })} is generally avoided
+          {/* ── Search summary ── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+            <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#6b7280', margin: 0 }}>
+              Searched <strong>{result.search_range?.from}</strong> to <strong>{result.search_range?.to}</strong> for {selectedType?.label}
+              {result.persons?.length > 0 && (
+                <> · {result.persons.map(p => `${p.role_label}: ${p.birth_rashi || '—'} / ${p.birth_nakshatra || '—'}`).join(' · ')}</>
+              )}
+            </p>
+          </div>
+
+          {/* ── Ashtakoot Milan (Vivah only, when both charts matched) ── */}
+          {result.ashtakoot_milan && (
+            <div style={{
+              background: result.ashtakoot_milan.points_obtained >= 18 ? '#f0fdf4' : '#fff8f7',
+              border: `1px solid ${result.ashtakoot_milan.points_obtained >= 18 ? '#bbf7d0' : '#fecaca'}`,
+              borderRadius: 10, padding: '14px 18px', marginBottom: 18,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
+                  Ashtakoot Milan (Guna Matching)
+                </span>
+                <span style={{ fontFamily: UI_FONT, fontSize: 15, fontWeight: 800, color: result.ashtakoot_milan.points_obtained >= 18 ? '#16a34a' : '#dc2626' }}>
+                  {result.ashtakoot_milan.points_obtained}/{result.ashtakoot_milan.max_points || 36}
                 </span>
               </div>
-              {result.verdict_reason && (
-                <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#991b1b', lineHeight: 1.65, margin: '0 0 10px' }}>{sanitizeApiText(result.verdict_reason)}</p>
+              {result.ashtakoot_milan.summary && (
+                <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#4b5563', margin: '8px 0 0', lineHeight: 1.6 }}>
+                  {sanitizeApiText(result.ashtakoot_milan.summary)}
+                </p>
               )}
-              {result.next_favorable_date && (
-                <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#7f1d1d', margin: 0 }}>
-                  <strong>Next favorable date:</strong>{' '}{result.next_favorable_date.date} — {sanitizeApiText(result.next_favorable_date.reason)}{' '}
-                  <a href="#" onClick={e => e.preventDefault()} style={{ color: '#c9651a', textDecoration: 'none', fontWeight: 600 }}>Show details →</a>
+              {(result.ashtakoot_milan.nadi_dosha || result.ashtakoot_milan.bhakoot_dosha) && (
+                <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#b91c1c', margin: '6px 0 0', fontWeight: 600 }}>
+                  {result.ashtakoot_milan.nadi_dosha && 'Nadi Dosha present. '}
+                  {result.ashtakoot_milan.bhakoot_dosha && 'Bhakoot Dosha present.'}
                 </p>
               )}
             </div>
           )}
 
-          {/* ── Pandit message banner ── */}
-          {result.pandit_message && (
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>🌟</span>
-              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#92400e', lineHeight: 1.65, margin: 0 }}>{sanitizeApiText(result.pandit_message)}</p>
+          {result.recommended_dates?.length === 0 && (
+            <div style={{ background: '#fff8f7', border: '1px solid #fecaca', borderRadius: 10, padding: '16px 18px', marginBottom: 20 }}>
+              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#991b1b', margin: 0 }}>
+                Couldn't find data for any date in this range. Try a different city or search window.
+              </p>
             </div>
           )}
 
-          {/* ── Two-column layout ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 20, alignItems: 'start' }} className="muhurat-results-grid">
+          {result.recommended_dates?.every(d => d.verdict === 'fair' || d.verdict === 'avoid') && result.recommended_dates?.length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '12px 16px', marginBottom: 18 }}>
+              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#92400e', margin: 0 }}>
+                No excellent dates found in this window — showing the best available. Try widening the search or a later start date.
+              </p>
+            </div>
+          )}
 
-            {/* LEFT — Shubh windows */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ background: '#fff', border: '1px solid #e2d5c3', borderRadius: 10, padding: '18px 20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8L10.5 10"/></svg>
-                    <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Today's shubh windows</span>
+          {/* ── Ranked date cards ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {(result.recommended_dates || []).map((d, i) => {
+              const verdictStyle = {
+                excellent: { bg: '#f0fdf4', border: '#bbf7d0', badge: '#16a34a', badgeText: 'EXCELLENT' },
+                good:      { bg: '#f0fdf4', border: '#bbf7d0', badge: '#22c55e', badgeText: 'GOOD' },
+                fair:      { bg: '#fffdf5', border: '#fde68a', badge: '#d97706', badgeText: 'FAIR' },
+                avoid:     { bg: '#fff8f7', border: '#fecaca', badge: '#dc2626', badgeText: 'AVOID' },
+              }[d.verdict] || { bg: '#fafaf8', border: '#e2d5c3', badge: '#6b7280', badgeText: d.verdict?.toUpperCase() };
+
+              const dateObj = new Date(d.date + 'T12:00:00');
+              const dayLabel = dateObj.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+
+              return (
+                <div key={d.date} style={{ background: verdictStyle.bg, border: `1px solid ${verdictStyle.border}`, borderRadius: 10, padding: '16px 18px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {i === 0 && d.verdict !== 'avoid' && (
+                        <span style={{ fontSize: 16 }}>🏆</span>
+                      )}
+                      <div>
+                        <div style={{ fontFamily: UI_FONT, fontSize: 15, fontWeight: 800, color: '#1a1a1a' }}>{dayLabel}</div>
+                        <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#6b7280' }}>{d.weekday} · {d.tithi || '—'} · {d.nakshatra || '—'}</div>
+                      </div>
+                    </div>
+                    <span style={{ background: verdictStyle.badge, color: '#fff', fontFamily: UI_FONT, fontSize: 10, fontWeight: 800, letterSpacing: '.08em', padding: '4px 10px', borderRadius: 4, whiteSpace: 'nowrap' }}>
+                      {verdictStyle.badgeText}
+                    </span>
                   </div>
-                  {result.verdict === 'avoid' && (
-                    <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', fontStyle: 'italic' }}>(If proceeding anyway)</span>
+
+                  {d.reasons?.length > 0 && (
+                    <ul style={{ margin: '0 0 12px', paddingLeft: 18, fontFamily: UI_FONT, fontSize: 12.5, color: '#4b5563', lineHeight: 1.7 }}>
+                      {d.reasons.map((r, j) => <li key={j}>{r}</li>)}
+                    </ul>
+                  )}
+
+                  {d.best_timings?.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {d.best_timings.slice(0, 4).map((timing, j) => (
+                        <TimingCard key={j} timing={timing} index={j} />
+                      ))}
+                    </div>
                   )}
                 </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {(result.auspicious_timings || []).length > 0
-                    ? (result.auspicious_timings).map((timing, i) => (
-                        <TimingCard key={i} timing={timing} index={i} />
-                      ))
-                    : (
-                      <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#9A7150', textAlign: 'center', padding: '16px 0', margin: 0 }}>
-                        No auspicious windows found for this date
-                      </p>
-                    )
-                  }
-                </div>
-              </div>
-
-              {/* Pandit's note — free text from the backend, sanitized so it
-                  never surfaces the underlying data vendor's name */}
-              {result.special_notes?.length > 0 && (
-                <div style={{ background: '#fffdf5', border: '1px solid #fde68a', borderRadius: 10, padding: '16px 18px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#f59e0b" strokeWidth="1.4"/><path d="M8 4.5V9" stroke="#f59e0b" strokeWidth="1.6" strokeLinecap="round"/><circle cx="8" cy="11.5" r="0.8" fill="#f59e0b"/></svg>
-                    <span style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 700, color: '#92400e' }}>Pandit's note</span>
-                  </div>
-                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#78350f', lineHeight: 1.7, margin: 0 }}>
-                    {sanitizeApiText(result.special_notes.join(' '))}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* RIGHT — Day compatibility */}
-            <div style={{ background: '#fff', border: '1px solid #e2d5c3', borderRadius: 10, padding: '18px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1.5" y="3" width="13" height="12" rx="1.5"/><path d="M5 1.5V4.5 M11 1.5V4.5 M1.5 7H14.5"/></svg>
-                <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Day compatibility</span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                {compatItems.map((item, i) => {
-                  const isBad = item.status === false;
-                  return (
-                    <div key={i} style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '10px 12px',
-                      background: isBad ? '#fff5f5' : i % 2 === 0 ? '#fafaf8' : '#fff',
-                      borderBottom: !isBad && i < compatItems.length - 1 ? '1px solid #f0ebe3' : 'none',
-                      border: isBad ? '1px solid #fecaca' : undefined,
-                      marginBottom: isBad ? 4 : 0,
-                      borderRadius: isBad ? 6 : (i === 0 ? '6px 6px 0 0' : i === compatItems.length - 1 ? '0 0 6px 6px' : 0),
-                    }}>
-                      <div>
-                        <div style={{ fontFamily: UI_FONT, fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: '#9A7150', marginBottom: 2 }}>{item.label}</div>
-                        <div style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 600, color: isBad ? '#b91c1c' : '#1a1a1a' }}>{item.value}</div>
-                      </div>
-                      <CompatBadge status={item.status} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Birth-based Tara Bala / Chandra Bala per person */}
-            {result.person_compatibility?.length > 0 && (
-              <div style={{ background: '#fff', border: '1px solid #e2d5c3', borderRadius: 10, padding: '18px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8L10.5 10"/></svg>
-                  <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>Birth compatibility</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {result.person_compatibility.map((p, i) => (
-                    <div key={i} style={{
-                      padding: '10px 12px', borderRadius: 8,
-                      background: p.is_favorable === false ? '#fff5f5' : '#fafaf8',
-                      border: `1px solid ${p.is_favorable === false ? '#fecaca' : '#f0ebe3'}`,
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 700, color: '#1a1a1a' }}>
-                          {p.role_label}{p.name ? ` — ${p.name}` : ''}
-                        </span>
-                        {p.error ? null : <CompatBadge status={p.is_favorable} />}
-                      </div>
-                      {p.error ? (
-                        <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#b91c1c' }}>{p.error}</div>
-                      ) : (
-                        <div style={{ fontFamily: UI_FONT, fontSize: 11, color: '#9A7150', lineHeight: 1.6 }}>
-                          Janma Nakshatra: <strong style={{ color: '#5a3e28' }}>{p.birth_nakshatra || '—'}</strong>
-                          {p.tara_bala?.available && (
-                            <> · Tara Bala: <strong style={{ color: p.tara_bala.is_auspicious ? '#16a34a' : '#dc2626' }}>{p.tara_bala.label}</strong></>
-                          )}
-                          {p.chandra_bala?.available && (
-                            <> · Chandra Bala: <strong style={{ color: p.chandra_bala.is_auspicious ? '#16a34a' : '#dc2626' }}>House {p.chandra_bala.house}</strong></>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              );
+            })}
           </div>
         </div>
       )}
@@ -793,7 +734,7 @@ function MuhuratFinder({ result, loading, error, date, setDate, city, setCity, p
         <div style={{ textAlign: 'center', padding: '48px 20px', background: '#fdf9f4', borderRadius: 10, border: '1px dashed #e2d5c3' }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>🪔</div>
           <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#9A7150', lineHeight: 1.6, margin: 0 }}>
-            Select an occasion above and click <strong>Find auspicious muhurat</strong>
+            Select an occasion above and click <strong>Find best muhurat dates</strong>
           </p>
         </div>
       )}
@@ -870,24 +811,26 @@ export default function PanchangPage() {
           role,
           role_label: label,
           name: p.name || '',
+          gender: p.gender || 'male',
           dob: p.dob,
           tob: p.tob || '',
           birth_place: p.birthPlace,
         };
       });
 
-      const res = await fetch(`${API_BASE}/api/panchang/muhurat`, {
+      const res = await fetch(`${API_BASE}/api/panchang/muhurat/best-dates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           muhurat_type: selected,
           muhurat_label: selectedType?.label || selected,
           muhurat_hindi: selectedType?.hindi || '',
-          date,
           city: trimmedCity,
           coordinates: null,
           calendar: 'amanta',
           language: 'en',
+          start_date: date || null,
+          range_days: 45,
           persons,
         }),
       });
