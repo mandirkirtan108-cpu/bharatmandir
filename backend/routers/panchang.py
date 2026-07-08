@@ -44,29 +44,40 @@ CITY_COORDINATES = {
 }
 
 # Keyed by the EXACT raw field name DivineAPI returns (see divineapi_client._normalize_periods
-# "slug"), not by fuzzy text matching — some of DivineAPI's own field names are irregular
-# (e.g. "gulkai_kaal" is genuinely how their API spells Gulika Kaal; "dur_muhurtam" not
-# "dur_muhurat"), so matching on the exact slug is the only reliable approach.
+# "slug"). DivineAPI's own docs/marketing copy spell these inconsistently across pages
+# ("Gulika Kalam" vs "Gulikai Kalam", "Rahu Kaal" vs "Rahu Kalam"), and we can't verify the
+# live JSON key without a real API call, so BOTH the old guess and the doc-confirmed spelling
+# are included below — whichever the account's actual API response uses will match.
 MUHURAT_INFO = {
     "brahma_muhurta":        {"label": "Brahma Muhurat",        "reason": "Best for meditation, mantra japa and spiritual practice"},
     "abhijit_muhurta":       {"label": "Abhijit Muhurat",       "reason": "All-purpose auspicious window, good for most new beginnings"},
     "godhuli_muhurta":       {"label": "Godhuli Muhurat",       "reason": "Dusk period, traditionally favoured for Vivah rituals"},
     "vijay_muhurta":         {"label": "Vijay Muhurat",         "reason": "Favourable for undertakings related to success and victory"},
+    "vijaya_muhurta":        {"label": "Vijay Muhurat",         "reason": "Favourable for undertakings related to success and victory"},
     "nishita_muhurta":       {"label": "Nishita Muhurat",       "reason": "Midnight period, used for specific spiritual rites"},
     "amrit_kalam":           {"label": "Amrit Kalam",           "reason": "Short, highly favourable nectar period"},
     "pratah_sandhya":        {"label": "Pratah Sandhya",        "reason": "Morning twilight, suited for prayer and sandhyavandanam"},
     "sayahana_sandhya":      {"label": "Sayahna Sandhya",       "reason": "Evening twilight, suited for prayer and sandhyavandanam"},
+    "sayahna_sandhya":       {"label": "Sayahna Sandhya",       "reason": "Evening twilight, suited for prayer and sandhyavandanam"},
     "ravi_yoga":             {"label": "Ravi Yoga",             "reason": "Sun-blessed yoga said to neutralise other doshas in the period"},
     "sarvartha_siddhi_yoga": {"label": "Sarvartha Siddhi Yoga", "reason": "Highly auspicious yoga for success in any undertaking"},
     "amrit_siddhi_yoga":     {"label": "Amrit Siddhi Yoga",     "reason": "Rare, especially auspicious nakshatra-vaar combination"},
     "siddha_yoga":           {"label": "Siddha Yoga",           "reason": "Favourable yoga for accomplishment of tasks"},
     "tri_pushkara_yoga":     {"label": "Tri Pushkara Yoga",     "reason": "Triples the merit/effect of actions performed in this window"},
+    # Inauspicious — both spelling variants included defensively (see note above)
     "rahu_kaal":             {"label": "Rahu Kaal",             "reason": "Inauspicious — avoid starting new work"},
+    "rahu_kalam":            {"label": "Rahu Kaal",             "reason": "Inauspicious — avoid starting new work"},
     "yamaganda":             {"label": "Yamaganda",             "reason": "Inauspicious — avoid starting new work"},
+    "yamagandam":            {"label": "Yamaganda",             "reason": "Inauspicious — avoid starting new work"},
     "gulkai_kaal":           {"label": "Gulika Kaal",           "reason": "Inauspicious — avoid starting new work"},
+    "gulika_kaal":           {"label": "Gulika Kaal",           "reason": "Inauspicious — avoid starting new work"},
+    "gulika_kalam":          {"label": "Gulika Kaal",           "reason": "Inauspicious — avoid starting new work"},
+    "gulikai_kalam":         {"label": "Gulika Kaal",           "reason": "Inauspicious — avoid starting new work"},
     "dur_muhurtam":          {"label": "Dur Muhurat",           "reason": "Inauspicious window, best avoided for important events"},
+    "dur_muhurat":           {"label": "Dur Muhurat",           "reason": "Inauspicious window, best avoided for important events"},
     "varjyam":               {"label": "Varjyam",               "reason": "Inauspicious window, best avoided for important events"},
     "baana":                 {"label": "Baana",                 "reason": "Directional influence — check the specific sign for its effect"},
+    "bhadra":                {"label": "Bhadra",                "reason": "Inauspicious — avoid starting new work"},
     "panchaka":               {"label": "Panchaka",              "reason": "Inauspicious 5-day span, best avoided for certain rites"},
     "hutashana_yoga":        {"label": "Hutashana Yoga",        "reason": "Considered inauspicious for new beginnings"},
     "visha_yoga":            {"label": "Visha Yoga",            "reason": "Considered inauspicious for new beginnings"},
@@ -827,26 +838,36 @@ def find_best_muhurat_dates(req: BestDatesRequest):
 
 
 def legacy_daily_response(day: dict) -> dict:
+    tithi, nakshatra, yoga, karana = day.get("tithi", {}), day.get("nakshatra", {}), day.get("yoga", {}), day.get("karana", {})
     return {
         "source": "divineapi",
         "date": day.get("date"),
         "hindu_calendar": day.get("hindu_calendar", {}),
         "tithi": {
-            "name": day.get("tithi", {}).get("name", ""),
-            "number": day.get("tithi", {}).get("id", ""),
+            "name": tithi.get("name", ""),
+            "number": tithi.get("id", ""),
             "deity": "",
-            "nature": day.get("tithi", {}).get("paksha", ""),
+            "nature": tithi.get("paksha", ""),
+            "paksha": tithi.get("paksha", ""),
+            "end_time": format_time(tithi.get("end", "")) if tithi.get("end") else "",
         },
         "nakshatra": {
-            "name": day.get("nakshatra", {}).get("name", ""),
-            "hindi": day.get("nakshatra", {}).get("name", ""),
-            "lord": (day.get("nakshatra", {}).get("lord") or {}).get("name", ""),
+            "name": nakshatra.get("name", ""),
+            "hindi": nakshatra.get("name", ""),
+            "lord": (nakshatra.get("lord") or {}).get("name", ""),
             "quality": "",
+            "end_time": format_time(nakshatra.get("end", "")) if nakshatra.get("end") else "",
         },
-        "yoga": {"name": day.get("yoga", {}).get("name", ""), "nature": "", "meaning": ""},
-        "karana": {"name": day.get("karana", {}).get("name", ""), "nature": ""},
-        "var": {"day": day.get("vaara", ""), "lord": "", "color": "", "good_for": ""},
-        "rahu_kaal": {"time": find_period(day.get("inauspicious_period", []), "rahu_kaal")},
+        "yoga": {
+            "name": yoga.get("name", ""), "nature": "", "meaning": "",
+            "end_time": format_time(yoga.get("end", "")) if yoga.get("end") else "",
+        },
+        "karana": {
+            "name": karana.get("name", ""), "nature": "",
+            "end_time": format_time(karana.get("end", "")) if karana.get("end") else "",
+        },
+        "var": {"day": day.get("vaara", ""), "lord": day.get("vaara_lord", ""), "color": "", "good_for": ""},
+        "rahu_kaal": {"time": find_period(day.get("inauspicious_period", []), "rahu_kalam", "rahu_kaal")},
         "brahma_muhurat": {"time": find_period(day.get("auspicious_period", []), "brahma_muhurta"), "benefit": "Spiritual practice"},
         "abhijit_muhurat": {"time": find_period(day.get("auspicious_period", []), "abhijit_muhurta"), "benefit": "Auspicious work"},
         "choghadiya": [
@@ -862,9 +883,12 @@ def legacy_daily_response(day: dict) -> dict:
     }
 
 
-def find_period(items: list[dict], slug: str) -> str:
+def find_period(items: list[dict], *slugs: str) -> str:
+    """Look up a muhurat window by slug. Accepts multiple candidate spellings
+    (see MUHURAT_INFO note) and returns the first that matches."""
+    wanted = {s.strip().lower() for s in slugs}
     for item in items:
-        if item.get("slug") == slug:
+        if (item.get("slug") or "").strip().lower() in wanted:
             periods = item.get("period", [])
             if periods:
                 return format_period(periods[0])

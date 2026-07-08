@@ -685,9 +685,10 @@ def normalize_day(
     festivals = _data(festivals_response)
 
     tithi = _current_or_first(panchang.get("tithis") or panchang.get("tithi"))
-    nakshatra = _current_or_first(panchang.get("nakshatras") or panchang.get("nakshatra"))
+    nakshatra = _extract_nakshatra(panchang)
     yoga = _current_or_first(panchang.get("yogas") or panchang.get("yoga"))
     karana = _current_or_first(panchang.get("karnas") or panchang.get("karana"))
+    vaara = _extract_vaara(panchang, query.date)
 
     return {
         "date": query.date,
@@ -696,7 +697,8 @@ def normalize_day(
         "language": query.language,
         "source": "divineapi",
         "hindu_calendar": _hindu_calendar(query, panchang, tithi),
-        "vaara": _first_value(panchang, "vaar", "vaara", "weekday", "day"),
+        "vaara": vaara,
+        "vaara_lord": WEEKDAY_LORDS.get(vaara, ""),
         "tithi": _normalize_anga(tithi, "tithi"),
         "nakshatra": _normalize_anga(nakshatra, "nakshatra"),
         "yoga": _normalize_anga(yoga, "yoga"),
@@ -720,6 +722,62 @@ def normalize_day(
     }
 
 
+# Classical weekday → ruling planet (Vaar lord). Deterministic, no API needed.
+WEEKDAY_LORDS = {
+    "Sunday": "Surya (Sun)", "Monday": "Chandra (Moon)", "Tuesday": "Mangal (Mars)",
+    "Wednesday": "Budh (Mercury)", "Thursday": "Guru (Jupiter)", "Friday": "Shukra (Venus)",
+    "Saturday": "Shani (Saturn)",
+}
+
+
+def _extract_vaara(panchang: dict[str, Any], date_value: str) -> str:
+    """The weekday name. DivineAPI's find-panchang response doesn't reliably
+    expose a top-level 'vaar' string across all response variants we've seen,
+    so we ALWAYS fall back to computing it directly from the requested date
+    (a Gregorian weekday is a deterministic fact — no astrological calculation
+    or API call needed), and only prefer the API's value if it actually sent one.
+    """
+    api_value = _first_value(panchang, "vaar", "vaara", "weekday", "day_name")
+    if isinstance(api_value, str) and api_value.strip() and api_value.strip().isalpha():
+        return api_value.strip().title()
+    try:
+        return datetime.strptime(date_value, "%Y-%m-%d").strftime("%A")
+    except Exception:
+        return ""
+
+
+def _extract_nakshatra(panchang: dict[str, Any]) -> dict[str, Any]:
+    """DivineAPI's find-panchang response nests Nakshatra very differently
+    from Tithi/Yoga/Karana: `nakshatras` is a WRAPPER object —
+    {zodiac_point: [...], nakshatra_list: [...], nakshatra_pada: [...]} —
+    not the nakshatra period itself. We need to reach one level deeper.
+    `nakshatra_pada` is preferred (it carries lord/deity/pada), falling back
+    to the simpler `nakshatra_list`. Older/alternate API responses that
+    return `nakshatra` as a flat string or a flat list are also handled.
+    """
+    raw = panchang.get("nakshatras")
+    if isinstance(raw, dict):
+        pada_list = raw.get("nakshatra_pada")
+        if isinstance(pada_list, list) and pada_list:
+            return pada_list[0] if isinstance(pada_list[0], dict) else {}
+        simple_list = raw.get("nakshatra_list")
+        if isinstance(simple_list, list) and simple_list:
+            return simple_list[0] if isinstance(simple_list[0], dict) else {}
+        return {}
+    if isinstance(raw, list) and raw:
+        return raw[0] if isinstance(raw[0], dict) else {}
+    if isinstance(raw, str) and raw.strip():
+        return {"name": raw.strip()}
+
+    # Fallback: some response variants use a singular "nakshatra" key instead.
+    single = panchang.get("nakshatra")
+    if isinstance(single, dict):
+        return single
+    if isinstance(single, str) and single.strip():
+        return {"name": single.strip()}
+    return {}
+
+
 def _data(response: dict[str, Any] | None) -> dict[str, Any]:
     if not response:
         return {}
@@ -732,7 +790,9 @@ def _current_or_first(items: Any) -> dict[str, Any]:
         return items
     if isinstance(items, list) and items:
         first = items[0]
-        return first if isinstance(first, dict) else {}
+        return first if isinstance(first, dict) else ({"name": first} if isinstance(first, str) and first.strip() else {})
+    if isinstance(items, str) and items.strip():
+        return {"name": items.strip()}
     return {}
 
 
@@ -749,7 +809,11 @@ def _hindu_calendar(query: PanchangQuery, panchang: dict[str, Any], tithi: dict[
     }
 
 
-def _normalize_anga(item: dict[str, Any], prefix: str) -> dict[str, Any]:
+def _normalize_anga(item: dict[str, Any] | str, prefix: str) -> dict[str, Any]:
+    if isinstance(item, str):
+        item = {"name": item} if item.strip() else {}
+    if not isinstance(item, dict):
+        item = {}
     lord = _first_value(item, "lord", "nak_lord", "ruling_planet")
     return {
         "id": _first_value(item, "id", "number", f"{prefix}_number"),
