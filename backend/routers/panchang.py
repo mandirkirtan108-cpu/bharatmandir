@@ -304,6 +304,16 @@ WEEKDAY_RULES = {
     "yatra":      ({"Monday", "Wednesday", "Thursday", "Friday"}, {"Saturday"}),
 }
 
+WEEKDAY_LORDS = {
+    "Sunday": "Surya (Sun)",
+    "Monday": "Chandra (Moon)",
+    "Tuesday": "Mangal (Mars)",
+    "Wednesday": "Budh (Mercury)",
+    "Thursday": "Guru (Jupiter)",
+    "Friday": "Shukra (Venus)",
+    "Saturday": "Shani (Saturn)",
+}
+
 # Nakshatras classically considered favourable for each occasion.
 FAVORABLE_NAKSHATRAS = {
     "vivah":      {"Rohini", "Mrigashira", "Magha", "Uttara Phalguni", "Hasta", "Swati", "Anuradha", "Mula", "Uttara Ashadha", "Uttara Bhadrapada", "Revati"},
