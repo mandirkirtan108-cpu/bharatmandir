@@ -316,28 +316,185 @@ function TimingsTable({ title, data, tone = 'green' }) {
   );
 }
 
+const HIDDEN_DETAIL_KEYS = new Set([
+  'raw',
+  'vriddhi',
+  'kshaya',
+  'paksha_randhra_start_time',
+  'paksha_randhra_end_time',
+  'paksha_randhra',
+  'is_current',
+  'current',
+  'date',
+]);
+
+const TIMING_META = {
+  brahma_muhurta: { name: 'Brahma Muhurat', note: 'Ideal for meditation, prayer and spiritual practice.' },
+  brahma_muhurat: { name: 'Brahma Muhurat', note: 'Ideal for meditation, prayer and spiritual practice.' },
+  abhijit: { name: 'Abhijit Muhurat', note: 'A powerful window for important work and new beginnings.' },
+  abhijit_muhurta: { name: 'Abhijit Muhurat', note: 'A powerful window for important work and new beginnings.' },
+  abhijit_muhurat: { name: 'Abhijit Muhurat', note: 'A powerful window for important work and new beginnings.' },
+  godhuli_muhurta: { name: 'Godhuli Muhurat', note: 'A gentle evening period used for worship and auspicious activity.' },
+  vijaya_muhurta: { name: 'Vijaya Muhurat', note: 'Favorable for decisive action, travel and important efforts.' },
+  amrit_kaalam: { name: 'Amrit Kaalam', note: 'A sweet, supportive period for auspicious work.' },
+  nishita_muhurta: { name: 'Nishita Muhurat', note: 'A midnight worship period, especially used for specific pujas.' },
+  ravi_yoga: { name: 'Ravi Yoga', note: 'A bright yoga considered helpful for overcoming obstacles.' },
+  sarvartha_siddhi_yoga: { name: 'Sarvartha Siddhi Yoga', note: 'A fulfillment-oriented yoga for constructive beginnings.' },
+  rahu_kaal: { name: 'Rahu Kaal', note: 'Avoid starting new work, ceremonies or major commitments.' },
+  rahu_kalam: { name: 'Rahu Kaal', note: 'Avoid starting new work, ceremonies or major commitments.' },
+  rahukaal: { name: 'Rahu Kaal', note: 'Avoid starting new work, ceremonies or major commitments.' },
+  yamaganda: { name: 'Yamaganda', note: 'Avoid auspicious starts and major commitments.' },
+  yama_gandam: { name: 'Yamaganda', note: 'Avoid auspicious starts and major commitments.' },
+  gulikai_kaal: { name: 'Gulikai Kaal', note: 'Traditionally avoided for beginning auspicious work.' },
+  gulkai_kaal: { name: 'Gulikai Kaal', note: 'Traditionally avoided for beginning auspicious work.' },
+  dur_muhurtam: { name: 'Dur Muhurtam', note: 'An inauspicious span; avoid starting important work.' },
+  varjyam: { name: 'Varjyam', note: 'A void period generally avoided for auspicious actions.' },
+  baana: { name: 'Baana', note: 'A caution period checked before rituals, travel and major starts.' },
+  bhadra: { name: 'Bhadra', note: 'Avoid auspicious work while Bhadra is active.' },
+  panchaka: { name: 'Panchaka', note: 'A caution period considered before house, travel and ritual work.' },
+  gand_mool: { name: 'Gand Mool', note: 'A sensitive Nakshatra period handled with care in rituals.' },
+  vidaal_yoga: { name: 'Vidaal Yoga', note: 'A caution yoga; avoid major auspicious beginnings.' },
+  aadal_yoga: { name: 'Aadal Yoga', note: 'A caution yoga; avoid major auspicious beginnings.' },
+};
+
+const RECORD_FIELD_LABELS = {
+  paksha: 'Paksha',
+  number: 'Number',
+  id: 'Number',
+  start: 'Starts',
+  start_time: 'Starts',
+  end: 'Ends',
+  end_time: 'Ends',
+  lord: 'Lord',
+  nak_lord: 'Lord',
+  deity: 'Deity',
+  gana: 'Gana',
+  guna: 'Guna',
+  pada: 'Pada',
+  charan: 'Pada',
+  rashi: 'Rashi',
+  zodiac: 'Zodiac',
+  zodiac_sign: 'Zodiac',
+  sign: 'Sign',
+  type: 'Type',
+};
+
+function isEmptyDetail(value) {
+  return value === null || value === undefined || value === '' || value === '-' || value === 'â€”';
+}
+
+function normalizeApiKey(key) {
+  return String(key || '').trim().toLowerCase().replace(/\s+/g, '_');
+}
+
 function detailTime(value) {
   return to12h(cleanValue(value));
+}
+
+function displayDetailValue(value) {
+  if (typeof value === 'boolean') return value ? 'Yes' : '';
+  if (Array.isArray(value)) return value.filter(Boolean).map(displayDetailValue).filter(Boolean).join(', ');
+  if (value && typeof value === 'object') {
+    return value.name || value.full_name || value.title || value.value || '';
+  }
+  return detailTime(value);
 }
 
 function flattenDetails(data, prefix = '') {
   if (!data || typeof data !== 'object') return [];
   return Object.entries(data).flatMap(([key, value]) => {
-    if (key === 'raw') return [];
+    if (HIDDEN_DETAIL_KEYS.has(normalizeApiKey(key)) || isEmptyDetail(value) || value === false) return [];
     const label = prefix ? `${prefix} ${titleize(key)}` : titleize(key);
-    if (value === null || value === undefined || value === '') return [];
     if (Array.isArray(value)) {
-      if (!value.length) return [];
-      if (value.every((item) => typeof item !== 'object')) {
-        return [{ label, value: value.join(', ') }];
-      }
-      return [];
+      const text = value.filter((item) => typeof item !== 'object').map(displayDetailValue).filter(Boolean).join(', ');
+      return text ? [{ label, value: text }] : [];
     }
     if (typeof value === 'object') {
-      return flattenDetails(value, label);
+      const text = displayDetailValue(value);
+      return text ? [{ label, value: text }] : flattenDetails(value, label);
     }
     return [{ label, value }];
   });
+}
+
+function timingTitle(key) {
+  const normalized = normalizeApiKey(key);
+  return TIMING_META[normalized]?.name || titleize(key);
+}
+
+function timingNote(key, tone) {
+  const normalized = normalizeApiKey(key);
+  return TIMING_META[normalized]?.note || (tone === 'red'
+    ? 'Avoid this period for auspicious beginnings.'
+    : 'A supportive period for auspicious or devotional work.');
+}
+
+function hasTimingPeriod(value) {
+  if (!value) return false;
+  if (Array.isArray(value)) return value.some(hasTimingPeriod);
+  if (typeof value === 'string') return Boolean(value.trim());
+  if (typeof value !== 'object') return false;
+  return Boolean(
+    value.time ||
+    value.start ||
+    value.end ||
+    value.start_time ||
+    value.end_time ||
+    Object.values(value).some((nested) => Array.isArray(nested) && nested.some(hasTimingPeriod))
+  );
+}
+
+function formatTimingPeriod(value) {
+  if (!value) return '';
+  if (Array.isArray(value)) {
+    return value.map(formatTimingPeriod).filter(Boolean).join(' • ');
+  }
+  if (typeof value === 'string') return to12h(value);
+  if (typeof value !== 'object') return '';
+
+  if (value.time) return to12h(value.time);
+  const start = value.start || value.start_time || value.from || value.startTime;
+  const end = value.end || value.end_time || value.to || value.endTime;
+  if (start && end) return `${to12h(start)} - ${to12h(end)}`;
+  if (start || end) return to12h(start || end);
+
+  const nested = Object.values(value)
+    .filter((nestedValue) => Array.isArray(nestedValue) || (nestedValue && typeof nestedValue === 'object'))
+    .map(formatTimingPeriod)
+    .filter(Boolean);
+  return nested.join(' • ');
+}
+
+function recordName(record) {
+  return displayDetailValue(record?.name || record?.full_name || record?.tithi || record?.tithi_name || record?.nak_name || record?.nakshatra_name || record?.yoga_name || record?.karana_name || record?.karna_name || record?.type || record?.title || record?.number) || 'Panchang record';
+}
+
+function recordTiming(record) {
+  const formatted = formatTimingPeriod(record);
+  if (formatted) return formatted;
+  const start = record?.start || record?.start_time;
+  const end = record?.end || record?.end_time;
+  if (start && end) return `${to12h(start)} - ${to12h(end)}`;
+  return to12h(start || end || '');
+}
+
+function recordBadges(record) {
+  const badges = [];
+  if (record?.vriddhi === true) badges.push('Vriddhi Tithi');
+  if (record?.kshaya === true) badges.push('Kshaya Tithi');
+  return badges;
+}
+
+function curatedRecordFields(record) {
+  return Object.entries(RECORD_FIELD_LABELS)
+    .map(([key, label]) => {
+      const value = record?.[key];
+      const text = displayDetailValue(value);
+      return text ? { label, value: text } : null;
+    })
+    .filter(Boolean)
+    .filter((item, index, all) => all.findIndex((candidate) => candidate.label === item.label && candidate.value === item.value) === index)
+    .slice(0, 6);
 }
 
 function DetailCard({ title, data, accent = '#c47a14' }) {
@@ -377,14 +534,33 @@ function PanchangRecordTable({ title, records }) {
       <div style={{ display: 'grid', gap: 10 }}>
         {rows.map((record, index) => (
           <div key={`${title}-${index}`} style={{ background: '#fafafa', borderRadius: 8, padding: '11px 12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 8 }}>
-              {flattenDetails(record).slice(0, 10).map((item) => (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start', marginBottom: 9 }}>
+              <div>
+                <p style={{ fontFamily: UI_FONT, fontSize: 15, color: '#252525', fontWeight: 900, lineHeight: 1.25 }}>
+                  {recordName(record)}
+                </p>
+                {recordTiming(record) && (
+                  <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b5a24', fontWeight: 800, marginTop: 3 }}>
+                    {recordTiming(record)}
+                  </p>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {recordBadges(record).map((badge) => (
+                  <span key={badge} style={{ fontFamily: UI_FONT, fontSize: 10, color: '#9a3412', background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 50, padding: '3px 8px', fontWeight: 900, whiteSpace: 'nowrap' }}>
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8 }}>
+              {curatedRecordFields(record).map((item) => (
                 <div key={`${title}-${index}-${item.label}`}>
                   <p style={{ fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
                     {item.label}
                   </p>
-                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, marginTop: 3 }}>
-                    {detailTime(item.value)}
+                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, marginTop: 3, lineHeight: 1.35 }}>
+                    {item.value}
                   </p>
                 </div>
               ))}
@@ -399,7 +575,11 @@ function PanchangRecordTable({ title, records }) {
 function TimingDetailList({ title, data, tone = 'green' }) {
   const color = tone === 'red' ? '#dc2626' : '#16a34a';
   const bg = tone === 'red' ? '#fff5f5' : '#f5fff7';
-  const entries = Object.entries(data || {}).filter(([, value]) => value && typeof value === 'object');
+  const entries = Object.entries(data || {}).filter(([key, value]) => {
+    const normalized = normalizeApiKey(key);
+    if (HIDDEN_DETAIL_KEYS.has(normalized) || normalized.endsWith('_detailed')) return false;
+    return hasTimingPeriod(value);
+  });
   if (!entries.length) return null;
 
   return (
@@ -411,10 +591,13 @@ function TimingDetailList({ title, data, tone = 'green' }) {
         {entries.map(([key, value]) => (
           <div key={`${title}-${key}`} style={{ background: bg, borderRadius: 8, padding: '10px 11px' }}>
             <p style={{ fontFamily: UI_FONT, fontSize: 11, color, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-              {titleize(key)}
+              {timingTitle(key)}
             </p>
-            <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, lineHeight: 1.35, marginTop: 5 }}>
-              {detailTime(value)}
+            <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#252525', fontWeight: 900, lineHeight: 1.35, marginTop: 5 }}>
+              {formatTimingPeriod(value) || 'Not available'}
+            </p>
+            <p style={{ fontFamily: UI_FONT, fontSize: 11, color: tone === 'red' ? '#991b1b' : '#166534', fontWeight: 700, lineHeight: 1.4, marginTop: 5 }}>
+              {timingNote(key, tone)}
             </p>
           </div>
         ))}
