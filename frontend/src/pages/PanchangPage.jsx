@@ -316,6 +316,158 @@ function TimingsTable({ title, data, tone = 'green' }) {
   );
 }
 
+function detailTime(value) {
+  return to12h(cleanValue(value));
+}
+
+function flattenDetails(data, prefix = '') {
+  if (!data || typeof data !== 'object') return [];
+  return Object.entries(data).flatMap(([key, value]) => {
+    if (key === 'raw') return [];
+    const label = prefix ? `${prefix} ${titleize(key)}` : titleize(key);
+    if (value === null || value === undefined || value === '') return [];
+    if (Array.isArray(value)) {
+      if (!value.length) return [];
+      if (value.every((item) => typeof item !== 'object')) {
+        return [{ label, value: value.join(', ') }];
+      }
+      return [];
+    }
+    if (typeof value === 'object') {
+      return flattenDetails(value, label);
+    }
+    return [{ label, value }];
+  });
+}
+
+function DetailCard({ title, data, accent = '#c47a14' }) {
+  const items = flattenDetails(data);
+  if (!items.length) return null;
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 10, padding: '15px 16px' }}>
+      <p style={{ fontFamily: UI_FONT, fontSize: 12, color: accent, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
+        {title}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+        {items.map((item) => (
+          <div key={`${title}-${item.label}`} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 11px' }}>
+            <p style={{ fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+              {item.label}
+            </p>
+            <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, lineHeight: 1.35, marginTop: 5 }}>
+              {detailTime(item.value)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PanchangRecordTable({ title, records }) {
+  const rows = Array.isArray(records) ? records.filter((item) => item && typeof item === 'object') : [];
+  if (!rows.length) return null;
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 10, padding: '15px 16px' }}>
+      <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b5a24', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
+        {title}
+      </p>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {rows.map((record, index) => (
+          <div key={`${title}-${index}`} style={{ background: '#fafafa', borderRadius: 8, padding: '11px 12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 8 }}>
+              {flattenDetails(record).slice(0, 10).map((item) => (
+                <div key={`${title}-${index}-${item.label}`}>
+                  <p style={{ fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                    {item.label}
+                  </p>
+                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, marginTop: 3 }}>
+                    {detailTime(item.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TimingDetailList({ title, data, tone = 'green' }) {
+  const color = tone === 'red' ? '#dc2626' : '#16a34a';
+  const bg = tone === 'red' ? '#fff5f5' : '#f5fff7';
+  const entries = Object.entries(data || {}).filter(([, value]) => value && typeof value === 'object');
+  if (!entries.length) return null;
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 10, padding: '15px 16px' }}>
+      <p style={{ fontFamily: UI_FONT, fontSize: 12, color, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
+        {title}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }}>
+        {entries.map(([key, value]) => (
+          <div key={`${title}-${key}`} style={{ background: bg, borderRadius: 8, padding: '10px 11px' }}>
+            <p style={{ fontFamily: UI_FONT, fontSize: 11, color, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+              {titleize(key)}
+            </p>
+            <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, lineHeight: 1.35, marginTop: 5 }}>
+              {detailTime(value)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PanchangDetails({ dailyResult }) {
+  const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
+  const mainTimings = {
+    sunrise: dailyResult.sunrise,
+    sunset: dailyResult.sunset,
+    moonrise: dailyResult.moonrise,
+    moonset: dailyResult.moonset,
+    brahma_muhurat: dailyResult.brahma_muhurat?.time,
+    abhijit_muhurat: dailyResult.abhijit_muhurat?.time,
+    rahu_kaal: dailyResult.rahu_kaal?.time,
+  };
+
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <h3 style={{ fontFamily: UI_FONT, fontSize: 18, color: '#1f1f1f', fontWeight: 900, margin: 0 }}>
+          Full Panchang Details
+        </h3>
+        <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b8b8b', fontWeight: 800 }}>
+          Sunrise, moon timings, calendar, periods and Panchang records
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        <DetailCard title="Daily Timings" data={mainTimings} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12 }}>
+          <DetailCard title="Sun Details" data={dailyResult.sun} accent="#d97706" />
+          <DetailCard title="Moon Details" data={dailyResult.moon} accent="#2563eb" />
+          <DetailCard title="Hindu Calendar" data={dailyResult.hindu_calendar} accent="#7c3aed" />
+        </div>
+        <TimingDetailList title="Auspicious Timings" data={dailyResult.auspicious_timings} tone="green" />
+        <TimingDetailList title="Inauspicious Timings" data={dailyResult.inauspicious_timings} tone="red" />
+        {!!nightChoghadiya.length && <ChoghadiyaBlock title="Night Choghadiya" rows={nightChoghadiya} />}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
+          <PanchangRecordTable title="All Tithis" records={dailyResult.all_panchang?.tithis} />
+          <PanchangRecordTable title="All Nakshatras" records={dailyResult.all_panchang?.nakshatras} />
+          <PanchangRecordTable title="All Yogas" records={dailyResult.all_panchang?.yogas} />
+          <PanchangRecordTable title="All Karanas" records={dailyResult.all_panchang?.karnas} />
+          <PanchangRecordTable title="Sun Nakshatras" records={dailyResult.all_panchang?.sun_nakshatras} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PanchangDailyResult({ dailyResult }) {
   const dayChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period !== 'night');
 
@@ -357,6 +509,8 @@ function PanchangDailyResult({ dailyResult }) {
         <TimingCard title="Abhijit" value={dailyResult.abhijit_muhurat?.time} note={dailyResult.abhijit_muhurat?.benefit || 'Auspicious work'} tone="blue" />
         <TimingCard title="Rahu Kaal" value={dailyResult.rahu_kaal?.time} note={dailyResult.rahu_kaal?.benefit || 'Avoid new beginnings'} tone="red" />
       </div>
+
+      <PanchangDetails dailyResult={dailyResult} />
     </div>
   );
 }
