@@ -63,6 +63,22 @@ DAY_LORDS = {
     "Sunday": "Surya (Sun)",
 }
 
+DIVINE_API_KEY_ENV_NAMES = (
+    "DIVINE_API_KEY",
+    "DIVINEAPI_API_KEY",
+    "DIVINE_API_API_KEY",
+)
+
+DIVINE_ACCESS_TOKEN_ENV_NAMES = (
+    "DIVINE_API_TOKEN",
+    "DIVINE_API_ACCESS_TOKEN",
+    "DIVINE_ACCESS_TOKEN",
+    "DIVINEAPI_ACCESS_TOKEN",
+    "DIVINEAPI_TOKEN",
+    "DIVINE_API_BEARER_TOKEN",
+    "DIVINE_API_AUTH_TOKEN",
+)
+
 
 class DailyPanchangRequest(BaseModel):
     date: str
@@ -178,31 +194,46 @@ def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]
     return lat, lon, tz, f"{city} (using {default_place} coordinates)"
 
 
+def first_env_value(names: tuple[str, ...]) -> tuple[Optional[str], Optional[str]]:
+    for name in names:
+        value = os.environ.get(name)
+        if value and value.strip():
+            return value.strip(), name
+    return None, None
+
+
 def divine_token() -> str:
-    token = os.environ.get("DIVINE_API_TOKEN") or os.environ.get("DIVINE_API_ACCESS_TOKEN")
+    token, _used_name = first_env_value(DIVINE_ACCESS_TOKEN_ENV_NAMES)
     if not token:
         raise HTTPException(
             status_code=500,
-            detail="DIVINE_API_TOKEN is not configured on server",
+            detail=(
+                "Divine API access token is not configured on server. "
+                f"Set one of: {', '.join(DIVINE_ACCESS_TOKEN_ENV_NAMES)}"
+            ),
         )
     return token
 
 
 def divine_api_key() -> str:
-    key = os.environ.get("DIVINE_API_KEY")
+    key, _used_name = first_env_value(DIVINE_API_KEY_ENV_NAMES)
     if not key:
         raise HTTPException(
             status_code=500,
-            detail="DIVINE_API_KEY is not configured on server",
+            detail=(
+                "Divine API key is not configured on server. "
+                f"Set one of: {', '.join(DIVINE_API_KEY_ENV_NAMES)}"
+            ),
         )
     return key
 
 
 def divine_post(url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    token = divine_token()
     try:
         response = requests.post(
             url,
-            headers={"Authorization": f"Bearer {divine_token()}"},
+            headers={"Authorization": f"Bearer {token}"},
             data=payload,
             timeout=30,
         )
