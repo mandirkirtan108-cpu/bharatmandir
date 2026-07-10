@@ -6,7 +6,7 @@ Muhurat Finder is intentionally kept on the existing Claude flow for now.
 Monthly calendar (PanchangCalendar.jsx) uses divine_api_client.DivineApiClient,
 which already has caching + the exact data shape the calendar UI expects.
 """
-from divine_api_client import DivineApiClient, DivineApiConfigError, DivineApiError
+
 from __future__ import annotations
 
 from datetime import datetime
