@@ -172,7 +172,7 @@ export default function PanchangCalendar() {
                 {MONTH_NAMES[month]} {year}
               </div>
               <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', marginTop: 2 }}>
-                Amanta calendar · Varanasi
+                Amanta calendar
               </div>
             </div>
             <button onClick={nextMonth} style={navBtnStyle}><ChevronRight size={16} /></button>
