@@ -3,8 +3,8 @@ routers/panchang.py - Panchang and Muhurat API.
 
 Daily Panchang uses Divine API.
 Muhurat Finder is intentionally kept on the existing Claude flow for now.
-City resolution uses Google's Geocoding API (restricted to India) — no
-hardcoded city list. See geocode_city() below.
+City resolution uses OpenRouteService's Geocoding API (restricted to
+India) — no hardcoded city list. See geocode_city() below.
 """
 
 from __future__ import annotations
@@ -54,9 +54,9 @@ DIVINE_BASES = {
 # FIX: the old hardcoded CITY_COORDINATES table (~22 cities) is gone. Any
 # city not in that list — including real ones like Surat or Kanpur — used
 # to silently fall back to Ujjain's coordinates and still return a full
-# Panchang. City resolution now always goes through Google's Geocoding API
-# (see geocode_city() below), the same way city input is already verified
-# elsewhere in the app (Route Planner's autocomplete).
+# Panchang. City resolution now always goes through OpenRouteService's
+# Geocoding API (see geocode_city() below), the same way city input is
+# already verified elsewhere in the app (Route Planner's autocomplete).
 
 DAY_LORDS = {
     "Monday": "Chandra (Moon)",
@@ -85,17 +85,18 @@ DIVINE_ACCESS_TOKEN_ENV_NAMES = (
 )
 
 # Same env-name-fallback pattern as the Divine API keys above, so this
-# reuses whichever Google Maps key name is already set for the Route
-# Planner / city autocomplete feature, without forcing a rename.
-GOOGLE_MAPS_API_KEY_ENV_NAMES = (
-    "GOOGLE_MAPS_API_KEY",
-    "GOOGLE_PLACES_API_KEY",
-    "GOOGLE_GEOCODING_API_KEY",
+# reuses whichever OpenRouteService key name is already set elsewhere in
+# the app, without forcing a rename.
+ORS_API_KEY_ENV_NAMES = (
+    "ORS_API_KEY",
+    "OPENROUTESERVICE_API_KEY",
+    "OPEN_ROUTE_SERVICE_API_KEY",
+    "OPENROUTE_API_KEY",
 )
 
-GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+ORS_GEOCODE_URL = "https://api.openrouteservice.org/geocode/search"
 
-# Every city this endpoint resolves is restricted to India (component
+# Every city this endpoint resolves is restricted to India (boundary.country
 # filter below), and all of India sits in a single timezone — this is a
 # fixed geographic fact, not a per-city hardcode, so it's safe to use as
 # the default whenever the caller doesn't explicitly pass one.
@@ -260,14 +261,14 @@ def first_env_value(names: tuple[str, ...]) -> tuple[Optional[str], Optional[str
     return None, None
 
 
-def google_maps_key() -> str:
-    key, _used_name = first_env_value(GOOGLE_MAPS_API_KEY_ENV_NAMES)
+def ors_api_key() -> str:
+    key, _used_name = first_env_value(ORS_API_KEY_ENV_NAMES)
     if not key:
         raise HTTPException(
             status_code=500,
             detail=(
-                "Google Maps API key is not configured on server. "
-                f"Set one of: {', '.join(GOOGLE_MAPS_API_KEY_ENV_NAMES)}"
+                "OpenRouteService API key is not configured on server. "
+                f"Set one of: {', '.join(ORS_API_KEY_ENV_NAMES)}"
             ),
         )
     return key
@@ -276,61 +277,62 @@ def google_maps_key() -> str:
 @lru_cache(maxsize=1024)
 def geocode_city(city: str) -> tuple[float, float, str]:
     """Resolves free-text city input to (lat, lon, formatted_place) using
-    Google's Geocoding API, restricted to India via components=country:IN.
+    OpenRouteService's Geocoding API (Pelias-based /geocode/search),
+    restricted to India via boundary.country=IN.
 
     This is the single source of truth for "is this a real city" — there is
     no local list to fall back to. Unrecognized text (typos, gibberish,
     non-Indian places) raises a 422 instead of silently resolving to
     anything. Results are memoized per exact input string for the life of
     the process, since a city's coordinates don't change and this avoids
-    re-hitting Google for repeat lookups (e.g. "Mumbai" typed by many users,
+    re-hitting ORS for repeat lookups (e.g. "Mumbai" typed by many users,
     or the same user re-fetching the same date).
     """
     city = city.strip()
     try:
         response = requests.get(
-            GOOGLE_GEOCODE_URL,
+            ORS_GEOCODE_URL,
             params={
-                "address": city,
-                "components": "country:IN",
-                "key": google_maps_key(),
+                "api_key": ors_api_key(),
+                "text": city,
+                "boundary.country": "IN",
+                "size": 1,
             },
             timeout=15,
         )
     except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"Google Maps request failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"OpenRouteService request failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        detail = response.text[:500] or response.reason
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenRouteService geocoding error {response.status_code}: {detail}",
+        )
 
     try:
         payload = response.json()
     except ValueError as exc:
-        raise HTTPException(status_code=502, detail="Google Maps returned non-JSON data") from exc
+        raise HTTPException(status_code=502, detail="OpenRouteService returned non-JSON data") from exc
 
-    status = payload.get("status")
-    if status == "ZERO_RESULTS":
-        raise HTTPException(
-            status_code=422,
-            detail=f"'{city}' is not a recognized city. Please check the spelling or pick a suggestion.",
-        )
-    if status != "OK":
-        raise HTTPException(
-            status_code=502,
-            detail=f"Google Maps geocoding error: {payload.get('error_message') or status}",
-        )
-
-    results = payload.get("results") or []
-    if not results:
+    features = payload.get("features") or []
+    if not features:
         raise HTTPException(
             status_code=422,
             detail=f"'{city}' is not a recognized city. Please check the spelling or pick a suggestion.",
         )
 
-    top = results[0]
-    location = pick(top, "geometry", "location", default={}) or {}
-    lat, lon = location.get("lat"), location.get("lng")
-    if lat is None or lon is None:
-        raise HTTPException(status_code=502, detail="Google Maps returned an incomplete location.")
+    top = features[0]
+    coordinates = pick(top, "geometry", "coordinates", default=None)
+    if not coordinates or len(coordinates) < 2:
+        raise HTTPException(status_code=502, detail="OpenRouteService returned an incomplete location.")
 
-    formatted_place = top.get("formatted_address") or city
+    # GeoJSON order is [lon, lat], not [lat, lon].
+    lon, lat = coordinates[0], coordinates[1]
+
+    properties = top.get("properties") or {}
+    formatted_place = properties.get("label") or city
+
     return float(lat), float(lon), formatted_place
 
 
@@ -340,9 +342,9 @@ def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]
     Explicit coordinates or lat+lon (e.g. from a map/autocomplete picker
     the frontend already trusts) are accepted directly — those are already
     verified locations. Free-text city input goes through geocode_city(),
-    which is backed by Google's Geocoding API rather than any local list,
-    so unrecognized text raises a clear error instead of resolving to the
-    wrong place.
+    which is backed by OpenRouteService's Geocoding API rather than any
+    local list, so unrecognized text raises a clear error instead of
+    resolving to the wrong place.
     """
     if req.coordinates:
         try:
