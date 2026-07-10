@@ -17,6 +17,19 @@ import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+# NOTE: adjust this import path to match where divine_api_client.py actually
+# lives in your project (e.g. `from services.divine_api_client import ...`
+# or `from utils.divine_api_client import ...`). Using a bare top-level
+# import here as a best guess.
+from divine_api_client import (
+    DivineApiClient,
+    DivineApiConfigError,
+    DivineApiError,
+    DEFAULT_COORDINATES as CLIENT_DEFAULT_COORDINATES,
+    DEFAULT_CALENDAR as CLIENT_DEFAULT_CALENDAR,
+    DEFAULT_LANGUAGE as CLIENT_DEFAULT_LANGUAGE,
+)
+
 router = APIRouter(prefix="/api/panchang", tags=["Panchang"])
 
 DIVINE_BASES = {
@@ -621,6 +634,59 @@ def get_daily_panchang(req: DailyPanchangRequest):
         lon,
         tz,
     )
+
+
+# ---------------------------------------------------------------------- #
+# NEW: Calendar month endpoint.
+#
+# PanchangCalendar.jsx calls panchangAPI.getMonth(year, month, { coordinates,
+# calendar, language }) to render the monthly grid — but no route existed
+# for it, so every request 404'd, monthData stayed null, and the calendar
+# rendered with no tithi/nakshatra/festival data on any day.
+#
+# This wires in DivineApiClient.get_month(), which already builds exactly
+# the per-day shape the calendar expects (tithi.name, nakshatra.name,
+# festivals[], auspicious_period[], inauspicious_period[], sunrise/sunset,
+# etc. — see divine_api_client.normalize_day()).
+# ---------------------------------------------------------------------- #
+
+def get_divine_client() -> DivineApiClient:
+    try:
+        return DivineApiClient()
+    except DivineApiConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/month/{year}/{month}")
+def get_panchang_month(
+    year: int,
+    month: int,
+    coordinates: str = CLIENT_DEFAULT_COORDINATES,
+    calendar: str = CLIENT_DEFAULT_CALENDAR,
+    language: str = CLIENT_DEFAULT_LANGUAGE,
+):
+    if not (1 <= month <= 12):
+        raise HTTPException(status_code=422, detail="month must be between 1 and 12")
+
+    client = get_divine_client()
+    try:
+        return client.get_month(year, month, coordinates=coordinates, language=language, calendar=calendar)
+    except DivineApiError as exc:
+        raise HTTPException(status_code=exc.status_code or 502, detail=str(exc)) from exc
+
+
+@router.get("/year/{year}")
+def get_panchang_year(
+    year: int,
+    coordinates: str = CLIENT_DEFAULT_COORDINATES,
+    calendar: str = CLIENT_DEFAULT_CALENDAR,
+    language: str = CLIENT_DEFAULT_LANGUAGE,
+):
+    client = get_divine_client()
+    try:
+        return client.get_year(year, coordinates=coordinates, language=language, calendar=calendar)
+    except DivineApiError as exc:
+        raise HTTPException(status_code=exc.status_code or 502, detail=str(exc)) from exc
 
 
 def get_client() -> anthropic.Anthropic:
