@@ -227,6 +227,18 @@ def flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, A
 
 
 def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]:
+    """Resolves the request's city/coordinates into (lat, lon, tz, place).
+
+    FIX: previously, any city string that wasn't one of the ~22 hardcoded
+    entries in CITY_COORDINATES silently fell back to Ujjain's coordinates
+    and STILL returned a full Panchang — so typing "tanisha" or any other
+    garbage text produced a complete (wrong) Panchang instead of an error.
+    That silent fallback is now removed. Unrecognized city text raises a
+    422 with a clear message instead of pretending it resolved to a real
+    place. Explicit coordinates/lat+lon (e.g. from a map/autocomplete
+    picker) are still accepted directly and are NOT affected by this check,
+    since those are already verified locations, not free-text guesses.
+    """
     if req.coordinates:
         try:
             lat_text, lon_text = [part.strip() for part in req.coordinates.split(",", 1)]
@@ -247,15 +259,25 @@ def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]
             req.city or "Selected location",
         )
 
-    city = (req.city or "India").strip()
+    city = (req.city or "").strip()
+    if not city:
+        raise HTTPException(status_code=422, detail="Please enter a city.")
+
     city_key = city.lower()
     if city_key in CITY_COORDINATES:
         return CITY_COORDINATES[city_key]
 
-    # Divine API needs coordinates. For typed cities not in the local table we
-    # still return Panchang data, using Ujjain as a traditional India default.
-    lat, lon, tz, default_place = CITY_COORDINATES["india"]
-    return lat, lon, tz, f"{city} (using {default_place} coordinates)"
+    # FIX: unrecognized city text no longer silently falls back to Ujjain.
+    # Divine API needs real coordinates, and a free-text city we can't
+    # resolve isn't a safe guess — better to tell the user clearly than to
+    # hand back Panchang data for the wrong place.
+    raise HTTPException(
+        status_code=422,
+        detail=(
+            f"'{city}' is not a recognized city. Please pick a city from the "
+            "suggestions, or select it on the map."
+        ),
+    )
 
 
 def first_env_value(names: tuple[str, ...]) -> tuple[Optional[str], Optional[str]]:

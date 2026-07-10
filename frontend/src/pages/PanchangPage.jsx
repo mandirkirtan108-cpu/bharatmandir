@@ -139,11 +139,26 @@ function to12h(timeStr) {
 
 // Extracts just the HH:MM portion of a full "2026-07-08 10:38:00" style
 // string and formats it — used everywhere we want a clean time without
-// the date prefix cluttering the row.
+// the date prefix cluttering the row. This is the ONLY function that
+// should be used to render a single time value; to12h() alone is not
+// enough because it leaves any leading date text untouched.
 function formatTimeOnly(raw) {
   if (!raw) return '';
   const match = String(raw).match(/(\d{1,2}):(\d{2})/);
   return match ? to12h(match[0]) : to12h(raw);
+}
+
+// Cleans a "start - end" style range where start/end may themselves be
+// full "YYYY-MM-DD HH:MM:SS" strings (as DivineAPI returns for muhurat
+// windows). Strips the date on both sides so only "4:23 AM - 5:05 AM"
+// is ever shown, never "2026-07-10 4:23 AM - 2026-07-10 5:05 AM".
+function formatTimeRangeClean(value) {
+  if (!value) return '';
+  const parts = String(value).split(' - ');
+  if (parts.length === 2) {
+    return `${formatTimeOnly(parts[0])} - ${formatTimeOnly(parts[1])}`;
+  }
+  return formatTimeOnly(value);
 }
 
 function firstTimePart(value) {
@@ -151,8 +166,10 @@ function firstTimePart(value) {
   return String(value).split(' - ')[0].trim();
 }
 
+// Compact single time, date-prefix stripped, no spaces (used in tight
+// timeline labels like the Choghadiya strip).
 function shortTime(value) {
-  return to12h(firstTimePart(value)).replace(/\s/g, '');
+  return formatTimeOnly(firstTimePart(value)).replace(/\s/g, '');
 }
 
 function parseTimeToMinutes(value) {
@@ -291,6 +308,12 @@ function AngaCard({ label, value, sub, icon }) {
   );
 }
 
+// FIX: timing value used to be rendered with a raw to12h() call, which
+// only converts the HH:MM portion and leaves any leading "YYYY-MM-DD "
+// text untouched — producing an oversized, wrapping, hard-to-read line
+// like "2026-07-10 4:23 AM - 2026-07-10 5:05 AM". Switched to
+// formatTimeRangeClean() (date-stripped) and trimmed the font down so
+// the card stays compact and legible.
 function TimingCard({ title, value, note, tone }) {
   const tones = {
     green: ['#f0fdf4', '#22c55e', '#16a34a', '↟'],
@@ -303,8 +326,8 @@ function TimingCard({ title, value, note, tone }) {
       <p style={{ fontFamily: UI_FONT, fontSize: 12, color: label, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>
         <span style={{ marginRight: 7 }}>{mark}</span>{title}
       </p>
-      <p style={{ fontFamily: UI_FONT, fontSize: 18, color: text, fontWeight: 900, marginTop: 8, lineHeight: 1.25 }}>
-        {to12h(value) || 'Not available'}
+      <p style={{ fontFamily: UI_FONT, fontSize: 14.5, color: text, fontWeight: 800, marginTop: 8, lineHeight: 1.4 }}>
+        {formatTimeRangeClean(value) || 'Not available'}
       </p>
       <p style={{ fontFamily: UI_FONT, fontSize: 12, color: label, fontWeight: 700, marginTop: 4, lineHeight: 1.25 }}>
         {note}
@@ -408,8 +431,13 @@ function flattenDetails(data, prefix = '') {
   });
 }
 
+// FIX: was `to12h(cleanValue(value))`, which — same as TimingCard above —
+// left the date prefix in place for any full "YYYY-MM-DD HH:MM:SS" value.
+// formatTimeOnly() strips it, so every row in Daily Timings / Sun Details /
+// Moon Details / Hindu Calendar shows a clean "4:23 AM" instead of
+// "2026-07-10 4:23 AM".
 function detailTime(value) {
-  return to12h(cleanValue(value));
+  return formatTimeOnly(cleanValue(value));
 }
 
 function InfoRowList({ data }) {
@@ -573,6 +601,8 @@ function AngaSection({ title, icon, accent, records }) {
   );
 }
 
+// FIX: item.time subtitle used raw to12h() — switched to formatTimeOnly()
+// so a full datetime string doesn't leak the date into the chip.
 function ChoghadiyaChips({ rows }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8 }}>
@@ -581,7 +611,7 @@ function ChoghadiyaChips({ rows }) {
         return (
           <div key={`${item.name}-${index}`} style={{ padding: '10px 12px', borderRadius: 10, background: '#fafafa', border: '1px solid #eee', borderLeft: `4px solid ${color}` }}>
             <p style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, color, margin: 0 }}>{item.name || 'Choghadiya'}</p>
-            <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#8a8a8a', marginTop: 4 }}>{to12h(item.time)}</p>
+            <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#8a8a8a', marginTop: 4 }}>{formatTimeRangeClean(item.time)}</p>
           </div>
         );
       })}
@@ -846,6 +876,11 @@ export default function PanchangPage() {
         body: JSON.stringify({ date, city: city || 'India' }),
       });
       const data = await res.json();
+      // FIX: backend now returns a 422 with a clear message when the typed
+      // city text isn't recognized (see routers/panchang.py normalize_city),
+      // instead of silently generating Panchang for a wrong fallback city.
+      // `!res.ok` already surfaces that message here — no change needed on
+      // this side beyond making sure city text isn't trusted blindly.
       if (!res.ok) throw new Error(data.detail || 'Failed to load Panchang');
       setDailyResult(data);
     } catch (e) {
@@ -1172,7 +1207,7 @@ function MuhuratResult({ result, selectedType }) {
                 <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #86efac', overflow: 'hidden', background: '#f0fdf4' }}>
                   <div style={{ display: 'flex', borderBottom: '1px solid #86efac' }}>
                     <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid #86efac' }}>
-                      <p style={{ fontFamily: UI_FONT, fontSize: 17, fontWeight: 800, color: '#15803d', whiteSpace: 'nowrap', marginBottom: 2 }}>{to12h(timing.time)}</p>
+                      <p style={{ fontFamily: UI_FONT, fontSize: 15, fontWeight: 800, color: '#15803d', whiteSpace: 'nowrap', marginBottom: 2 }}>{formatTimeRangeClean(timing.time)}</p>
                       <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a' }}>Shubh Timing</p>
                     </div>
                     <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#dcfce7' }}>
@@ -1195,7 +1230,7 @@ function MuhuratResult({ result, selectedType }) {
                   <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #fca5a5', overflow: 'hidden', background: '#fef2f2' }}>
                     <div style={{ display: 'flex' }}>
                       <div style={{ padding: '10px 16px', borderRight: '1px solid #fca5a5' }}>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 16, fontWeight: 800, color: '#b91c1c', whiteSpace: 'nowrap', marginBottom: 2 }}>{to12h(timing.time)}</p>
+                        <p style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 800, color: '#b91c1c', whiteSpace: 'nowrap', marginBottom: 2 }}>{formatTimeRangeClean(timing.time)}</p>
                         <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#dc2626' }}>Avoid</p>
                       </div>
                       <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center' }}>
