@@ -7,6 +7,7 @@ Muhurat Finder is intentionally kept on the existing Claude flow for now.
 
 from __future__ import annotations
 
+import calendar as calendar_module
 from datetime import datetime
 import json
 import os
@@ -643,6 +644,116 @@ def get_daily_panchang(req: DailyPanchangRequest):
         lon,
         tz,
     )
+
+
+@router.get("/month")
+def get_panchang_month(
+    year: int,
+    month: int,
+    city: Optional[str] = "India",
+    coordinates: Optional[str] = None,
+    calendar: Optional[str] = "amanta",
+    language: Optional[str] = "en",
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    timezone: Optional[float] = None,
+):
+    """Monthly Panchang endpoint used by frontend/src/components/PanchangCalendar.jsx.
+
+    The calendar UI calls:
+      GET /api/panchang/month?year=YYYY&month=M&coordinates=lat,lon&calendar=amanta&language=en
+
+    Without this route FastAPI returns 404 "Not Found", which is what the
+    calendar screenshot is showing. This endpoint returns the shape the
+    frontend expects: { year, month, days: [...] }.
+    """
+    if year < 1900 or year > 2100:
+        raise HTTPException(status_code=422, detail="year must be between 1900 and 2100")
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=422, detail="month must be between 1 and 12")
+
+    base_req = DailyPanchangRequest(
+        date=f"{year}-{month:02d}-01",
+        city=city,
+        coordinates=coordinates,
+        calendar=calendar,
+        language=language,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+    )
+    lat, lon, tz, place = normalize_city(base_req)
+
+    festivals_payload = {
+        "api_key": divine_api_key(),
+        "year": str(year),
+        "month": f"{month:02d}",
+        "place": place,
+        "lat": lat,
+        "lon": lon,
+        "tzone": tz,
+    }
+    try:
+        festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
+        month_festivals = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
+    except HTTPException:
+        month_festivals = []
+
+    days = []
+    total_days = calendar_module.monthrange(year, month)[1]
+    for day_number in range(1, total_days + 1):
+        date_value = f"{year}-{month:02d}-{day_number:02d}"
+        req = DailyPanchangRequest(
+            date=date_value,
+            city=city,
+            coordinates=coordinates,
+            calendar=calendar,
+            language=language,
+            latitude=latitude,
+            longitude=longitude,
+            timezone=timezone,
+        )
+        payload = {
+            "api_key": divine_api_key(),
+            "day": day_number,
+            "month": month,
+            "year": year,
+            "place": place,
+            "lat": lat,
+            "lon": lon,
+            "tzone": tz,
+            "lan": language or "en",
+        }
+        panchang_raw = divine_post(DIVINE_BASES["panchang"], payload)
+        choghadiya_raw = divine_post(DIVINE_BASES["choghadiya"], payload)
+        auspicious_raw = divine_post(DIVINE_BASES["auspicious"], payload)
+        inauspicious_raw = divine_post(DIVINE_BASES["inauspicious"], payload)
+        festivals_for_day = [f for f in month_festivals if f.get("date") == date_value]
+        days.append(
+            normalize_daily(
+                req,
+                panchang_raw,
+                choghadiya_raw,
+                auspicious_raw,
+                inauspicious_raw,
+                festivals_for_day,
+                place,
+                lat,
+                lon,
+                tz,
+            )
+        )
+
+    return {
+        "status": "ok",
+        "source": "divineapi",
+        "year": year,
+        "month": month,
+        "calendar": calendar,
+        "language": language,
+        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
+        "days": days,
+    }
 
 
 def get_client() -> anthropic.Anthropic:
