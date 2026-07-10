@@ -24,6 +24,14 @@ DIVINE_BASES = {
     "choghadiya": "https://astroapi-2.divineapi.com/indian-api/v1/find-choghadiya",
     "auspicious": "https://astroapi-3.divineapi.com/indian-api/v1/auspicious-timings",
     "inauspicious": "https://astroapi-3.divineapi.com/indian-api/v1/inauspicious-timings",
+    # FIX: added. This is the correct endpoint for "every Hindu festival in a
+    # Gregorian month" — DivineAPI's own docs call it the flagship festival
+    # endpoint. It takes YEAR + MONTH (not day), unlike the panchang/
+    # choghadiya/timings endpoints above which are per-day. See
+    # divine_api_client.py for the fuller explanation of why the previously
+    # used "date-specific-festivals" endpoint never actually worked (it has
+    # no day/month parameter at all).
+    "festivals": "https://astroapi-3.divineapi.com/indian-api/v1/english-calendar-festivals",
 }
 
 CITY_COORDINATES = {
@@ -160,6 +168,62 @@ def time_range(value: Any) -> str:
     if start and end:
         return f"{start} - {end}"
     return display_name(value)
+
+
+def label(value: str) -> str:
+    return str(value or "").replace("_", " ").strip().title()
+
+
+def flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flattens the English Calendar Festivals response into a flat list:
+    {name, slug, date, image, tradition, parana}.
+
+    Two shapes exist per slug in the raw response:
+      - Plain:            "diwali": {"date": "...", "image": "..."}
+      - Tradition-nested:  "utpanna_ekadashi": {
+            "smartas":   {"date": "...", "parana": {...}, "image": "..."},
+            "vaishnavas": {"date": "...", "parana": {...}, "image": "..."},
+        }
+    Tradition-nested entries (mostly Ekadashi/Pradosh vrats) produce one row
+    PER tradition variant, since Smarta and Vaishnava observances commonly
+    fall on different dates and both should be visible on the calendar.
+    """
+    festivals: list[dict[str, Any]] = []
+    if not isinstance(data, dict):
+        return festivals
+
+    for slug, value in data.items():
+        if slug in {"year", "success", "status"} or not isinstance(value, dict):
+            continue
+
+        if "date" in value:
+            festivals.append(
+                {
+                    "name": label(slug),
+                    "slug": slug,
+                    "date": value.get("date"),
+                    "image": value.get("image"),
+                    "tradition": None,
+                    "parana": value.get("parana"),
+                }
+            )
+            continue
+
+        for tradition, variant in value.items():
+            if not isinstance(variant, dict) or "date" not in variant:
+                continue
+            festivals.append(
+                {
+                    "name": label(slug),
+                    "slug": slug,
+                    "date": variant.get("date"),
+                    "image": variant.get("image"),
+                    "tradition": label(tradition),
+                    "parana": variant.get("parana"),
+                }
+            )
+
+    return festivals
 
 
 def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]:
@@ -354,6 +418,7 @@ def normalize_daily(
     choghadiya_raw: dict[str, Any],
     auspicious_raw: dict[str, Any],
     inauspicious_raw: dict[str, Any],
+    festivals_for_day: list[dict[str, Any]],
     place: str,
     lat: float,
     lon: float,
@@ -388,6 +453,20 @@ def normalize_daily(
     nakshatra_name = display_name(nakshatra)
     yoga_name = display_name(yoga)
     karana_name = display_name(karana)
+
+    festivals = [
+        {
+            "name": item.get("name") or "Festival",
+            "slug": item.get("slug") or "",
+            "date": item.get("date"),
+            "start_date": item.get("date"),
+            "end_date": item.get("date"),
+            "image": item.get("image"),
+            "tradition": item.get("tradition"),
+            "parana": item.get("parana"),
+        }
+        for item in (festivals_for_day or [])
+    ]
 
     return {
         "source": "divineapi",
@@ -433,6 +512,9 @@ def normalize_daily(
         "next_choghadiya": next_choghadiya,
         "auspicious_timings": auspicious,
         "inauspicious_timings": inauspicious,
+        # FIX: festivals for this exact date, sourced from the English
+        # Calendar Festivals endpoint (fetched once per month, filtered here).
+        "festivals": festivals,
         "auspicious_period": [
             {
                 "slug": key,
@@ -481,7 +563,7 @@ def normalize_daily(
 @router.post("/daily")
 def get_daily_panchang(req: DailyPanchangRequest):
     try:
-        datetime.strptime(req.date, "%Y-%m-%d")
+        parsed_date = datetime.strptime(req.date, "%Y-%m-%d")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="date must be in YYYY-MM-DD format") from exc
 
@@ -503,12 +585,37 @@ def get_daily_panchang(req: DailyPanchangRequest):
     auspicious_raw = divine_post(DIVINE_BASES["auspicious"], payload)
     inauspicious_raw = divine_post(DIVINE_BASES["inauspicious"], payload)
 
+    # FIX: festivals need their OWN payload — the English Calendar Festivals
+    # endpoint takes {api_key, year, month, place, lat, lon, tzone}, not a
+    # "day". Sending a "day" field to it (as the panchang/choghadiya/timings
+    # calls do above) is harmless but meaningless; it returns every festival
+    # for the whole month regardless, which we then filter down to this date.
+    festivals_payload = {
+        "api_key": divine_api_key(),
+        "year": str(parsed_date.year),
+        "month": f"{parsed_date.month:02d}",
+        "place": place,
+        "lat": lat,
+        "lon": lon,
+        "tzone": tz,
+    }
+    try:
+        festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
+        month_festivals = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
+    except HTTPException:
+        # Don't fail the whole daily Panchang if the festival feed hiccups —
+        # the rest of the day's data is still useful without it.
+        month_festivals = []
+
+    festivals_for_day = [f for f in month_festivals if f.get("date") == req.date]
+
     return normalize_daily(
         req,
         panchang_raw,
         choghadiya_raw,
         auspicious_raw,
         inauspicious_raw,
+        festivals_for_day,
         place,
         lat,
         lon,

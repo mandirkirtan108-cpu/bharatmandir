@@ -44,9 +44,23 @@ CHOGHADIYA_URL = os.getenv(
     "DIVINE_CHOGHADIYA_URL",
     "https://astroapi-2.divineapi.com/indian-api/v1/find-choghadiya",
 )
-FESTIVALS_URL = os.getenv(
-    "DIVINE_FESTIVALS_URL",
-    "https://astroapi-3.divineapi.com/indian-api/v1/date-specific-festivals",
+# FIX: This used to point at "date-specific-festivals", which only accepts
+# {api_key, year, Place, lat, lon, tzone} — it has NO day/month parameter at
+# all, so sending day/month (as the old code did) was silently ignored and
+# every day of the year got back the exact same (wrong-shaped) payload. That
+# is why festivals never rendered on the calendar grid.
+#
+# The correct endpoint for "every Hindu festival in a Gregorian month" is the
+# English Calendar Festivals API — DivineAPI's own docs call it the
+# "flagship" festival endpoint for exactly this use case:
+#   POST https://astroapi-3.divineapi.com/indian-api/v1/english-calendar-festivals
+#   body: api_key, year, month, place, lat, lon, tzone
+# Response is keyed by festival slug -> {date, image}, or for festivals with
+# tradition variants (e.g. Ekadashis) -> {smartas: {date, parana, image},
+# vaishnavas: {date, parana, image}}.
+ENGLISH_CALENDAR_FESTIVALS_URL = os.getenv(
+    "DIVINE_ENGLISH_CALENDAR_FESTIVALS_URL",
+    "https://astroapi-3.divineapi.com/indian-api/v1/english-calendar-festivals",
 )
 # Real Chandrabalam/Tarabalam favourability lists for a date — replaces the
 # manual nakshatra-count approximation previously used for compatibility.
@@ -80,6 +94,12 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 BIRTH_CACHE_DIR = CACHE_DIR / "birth_moments"
 BIRTH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# FIX: month-level cache for the English Calendar Festivals endpoint. One
+# entry covers an entire Gregorian month (year+month+coordinates), so a
+# 30-day calendar view costs ONE upstream call instead of one-per-day.
+FESTIVALS_CACHE_DIR = CACHE_DIR / "english_calendar_festivals"
+FESTIVALS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def normalize_coordinates(coordinates: str) -> str:
     try:
@@ -104,6 +124,11 @@ def coordinate_variants(coordinates: str) -> list[str]:
 def cache_key_for(date_value: str, coordinates: str, calendar: str, language: str, ayanamsa: int) -> str:
     safe_coordinates = normalize_coordinates(coordinates).replace(",", "_").replace(".", "-")
     return f"{date_value}_{safe_coordinates}_{calendar}_{language}_{ayanamsa}.json"
+
+
+def _festivals_cache_key(year: int, month: int, coordinates: str) -> str:
+    safe_coordinates = normalize_coordinates(coordinates).replace(",", "_").replace(".", "-")
+    return f"{year}_{month:02d}_{safe_coordinates}.json"
 
 
 def _parse_hour_minute(time_value: str | None) -> tuple[int, int]:
@@ -167,6 +192,64 @@ class PanchangQuery:
         return lat, lon
 
 
+def _label(value: str) -> str:
+    return value.replace("_", " ").strip().title()
+
+
+def _flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flattens the English Calendar Festivals response into a flat list of
+    rows: {name, slug, date, image, tradition, parana}.
+
+    Two shapes exist in the raw response, keyed by festival slug:
+      - Plain observances:      "diwali": {"date": "...", "image": "..."}
+      - Tradition-nested ones:  "utpanna_ekadashi": {
+            "smartas":   {"date": "...", "parana": {...}, "image": "..."},
+            "vaishnavas": {"date": "...", "parana": {...}, "image": "..."},
+        }
+    Ekadashis, Pradosh and similar vrats are commonly observed on different
+    dates by Smarta vs Vaishnava tradition, so tradition-nested entries
+    produce one row PER variant (so both dates surface on the calendar
+    instead of only one being kept).
+    """
+    festivals: list[dict[str, Any]] = []
+    if not isinstance(data, dict):
+        return festivals
+
+    for slug, value in data.items():
+        if slug in {"year", "success", "status"} or not isinstance(value, dict):
+            continue
+
+        if "date" in value:
+            festivals.append(
+                {
+                    "name": _label(slug),
+                    "slug": slug,
+                    "date": value.get("date"),
+                    "image": value.get("image"),
+                    "tradition": None,
+                    "parana": value.get("parana"),
+                }
+            )
+            continue
+
+        # Tradition-nested variant (Ekadashi/Pradosh style entries).
+        for tradition, variant in value.items():
+            if not isinstance(variant, dict) or "date" not in variant:
+                continue
+            festivals.append(
+                {
+                    "name": _label(slug),
+                    "slug": slug,
+                    "date": variant.get("date"),
+                    "image": variant.get("image"),
+                    "tradition": _label(tradition),
+                    "parana": variant.get("parana"),
+                }
+            )
+
+    return festivals
+
+
 class DivineApiClient:
     def __init__(self) -> None:
         self.api_key = os.getenv("DIVINE_API_KEY")
@@ -208,21 +291,76 @@ class DivineApiClient:
         if warning:
             warnings.append(warning)
         choghadiya = None
-        festivals = None
+        festivals_payload = None
         if include_choghadiya:
             choghadiya, warning = self._optional_post("choghadiya", CHOGHADIYA_URL, query)
             if warning:
                 warnings.append(warning)
         if include_festivals:
-            festivals, warning = self._optional_post("festivals", FESTIVALS_URL, query, include_language=False)
-            if warning:
-                warnings.append(warning)
+            # FIX: pull the WHOLE month's festivals (cached per year+month+
+            # coordinates) and filter down to this exact date, instead of
+            # hitting a per-day endpoint that didn't actually accept a date.
+            try:
+                day, month, year = query.date_parts
+                month_festivals = self.get_month_festivals(year, month, query.coordinates, query.place)
+                day_festivals = [f for f in month_festivals if f.get("date") == query.date]
+                festivals_payload = {"festivals_for_day": day_festivals}
+            except DivineApiError as exc:
+                warnings.append(
+                    {"endpoint": "festivals", "status_code": exc.status_code, "message": str(exc), "upstream": exc.payload}
+                )
+                festivals_payload = None
 
-        payload = normalize_day(query, panchang, auspicious, inauspicious, choghadiya, festivals)
+        payload = normalize_day(query, panchang, auspicious, inauspicious, choghadiya, festivals_payload)
         if warnings:
             payload["warnings"] = warnings
         self._save_cached_day(query, payload, cache_file)
         return payload
+
+    def get_month_festivals(
+        self,
+        year: int,
+        month: int,
+        coordinates: str = DEFAULT_COORDINATES,
+        place: str = DEFAULT_PLACE,
+    ) -> list[dict[str, Any]]:
+        """Every Hindu festival, vrat, Ekadashi, Purnima etc. that falls in
+        the given Gregorian year+month, via DivineAPI's English Calendar
+        Festivals endpoint. Cached to disk per (year, month, coordinates) so
+        rendering a full month calendar grid costs exactly ONE upstream call,
+        no matter how many days are requested.
+        """
+        cache_file = FESTIVALS_CACHE_DIR / _festivals_cache_key(year, month, coordinates)
+        if cache_file.exists():
+            try:
+                return json.loads(cache_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        lat, lon = [part.strip() for part in normalize_coordinates(coordinates).split(",", 1)]
+        body = {
+            "api_key": self.api_key,
+            "year": str(year),
+            "month": f"{month:02d}",
+            "place": place or DEFAULT_PLACE,
+            "lat": lat,
+            "lon": lon,
+            "tzone": str(DEFAULT_TZONE),
+        }
+        response = requests.post(ENGLISH_CALENDAR_FESTIVALS_URL, data=body, headers=self._headers(), timeout=30)
+        self._raise_for_response(response)
+        payload = response.json()
+        if payload.get("success") in (0, False):
+            raise DivineApiError(
+                payload.get("message") or "English Calendar Festivals request failed.", response.status_code, payload
+            )
+
+        result = _flatten_english_calendar_festivals(payload.get("data", {}))
+        try:
+            cache_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+        return result
 
     def get_month(
         self,
@@ -879,34 +1017,28 @@ def _normalize_choghadiya(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _normalize_festivals(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """FIX: `data` is now the pre-flattened, already-filtered-to-this-day
+    payload produced in DivineApiClient.get_day():
+        {"festivals_for_day": [{name, slug, date, image, tradition, parana}, ...]}
+    (sourced from the English Calendar Festivals endpoint, one call per
+    month). This replaces the old logic that expected a raw per-day festival
+    response, which the previous endpoint never actually returned correctly.
+    """
+    rows = (data or {}).get("festivals_for_day") or []
     festivals = []
-    if isinstance(data, list):
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            name = _first_value(item, "name", "festival_name", "title", "slug")
-            festivals.append(
-                {
-                    "name": name or "Festival",
-                    "slug": _first_value(item, "slug", "key") or str(name).lower().replace(" ", "_"),
-                    "date": item.get("date"),
-                    "start_date": item.get("start_date"),
-                    "end_date": item.get("end_date"),
-                    "image": item.get("image") or item.get("start_image") or item.get("end_image"),
-                }
-            )
-        return festivals
-    for key, value in data.items():
-        if not isinstance(value, dict):
+    for item in rows:
+        if not isinstance(item, dict):
             continue
         festivals.append(
             {
-                "name": _label(key),
-                "slug": key,
-                "date": value.get("date"),
-                "start_date": value.get("start_date"),
-                "end_date": value.get("end_date"),
-                "image": value.get("image") or value.get("start_image") or value.get("end_image"),
+                "name": item.get("name") or "Festival",
+                "slug": item.get("slug") or "",
+                "date": item.get("date"),
+                "start_date": item.get("date"),
+                "end_date": item.get("date"),
+                "image": item.get("image"),
+                "tradition": item.get("tradition"),
+                "parana": item.get("parana"),
             }
         )
     return festivals
@@ -918,10 +1050,6 @@ def _first_value(source: dict[str, Any], *keys: str) -> Any:
         if value not in (None, "", []):
             return value
     return ""
-
-
-def _label(value: str) -> str:
-    return value.replace("_", " ").strip().title()
 
 
 def _split_range(value: str) -> tuple[str, str]:
