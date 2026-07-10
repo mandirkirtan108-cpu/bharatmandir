@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 from functools import lru_cache
 import json
 import os
+import re
 from typing import Any, Optional
 
 import anthropic
@@ -124,6 +125,10 @@ class CalendarYearSeedRequest(BaseModel):
     longitude: Optional[float] = None
     timezone: Optional[float] = None
     overwrite: bool = False
+
+
+class CalendarMonthSeedRequest(CalendarYearSeedRequest):
+    month: int
 
 
 class MuhuratRequest(BaseModel):
@@ -274,6 +279,69 @@ def ors_api_key() -> str:
     return key
 
 
+VALID_CITY_LAYERS = {
+    "locality",
+    "localadmin",
+    "county",
+    "macrocounty",
+    "region",
+    "macroregion",
+    "borough",
+}
+
+
+def normalize_place_text(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def invalid_city_error(city: str) -> HTTPException:
+    return HTTPException(
+        status_code=422,
+        detail=f"'{city}' is not a recognized Indian city. Please check the spelling or pick a city suggestion.",
+    )
+
+
+def is_india_feature(properties: dict[str, Any]) -> bool:
+    country_values = [
+        properties.get("country_a"),
+        properties.get("country_code"),
+        properties.get("country"),
+    ]
+    normalized = {str(value or "").strip().lower() for value in country_values if value}
+    return not normalized or bool(normalized & {"ind", "in", "india"})
+
+
+def is_city_like_feature(city: str, feature: dict[str, Any]) -> bool:
+    properties = feature.get("properties") or {}
+    layer = str(properties.get("layer") or "").lower()
+    if layer not in VALID_CITY_LAYERS:
+        return False
+    if not is_india_feature(properties):
+        return False
+
+    query = normalize_place_text(city)
+    if len(query) < 3:
+        return False
+
+    label = properties.get("label") or ""
+    label_head = str(label).split(",", 1)[0]
+    candidates = {
+        properties.get("name"),
+        properties.get("locality"),
+        properties.get("localadmin"),
+        properties.get("county"),
+        properties.get("region"),
+        label_head,
+    }
+    candidate_values = {normalize_place_text(value) for value in candidates if value}
+    if query in candidate_values:
+        return True
+
+    # Allows inputs like "Varanasi UP" or "New Delhi India" while still
+    # rejecting fuzzy POI/street matches such as a random "Anurag..." result.
+    return any(candidate and len(candidate) >= 4 and query.startswith(candidate) for candidate in candidate_values)
+
+
 @lru_cache(maxsize=1024)
 def geocode_city(city: str) -> tuple[float, float, str]:
     """Resolves free-text city input to (lat, lon, formatted_place) using
@@ -296,7 +364,7 @@ def geocode_city(city: str) -> tuple[float, float, str]:
                 "api_key": ors_api_key(),
                 "text": city,
                 "boundary.country": "IN",
-                "size": 1,
+                "size": 5,
             },
             timeout=15,
         )
@@ -317,12 +385,12 @@ def geocode_city(city: str) -> tuple[float, float, str]:
 
     features = payload.get("features") or []
     if not features:
-        raise HTTPException(
-            status_code=422,
-            detail=f"'{city}' is not a recognized city. Please check the spelling or pick a suggestion.",
-        )
+        raise invalid_city_error(city)
 
-    top = features[0]
+    top = next((feature for feature in features if is_city_like_feature(city, feature)), None)
+    if not top:
+        raise invalid_city_error(city)
+
     coordinates = pick(top, "geometry", "coordinates", default=None)
     if not coordinates or len(coordinates) < 2:
         raise HTTPException(status_code=502, detail="OpenRouteService returned an incomplete location.")
@@ -856,6 +924,95 @@ def get_panchang_month(
         "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
         "hindu_calendar_meta": first_day.get("hindu_calendar") or {},
         "days": days,
+    }
+
+
+@router.post("/calendar/seed-month")
+def seed_panchang_calendar_month(req: CalendarMonthSeedRequest):
+    if req.year < 1900 or req.year > 2100:
+        raise HTTPException(status_code=422, detail="year must be between 1900 and 2100")
+    if req.month < 1 or req.month > 12:
+        raise HTTPException(status_code=422, detail="month must be between 1 and 12")
+
+    base_req = DailyPanchangRequest(
+        date=f"{req.year}-{req.month:02d}-01",
+        city=req.city,
+        coordinates=req.coordinates,
+        calendar=req.calendar,
+        language=req.language,
+        latitude=req.latitude,
+        longitude=req.longitude,
+        timezone=req.timezone,
+    )
+    lat, lon, tz, place = normalize_city(base_req)
+    calendar_type = req.calendar or "amanta"
+    language = req.language or "en"
+    coordinates_key = coordinates_text(lat, lon)
+
+    festivals_payload = {
+        "api_key": divine_api_key(),
+        "year": str(req.year),
+        "month": f"{req.month:02d}",
+        "place": place,
+        "lat": lat,
+        "lon": lon,
+        "tzone": tz,
+    }
+    try:
+        festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
+        month_festivals = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
+    except HTTPException:
+        month_festivals = []
+
+    generated = 0
+    skipped_existing = 0
+    failed: list[dict[str, str]] = []
+    total_days = calendar_module.monthrange(req.year, req.month)[1]
+
+    for day_number in range(1, total_days + 1):
+        date_value = f"{req.year}-{req.month:02d}-{day_number:02d}"
+        if not req.overwrite and get_cached_day(date_value, coordinates_key, calendar_type, language):
+            skipped_existing += 1
+            continue
+
+        day_req = DailyPanchangRequest(
+            date=date_value,
+            city=req.city,
+            coordinates=req.coordinates,
+            calendar=calendar_type,
+            language=language,
+            latitude=req.latitude,
+            longitude=req.longitude,
+            timezone=req.timezone,
+        )
+        try:
+            normalized = fetch_calendar_day_from_divine(
+                day_req,
+                month_festivals,
+                place,
+                lat,
+                lon,
+                tz,
+            )
+            normalized["cache"] = "database"
+            save_day_cache(date_value, coordinates_key, calendar_type, language, normalized)
+            generated += 1
+        except HTTPException as exc:
+            failed.append({"date": date_value, "error": str(exc.detail)})
+
+    return {
+        "status": "ok" if not failed else "partial",
+        "source": "divineapi-to-database",
+        "year": req.year,
+        "month": req.month,
+        "calendar": calendar_type,
+        "language": language,
+        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
+        "generated": generated,
+        "skipped_existing": skipped_existing,
+        "failed_count": len(failed),
+        "failed": failed[:20],
+        "message": "Month calendar data is stored in database. Calendar month endpoint will now read DB only.",
     }
 
 
