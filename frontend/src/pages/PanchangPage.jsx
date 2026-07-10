@@ -333,8 +333,8 @@ function curateRecord(record) {
   if (!record || typeof record !== 'object') return { fields: [], badges: [] };
 
   const badges = [];
-  if (record.vriddhi === true || record.vriddhi === 'true') badges.push('Vriddhi Tithi');
-  if (record.kshaya === true || record.kshaya === 'true') badges.push('Kshaya Tithi');
+  if (record.vriddhi === true || record.vriddhi === 'true') badges.push('Vriddhi');
+  if (record.kshaya === true || record.kshaya === 'true') badges.push('Kshaya');
 
   const fields = Object.entries(record)
     .filter(([key]) => !HIDDEN_KEYS.has(key))
@@ -404,52 +404,83 @@ function DetailCard({ title, data, accent = '#c47a14' }) {
   );
 }
 
-// Replaces the old "PanchangRecordTable" key-dump. Shows only meaningful,
-// labeled fields per record (Tithi/Nakshatra/Yoga/Karana), with a status
-// badge row for Vriddhi/Kshaya instead of a raw "false" line.
-function AngaRecordList({ title, records }) {
+// Compact table view for a list of Tithi/Nakshatra/Yoga/Karana records.
+// Replaces the old "one big card per record, one tiny tile per field"
+// layout (which turned into an endless vertical scroll for a full
+// month's worth of records) with a single scannable table — one row
+// per record, only the columns that are actually present.
+function AngaRecordTable({ title, records }) {
   const rows = Array.isArray(records) ? records.filter((item) => item && typeof item === 'object') : [];
   if (!rows.length) return null;
 
+  const curated = rows.map(curateRecord).filter((c) => c.fields.length);
+  if (!curated.length) return null;
+
+  // Union of keys across all rows, kept in priority order, capped so the
+  // table stays readable instead of growing sideways forever.
+  const seen = new Set();
+  const columnKeys = [];
+  curated.forEach((c) => c.fields.forEach((f) => {
+    if (!seen.has(f.key)) { seen.add(f.key); columnKeys.push(f.key); }
+  }));
+  columnKeys.sort((a, b) => {
+    const ai = FIELD_PRIORITY.indexOf(a);
+    const bi = FIELD_PRIORITY.indexOf(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+  const shownKeys = columnKeys.slice(0, 5);
+
+  const thStyle = {
+    fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900,
+    letterSpacing: '.06em', textTransform: 'uppercase', textAlign: 'left',
+    padding: '0 10px 8px', whiteSpace: 'nowrap',
+  };
+  const tdStyle = {
+    fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 700,
+    padding: '9px 10px', whiteSpace: 'nowrap',
+  };
+
   return (
     <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 10, padding: '15px 16px' }}>
-      <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b5a24', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-        {title}
-      </p>
-      <div style={{ display: 'grid', gap: 10 }}>
-        {rows.map((record, index) => {
-          const { fields, badges } = curateRecord(record);
-          if (!fields.length) return null;
-          return (
-            <div key={`${title}-${index}`} style={{ background: '#fafafa', borderRadius: 8, padding: '11px 12px' }}>
-              {!!badges.length && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 9 }}>
-                  {badges.map((badge) => (
-                    <span key={badge} style={{
-                      fontFamily: UI_FONT, fontSize: 10, fontWeight: 900, color: '#9a5d12',
-                      background: '#fff1d9', borderRadius: 50, padding: '3px 10px',
-                      letterSpacing: '.04em', textTransform: 'uppercase',
-                    }}>
-                      {badge}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 8 }}>
-                {fields.slice(0, 10).map((item) => (
-                  <div key={`${title}-${index}-${item.key}`}>
-                    <p style={{ fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                      {item.label}
-                    </p>
-                    <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, marginTop: 3 }}>
-                      {item.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b5a24', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>
+          {title}
+        </p>
+        <span style={{ fontFamily: UI_FONT, fontSize: 11, color: '#a8a8a8', fontWeight: 700 }}>{curated.length} entries</span>
+      </div>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: shownKeys.length * 110 + 40 }}>
+          <thead>
+            <tr>
+              {shownKeys.map((k) => (
+                <th key={k} style={thStyle}>{LABEL_MAP[k] || titleize(k)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {curated.map((c, index) => (
+              <tr key={index} style={{ borderTop: '1px solid #f2f2f2', background: index % 2 ? '#fafafa' : 'transparent' }}>
+                {shownKeys.map((k) => {
+                  const field = c.fields.find((f) => f.key === k);
+                  return (
+                    <td key={k} style={tdStyle}>
+                      {field ? field.value : '—'}
+                      {k === shownKeys[0] && !!c.badges.length && (
+                        <span style={{
+                          marginLeft: 7, fontSize: 9, fontWeight: 900, color: '#9a5d12',
+                          background: '#fff1d9', borderRadius: 50, padding: '2px 7px',
+                          letterSpacing: '.03em', textTransform: 'uppercase',
+                        }}>
+                          {c.badges.join(' · ')}
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -526,7 +557,48 @@ function MuhuratTimingsGrid({ title, data, tone = 'green', meanings }) {
   );
 }
 
+// Tab bar used inside "Full Panchang Details" — lets the user jump
+// straight to the section they care about instead of scrolling past
+// everything else.
+function TabBar({ tabs, active, onChange }) {
+  return (
+    <div style={{
+      display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e6e6e6',
+      overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+    }}>
+      {tabs.map((tb) => (
+        <button
+          key={tb.id}
+          onClick={() => onChange(tb.id)}
+          style={{
+            padding: '10px 16px',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            fontFamily: UI_FONT,
+            fontSize: 13,
+            fontWeight: 800,
+            whiteSpace: 'nowrap',
+            color: active === tb.id ? '#c47a14' : '#8b8b8b',
+            borderBottom: active === tb.id ? '2px solid #c47a14' : '2px solid transparent',
+            marginBottom: -1,
+            transition: 'color .15s',
+          }}
+        >
+          {tb.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// "Full Panchang Details" used to be one long stack of every section —
+// Daily Timings, Sun/Moon/Calendar, Auspicious, Inauspicious, and five
+// separate "All X" record dumps — all rendered at once. That's what
+// made the page feel endless. Now it's tabbed: one focused section
+// shown at a time, with the heavy "All Records" data behind its own tab.
 function PanchangDetails({ dailyResult }) {
+  const [tab, setTab] = useState('timings');
   const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
   const mainTimings = {
     sunrise: dailyResult.sunrise,
@@ -537,6 +609,13 @@ function PanchangDetails({ dailyResult }) {
     abhijit_muhurat: dailyResult.abhijit_muhurat?.time,
     rahu_kaal: dailyResult.rahu_kaal?.time,
   };
+
+  const TABS = [
+    { id: 'timings', label: 'Daily Timings' },
+    { id: 'sun_moon', label: 'Sun, Moon & Calendar' },
+    { id: 'muhurat', label: 'Auspicious / Inauspicious' },
+    { id: 'records', label: 'All Panchang Records' },
+  ];
 
   return (
     <div style={{ marginTop: 22 }}>
@@ -549,24 +628,39 @@ function PanchangDetails({ dailyResult }) {
         </span>
       </div>
 
-      <div style={{ display: 'grid', gap: 12 }}>
-        <DetailCard title="Daily Timings" data={mainTimings} />
+      <TabBar tabs={TABS} active={tab} onChange={setTab} />
+
+      {tab === 'timings' && (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <DetailCard title="Daily Timings" data={mainTimings} />
+          {!!nightChoghadiya.length && <ChoghadiyaBlock title="Night Choghadiya" rows={nightChoghadiya} />}
+        </div>
+      )}
+
+      {tab === 'sun_moon' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12 }}>
           <DetailCard title="Sun Details" data={dailyResult.sun} accent="#d97706" />
           <DetailCard title="Moon Details" data={dailyResult.moon} accent="#2563eb" />
           <DetailCard title="Hindu Calendar" data={dailyResult.hindu_calendar} accent="#7c3aed" />
         </div>
-        <MuhuratTimingsGrid title="Auspicious Timings" data={dailyResult.auspicious_timings} tone="green" meanings={AUSPICIOUS_MEANINGS} />
-        <MuhuratTimingsGrid title="Inauspicious Timings" data={dailyResult.inauspicious_timings} tone="red" meanings={INAUSPICIOUS_MEANINGS} />
-        {!!nightChoghadiya.length && <ChoghadiyaBlock title="Night Choghadiya" rows={nightChoghadiya} />}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
-          <AngaRecordList title="All Tithis" records={dailyResult.all_panchang?.tithis} />
-          <AngaRecordList title="All Nakshatras" records={dailyResult.all_panchang?.nakshatras} />
-          <AngaRecordList title="All Yogas" records={dailyResult.all_panchang?.yogas} />
-          <AngaRecordList title="All Karanas" records={dailyResult.all_panchang?.karnas} />
-          <AngaRecordList title="Sun Nakshatras" records={dailyResult.all_panchang?.sun_nakshatras} />
+      )}
+
+      {tab === 'muhurat' && (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <MuhuratTimingsGrid title="Auspicious Timings" data={dailyResult.auspicious_timings} tone="green" meanings={AUSPICIOUS_MEANINGS} />
+          <MuhuratTimingsGrid title="Inauspicious Timings" data={dailyResult.inauspicious_timings} tone="red" meanings={INAUSPICIOUS_MEANINGS} />
         </div>
-      </div>
+      )}
+
+      {tab === 'records' && (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <AngaRecordTable title="All Tithis" records={dailyResult.all_panchang?.tithis} />
+          <AngaRecordTable title="All Nakshatras" records={dailyResult.all_panchang?.nakshatras} />
+          <AngaRecordTable title="All Yogas" records={dailyResult.all_panchang?.yogas} />
+          <AngaRecordTable title="All Karanas" records={dailyResult.all_panchang?.karnas} />
+          <AngaRecordTable title="Sun Nakshatras" records={dailyResult.all_panchang?.sun_nakshatras} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1169,4 +1263,4 @@ function MuhuratResult({ result, selectedType }) {
       </div>
     </div>
   );
-} 
+}
