@@ -861,14 +861,15 @@ export default function PanchangPage() {
   const [dailyLoading, setDailyLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [dailyResult, setDailyResult] = useState(null);
-  const [error, setError] = useState(null);
+  const [dailyError, setDailyError] = useState(null);
+  const [muhuratError, setMuhuratError] = useState(null);
 
   const selectedType = MUHURAT_TYPES.find((m) => m.id === selected);
 
   const fetchDailyPanchang = async () => {
     setDailyLoading(true);
     setDailyResult(null);
-    setError(null);
+    setDailyError(null);
     try {
       const res = await fetch(`${API_BASE}/api/panchang/daily`, {
         method: 'POST',
@@ -884,7 +885,7 @@ export default function PanchangPage() {
       if (!res.ok) throw new Error(data.detail || 'Failed to load Panchang');
       setDailyResult(data);
     } catch (e) {
-      setError(`Could not load Panchang: ${e.message}`);
+      setDailyError(e.message || 'Could not load Panchang');
     } finally {
       setDailyLoading(false);
     }
@@ -892,12 +893,12 @@ export default function PanchangPage() {
 
   const findMuhurat = async () => {
     if (!selected) {
-      setError('Please select an occasion first.');
+      setMuhuratError('Please select an occasion first.');
       return;
     }
     setLoading(true);
     setResult(null);
-    setError(null);
+    setMuhuratError(null);
     try {
       const res = await fetch(`${API_BASE}/api/panchang/muhurat`, {
         method: 'POST',
@@ -916,7 +917,7 @@ export default function PanchangPage() {
       if (!res.ok) throw new Error(data.detail || 'Failed to get Muhurat');
       setResult(data);
     } catch (e) {
-      setError(`Could not get Muhurat: ${e.message}`);
+      setMuhuratError(`Could not get Muhurat: ${e.message}`);
     } finally {
       setLoading(false);
     }
@@ -943,6 +944,17 @@ export default function PanchangPage() {
     color: 'var(--text-light)',
     display: 'block',
     marginBottom: 6,
+  };
+  const inlineErrorStyle = {
+    background: '#FFF4F4',
+    border: '1px solid #FFCDD2',
+    borderRadius: 10,
+    padding: '12px 14px',
+    margin: '-2px 0 16px',
+    display: 'flex',
+    gap: 10,
+    alignItems: 'flex-start',
+    maxWidth: 640,
   };
 
   return (
@@ -1031,11 +1043,11 @@ export default function PanchangPage() {
                 <input
                   type="text"
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  onChange={(e) => { setCity(e.target.value); setDailyError(null); }}
                   placeholder="e.g. Ujjain, Mumbai"
-                  style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: '1px solid #e7d8c6', borderRadius: 9 }}
+                  style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
                   onFocus={(e) => { e.target.style.borderColor = 'var(--saffron)'; }}
-                  onBlur={(e) => { e.target.style.borderColor = 'var(--cream-dark)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = dailyError ? '#ef4444' : 'var(--cream-dark)'; }}
                 />
               </div>
               <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
@@ -1050,6 +1062,20 @@ export default function PanchangPage() {
                 )}
               </button>
             </div>
+
+            {dailyError && (
+              <div style={inlineErrorStyle}>
+                <AlertCircle size={17} color="#D32F2F" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <p style={{ fontFamily: UI_FONT, color: '#C62828', fontSize: 14, fontWeight: 800, margin: 0 }}>
+                    City not found
+                  </p>
+                  <p style={{ fontFamily: UI_FONT, color: '#9f1239', fontSize: 13, margin: '3px 0 0', lineHeight: 1.45 }}>
+                    {dailyError}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {dailyLoading && <LoadingState message="Loading Panchang..." />}
             {dailyResult && !dailyLoading && <PanchangDailyResult dailyResult={dailyResult} />}
@@ -1134,10 +1160,10 @@ export default function PanchangPage() {
             )}
           </Card>
 
-          {error && (
+          {muhuratError && (
             <div style={{ background: '#FFF4F4', border: '1px solid #FFCDD2', borderRadius: 'var(--radius)', padding: '14px 18px', marginBottom: 24, display: 'flex', gap: 10 }}>
               <AlertCircle size={18} color="#D32F2F" style={{ flexShrink: 0, marginTop: 2 }} />
-              <p style={{ fontFamily: UI_FONT, color: '#C62828', fontSize: 14 }}>{error}</p>
+              <p style={{ fontFamily: UI_FONT, color: '#C62828', fontSize: 14 }}>{muhuratError}</p>
             </div>
           )}
 
