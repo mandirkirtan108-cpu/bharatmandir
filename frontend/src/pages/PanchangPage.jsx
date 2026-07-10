@@ -44,17 +44,11 @@ const VERDICT_BG = { excellent: '#f0fdf4', good: '#eff6ff', average: '#fffbeb', 
 
 /* ------------------------------------------------------------------ */
 /*  Field curation — turns raw DivineAPI keys into a clean, human      */
-/*  readable Panchang. This is the layer that used to be missing:      */
-/*  before, every key from the API (vriddhi, kshaya, paksha_randhra_   */
-/*  start_time, raw slugs, duplicated "_detailed" entries...) was      */
-/*  dumped straight into the UI. Everything below decides what's       */
-/*  worth showing, what it should be called, and what it means.        */
+/*  readable Panchang instead of a raw key dump.                       */
 /* ------------------------------------------------------------------ */
 
-// Keys that are internal/API bookkeeping and should never reach the UI.
 const HIDDEN_KEYS = new Set(['id', 'raw', 'paksha_randhra_start_time', 'vriddhi', 'kshaya']);
 
-// Friendly labels for known API field names (falls back to titleize()).
 const LABEL_MAP = {
   tithi: 'Tithi', paksha: 'Paksha', number: 'Number', deity: 'Deity', type: 'Nature',
   start_time: 'Starts', end_time: 'Ends', start: 'Starts', end: 'Ends',
@@ -66,14 +60,12 @@ const LABEL_MAP = {
   brahma_muhurat: 'Brahma Muhurat', abhijit_muhurat: 'Abhijit Muhurat', rahu_kaal: 'Rahu Kaal',
 };
 
-// Preferred display order — the "name" of a thing first, timing last.
 const FIELD_PRIORITY = [
   'tithi', 'nak_name', 'nakshatra_name', 'yoga_name', 'karana_name',
   'paksha', 'pada', 'mobility', 'deity', 'devata', 'ruling_planet', 'rulling_planet', 'lord',
   'nature', 'type', 'number', 'yoga_number', 'sign', 'start_time', 'start', 'end_time', 'end',
 ];
 
-// What each auspicious muhurat actually means — replaces a bare titleized slug.
 const AUSPICIOUS_MEANINGS = {
   brahma_muhurta: { label: 'Brahma Muhurat', icon: '🕉️', note: 'Best for meditation, prayer and spiritual practice.' },
   abhijit_muhurta: { label: 'Abhijit Muhurat', icon: '✳️', note: 'The most auspicious window of the day for important beginnings.' },
@@ -87,7 +79,6 @@ const AUSPICIOUS_MEANINGS = {
   amrit_kaal: { label: 'Amrit Kaal', icon: '💧', note: 'Nectar period — favourable for most activities.' },
 };
 
-// What each inauspicious window means and why it should be avoided.
 const INAUSPICIOUS_MEANINGS = {
   rahu_kaal: { label: 'Rahu Kaal', icon: '⊘', note: 'Avoid starting new or auspicious work.' },
   gulkai_kaal: { label: 'Gulikai Kaal', icon: '⊘', note: 'Avoid important beginnings during this window.' },
@@ -119,8 +110,6 @@ function cleanValue(value) {
     .join(' | ');
 }
 
-// A nested object like { name: 'Chandra' } (the shape "lord" comes back as)
-// should just read as "Chandra", not "Name: Chandra".
 function simplifyValue(value) {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const keys = Object.keys(value);
@@ -147,9 +136,13 @@ function to12h(timeStr) {
   });
 }
 
-function show(value, fallback = 'Not available') {
-  const text = String(value ?? '').trim();
-  return text && text !== '-' && text !== '—' ? text : fallback;
+// Extracts just the HH:MM portion of a full "2026-07-08 10:38:00" style
+// string and formats it — used everywhere we want a clean time without
+// the date prefix cluttering the row.
+function formatTimeOnly(raw) {
+  if (!raw) return '';
+  const match = String(raw).match(/(\d{1,2}):(\d{2})/);
+  return match ? to12h(match[0]) : to12h(raw);
 }
 
 function firstTimePart(value) {
@@ -157,12 +150,8 @@ function firstTimePart(value) {
   return String(value).split(' - ')[0].trim();
 }
 
-function timeLabel(value) {
-  return to12h(firstTimePart(value));
-}
-
 function shortTime(value) {
-  return timeLabel(value).replace(/\s/g, '');
+  return to12h(firstTimePart(value)).replace(/\s/g, '');
 }
 
 function parseTimeToMinutes(value) {
@@ -269,10 +258,11 @@ function AngaCard({ label, value, sub, icon }) {
   return (
     <div style={{
       background: '#fff',
-      borderRadius: 8,
+      borderRadius: 12,
       padding: '16px 12px 14px',
       textAlign: 'center',
-      border: '1px solid #e6e6e6',
+      border: '1px solid #ececec',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       minHeight: 118,
       display: 'flex',
       flexDirection: 'column',
@@ -308,7 +298,7 @@ function TimingCard({ title, value, note, tone }) {
   };
   const [bg, label, text, mark] = tones[tone] || tones.blue;
   return (
-    <div style={{ background: bg, border: 'none', borderRadius: 8, padding: '15px 16px 13px', minHeight: 88 }}>
+    <div style={{ background: bg, border: 'none', borderRadius: 12, padding: '15px 16px 13px', minHeight: 88, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
       <p style={{ fontFamily: UI_FONT, fontSize: 12, color: label, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' }}>
         <span style={{ marginRight: 7 }}>{mark}</span>{title}
       </p>
@@ -323,37 +313,79 @@ function TimingCard({ title, value, note, tone }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Curated record rendering (Tithi / Nakshatra / Yoga / Karana lists) */
+/*  Premium building blocks for the "Full Panchang Details" panel      */
 /* ------------------------------------------------------------------ */
 
-// Turns one raw anga record (a tithi, nakshatra, yoga or karana object)
-// into an ordered list of { key, label, value } plus any status badges
-// (Vriddhi/Kshaya), dropping internal fields entirely.
-function curateRecord(record) {
-  if (!record || typeof record !== 'object') return { fields: [], badges: [] };
-
-  const badges = [];
-  if (record.vriddhi === true || record.vriddhi === 'true') badges.push('Vriddhi');
-  if (record.kshaya === true || record.kshaya === 'true') badges.push('Kshaya');
-
-  const fields = Object.entries(record)
-    .filter(([key]) => !HIDDEN_KEYS.has(key))
-    .map(([key, value]) => ({
-      key,
-      label: LABEL_MAP[key] || titleize(key),
-      value: to12h(cleanValue(simplifyValue(value))),
-    }))
-    .filter((field) => field.value && field.value !== 'Not available');
-
-  fields.sort((a, b) => {
-    const ai = FIELD_PRIORITY.indexOf(a.key);
-    const bi = FIELD_PRIORITY.indexOf(b.key);
-    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-  });
-
-  return { fields, badges };
+function Panel({ icon, title, accent = '#c47a14', right, children }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ width: 32, height: 32, borderRadius: 9, background: `${accent}18`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {icon}
+          </span>
+          <h4 style={{ fontFamily: UI_FONT, fontSize: 15, fontWeight: 900, color: '#1f1f1f', margin: 0 }}>{title}</h4>
+        </div>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
 }
 
+function Badge({ children }) {
+  return (
+    <span style={{
+      fontFamily: UI_FONT, fontSize: 10, fontWeight: 900, color: '#9a5d12',
+      background: '#fff1d9', borderRadius: 50, padding: '2px 9px',
+      letterSpacing: '.04em', textTransform: 'uppercase',
+    }}>
+      {children}
+    </span>
+  );
+}
+
+function EmptyState({ text }) {
+  return (
+    <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#a3a3a3', fontStyle: 'italic', padding: '10px 0', textAlign: 'center', margin: 0 }}>
+      {text}
+    </p>
+  );
+}
+
+const PANCHANG_TABS = [
+  { id: 'overview', label: 'Overview', icon: <Clock size={14} /> },
+  { id: 'auspicious', label: 'Auspicious', icon: <Sparkles size={14} /> },
+  { id: 'inauspicious', label: 'Inauspicious', icon: <AlertCircle size={14} /> },
+  { id: 'full', label: 'Full Data', icon: <Star size={14} /> },
+];
+
+function Tabs({ tabs, active, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap', background: '#f4ede2', padding: 6, borderRadius: 14 }}>
+      {tabs.map((tab) => {
+        const isActive = tab.id === active;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onChange(tab.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: isActive ? '#EA580C' : 'transparent', color: isActive ? '#fff' : '#8a7350',
+              fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, transition: 'var(--transition)',
+            }}
+          >
+            {tab.icon}{tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Turns any flat data object (sunrise/sunset, sun/moon details, hindu
+// calendar...) into a clean settings-style row list instead of a grid
+// of tiny boxes.
 function flattenDetails(data, prefix = '') {
   if (!data || typeof data !== 'object') return [];
   return Object.entries(data).flatMap(([key, value]) => {
@@ -379,131 +411,38 @@ function detailTime(value) {
   return to12h(cleanValue(value));
 }
 
-function DetailCard({ title, data, accent = '#c47a14' }) {
+function InfoRowList({ data }) {
   const items = flattenDetails(data);
-  if (!items.length) return null;
-
+  if (!items.length) return <EmptyState text="No details available." />;
   return (
-    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 10, padding: '15px 16px' }}>
-      <p style={{ fontFamily: UI_FONT, fontSize: 12, color: accent, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-        {title}
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-        {items.map((item) => (
-          <div key={`${title}-${item.label}`} style={{ background: '#fafafa', borderRadius: 8, padding: '10px 11px' }}>
-            <p style={{ fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-              {item.label}
-            </p>
-            <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, lineHeight: 1.35, marginTop: 5 }}>
-              {detailTime(item.value)}
-            </p>
-          </div>
-        ))}
-      </div>
+    <div>
+      {items.map((item, index) => (
+        <div
+          key={`${item.label}-${index}`}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+            padding: '11px 0', borderBottom: index < items.length - 1 ? '1px solid #f2f2f2' : 'none',
+          }}
+        >
+          <span style={{ fontFamily: UI_FONT, fontSize: 13, color: '#7d7d7d', fontWeight: 700 }}>{item.label}</span>
+          <span style={{ fontFamily: UI_FONT, fontSize: 13.5, color: '#1f1f1f', fontWeight: 800, textAlign: 'right' }}>
+            {detailTime(item.value)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
-
-// Compact table view for a list of Tithi/Nakshatra/Yoga/Karana records.
-// Replaces the old "one big card per record, one tiny tile per field"
-// layout (which turned into an endless vertical scroll for a full
-// month's worth of records) with a single scannable table — one row
-// per record, only the columns that are actually present.
-function AngaRecordTable({ title, records }) {
-  const rows = Array.isArray(records) ? records.filter((item) => item && typeof item === 'object') : [];
-  if (!rows.length) return null;
-
-  const curated = rows.map(curateRecord).filter((c) => c.fields.length);
-  if (!curated.length) return null;
-
-  // Union of keys across all rows, kept in priority order, capped so the
-  // table stays readable instead of growing sideways forever.
-  const seen = new Set();
-  const columnKeys = [];
-  curated.forEach((c) => c.fields.forEach((f) => {
-    if (!seen.has(f.key)) { seen.add(f.key); columnKeys.push(f.key); }
-  }));
-  columnKeys.sort((a, b) => {
-    const ai = FIELD_PRIORITY.indexOf(a);
-    const bi = FIELD_PRIORITY.indexOf(b);
-    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-  });
-  const shownKeys = columnKeys.slice(0, 5);
-
-  const thStyle = {
-    fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900,
-    letterSpacing: '.06em', textTransform: 'uppercase', textAlign: 'left',
-    padding: '0 10px 8px', whiteSpace: 'nowrap',
-  };
-  const tdStyle = {
-    fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 700,
-    padding: '9px 10px', whiteSpace: 'nowrap',
-  };
-
-  return (
-    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 10, padding: '15px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b5a24', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>
-          {title}
-        </p>
-        <span style={{ fontFamily: UI_FONT, fontSize: 11, color: '#a8a8a8', fontWeight: 700 }}>{curated.length} entries</span>
-      </div>
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: shownKeys.length * 110 + 40 }}>
-          <thead>
-            <tr>
-              {shownKeys.map((k) => (
-                <th key={k} style={thStyle}>{LABEL_MAP[k] || titleize(k)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {curated.map((c, index) => (
-              <tr key={index} style={{ borderTop: '1px solid #f2f2f2', background: index % 2 ? '#fafafa' : 'transparent' }}>
-                {shownKeys.map((k) => {
-                  const field = c.fields.find((f) => f.key === k);
-                  return (
-                    <td key={k} style={tdStyle}>
-                      {field ? field.value : '—'}
-                      {k === shownKeys[0] && !!c.badges.length && (
-                        <span style={{
-                          marginLeft: 7, fontSize: 9, fontWeight: 900, color: '#9a5d12',
-                          background: '#fff1d9', borderRadius: 50, padding: '2px 7px',
-                          letterSpacing: '.03em', textTransform: 'uppercase',
-                        }}>
-                          {c.badges.join(' · ')}
-                        </span>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Auspicious / Inauspicious timings — named, explained, correctly    */
-/*  formatted even when a muhurat has more than one window in a day.   */
-/* ------------------------------------------------------------------ */
 
 function formatPeriod(item) {
   if (!item || typeof item !== 'object') return '';
   const start = item.start_time || item.start;
   const end = item.end_time || item.end;
   if (!start || !end) return '';
-  const range = `${to12h(start)} - ${to12h(end)}`;
+  const range = `${formatTimeOnly(start)} - ${formatTimeOnly(end)}`;
   return item.sign ? `${range} (Sign: ${item.sign})` : range;
 }
 
-// A timing value may be a single {start,end} object OR a list of them
-// (e.g. Dur Muhurtam happens twice a day). Format every window cleanly
-// and join them, instead of the old behaviour of concatenating raw
-// "Start Time: ... End Time: ..." strings into one unreadable line.
 function formatTimingValue(value) {
   if (Array.isArray(value)) {
     return value.map(formatPeriod).filter(Boolean).join('  •  ');
@@ -511,94 +450,146 @@ function formatTimingValue(value) {
   return formatPeriod(value);
 }
 
-function MuhuratTimingsGrid({ title, data, tone = 'green', meanings }) {
+// Auspicious / Inauspicious timings as a scannable list of rows, each
+// with an icon, a proper name, the (correctly formatted, even when
+// multi-window) time range, and a one-line explanation of what it means.
+function MuhuratRowList({ data, tone, meanings, emptyText }) {
   const color = tone === 'red' ? '#dc2626' : '#16a34a';
-  const bg = tone === 'red' ? '#fff5f5' : '#f5fff7';
-  const border = tone === 'red' ? '#fecaca' : '#bbf7d0';
+  const bg = tone === 'red' ? '#fef7f7' : '#f4fdf6';
+  const border = tone === 'red' ? '#f6c9c9' : '#c8ecd2';
 
   const entries = Object.entries(data || {})
-    // "_detailed" variants duplicate the base entry with identical times.
     .filter(([key]) => !key.toLowerCase().endsWith('_detailed'))
     .map(([key, value]) => ({ key, text: formatTimingValue(value) }))
     .filter((item) => item.text);
 
-  if (!entries.length) return null;
+  if (!entries.length) return <EmptyState text={emptyText} />;
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 10, padding: '15px 16px' }}>
-      <p style={{ fontFamily: UI_FONT, fontSize: 12, color, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-        {title}
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
-        {entries.map(({ key, text }) => {
-          const meta = (meanings && meanings[key.toLowerCase()]) || {
-            label: titleize(key),
-            icon: tone === 'red' ? '⊘' : '✦',
-            note: '',
-          };
-          return (
-            <div key={key} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 8, padding: '11px 12px' }}>
-              <p style={{ fontFamily: UI_FONT, fontSize: 12, color, fontWeight: 900 }}>
-                <span style={{ marginRight: 6 }}>{meta.icon}</span>{meta.label}
-              </p>
-              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: tone === 'red' ? '#991b1b' : '#166534', fontWeight: 800, marginTop: 6, lineHeight: 1.4 }}>
-                {text}
-              </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {entries.map(({ key, text }) => {
+        const meta = (meanings && meanings[key.toLowerCase()]) || {
+          label: titleize(key), icon: tone === 'red' ? '⊘' : '✦', note: '',
+        };
+        return (
+          <div key={key} style={{ display: 'flex', gap: 14, padding: '13px 15px', background: bg, borderRadius: 12, border: `1px solid ${border}` }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: 16, flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+            }}>
+              {meta.icon}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: UI_FONT, fontWeight: 900, fontSize: 14, color: '#1f1f1f' }}>{meta.label}</span>
+                <span style={{ fontFamily: UI_FONT, fontWeight: 800, fontSize: 13, color, whiteSpace: 'nowrap' }}>{text}</span>
+              </div>
               {!!meta.note && (
-                <p style={{ fontFamily: UI_FONT, fontSize: 11, color: tone === 'red' ? '#b45454' : '#4d7a45', marginTop: 4, lineHeight: 1.4 }}>
-                  {meta.note}
-                </p>
+                <p style={{ fontFamily: UI_FONT, margin: '4px 0 0', fontSize: 12, color: '#767676', lineHeight: 1.45 }}>{meta.note}</p>
               )}
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// Tab bar used inside "Full Panchang Details" — lets the user jump
-// straight to the section they care about instead of scrolling past
-// everything else.
-function TabBar({ tabs, active, onChange }) {
+const NAME_KEYS = ['tithi', 'nak_name', 'nakshatra_name', 'yoga_name', 'karana_name'];
+const TIME_KEYS = new Set(['start_time', 'start', 'end_time', 'end']);
+
+// One raw anga record (tithi/nakshatra/yoga/karana) → { name, startRaw,
+// endRaw, badges, chips }. This is the layer that decides what's worth
+// showing and what it should be called, instead of dumping every key.
+function buildAngaCard(record) {
+  if (!record || typeof record !== 'object') return null;
+  const nameKey = NAME_KEYS.find((key) => record[key]);
+  const name = (nameKey ? record[nameKey] : record.name) || '';
+  if (!name) return null;
+
+  const startRaw = record.start_time || record.start;
+  const endRaw = record.end_time || record.end;
+
+  const badges = [];
+  if (record.vriddhi === true || record.vriddhi === 'true') badges.push('Vriddhi');
+  if (record.kshaya === true || record.kshaya === 'true') badges.push('Kshaya');
+
+  const chips = Object.entries(record)
+    .filter(([key]) => !HIDDEN_KEYS.has(key) && !TIME_KEYS.has(key) && key !== nameKey && key !== 'name')
+    .map(([key, value]) => ({ key, label: LABEL_MAP[key] || titleize(key), value: cleanValue(simplifyValue(value)) }))
+    .filter((chip) => chip.value && chip.value !== 'Not available');
+
+  chips.sort((a, b) => {
+    const ai = FIELD_PRIORITY.indexOf(a.key);
+    const bi = FIELD_PRIORITY.indexOf(b.key);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+
+  return { name, startRaw, endRaw, badges, chips };
+}
+
+// Replaces the old raw key-dump list. One clean row per Tithi/Nakshatra/
+// Yoga/Karana: icon, name (+ Vriddhi/Kshaya badge if applicable), a
+// readable time range, and secondary attributes as small chips.
+function AngaSection({ title, icon, accent, records }) {
+  const rows = (Array.isArray(records) ? records : []).map(buildAngaCard).filter(Boolean);
   return (
-    <div style={{
-      display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e6e6e6',
-      overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-    }}>
-      {tabs.map((tb) => (
-        <button
-          key={tb.id}
-          onClick={() => onChange(tb.id)}
-          style={{
-            padding: '10px 16px',
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            fontFamily: UI_FONT,
-            fontSize: 13,
-            fontWeight: 800,
-            whiteSpace: 'nowrap',
-            color: active === tb.id ? '#c47a14' : '#8b8b8b',
-            borderBottom: active === tb.id ? '2px solid #c47a14' : '2px solid transparent',
-            marginBottom: -1,
-            transition: 'color .15s',
-          }}
-        >
-          {tb.label}
-        </button>
-      ))}
+    <Panel icon={icon} title={title} accent={accent}>
+      {!rows.length ? (
+        <EmptyState text="No records available for this date." />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {rows.map((row, index) => (
+            <div key={index} style={{ display: 'flex', gap: 14, padding: '13px 15px', background: index % 2 ? '#fafafa' : '#fff', border: '1px solid #f0f0f0', borderRadius: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}18`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 15 }}>
+                {icon}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: UI_FONT, fontWeight: 900, fontSize: 14.5, color: '#1f1f1f' }}>{row.name}</span>
+                  {row.badges.map((badge) => <Badge key={badge}>{badge}</Badge>)}
+                </div>
+                {(row.startRaw || row.endRaw) && (
+                  <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#7a7a7a', fontWeight: 700, margin: '3px 0 0' }}>
+                    {formatTimeOnly(row.startRaw)}{row.startRaw && row.endRaw ? ' – ' : ''}{formatTimeOnly(row.endRaw)}
+                  </p>
+                )}
+                {!!row.chips.length && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
+                    {row.chips.map((chip) => (
+                      <span key={chip.key} style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, color: '#6b5638', background: '#f6efe4', borderRadius: 6, padding: '3px 9px' }}>
+                        {chip.label}: {chip.value}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ChoghadiyaChips({ rows }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8 }}>
+      {rows.map((item, index) => {
+        const color = item.nature === 'good' ? '#16a34a' : item.nature === 'bad' ? '#dc2626' : '#64748b';
+        return (
+          <div key={`${item.name}-${index}`} style={{ padding: '10px 12px', borderRadius: 10, background: '#fafafa', border: '1px solid #eee', borderLeft: `4px solid ${color}` }}>
+            <p style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, color, margin: 0 }}>{item.name || 'Choghadiya'}</p>
+            <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#8a8a8a', marginTop: 4 }}>{to12h(item.time)}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// "Full Panchang Details" used to be one long stack of every section —
-// Daily Timings, Sun/Moon/Calendar, Auspicious, Inauspicious, and five
-// separate "All X" record dumps — all rendered at once. That's what
-// made the page feel endless. Now it's tabbed: one focused section
-// shown at a time, with the heavy "All Records" data behind its own tab.
 function PanchangDetails({ dailyResult }) {
-  const [tab, setTab] = useState('timings');
+  const [activeTab, setActiveTab] = useState('overview');
   const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
   const mainTimings = {
     sunrise: dailyResult.sunrise,
@@ -610,16 +601,17 @@ function PanchangDetails({ dailyResult }) {
     rahu_kaal: dailyResult.rahu_kaal?.time,
   };
 
-  const TABS = [
-    { id: 'timings', label: 'Daily Timings' },
-    { id: 'sun_moon', label: 'Sun, Moon & Calendar' },
-    { id: 'muhurat', label: 'Auspicious / Inauspicious' },
-    { id: 'records', label: 'All Panchang Records' },
+  const angaGroups = [
+    { key: 'tithis', title: 'All Tithis', icon: <Moon size={16} />, accent: '#c47a14', records: dailyResult.all_panchang?.tithis },
+    { key: 'nakshatras', title: 'All Nakshatras', icon: <Star size={16} />, accent: '#2563eb', records: dailyResult.all_panchang?.nakshatras },
+    { key: 'yogas', title: 'All Yogas', icon: <span style={{ fontSize: 16 }}>∞</span>, accent: '#7c3aed', records: dailyResult.all_panchang?.yogas },
+    { key: 'karnas', title: 'All Karanas', icon: <span style={{ fontSize: 14 }}>□</span>, accent: '#0f766e', records: dailyResult.all_panchang?.karnas },
+    { key: 'sun_nakshatras', title: 'Sun Nakshatras', icon: <Sun size={16} />, accent: '#d97706', records: dailyResult.all_panchang?.sun_nakshatras },
   ];
 
   return (
-    <div style={{ marginTop: 22 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+    <div style={{ marginTop: 26 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <h3 style={{ fontFamily: UI_FONT, fontSize: 18, color: '#1f1f1f', fontWeight: 900, margin: 0 }}>
           Full Panchang Details
         </h3>
@@ -628,37 +620,59 @@ function PanchangDetails({ dailyResult }) {
         </span>
       </div>
 
-      <TabBar tabs={TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={PANCHANG_TABS} active={activeTab} onChange={setActiveTab} />
 
-      {tab === 'timings' && (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <DetailCard title="Daily Timings" data={mainTimings} />
-          {!!nightChoghadiya.length && <ChoghadiyaBlock title="Night Choghadiya" rows={nightChoghadiya} />}
+      {activeTab === 'overview' && (
+        <div style={{ display: 'grid', gap: 14 }}>
+          <Panel icon={<Clock size={16} />} title="Daily Timings" accent="#c47a14">
+            <InfoRowList data={mainTimings} />
+          </Panel>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14 }}>
+            <Panel icon={<Sun size={16} />} title="Sun Details" accent="#d97706">
+              <InfoRowList data={dailyResult.sun} />
+            </Panel>
+            <Panel icon={<Moon size={16} />} title="Moon Details" accent="#2563eb">
+              <InfoRowList data={dailyResult.moon} />
+            </Panel>
+            <Panel icon={<Calendar size={16} />} title="Hindu Calendar" accent="#7c3aed">
+              <InfoRowList data={dailyResult.hindu_calendar} />
+            </Panel>
+          </div>
         </div>
       )}
 
-      {tab === 'sun_moon' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12 }}>
-          <DetailCard title="Sun Details" data={dailyResult.sun} accent="#d97706" />
-          <DetailCard title="Moon Details" data={dailyResult.moon} accent="#2563eb" />
-          <DetailCard title="Hindu Calendar" data={dailyResult.hindu_calendar} accent="#7c3aed" />
-        </div>
+      {activeTab === 'auspicious' && (
+        <Panel icon={<Sparkles size={16} />} title="Auspicious Timings" accent="#16a34a">
+          <MuhuratRowList
+            data={dailyResult.auspicious_timings}
+            tone="green"
+            meanings={AUSPICIOUS_MEANINGS}
+            emptyText="No auspicious timings available for this date."
+          />
+        </Panel>
       )}
 
-      {tab === 'muhurat' && (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <MuhuratTimingsGrid title="Auspicious Timings" data={dailyResult.auspicious_timings} tone="green" meanings={AUSPICIOUS_MEANINGS} />
-          <MuhuratTimingsGrid title="Inauspicious Timings" data={dailyResult.inauspicious_timings} tone="red" meanings={INAUSPICIOUS_MEANINGS} />
-        </div>
+      {activeTab === 'inauspicious' && (
+        <Panel icon={<AlertCircle size={16} />} title="Inauspicious Timings" accent="#dc2626">
+          <MuhuratRowList
+            data={dailyResult.inauspicious_timings}
+            tone="red"
+            meanings={INAUSPICIOUS_MEANINGS}
+            emptyText="No inauspicious timings available for this date."
+          />
+        </Panel>
       )}
 
-      {tab === 'records' && (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <AngaRecordTable title="All Tithis" records={dailyResult.all_panchang?.tithis} />
-          <AngaRecordTable title="All Nakshatras" records={dailyResult.all_panchang?.nakshatras} />
-          <AngaRecordTable title="All Yogas" records={dailyResult.all_panchang?.yogas} />
-          <AngaRecordTable title="All Karanas" records={dailyResult.all_panchang?.karnas} />
-          <AngaRecordTable title="Sun Nakshatras" records={dailyResult.all_panchang?.sun_nakshatras} />
+      {activeTab === 'full' && (
+        <div style={{ display: 'grid', gap: 14 }}>
+          {!!nightChoghadiya.length && (
+            <Panel icon={<Moon size={16} />} title="Night Choghadiya" accent="#4338ca">
+              <ChoghadiyaChips rows={nightChoghadiya} />
+            </Panel>
+          )}
+          {angaGroups.map((group) => (
+            <AngaSection key={group.key} title={group.title} icon={group.icon} accent={group.accent} records={group.records} />
+          ))}
         </div>
       )}
     </div>
@@ -800,27 +814,6 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
             {next?.name || 'Not available'}{minutesToNext !== null ? ` · in ${minutesToNext} min` : ''}
           </p>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ChoghadiyaBlock({ title, rows }) {
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <p style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--brown)', marginBottom: 10 }}>
-        {title}
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8 }}>
-        {rows.map((item, index) => {
-          const color = item.nature === 'good' ? '#16a34a' : item.nature === 'bad' ? '#dc2626' : '#64748b';
-          return (
-            <div key={`${title}-${index}`} style={{ padding: '10px 12px', borderRadius: 8, background: 'white', border: '1px solid var(--cream-dark)', borderLeft: `4px solid ${color}` }}>
-              <p style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, color }}>{item.name || 'Choghadiya'}</p>
-              <p style={{ fontFamily: UI_FONT, fontSize: 11, color: 'var(--text-light)', whiteSpace: 'nowrap', marginTop: 4 }}>{to12h(item.time)}</p>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
