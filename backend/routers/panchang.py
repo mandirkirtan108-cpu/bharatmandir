@@ -9,7 +9,8 @@ hardcoded city list. See geocode_city() below.
 
 from __future__ import annotations
 
-from datetime import datetime
+import calendar as calendar_module
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 import json
 import os
@@ -20,7 +21,20 @@ import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+try:
+    from db.panchang_cache import (
+        get_cached_panchang,
+        get_cached_panchang_month,
+        save_cached_panchang,
+    )
+except Exception:
+    get_cached_panchang = None
+    get_cached_panchang_month = None
+    save_cached_panchang = None
+
 router = APIRouter(prefix="/api/panchang", tags=["Panchang"])
+
+PANCHANG_CACHE_VERSION = int(os.getenv("PANCHANG_CACHE_VERSION", "1"))
 
 DIVINE_BASES = {
     "panchang": "https://astroapi-1.divineapi.com/indian-api/v2/find-panchang",
@@ -97,6 +111,18 @@ class DailyPanchangRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     timezone: Optional[float] = None
+
+
+class CalendarYearSeedRequest(BaseModel):
+    year: int
+    city: Optional[str] = "India"
+    coordinates: Optional[str] = None
+    calendar: Optional[str] = "amanta"
+    language: Optional[str] = "en"
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    timezone: Optional[float] = None
+    overwrite: bool = False
 
 
 class MuhuratRequest(BaseModel):
@@ -345,6 +371,56 @@ def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]
     lat, lon, formatted_place = geocode_city(city)
     tz = req.timezone if req.timezone is not None else INDIA_TZ_OFFSET
     return lat, lon, tz, formatted_place
+
+
+def coordinates_text(lat: float, lon: float) -> str:
+    return f"{float(lat):.4f},{float(lon):.4f}"
+
+
+def get_cached_day(date_value: str, coordinates: str, calendar_type: str, language: str) -> Optional[dict[str, Any]]:
+    if not get_cached_panchang:
+        return None
+    try:
+        return get_cached_panchang(date_value, coordinates, calendar_type, language, PANCHANG_CACHE_VERSION)
+    except Exception:
+        return None
+
+
+def get_cached_month_days(
+    year: int,
+    month: int,
+    coordinates: str,
+    calendar_type: str,
+    language: str,
+) -> dict[str, dict[str, Any]]:
+    if not get_cached_panchang_month:
+        return {}
+    try:
+        start_date = f"{year}-{month:02d}-01"
+        end_date = f"{year}-{month:02d}-{calendar_module.monthrange(year, month)[1]:02d}"
+        return get_cached_panchang_month(
+            start_date,
+            end_date,
+            coordinates,
+            calendar_type,
+            language,
+            PANCHANG_CACHE_VERSION,
+        )
+    except Exception:
+        return {}
+
+
+def save_day_cache(date_value: str, coordinates: str, calendar_type: str, language: str, payload: dict[str, Any]) -> None:
+    if not save_cached_panchang:
+        raise HTTPException(status_code=500, detail="panchang_cache database helper is not available")
+    save_cached_panchang(
+        date_value,
+        coordinates,
+        calendar_type,
+        language,
+        PANCHANG_CACHE_VERSION,
+        payload,
+    )
 
 
 def divine_token() -> str:
@@ -638,6 +714,239 @@ def normalize_daily(
             "Avoid starting new auspicious work during Rahu Kaal.",
             "Avoid relying on one Panchang factor alone for major ceremonies.",
         ],
+    }
+
+
+def fetch_calendar_day_from_divine(
+    req: DailyPanchangRequest,
+    month_festivals: Optional[list[dict[str, Any]]] = None,
+    place: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    tz: Optional[float] = None,
+) -> dict[str, Any]:
+    try:
+        parsed_date = datetime.strptime(req.date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="date must be in YYYY-MM-DD format") from exc
+
+    if place is None or lat is None or lon is None or tz is None:
+        lat, lon, tz, place = normalize_city(req)
+
+    language = req.language or "en"
+    payload = {
+        "api_key": divine_api_key(),
+        "day": parsed_date.day,
+        "month": parsed_date.month,
+        "year": parsed_date.year,
+        "place": place,
+        "lat": lat,
+        "lon": lon,
+        "tzone": tz,
+        "lan": language,
+    }
+
+    panchang_raw = divine_post(DIVINE_BASES["panchang"], payload)
+    choghadiya_raw = divine_post(DIVINE_BASES["choghadiya"], payload)
+    auspicious_raw = divine_post(DIVINE_BASES["auspicious"], payload)
+    inauspicious_raw = divine_post(DIVINE_BASES["inauspicious"], payload)
+
+    if month_festivals is None:
+        festivals_payload = {
+            "api_key": divine_api_key(),
+            "year": str(parsed_date.year),
+            "month": f"{parsed_date.month:02d}",
+            "place": place,
+            "lat": lat,
+            "lon": lon,
+            "tzone": tz,
+        }
+        try:
+            festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
+            month_festivals = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
+        except HTTPException:
+            month_festivals = []
+
+    festivals_for_day = [f for f in month_festivals if f.get("date") == req.date]
+    normalized = normalize_daily(
+        req,
+        panchang_raw,
+        choghadiya_raw,
+        auspicious_raw,
+        inauspicious_raw,
+        festivals_for_day,
+        place,
+        lat,
+        lon,
+        tz,
+    )
+    normalized["calendar_type"] = req.calendar or "amanta"
+    normalized["language"] = language
+    return normalized
+
+
+@router.get("/month")
+def get_panchang_month(
+    year: int,
+    month: int,
+    city: Optional[str] = "India",
+    coordinates: Optional[str] = None,
+    calendar: Optional[str] = "amanta",
+    language: Optional[str] = "en",
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    timezone: Optional[float] = None,
+):
+    """Calendar endpoint: DB-only read.
+
+    This endpoint intentionally does NOT call DivineAPI. Run
+    POST /api/panchang/calendar/seed-year once for the required year/location,
+    then the frontend calendar reads the stored data from panchang_cache.
+    """
+    if year < 1900 or year > 2100:
+        raise HTTPException(status_code=422, detail="year must be between 1900 and 2100")
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=422, detail="month must be between 1 and 12")
+
+    base_req = DailyPanchangRequest(
+        date=f"{year}-{month:02d}-01",
+        city=city,
+        coordinates=coordinates,
+        calendar=calendar,
+        language=language,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+    )
+    lat, lon, tz, place = normalize_city(base_req)
+    calendar_type = calendar or "amanta"
+    language_code = language or "en"
+    coordinates_key = coordinates_text(lat, lon)
+    cached_days = get_cached_month_days(year, month, coordinates_key, calendar_type, language_code)
+
+    total_days = calendar_module.monthrange(year, month)[1]
+    missing_dates = [
+        f"{year}-{month:02d}-{day_number:02d}"
+        for day_number in range(1, total_days + 1)
+        if f"{year}-{month:02d}-{day_number:02d}" not in cached_days
+    ]
+    if missing_dates:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "Calendar data is not seeded in database for this month. Run /api/panchang/calendar/seed-year first.",
+                "missing_dates": missing_dates,
+            },
+        )
+
+    days = [cached_days[f"{year}-{month:02d}-{day_number:02d}"] for day_number in range(1, total_days + 1)]
+    for item in days:
+        item["cache"] = item.get("cache") or "database"
+
+    first_day = days[0] if days else {}
+    return {
+        "status": "ok",
+        "source": "database",
+        "year": year,
+        "month": month,
+        "calendar": calendar_type,
+        "language": language_code,
+        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
+        "hindu_calendar_meta": first_day.get("hindu_calendar") or {},
+        "days": days,
+    }
+
+
+@router.post("/calendar/seed-year")
+def seed_panchang_calendar_year(req: CalendarYearSeedRequest):
+    if req.year < 1900 or req.year > 2100:
+        raise HTTPException(status_code=422, detail="year must be between 1900 and 2100")
+
+    base_req = DailyPanchangRequest(
+        date=f"{req.year}-01-01",
+        city=req.city,
+        coordinates=req.coordinates,
+        calendar=req.calendar,
+        language=req.language,
+        latitude=req.latitude,
+        longitude=req.longitude,
+        timezone=req.timezone,
+    )
+    lat, lon, tz, place = normalize_city(base_req)
+    calendar_type = req.calendar or "amanta"
+    language = req.language or "en"
+    coordinates_key = coordinates_text(lat, lon)
+
+    generated = 0
+    skipped_existing = 0
+    failed: list[dict[str, str]] = []
+    start = date(req.year, 1, 1)
+    end = date(req.year, 12, 31)
+    current = start
+    month_festivals_by_month: dict[int, list[dict[str, Any]]] = {}
+
+    while current <= end:
+        date_value = current.isoformat()
+        if not req.overwrite and get_cached_day(date_value, coordinates_key, calendar_type, language):
+            skipped_existing += 1
+            current += timedelta(days=1)
+            continue
+
+        if current.month not in month_festivals_by_month:
+            festivals_payload = {
+                "api_key": divine_api_key(),
+                "year": str(req.year),
+                "month": f"{current.month:02d}",
+                "place": place,
+                "lat": lat,
+                "lon": lon,
+                "tzone": tz,
+            }
+            try:
+                festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
+                month_festivals_by_month[current.month] = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
+            except HTTPException:
+                month_festivals_by_month[current.month] = []
+
+        day_req = DailyPanchangRequest(
+            date=date_value,
+            city=req.city,
+            coordinates=req.coordinates,
+            calendar=calendar_type,
+            language=language,
+            latitude=req.latitude,
+            longitude=req.longitude,
+            timezone=req.timezone,
+        )
+        try:
+            normalized = fetch_calendar_day_from_divine(
+                day_req,
+                month_festivals_by_month[current.month],
+                place,
+                lat,
+                lon,
+                tz,
+            )
+            normalized["cache"] = "database"
+            save_day_cache(date_value, coordinates_key, calendar_type, language, normalized)
+            generated += 1
+        except HTTPException as exc:
+            failed.append({"date": date_value, "error": str(exc.detail)})
+
+        current += timedelta(days=1)
+
+    return {
+        "status": "ok" if not failed else "partial",
+        "source": "divineapi-to-database",
+        "year": req.year,
+        "calendar": calendar_type,
+        "language": language,
+        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
+        "generated": generated,
+        "skipped_existing": skipped_existing,
+        "failed_count": len(failed),
+        "failed": failed[:20],
+        "message": "Year calendar data is stored in database. Calendar month endpoint will now read DB only.",
     }
 
 
