@@ -13,10 +13,6 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-// FIX: this was the missing piece — the monthly calendar grid component
-// (with festival names/badges, tithi-phase dots, etc.) existed as its own
-// file but was never imported or rendered anywhere on this page. Nothing
-// else in this file has been changed.
 import PanchangCalendar from '../components/PanchangCalendar';
 
 const MUHURAT_TYPES = [
@@ -1024,12 +1020,6 @@ export default function PanchangPage() {
             {dailyResult && !dailyLoading && <PanchangDailyResult dailyResult={dailyResult} />}
           </Card>
 
-          {/* FIX: this <PanchangCalendar /> render was entirely missing.
-              The monthly grid component (with festival names/badges and
-              tithi-phase dots) is a self-contained component that fetches
-              its own month data via panchangAPI.getMonth() — it just needed
-              to actually be placed on the page. Nothing else on this page
-              was changed. */}
           <PanchangCalendar />
 
           <Card>
