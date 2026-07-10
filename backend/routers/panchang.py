@@ -3,12 +3,14 @@ routers/panchang.py - Panchang and Muhurat API.
 
 Daily Panchang uses Divine API.
 Muhurat Finder is intentionally kept on the existing Claude flow for now.
+City resolution uses Google's Geocoding API (restricted to India) — no
+hardcoded city list. See geocode_city() below.
 """
 
 from __future__ import annotations
 
-import calendar as calendar_module
 from datetime import datetime
+from functools import lru_cache
 import json
 import os
 from typing import Any, Optional
@@ -35,32 +37,12 @@ DIVINE_BASES = {
     "festivals": "https://astroapi-3.divineapi.com/indian-api/v1/english-calendar-festivals",
 }
 
-CITY_COORDINATES = {
-    "india": (23.1765, 75.7885, 5.5, "Ujjain, India"),
-    "ujjain": (23.1765, 75.7885, 5.5, "Ujjain, Madhya Pradesh, India"),
-    "varanasi": (25.3176, 82.9739, 5.5, "Varanasi, Uttar Pradesh, India"),
-    "kashi": (25.3176, 82.9739, 5.5, "Varanasi, Uttar Pradesh, India"),
-    "delhi": (28.6139, 77.2090, 5.5, "Delhi, India"),
-    "new delhi": (28.6139, 77.2090, 5.5, "New Delhi, India"),
-    "mumbai": (19.0760, 72.8777, 5.5, "Mumbai, Maharashtra, India"),
-    "pune": (18.5204, 73.8567, 5.5, "Pune, Maharashtra, India"),
-    "nashik": (19.9975, 73.7898, 5.5, "Nashik, Maharashtra, India"),
-    "ahmedabad": (23.0225, 72.5714, 5.5, "Ahmedabad, Gujarat, India"),
-    "jaipur": (26.9124, 75.7873, 5.5, "Jaipur, Rajasthan, India"),
-    "mathura": (27.4924, 77.6737, 5.5, "Mathura, Uttar Pradesh, India"),
-    "vrindavan": (27.5650, 77.6593, 5.5, "Vrindavan, Uttar Pradesh, India"),
-    "ayodhya": (26.7922, 82.1998, 5.5, "Ayodhya, Uttar Pradesh, India"),
-    "haridwar": (29.9457, 78.1642, 5.5, "Haridwar, Uttarakhand, India"),
-    "rishikesh": (30.0869, 78.2676, 5.5, "Rishikesh, Uttarakhand, India"),
-    "kolkata": (22.5726, 88.3639, 5.5, "Kolkata, West Bengal, India"),
-    "chennai": (13.0827, 80.2707, 5.5, "Chennai, Tamil Nadu, India"),
-    "bengaluru": (12.9716, 77.5946, 5.5, "Bengaluru, Karnataka, India"),
-    "bangalore": (12.9716, 77.5946, 5.5, "Bengaluru, Karnataka, India"),
-    "hyderabad": (17.3850, 78.4867, 5.5, "Hyderabad, Telangana, India"),
-    "lucknow": (26.8467, 80.9462, 5.5, "Lucknow, Uttar Pradesh, India"),
-    "bhopal": (23.2599, 77.4126, 5.5, "Bhopal, Madhya Pradesh, India"),
-    "indore": (22.7196, 75.8577, 5.5, "Indore, Madhya Pradesh, India"),
-}
+# FIX: the old hardcoded CITY_COORDINATES table (~22 cities) is gone. Any
+# city not in that list — including real ones like Surat or Kanpur — used
+# to silently fall back to Ujjain's coordinates and still return a full
+# Panchang. City resolution now always goes through Google's Geocoding API
+# (see geocode_city() below), the same way city input is already verified
+# elsewhere in the app (Route Planner's autocomplete).
 
 DAY_LORDS = {
     "Monday": "Chandra (Moon)",
@@ -87,6 +69,23 @@ DIVINE_ACCESS_TOKEN_ENV_NAMES = (
     "DIVINE_API_BEARER_TOKEN",
     "DIVINE_API_AUTH_TOKEN",
 )
+
+# Same env-name-fallback pattern as the Divine API keys above, so this
+# reuses whichever Google Maps key name is already set for the Route
+# Planner / city autocomplete feature, without forcing a rename.
+GOOGLE_MAPS_API_KEY_ENV_NAMES = (
+    "GOOGLE_MAPS_API_KEY",
+    "GOOGLE_PLACES_API_KEY",
+    "GOOGLE_GEOCODING_API_KEY",
+)
+
+GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+
+# Every city this endpoint resolves is restricted to India (component
+# filter below), and all of India sits in a single timezone — this is a
+# fixed geographic fact, not a per-city hardcode, so it's safe to use as
+# the default whenever the caller doesn't explicitly pass one.
+INDIA_TZ_OFFSET = 5.5
 
 
 class DailyPanchangRequest(BaseModel):
@@ -227,18 +226,97 @@ def flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, A
     return festivals
 
 
+def first_env_value(names: tuple[str, ...]) -> tuple[Optional[str], Optional[str]]:
+    for name in names:
+        value = os.environ.get(name)
+        if value and value.strip():
+            return value.strip(), name
+    return None, None
+
+
+def google_maps_key() -> str:
+    key, _used_name = first_env_value(GOOGLE_MAPS_API_KEY_ENV_NAMES)
+    if not key:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Google Maps API key is not configured on server. "
+                f"Set one of: {', '.join(GOOGLE_MAPS_API_KEY_ENV_NAMES)}"
+            ),
+        )
+    return key
+
+
+@lru_cache(maxsize=1024)
+def geocode_city(city: str) -> tuple[float, float, str]:
+    """Resolves free-text city input to (lat, lon, formatted_place) using
+    Google's Geocoding API, restricted to India via components=country:IN.
+
+    This is the single source of truth for "is this a real city" — there is
+    no local list to fall back to. Unrecognized text (typos, gibberish,
+    non-Indian places) raises a 422 instead of silently resolving to
+    anything. Results are memoized per exact input string for the life of
+    the process, since a city's coordinates don't change and this avoids
+    re-hitting Google for repeat lookups (e.g. "Mumbai" typed by many users,
+    or the same user re-fetching the same date).
+    """
+    city = city.strip()
+    try:
+        response = requests.get(
+            GOOGLE_GEOCODE_URL,
+            params={
+                "address": city,
+                "components": "country:IN",
+                "key": google_maps_key(),
+            },
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Google Maps request failed: {exc}") from exc
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Google Maps returned non-JSON data") from exc
+
+    status = payload.get("status")
+    if status == "ZERO_RESULTS":
+        raise HTTPException(
+            status_code=422,
+            detail=f"'{city}' is not a recognized city. Please check the spelling or pick a suggestion.",
+        )
+    if status != "OK":
+        raise HTTPException(
+            status_code=502,
+            detail=f"Google Maps geocoding error: {payload.get('error_message') or status}",
+        )
+
+    results = payload.get("results") or []
+    if not results:
+        raise HTTPException(
+            status_code=422,
+            detail=f"'{city}' is not a recognized city. Please check the spelling or pick a suggestion.",
+        )
+
+    top = results[0]
+    location = pick(top, "geometry", "location", default={}) or {}
+    lat, lon = location.get("lat"), location.get("lng")
+    if lat is None or lon is None:
+        raise HTTPException(status_code=502, detail="Google Maps returned an incomplete location.")
+
+    formatted_place = top.get("formatted_address") or city
+    return float(lat), float(lon), formatted_place
+
+
 def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]:
     """Resolves the request's city/coordinates into (lat, lon, tz, place).
 
-    FIX: previously, any city string that wasn't one of the ~22 hardcoded
-    entries in CITY_COORDINATES silently fell back to Ujjain's coordinates
-    and STILL returned a full Panchang — so typing "tanisha" or any other
-    garbage text produced a complete (wrong) Panchang instead of an error.
-    That silent fallback is now removed. Unrecognized city text raises a
-    422 with a clear message instead of pretending it resolved to a real
-    place. Explicit coordinates/lat+lon (e.g. from a map/autocomplete
-    picker) are still accepted directly and are NOT affected by this check,
-    since those are already verified locations, not free-text guesses.
+    Explicit coordinates or lat+lon (e.g. from a map/autocomplete picker
+    the frontend already trusts) are accepted directly — those are already
+    verified locations. Free-text city input goes through geocode_city(),
+    which is backed by Google's Geocoding API rather than any local list,
+    so unrecognized text raises a clear error instead of resolving to the
+    wrong place.
     """
     if req.coordinates:
         try:
@@ -246,7 +324,7 @@ def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]
             return (
                 float(lat_text),
                 float(lon_text),
-                req.timezone if req.timezone is not None else 5.5,
+                req.timezone if req.timezone is not None else INDIA_TZ_OFFSET,
                 req.city or "Selected location",
             )
         except Exception as exc:
@@ -256,7 +334,7 @@ def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]
         return (
             req.latitude,
             req.longitude,
-            req.timezone if req.timezone is not None else 5.5,
+            req.timezone if req.timezone is not None else INDIA_TZ_OFFSET,
             req.city or "Selected location",
         )
 
@@ -264,29 +342,9 @@ def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]
     if not city:
         raise HTTPException(status_code=422, detail="Please enter a city.")
 
-    city_key = city.lower()
-    if city_key in CITY_COORDINATES:
-        return CITY_COORDINATES[city_key]
-
-    # FIX: unrecognized city text no longer silently falls back to Ujjain.
-    # Divine API needs real coordinates, and a free-text city we can't
-    # resolve isn't a safe guess — better to tell the user clearly than to
-    # hand back Panchang data for the wrong place.
-    raise HTTPException(
-        status_code=422,
-        detail=(
-            f"'{city}' is not a recognized city. Please pick a city from the "
-            "suggestions, or select it on the map."
-        ),
-    )
-
-
-def first_env_value(names: tuple[str, ...]) -> tuple[Optional[str], Optional[str]]:
-    for name in names:
-        value = os.environ.get(name)
-        if value and value.strip():
-            return value.strip(), name
-    return None, None
+    lat, lon, formatted_place = geocode_city(city)
+    tz = req.timezone if req.timezone is not None else INDIA_TZ_OFFSET
+    return lat, lon, tz, formatted_place
 
 
 def divine_token() -> str:
@@ -644,116 +702,6 @@ def get_daily_panchang(req: DailyPanchangRequest):
         lon,
         tz,
     )
-
-
-@router.get("/month")
-def get_panchang_month(
-    year: int,
-    month: int,
-    city: Optional[str] = "India",
-    coordinates: Optional[str] = None,
-    calendar: Optional[str] = "amanta",
-    language: Optional[str] = "en",
-    latitude: Optional[float] = None,
-    longitude: Optional[float] = None,
-    timezone: Optional[float] = None,
-):
-    """Monthly Panchang endpoint used by frontend/src/components/PanchangCalendar.jsx.
-
-    The calendar UI calls:
-      GET /api/panchang/month?year=YYYY&month=M&coordinates=lat,lon&calendar=amanta&language=en
-
-    Without this route FastAPI returns 404 "Not Found", which is what the
-    calendar screenshot is showing. This endpoint returns the shape the
-    frontend expects: { year, month, days: [...] }.
-    """
-    if year < 1900 or year > 2100:
-        raise HTTPException(status_code=422, detail="year must be between 1900 and 2100")
-    if month < 1 or month > 12:
-        raise HTTPException(status_code=422, detail="month must be between 1 and 12")
-
-    base_req = DailyPanchangRequest(
-        date=f"{year}-{month:02d}-01",
-        city=city,
-        coordinates=coordinates,
-        calendar=calendar,
-        language=language,
-        latitude=latitude,
-        longitude=longitude,
-        timezone=timezone,
-    )
-    lat, lon, tz, place = normalize_city(base_req)
-
-    festivals_payload = {
-        "api_key": divine_api_key(),
-        "year": str(year),
-        "month": f"{month:02d}",
-        "place": place,
-        "lat": lat,
-        "lon": lon,
-        "tzone": tz,
-    }
-    try:
-        festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
-        month_festivals = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
-    except HTTPException:
-        month_festivals = []
-
-    days = []
-    total_days = calendar_module.monthrange(year, month)[1]
-    for day_number in range(1, total_days + 1):
-        date_value = f"{year}-{month:02d}-{day_number:02d}"
-        req = DailyPanchangRequest(
-            date=date_value,
-            city=city,
-            coordinates=coordinates,
-            calendar=calendar,
-            language=language,
-            latitude=latitude,
-            longitude=longitude,
-            timezone=timezone,
-        )
-        payload = {
-            "api_key": divine_api_key(),
-            "day": day_number,
-            "month": month,
-            "year": year,
-            "place": place,
-            "lat": lat,
-            "lon": lon,
-            "tzone": tz,
-            "lan": language or "en",
-        }
-        panchang_raw = divine_post(DIVINE_BASES["panchang"], payload)
-        choghadiya_raw = divine_post(DIVINE_BASES["choghadiya"], payload)
-        auspicious_raw = divine_post(DIVINE_BASES["auspicious"], payload)
-        inauspicious_raw = divine_post(DIVINE_BASES["inauspicious"], payload)
-        festivals_for_day = [f for f in month_festivals if f.get("date") == date_value]
-        days.append(
-            normalize_daily(
-                req,
-                panchang_raw,
-                choghadiya_raw,
-                auspicious_raw,
-                inauspicious_raw,
-                festivals_for_day,
-                place,
-                lat,
-                lon,
-                tz,
-            )
-        )
-
-    return {
-        "status": "ok",
-        "source": "divineapi",
-        "year": year,
-        "month": month,
-        "calendar": calendar,
-        "language": language,
-        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
-        "days": days,
-    }
 
 
 def get_client() -> anthropic.Anthropic:
