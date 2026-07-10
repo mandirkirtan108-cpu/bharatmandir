@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, CalendarDays, Loader2 } from 'lucide-react';
 import { panchangAPI } from '../services/api';
 
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
-const DEFAULT_COORDINATES = '28.6139,77.2090';
+const DEFAULT_COORDINATES = '25.3176,82.9739';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
