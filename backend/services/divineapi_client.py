@@ -1,215 +1,218 @@
+"""
+routers/panchang.py - Panchang and Muhurat API.
+
+Daily Panchang uses Divine API.
+Muhurat Finder is intentionally kept on the existing Claude flow for now.
+City resolution uses Google's Geocoding API (restricted to India) — no
+hardcoded city list. See geocode_city() below.
+"""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime
+import calendar as calendar_module
+from datetime import date, datetime, timedelta
+from functools import lru_cache
 import json
 import os
-from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
+import anthropic
 import requests
-from dotenv import load_dotenv
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 try:
-    from db.panchang_cache import get_cached_panchang, get_cached_panchang_month, save_cached_panchang
+    from db.panchang_cache import (
+        get_cached_panchang,
+        get_cached_panchang_month,
+        save_cached_panchang,
+    )
 except Exception:
     get_cached_panchang = None
     get_cached_panchang_month = None
     save_cached_panchang = None
 
+router = APIRouter(prefix="/api/panchang", tags=["Panchang"])
 
-CACHE_ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(CACHE_ROOT / ".env")
+PANCHANG_CACHE_VERSION = int(os.getenv("PANCHANG_CACHE_VERSION", "1"))
 
-DEFAULT_COORDINATES = os.getenv("PANCHANG_DEFAULT_COORDINATES", "28.6139,77.2090")
-DEFAULT_LANGUAGE = os.getenv("DIVINE_LANGUAGE", "en")
-DEFAULT_CALENDAR = os.getenv("DIVINE_CALENDAR", "amanta")
-DEFAULT_PLACE = os.getenv("DIVINE_DEFAULT_PLACE", "New Delhi")
-DEFAULT_TZONE = os.getenv("DIVINE_TZONE", "5.5")
-CACHE_VERSION = int(os.getenv("DIVINE_CACHE_VERSION", "1"))
+DIVINE_BASES = {
+    "panchang": "https://astroapi-1.divineapi.com/indian-api/v2/find-panchang",
+    "choghadiya": "https://astroapi-2.divineapi.com/indian-api/v1/find-choghadiya",
+    "auspicious": "https://astroapi-3.divineapi.com/indian-api/v1/auspicious-timings",
+    "inauspicious": "https://astroapi-3.divineapi.com/indian-api/v1/inauspicious-timings",
+    # FIX: added. This is the correct endpoint for "every Hindu festival in a
+    # Gregorian month" — DivineAPI's own docs call it the flagship festival
+    # endpoint. It takes YEAR + MONTH (not day), unlike the panchang/
+    # choghadiya/timings endpoints above which are per-day. See
+    # divine_api_client.py for the fuller explanation of why the previously
+    # used "date-specific-festivals" endpoint never actually worked (it has
+    # no day/month parameter at all).
+    "festivals": "https://astroapi-3.divineapi.com/indian-api/v1/english-calendar-festivals",
+}
 
-FIND_PANCHANG_URL = os.getenv(
-    "DIVINE_FIND_PANCHANG_URL",
-    "https://astroapi-1.divineapi.com/indian-api/v2/find-panchang",
-)
-AUSPICIOUS_TIMINGS_URL = os.getenv(
-    "DIVINE_AUSPICIOUS_TIMINGS_URL",
-    "https://astroapi-3.divineapi.com/indian-api/v1/auspicious-timings",
-)
-INAUSPICIOUS_TIMINGS_URL = os.getenv(
-    "DIVINE_INAUSPICIOUS_TIMINGS_URL",
-    "https://astroapi-3.divineapi.com/indian-api/v1/inauspicious-timings",
-)
-CHOGHADIYA_URL = os.getenv(
-    "DIVINE_CHOGHADIYA_URL",
-    "https://astroapi-2.divineapi.com/indian-api/v1/find-choghadiya",
-)
-# FIX: This used to point at "date-specific-festivals", which only accepts
-# {api_key, year, Place, lat, lon, tzone} — it has NO day/month parameter at
-# all, so sending day/month (as the old code did) was silently ignored and
-# every day of the year got back the exact same (wrong-shaped) payload. That
-# is why festivals never rendered on the calendar grid.
-#
-# The correct endpoint for "every Hindu festival in a Gregorian month" is the
-# English Calendar Festivals API — DivineAPI's own docs call it the
-# "flagship" festival endpoint for exactly this use case:
-#   POST https://astroapi-3.divineapi.com/indian-api/v1/english-calendar-festivals
-#   body: api_key, year, month, place, lat, lon, tzone
-# Response is keyed by festival slug -> {date, image}, or for festivals with
-# tradition variants (e.g. Ekadashis) -> {smartas: {date, parana, image},
-# vaishnavas: {date, parana, image}}.
-ENGLISH_CALENDAR_FESTIVALS_URL = os.getenv(
-    "DIVINE_ENGLISH_CALENDAR_FESTIVALS_URL",
-    "https://astroapi-3.divineapi.com/indian-api/v1/english-calendar-festivals",
-)
-# Real Chandrabalam/Tarabalam favourability lists for a date — replaces the
-# manual nakshatra-count approximation previously used for compatibility.
-CHANDRABALAM_TARABALAM_URL = os.getenv(
-    "DIVINE_CHANDRABALAM_TARABALAM_URL",
-    "https://astroapi-2.divineapi.com/indian-api/v2/find-chandrabalam-and-tarabalam",
-)
-# Panchak-free windows for a date (relevant for Griha Pravesh / Vastu).
-PANCHAK_RAHITA_URL = os.getenv(
-    "DIVINE_PANCHAK_RAHITA_URL",
-    "https://astroapi-3.divineapi.com/indian-api/v1/panchak-rahita",
-)
-# Kundali API — exact birth Moonsign (Janma Rashi) + Nakshatra for a person.
-BASIC_ASTRO_DETAILS_URL = os.getenv(
-    "DIVINE_BASIC_ASTRO_DETAILS_URL",
-    "https://astroapi-3.divineapi.com/indian-api/v3/basic-astro-details",
-)
-# Kundali Matching API — classical 36-point guna milan for Vivah.
-ASHTAKOOT_MILAN_URL = os.getenv(
-    "DIVINE_ASHTAKOOT_MILAN_URL",
-    "https://astroapi-3.divineapi.com/indian-api/v2/ashtakoot-milan",
+# FIX: the old hardcoded CITY_COORDINATES table (~22 cities) is gone. Any
+# city not in that list — including real ones like Surat or Kanpur — used
+# to silently fall back to Ujjain's coordinates and still return a full
+# Panchang. City resolution now always goes through Google's Geocoding API
+# (see geocode_city() below), the same way city input is already verified
+# elsewhere in the app (Route Planner's autocomplete).
+
+DAY_LORDS = {
+    "Monday": "Chandra (Moon)",
+    "Tuesday": "Mangal (Mars)",
+    "Wednesday": "Budha (Mercury)",
+    "Thursday": "Guru (Jupiter)",
+    "Friday": "Shukra (Venus)",
+    "Saturday": "Shani (Saturn)",
+    "Sunday": "Surya (Sun)",
+}
+
+DIVINE_API_KEY_ENV_NAMES = (
+    "DIVINE_API_KEY",
+    "DIVINEAPI_API_KEY",
+    "DIVINE_API_API_KEY",
 )
 
-CACHE_DIR = Path(__file__).resolve().parents[1] / "data" / "divineapi_cache"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+DIVINE_ACCESS_TOKEN_ENV_NAMES = (
+    "DIVINE_API_TOKEN",
+    "DIVINE_API_ACCESS_TOKEN",
+    "DIVINE_ACCESS_TOKEN",
+    "DIVINEAPI_ACCESS_TOKEN",
+    "DIVINEAPI_TOKEN",
+    "DIVINE_API_BEARER_TOKEN",
+    "DIVINE_API_AUTH_TOKEN",
+)
 
-# Separate cache namespace for one-off "birth moment" lookups (used to derive a
-# person's janma nakshatra/rashi for Muhurat compatibility). These are keyed
-# by exact date+time+coordinates and are NOT related to the daily Panchang
-# cache above, so they never collide with it.
-BIRTH_CACHE_DIR = CACHE_DIR / "birth_moments"
-BIRTH_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+# Same env-name-fallback pattern as the Divine API keys above, so this
+# reuses whichever Google Maps key name is already set for the Route
+# Planner / city autocomplete feature, without forcing a rename.
+GOOGLE_MAPS_API_KEY_ENV_NAMES = (
+    "GOOGLE_MAPS_API_KEY",
+    "GOOGLE_PLACES_API_KEY",
+    "GOOGLE_GEOCODING_API_KEY",
+)
 
-# FIX: month-level cache for the English Calendar Festivals endpoint. One
-# entry covers an entire Gregorian month (year+month+coordinates), so a
-# 30-day calendar view costs ONE upstream call instead of one-per-day.
-FESTIVALS_CACHE_DIR = CACHE_DIR / "english_calendar_festivals"
-FESTIVALS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
-
-def normalize_coordinates(coordinates: str) -> str:
-    try:
-        lat, lon = [float(part.strip()) for part in coordinates.split(",", 1)]
-        return f"{lat:.4f},{lon:.4f}"
-    except Exception:
-        return coordinates.strip()
-
-
-def coordinate_variants(coordinates: str) -> list[str]:
-    normalized = normalize_coordinates(coordinates)
-    variants = {coordinates.strip(), normalized}
-    try:
-        lat, lon = [float(part.strip()) for part in coordinates.split(",", 1)]
-        variants.add(f"{lat},{lon}")
-        variants.add(f"{lat:.6f},{lon:.6f}")
-    except Exception:
-        pass
-    return sorted(variants)
+# Every city this endpoint resolves is restricted to India (component
+# filter below), and all of India sits in a single timezone — this is a
+# fixed geographic fact, not a per-city hardcode, so it's safe to use as
+# the default whenever the caller doesn't explicitly pass one.
+INDIA_TZ_OFFSET = 5.5
 
 
-def cache_key_for(date_value: str, coordinates: str, calendar: str, language: str, ayanamsa: int) -> str:
-    safe_coordinates = normalize_coordinates(coordinates).replace(",", "_").replace(".", "-")
-    return f"{date_value}_{safe_coordinates}_{calendar}_{language}_{ayanamsa}.json"
-
-
-def _festivals_cache_key(year: int, month: int, coordinates: str) -> str:
-    safe_coordinates = normalize_coordinates(coordinates).replace(",", "_").replace(".", "-")
-    return f"{year}_{month:02d}_{safe_coordinates}.json"
-
-
-def _parse_hour_minute(time_value: str | None) -> tuple[int, int]:
-    """Parse a 24h 'HH:MM' string (as produced by an <input type=time>).
-    Falls back to noon when no time is given, since we still need a fixed
-    moment to query the Nakshatra/Tithi for that date."""
-    if not time_value:
-        return 12, 0
-    try:
-        parts = str(time_value).strip().split(":")
-        hour = max(0, min(23, int(parts[0])))
-        minute = max(0, min(59, int(parts[1]))) if len(parts) > 1 else 0
-        return hour, minute
-    except Exception:
-        return 12, 0
-
-
-def _birth_cache_key(date_value: str, hour: int, minute: int, coordinates: str) -> str:
-    safe_coordinates = normalize_coordinates(coordinates).replace(",", "_").replace(".", "-")
-    return f"{date_value}_{hour:02d}-{minute:02d}_{safe_coordinates}.json"
-
-
-class DivineApiConfigError(RuntimeError):
-    pass
-
-
-class DivineApiError(RuntimeError):
-    def __init__(self, message: str, status_code: int | None = None, payload: Any = None):
-        super().__init__(message)
-        self.status_code = status_code
-        self.payload = payload
-
-
-@dataclass(frozen=True)
-class PanchangQuery:
+class DailyPanchangRequest(BaseModel):
     date: str
-    coordinates: str = DEFAULT_COORDINATES
-    language: str = DEFAULT_LANGUAGE
-    calendar: str = DEFAULT_CALENDAR
-    place: str = DEFAULT_PLACE
-    tzone: str = DEFAULT_TZONE
-    ayanamsa: int = CACHE_VERSION
-    # Only set for birth-moment lookups (see DivineApiClient.get_birth_moment).
-    # Daily Panchang queries leave these as None so existing behaviour/cache
-    # keys are unaffected.
-    hour: str | None = None
-    minute: str | None = None
-
-    @property
-    def cache_key(self) -> str:
-        return cache_key_for(self.date, self.coordinates, self.calendar, self.language, self.ayanamsa)
-
-    @property
-    def date_parts(self) -> tuple[int, int, int]:
-        parsed = datetime.strptime(self.date, "%Y-%m-%d")
-        return parsed.day, parsed.month, parsed.year
-
-    @property
-    def lat_lon(self) -> tuple[str, str]:
-        lat, lon = [part.strip() for part in normalize_coordinates(self.coordinates).split(",", 1)]
-        return lat, lon
+    city: Optional[str] = "India"
+    coordinates: Optional[str] = None
+    calendar: Optional[str] = "amanta"
+    language: Optional[str] = "en"
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    timezone: Optional[float] = None
 
 
-def _label(value: str) -> str:
-    return value.replace("_", " ").strip().title()
+class CalendarYearSeedRequest(BaseModel):
+    year: int
+    city: Optional[str] = "India"
+    coordinates: Optional[str] = None
+    calendar: Optional[str] = "amanta"
+    language: Optional[str] = "en"
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    timezone: Optional[float] = None
+    overwrite: bool = False
 
 
-def _flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Flattens the English Calendar Festivals response into a flat list of
-    rows: {name, slug, date, image, tradition, parana}.
+class MuhuratRequest(BaseModel):
+    muhurat_type: str
+    muhurat_label: str
+    muhurat_hindi: str
+    date: str
+    name: Optional[str] = ""
+    rashi: Optional[str] = ""
+    city: Optional[str] = "India"
 
-    Two shapes exist in the raw response, keyed by festival slug:
-      - Plain observances:      "diwali": {"date": "...", "image": "..."}
-      - Tradition-nested ones:  "utpanna_ekadashi": {
+
+def pick(data: Any, *keys: str, default: Any = None) -> Any:
+    current = data
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            return default
+        current = current[key]
+    return current
+
+
+def as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def first_record(value: Any) -> dict[str, Any]:
+    items = as_list(value)
+    return items[0] if items and isinstance(items[0], dict) else {}
+
+
+def display_name(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    if isinstance(value, dict):
+        for key in (
+            "name",
+            "full_name",
+            "tithi",
+            "tithi_name",
+            "nak_name",
+            "nakshatra_name",
+            "yoga_name",
+            "karana_name",
+            "karna_name",
+            "type",
+            "title",
+            "number",
+        ):
+            if value.get(key):
+                return str(value[key])
+        return " / ".join(str(v) for v in value.values() if isinstance(v, (str, int, float)))
+    return str(value)
+
+
+def time_range(value: Any) -> str:
+    if isinstance(value, list):
+        first = first_record(value)
+        return time_range(first) if first else ""
+    if not isinstance(value, dict):
+        return display_name(value)
+    start = value.get("start_time") or value.get("start") or value.get("from") or value.get("startTime")
+    end = value.get("end_time") or value.get("end") or value.get("to") or value.get("endTime")
+    if start and end:
+        return f"{start} - {end}"
+    return display_name(value)
+
+
+def label(value: str) -> str:
+    return str(value or "").replace("_", " ").strip().title()
+
+
+def flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flattens the English Calendar Festivals response into a flat list:
+    {name, slug, date, image, tradition, parana}.
+
+    Two shapes exist per slug in the raw response:
+      - Plain:            "diwali": {"date": "...", "image": "..."}
+      - Tradition-nested:  "utpanna_ekadashi": {
             "smartas":   {"date": "...", "parana": {...}, "image": "..."},
             "vaishnavas": {"date": "...", "parana": {...}, "image": "..."},
         }
-    Ekadashis, Pradosh and similar vrats are commonly observed on different
-    dates by Smarta vs Vaishnava tradition, so tradition-nested entries
-    produce one row PER variant (so both dates surface on the calendar
-    instead of only one being kept).
+    Tradition-nested entries (mostly Ekadashi/Pradosh vrats) produce one row
+    PER tradition variant, since Smarta and Vaishnava observances commonly
+    fall on different dates and both should be visible on the calendar.
     """
     festivals: list[dict[str, Any]] = []
     if not isinstance(data, dict):
@@ -222,7 +225,7 @@ def _flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, 
         if "date" in value:
             festivals.append(
                 {
-                    "name": _label(slug),
+                    "name": label(slug),
                     "slug": slug,
                     "date": value.get("date"),
                     "image": value.get("image"),
@@ -232,17 +235,16 @@ def _flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, 
             )
             continue
 
-        # Tradition-nested variant (Ekadashi/Pradosh style entries).
         for tradition, variant in value.items():
             if not isinstance(variant, dict) or "date" not in variant:
                 continue
             festivals.append(
                 {
-                    "name": _label(slug),
+                    "name": label(slug),
                     "slug": slug,
                     "date": variant.get("date"),
                     "image": variant.get("image"),
-                    "tradition": _label(tradition),
+                    "tradition": label(tradition),
                     "parana": variant.get("parana"),
                 }
             )
@@ -250,821 +252,830 @@ def _flatten_english_calendar_festivals(data: dict[str, Any]) -> list[dict[str, 
     return festivals
 
 
-class DivineApiClient:
-    def __init__(self) -> None:
-        self.api_key = os.getenv("DIVINE_API_KEY")
-        self.access_token = os.getenv("DIVINE_ACCESS_TOKEN")
-        if not self.api_key or not self.access_token:
-            raise DivineApiConfigError("DIVINE_API_KEY and DIVINE_ACCESS_TOKEN must be set on the backend.")
+def first_env_value(names: tuple[str, ...]) -> tuple[Optional[str], Optional[str]]:
+    for name in names:
+        value = os.environ.get(name)
+        if value and value.strip():
+            return value.strip(), name
+    return None, None
 
-    def get_day(
-        self,
-        query: PanchangQuery,
-        force_refresh: bool = False,
-        include_choghadiya: bool = True,
-        include_festivals: bool = True,
-        cache_only: bool = False,
-    ) -> dict[str, Any]:
-        cache_file = CACHE_DIR / query.cache_key
-        if not force_refresh:
-            cached = self._get_cached_day(query, cache_file)
-            if cached:
-                return cached
-            if cache_only:
-                raise DivineApiError(
-                    "Panchang data is not cached for this date and location. Please generate/cache it first.",
-                    404,
-                    {
-                        "date": query.date,
-                        "coordinates": query.coordinates,
-                        "calendar": query.calendar,
-                        "language": query.language,
-                    },
-                )
 
-        warnings: list[dict[str, Any]] = []
-        panchang = self._post("panchang", FIND_PANCHANG_URL, query, include_sign_language=True)
-        auspicious, warning = self._optional_post("auspicious_timings", AUSPICIOUS_TIMINGS_URL, query)
-        if warning:
-            warnings.append(warning)
-        inauspicious, warning = self._optional_post("inauspicious_timings", INAUSPICIOUS_TIMINGS_URL, query)
-        if warning:
-            warnings.append(warning)
-        choghadiya = None
-        festivals_payload = None
-        if include_choghadiya:
-            choghadiya, warning = self._optional_post("choghadiya", CHOGHADIYA_URL, query)
-            if warning:
-                warnings.append(warning)
-        if include_festivals:
-            # FIX: pull the WHOLE month's festivals (cached per year+month+
-            # coordinates) and filter down to this exact date, instead of
-            # hitting a per-day endpoint that didn't actually accept a date.
-            try:
-                day, month, year = query.date_parts
-                month_festivals = self.get_month_festivals(year, month, query.coordinates, query.place)
-                day_festivals = [f for f in month_festivals if f.get("date") == query.date]
-                festivals_payload = {"festivals_for_day": day_festivals}
-            except DivineApiError as exc:
-                warnings.append(
-                    {"endpoint": "festivals", "status_code": exc.status_code, "message": str(exc), "upstream": exc.payload}
-                )
-                festivals_payload = None
+def google_maps_key() -> str:
+    key, _used_name = first_env_value(GOOGLE_MAPS_API_KEY_ENV_NAMES)
+    if not key:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Google Maps API key is not configured on server. "
+                f"Set one of: {', '.join(GOOGLE_MAPS_API_KEY_ENV_NAMES)}"
+            ),
+        )
+    return key
 
-        payload = normalize_day(query, panchang, auspicious, inauspicious, choghadiya, festivals_payload)
-        if warnings:
-            payload["warnings"] = warnings
-        self._save_cached_day(query, payload, cache_file)
-        return payload
 
-    def get_month_festivals(
-        self,
-        year: int,
-        month: int,
-        coordinates: str = DEFAULT_COORDINATES,
-        place: str = DEFAULT_PLACE,
-    ) -> list[dict[str, Any]]:
-        """Every Hindu festival, vrat, Ekadashi, Purnima etc. that falls in
-        the given Gregorian year+month, via DivineAPI's English Calendar
-        Festivals endpoint. Cached to disk per (year, month, coordinates) so
-        rendering a full month calendar grid costs exactly ONE upstream call,
-        no matter how many days are requested.
-        """
-        cache_file = FESTIVALS_CACHE_DIR / _festivals_cache_key(year, month, coordinates)
-        if cache_file.exists():
-            try:
-                return json.loads(cache_file.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+@lru_cache(maxsize=1024)
+def geocode_city(city: str) -> tuple[float, float, str]:
+    """Resolves free-text city input to (lat, lon, formatted_place) using
+    Google's Geocoding API, restricted to India via components=country:IN.
 
-        lat, lon = [part.strip() for part in normalize_coordinates(coordinates).split(",", 1)]
-        body = {
-            "api_key": self.api_key,
-            "year": str(year),
-            "month": f"{month:02d}",
-            "place": place or DEFAULT_PLACE,
-            "lat": lat,
-            "lon": lon,
-            "tzone": str(DEFAULT_TZONE),
-        }
-        response = requests.post(ENGLISH_CALENDAR_FESTIVALS_URL, data=body, headers=self._headers(), timeout=30)
-        self._raise_for_response(response)
+    This is the single source of truth for "is this a real city" — there is
+    no local list to fall back to. Unrecognized text (typos, gibberish,
+    non-Indian places) raises a 422 instead of silently resolving to
+    anything. Results are memoized per exact input string for the life of
+    the process, since a city's coordinates don't change and this avoids
+    re-hitting Google for repeat lookups (e.g. "Mumbai" typed by many users,
+    or the same user re-fetching the same date).
+    """
+    city = city.strip()
+    try:
+        response = requests.get(
+            GOOGLE_GEOCODE_URL,
+            params={
+                "address": city,
+                "components": "country:IN",
+                "key": google_maps_key(),
+            },
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Google Maps request failed: {exc}") from exc
+
+    try:
         payload = response.json()
-        if payload.get("success") in (0, False):
-            raise DivineApiError(
-                payload.get("message") or "English Calendar Festivals request failed.", response.status_code, payload
-            )
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Google Maps returned non-JSON data") from exc
 
-        result = _flatten_english_calendar_festivals(payload.get("data", {}))
-        try:
-            cache_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-        return result
-
-    def get_month(
-        self,
-        year: int,
-        month: int,
-        coordinates: str = DEFAULT_COORDINATES,
-        language: str = DEFAULT_LANGUAGE,
-        calendar: str = DEFAULT_CALENDAR,
-        cache_only: bool = False,
-    ) -> dict[str, Any]:
-        import calendar as calendar_module
-
-        days = []
-        missing_dates = []
-        total_days = calendar_module.monthrange(year, month)[1]
-        if cache_only:
-            cached_days = self._get_cached_month(year, month, coordinates, language, calendar)
-            for day in range(1, total_days + 1):
-                current = f"{year}-{month:02d}-{day:02d}"
-                cached = cached_days.get(current)
-                if cached:
-                    cached["cache"] = cached.get("cache") or "database"
-                    days.append(cached)
-                else:
-                    missing_dates.append(current)
-            return {
-                "status": "ok",
-                "source": "database-cache",
-                "year": year,
-                "month": month,
-                "coordinates": coordinates,
-                "calendar": calendar,
-                "language": language,
-                "missing_dates": missing_dates,
-                "days": days,
-            }
-
-        for day in range(1, total_days + 1):
-            current = f"{year}-{month:02d}-{day:02d}"
-            try:
-                days.append(
-                    self.get_day(
-                        PanchangQuery(date=current, coordinates=coordinates, language=language, calendar=calendar),
-                        cache_only=cache_only,
-                    )
-                )
-            except DivineApiError as exc:
-                if cache_only and exc.status_code == 404:
-                    missing_dates.append(current)
-                    continue
-                raise
-        return {
-            "status": "ok",
-            "source": "database-cache" if cache_only else "divineapi-cache",
-            "year": year,
-            "month": month,
-            "coordinates": coordinates,
-            "calendar": calendar,
-            "language": language,
-            "missing_dates": missing_dates,
-            "days": days,
-        }
-
-    def get_year(
-        self,
-        year: int,
-        coordinates: str = DEFAULT_COORDINATES,
-        language: str = DEFAULT_LANGUAGE,
-        calendar: str = DEFAULT_CALENDAR,
-        cache_only: bool = False,
-    ) -> dict[str, Any]:
-        return {
-            "status": "ok",
-            "source": "database-cache" if cache_only else "divineapi-cache",
-            "year": year,
-            "coordinates": normalize_coordinates(coordinates),
-            "calendar": calendar,
-            "language": language,
-            "months": [self.get_month(year, month, coordinates, language, calendar, cache_only) for month in range(1, 13)],
-        }
-
-    def get_panchang_basic(self, date_value: str, coordinates: str, place: str) -> dict[str, Any]:
-        """Cheap Vaar/Tithi/Nakshatra-only lookup for a single date, used when
-        scanning a date range to shortlist Muhurat candidates (see
-        routers/panchang.py find_best_dates). Reuses the full-day cache when
-        already available so scanning a date already cached costs nothing;
-        otherwise makes ONE lightweight call (not the 4 calls get_day makes)
-        and does not touch the main daily cache."""
-        query = PanchangQuery(date=date_value, coordinates=coordinates or DEFAULT_COORDINATES, place=place or DEFAULT_PLACE)
-        cache_file = CACHE_DIR / query.cache_key
-        cached = self._get_cached_day(query, cache_file)
-        if cached:
-            return {
-                "vaara": cached.get("vaara", ""),
-                "tithi": cached.get("tithi", {}),
-                "nakshatra": cached.get("nakshatra", {}),
-            }
-
-        panchang = self._post("panchang", FIND_PANCHANG_URL, query, include_sign_language=True)
-        data = _data(panchang)
-        tithi = _current_or_first(data.get("tithis") or data.get("tithi"))
-        nakshatra = _current_or_first(data.get("nakshatras") or data.get("nakshatra"))
-        return {
-            "vaara": _first_value(data, "vaar", "vaara", "weekday", "day"),
-            "tithi": _normalize_anga(tithi, "tithi"),
-            "nakshatra": _normalize_anga(nakshatra, "nakshatra"),
-        }
-
-    def get_birth_moment(
-        self,
-        date_value: str,
-        time_value: str | None,
-        coordinates: str,
-        place: str,
-    ) -> dict[str, Any]:
-        """Look up the Nakshatra/Tithi ruling a specific birth date+time+place.
-
-        This powers Muhurat compatibility (Tara Bala / Chandra Bala) for a
-        person's birth details. It is intentionally separate from get_day():
-        birth dates are arbitrary and one-off, so they can't be pre-cached the
-        way daily Panchang is, and we only need the Nakshatra/Tithi anga here
-        (not choghadiya/festivals/auspicious-timings).
-        """
-        hour, minute = _parse_hour_minute(time_value)
-        query = PanchangQuery(
-            date=date_value,
-            coordinates=coordinates or DEFAULT_COORDINATES,
-            place=place or DEFAULT_PLACE,
-            hour=str(hour),
-            minute=str(minute),
+    status = payload.get("status")
+    if status == "ZERO_RESULTS":
+        raise HTTPException(
+            status_code=422,
+            detail=f"'{city}' is not a recognized city. Please check the spelling or pick a suggestion.",
+        )
+    if status != "OK":
+        raise HTTPException(
+            status_code=502,
+            detail=f"Google Maps geocoding error: {payload.get('error_message') or status}",
         )
 
-        cache_file = BIRTH_CACHE_DIR / _birth_cache_key(date_value, hour, minute, query.coordinates)
-        if cache_file.exists():
-            try:
-                return json.loads(cache_file.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+    results = payload.get("results") or []
+    if not results:
+        raise HTTPException(
+            status_code=422,
+            detail=f"'{city}' is not a recognized city. Please check the spelling or pick a suggestion.",
+        )
 
-        panchang = self._post("panchang", FIND_PANCHANG_URL, query, include_sign_language=True)
-        data = _data(panchang)
-        nakshatra = _current_or_first(data.get("nakshatras") or data.get("nakshatra"))
-        tithi = _current_or_first(data.get("tithis") or data.get("tithi"))
-        result = {
-            "date": date_value,
-            "hour": hour,
-            "minute": minute,
-            "coordinates": normalize_coordinates(query.coordinates),
-            "nakshatra": _normalize_anga(nakshatra, "nakshatra"),
-            "tithi": _normalize_anga(tithi, "tithi"),
-        }
+    top = results[0]
+    location = pick(top, "geometry", "location", default={}) or {}
+    lat, lon = location.get("lat"), location.get("lng")
+    if lat is None or lon is None:
+        raise HTTPException(status_code=502, detail="Google Maps returned an incomplete location.")
+
+    formatted_place = top.get("formatted_address") or city
+    return float(lat), float(lon), formatted_place
+
+
+def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]:
+    """Resolves the request's city/coordinates into (lat, lon, tz, place).
+
+    Explicit coordinates or lat+lon (e.g. from a map/autocomplete picker
+    the frontend already trusts) are accepted directly — those are already
+    verified locations. Free-text city input goes through geocode_city(),
+    which is backed by Google's Geocoding API rather than any local list,
+    so unrecognized text raises a clear error instead of resolving to the
+    wrong place.
+    """
+    if req.coordinates:
         try:
-            cache_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-        return result
+            lat_text, lon_text = [part.strip() for part in req.coordinates.split(",", 1)]
+            return (
+                float(lat_text),
+                float(lon_text),
+                req.timezone if req.timezone is not None else INDIA_TZ_OFFSET,
+                req.city or "Selected location",
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail="coordinates must be 'lat,lon'") from exc
 
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.access_token}", "Accept": "application/json"}
+    if req.latitude is not None and req.longitude is not None:
+        return (
+            req.latitude,
+            req.longitude,
+            req.timezone if req.timezone is not None else INDIA_TZ_OFFSET,
+            req.city or "Selected location",
+        )
 
-    def get_chandrabalam_tarabalam(self, date_value: str, coordinates: str, place: str) -> dict[str, Any]:
-        """Real Chandrabalam/Tarabalam favourability lists for one date
-        (Vedic Prakash plan). Returns which Rashis (Chandrabalam) and which
-        Nakshatras (Tarabalam) are currently favourable — this REPLACES the
-        manual nakshatra-count Tara Bala / Chandra Bala approximation: we
-        just check whether a person's birth Rashi/Nakshatra is in these lists.
-        One call covers every person being checked against this same date, so
-        it's cached per date+coordinates (not per person).
-        """
-        query = PanchangQuery(date=date_value, coordinates=coordinates or DEFAULT_COORDINATES, place=place or DEFAULT_PLACE)
-        cache_file = CACHE_DIR / ("bala_" + query.cache_key)
-        if cache_file.exists():
-            try:
-                return json.loads(cache_file.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+    city = (req.city or "").strip()
+    if not city:
+        raise HTTPException(status_code=422, detail="Please enter a city.")
 
-        body = self._body(query, include_language=True)
-        response = requests.post(CHANDRABALAM_TARABALAM_URL, data=body, headers=self._headers(), timeout=30)
-        self._raise_for_response(response)
-        payload = response.json()
-        if payload.get("success") in (0, False):
-            raise DivineApiError(payload.get("message") or "Chandrabalam/Tarabalam request failed.", response.status_code, payload)
+    lat, lon, formatted_place = geocode_city(city)
+    tz = req.timezone if req.timezone is not None else INDIA_TZ_OFFSET
+    return lat, lon, tz, formatted_place
 
-        data = payload.get("data", {})
-        result = {
-            "chandrabalam_current": (data.get("chandrabalams") or {}).get("current", []),
-            "chandrabalam_upto": (data.get("chandrabalams") or {}).get("upto", ""),
-            "tarabalam_current": (data.get("tarabalams") or {}).get("current", []),
-            "tarabalam_upto": (data.get("tarabalams") or {}).get("upto", ""),
-        }
-        try:
-            cache_file.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
-        return result
 
-    def get_panchaka_rahita(self, date_value: str, coordinates: str, place: str) -> dict[str, Any]:
-        """Panchak-free time windows for a date — relevant for Griha Pravesh
-        and Vastu muhurats, which classically avoid Panchak dosha periods."""
-        query = PanchangQuery(date=date_value, coordinates=coordinates or DEFAULT_COORDINATES, place=place or DEFAULT_PLACE)
-        lat, lon = query.lat_lon
-        day, month, year = query.date_parts
-        body = {
-            "api_key": self.api_key,
-            "day": f"{day:02d}",
-            "month": f"{month:02d}",
-            "year": str(year),
-            "Place": query.place,  # NOTE: this endpoint's docs use capital "Place"
-            "lat": lat,
-            "lon": lon,
-            "tzone": str(query.tzone),
-            "lan": DEFAULT_LANGUAGE,
-        }
-        response = requests.post(PANCHAK_RAHITA_URL, data=body, headers=self._headers(), timeout=30)
-        self._raise_for_response(response)
-        payload = response.json()
-        if payload.get("success") in (0, False):
-            raise DivineApiError(payload.get("message") or "Panchak Rahita request failed.", response.status_code, payload)
-        return payload.get("data", {})
+def coordinates_text(lat: float, lon: float) -> str:
+    return f"{float(lat):.4f},{float(lon):.4f}"
 
-    def get_basic_astro_details(self, person: dict) -> dict[str, Any]:
-        """Kundali API — a person's exact birth Moonsign (Janma Rashi) and
-        Nakshatra. This REPLACES the get_birth_moment() reuse-of-Panchang
-        hack: this is the endpoint actually designed for birth-chart lookups.
 
-        `person` dict needs: name, gender, dob ('YYYY-MM-DD'), tob ('HH:MM' or
-        empty), coordinates ('lat,lon'), place, tzone (optional).
-        """
-        hour, minute = _parse_hour_minute(person.get("tob"))
-        year, month, day = (int(part) for part in person["dob"].split("-"))
-        lat, lon = [part.strip() for part in (person.get("coordinates") or DEFAULT_COORDINATES).split(",", 1)]
-        body = {
-            "api_key": self.api_key,
-            "full_name": person.get("name") or "Native",
-            "day": f"{day:02d}",
-            "month": f"{month:02d}",
-            "year": str(year),
-            "hour": str(hour),
-            "min": str(minute),
-            "sec": "0",
-            "gender": (person.get("gender") or "male").lower(),
-            "place": person.get("place") or DEFAULT_PLACE,
-            "lat": lat,
-            "lon": lon,
-            "tzone": str(person.get("tzone") or DEFAULT_TZONE),
-            "lan": DEFAULT_LANGUAGE,
-        }
-        response = requests.post(BASIC_ASTRO_DETAILS_URL, data=body, headers=self._headers(), timeout=30)
-        self._raise_for_response(response)
-        payload = response.json()
-        if payload.get("success") in (0, False):
-            raise DivineApiError(payload.get("message") or "Basic Astrological Details request failed.", response.status_code, payload)
-        data = payload.get("data", {})
-        return {
-            "moonsign": data.get("moonsign", ""),
-            "nakshatra": data.get("nakshatra", ""),
-            "sunsign": data.get("sunsign", ""),
-        }
-
-    def get_ashtakoot_milan(self, groom: dict, bride: dict) -> dict[str, Any]:
-        """Kundali Matching API — classical 36-point guna milan between two
-        birth charts. Used for Vivah instead of a manual compatibility
-        formula: this draws on each partner's complete kundali, the same way
-        a traditional Jyotishi's matching report would."""
-
-        def _person_fields(prefix: str, person: dict, default_gender: str) -> dict[str, str]:
-            hour, minute = _parse_hour_minute(person.get("tob"))
-            year, month, day = (int(part) for part in person["dob"].split("-"))
-            lat, lon = [part.strip() for part in (person.get("coordinates") or DEFAULT_COORDINATES).split(",", 1)]
-            return {
-                f"{prefix}_full_name": person.get("name") or prefix.upper(),
-                f"{prefix}_day": f"{day:02d}",
-                f"{prefix}_month": f"{month:02d}",
-                f"{prefix}_year": str(year),
-                f"{prefix}_hour": str(hour),
-                f"{prefix}_min": str(minute),
-                f"{prefix}_sec": "0",
-                f"{prefix}_gender": (person.get("gender") or default_gender).lower(),
-                f"{prefix}_place": person.get("place") or DEFAULT_PLACE,
-                f"{prefix}_lat": lat,
-                f"{prefix}_lon": lon,
-                f"{prefix}_tzone": str(person.get("tzone") or DEFAULT_TZONE),
-            }
-
-        body = {"api_key": self.api_key, "lan": DEFAULT_LANGUAGE}
-        body.update(_person_fields("p1", groom, "male"))
-        body.update(_person_fields("p2", bride, "female"))
-
-        response = requests.post(ASHTAKOOT_MILAN_URL, data=body, headers=self._headers(), timeout=30)
-        self._raise_for_response(response)
-        payload = response.json()
-        if payload.get("success") in (0, False):
-            raise DivineApiError(payload.get("message") or "Ashtakoot Milan request failed.", response.status_code, payload)
-
-        data = payload.get("data", {})
-        result = data.get("ashtakoot_milan_result", {})
-        return {
-            "points_obtained": result.get("points_obtained"),
-            "max_points": result.get("max_ponits") or result.get("max_points") or 36,
-            "is_compatible": str(result.get("is_compatible", "")).lower() == "true",
-            "summary": result.get("content", ""),
-            "manglik_dosha": data.get("manglik_dosha", {}),
-            "nadi_dosha": str(data.get("nadi_dosha", "")).lower() == "true",
-            "bhakoot_dosha": str(data.get("bhakoot_dosha", "")).lower() == "true",
-            "koota_breakdown": data.get("ashtakoot_milan", {}),
-        }
-
-    def _get_cached_day(self, query: PanchangQuery, cache_file: Path) -> dict[str, Any] | None:
-        if get_cached_panchang:
-            try:
-                cached = get_cached_panchang(query.date, normalize_coordinates(query.coordinates), query.calendar, query.language, query.ayanamsa)
-                if cached:
-                    cached["cache"] = "database"
-                    return cached
-            except Exception as exc:
-                print(f"Database Panchang cache read skipped: {exc}")
-
-        for candidate in self._cache_file_candidates(query):
-            if candidate.exists():
-                cached = json.loads(candidate.read_text(encoding="utf-8"))
-                cached["cache"] = "file"
-                return cached
+def get_cached_day(date_value: str, coordinates: str, calendar_type: str, language: str) -> Optional[dict[str, Any]]:
+    if not get_cached_panchang:
+        return None
+    try:
+        return get_cached_panchang(date_value, coordinates, calendar_type, language, PANCHANG_CACHE_VERSION)
+    except Exception:
         return None
 
-    def _get_cached_month(self, year: int, month: int, coordinates: str, language: str, calendar: str) -> dict[str, dict[str, Any]]:
-        cached_days = {}
-        if get_cached_panchang_month:
-            try:
-                import calendar as calendar_module
 
-                start_date = f"{year}-{month:02d}-01"
-                end_date = f"{year}-{month:02d}-{calendar_module.monthrange(year, month)[1]:02d}"
-                cached_days.update(
-                    get_cached_panchang_month(
-                        start_date,
-                        end_date,
-                        normalize_coordinates(coordinates),
-                        calendar,
-                        language,
-                        CACHE_VERSION,
-                    )
-                )
-            except Exception as exc:
-                print(f"Database Panchang month cache read skipped: {exc}")
-        file_days = self._get_cached_month_files(year, month, coordinates, language, calendar)
-        file_days.update(cached_days)
-        return file_days
+def get_cached_month_days(
+    year: int,
+    month: int,
+    coordinates: str,
+    calendar_type: str,
+    language: str,
+) -> dict[str, dict[str, Any]]:
+    if not get_cached_panchang_month:
+        return {}
+    try:
+        start_date = f"{year}-{month:02d}-01"
+        end_date = f"{year}-{month:02d}-{calendar_module.monthrange(year, month)[1]:02d}"
+        return get_cached_panchang_month(
+            start_date,
+            end_date,
+            coordinates,
+            calendar_type,
+            language,
+            PANCHANG_CACHE_VERSION,
+        )
+    except Exception:
+        return {}
 
-    def _get_cached_month_files(self, year: int, month: int, coordinates: str, language: str, calendar: str) -> dict[str, dict[str, Any]]:
-        import calendar as calendar_module
 
-        cached_days = {}
-        for day in range(1, calendar_module.monthrange(year, month)[1] + 1):
-            current = f"{year}-{month:02d}-{day:02d}"
-            query = PanchangQuery(date=current, coordinates=coordinates, language=language, calendar=calendar)
-            for cache_file in self._cache_file_candidates(query):
-                if cache_file.exists():
-                    cached = json.loads(cache_file.read_text(encoding="utf-8"))
-                    cached["cache"] = "file"
-                    cached_days[current] = cached
-                    break
-        return cached_days
+def save_day_cache(date_value: str, coordinates: str, calendar_type: str, language: str, payload: dict[str, Any]) -> None:
+    if not save_cached_panchang:
+        raise HTTPException(status_code=500, detail="panchang_cache database helper is not available")
+    save_cached_panchang(
+        date_value,
+        coordinates,
+        calendar_type,
+        language,
+        PANCHANG_CACHE_VERSION,
+        payload,
+    )
 
-    def _save_cached_day(self, query: PanchangQuery, payload: dict[str, Any], cache_file: Path) -> None:
-        if save_cached_panchang:
-            try:
-                save_cached_panchang(query.date, normalize_coordinates(query.coordinates), query.calendar, query.language, query.ayanamsa, payload)
-                payload["cache"] = "database"
-            except Exception as exc:
-                print(f"Database Panchang cache write skipped: {exc}")
 
-        cache_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+def divine_token() -> str:
+    token, _used_name = first_env_value(DIVINE_ACCESS_TOKEN_ENV_NAMES)
+    if not token:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Divine API access token is not configured on server. "
+                f"Set one of: {', '.join(DIVINE_ACCESS_TOKEN_ENV_NAMES)}"
+            ),
+        )
+    return token
 
-    def _cache_file_candidates(self, query: PanchangQuery) -> list[Path]:
-        return [
-            CACHE_DIR / cache_key_for(query.date, coordinates, query.calendar, query.language, query.ayanamsa)
-            for coordinates in coordinate_variants(query.coordinates)
-        ]
 
-    def _post(self, label: str, url: str, query: PanchangQuery, include_language: bool = True, include_sign_language: bool = False) -> dict[str, Any]:
-        body = self._body(query, include_language=include_language)
-        if include_sign_language:
-            body["sign_lan"] = "en"
+def divine_api_key() -> str:
+    key, _used_name = first_env_value(DIVINE_API_KEY_ENV_NAMES)
+    if not key:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Divine API key is not configured on server. "
+                f"Set one of: {', '.join(DIVINE_API_KEY_ENV_NAMES)}"
+            ),
+        )
+    return key
+
+
+def divine_post(url: str, payload: dict[str, Any]) -> dict[str, Any]:
+    token = divine_token()
+    try:
         response = requests.post(
             url,
-            data=body,
-            headers={"Authorization": f"Bearer {self.access_token}", "Accept": "application/json"},
+            headers={"Authorization": f"Bearer {token}"},
+            data=payload,
             timeout=30,
         )
-        self._raise_for_response(response)
-        payload = response.json()
-        if payload.get("success") in (0, False):
-            raise DivineApiError(payload.get("message") or f"DivineAPI {label} request failed.", response.status_code, payload)
-        return payload
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Divine API request failed: {exc}") from exc
 
-    def _optional_post(
-        self,
-        label: str,
-        url: str,
-        query: PanchangQuery,
-        include_language: bool = True,
-    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-        try:
-            return self._post(label, url, query, include_language=include_language), None
-        except DivineApiError as exc:
-            return None, {"endpoint": label, "status_code": exc.status_code, "message": str(exc), "upstream": exc.payload}
+    if response.status_code >= 400:
+        detail = response.text[:500] or response.reason
+        raise HTTPException(status_code=502, detail=f"Divine API error {response.status_code}: {detail}")
 
-    def _body(self, query: PanchangQuery, include_language: bool = True) -> dict[str, str]:
-        day, month, year = query.date_parts
-        lat, lon = query.lat_lon
-        body = {
-            "api_key": self.api_key,
-            # DivineAPI's own docs show these zero-padded (e.g. "05" not "5");
-            # sending zero-padded values matches their documented examples exactly.
-            "day": f"{day:02d}",
-            "month": f"{month:02d}",
-            "year": str(year),
-            "place": query.place,
-            "lat": lat,
-            "lon": lon,
-            "tzone": str(query.tzone),
-        }
-        if query.hour is not None:
-            body["hour"] = query.hour
-            body["min"] = query.minute or "0"
-        if include_language:
-            body["lan"] = query.language
-        return body
-
-    @staticmethod
-    def _raise_for_response(response: requests.Response) -> None:
-        if response.ok:
-            return
-        try:
-            payload = response.json()
-        except ValueError:
-            payload = response.text
-        detail = None
-        if isinstance(payload, dict):
-            detail = payload.get("message") or payload.get("error") or payload.get("detail")
-            errors = payload.get("errors")
-            if errors and isinstance(errors, list):
-                detail = "; ".join(error.get("message") or error.get("detail") or str(error) for error in errors)
-        raise DivineApiError(detail or "DivineAPI request failed.", response.status_code, payload)
-
-
-def normalize_day(
-    query: PanchangQuery,
-    panchang_response: dict[str, Any],
-    auspicious_response: dict[str, Any] | None,
-    inauspicious_response: dict[str, Any] | None,
-    choghadiya_response: dict[str, Any] | None,
-    festivals_response: dict[str, Any] | None,
-) -> dict[str, Any]:
-    panchang = _data(panchang_response)
-    auspicious = _data(auspicious_response)
-    inauspicious = _data(inauspicious_response)
-    choghadiya = _data(choghadiya_response)
-    festivals = _data(festivals_response)
-
-    tithi = _current_or_first(panchang.get("tithis") or panchang.get("tithi"))
-    nakshatra = _extract_nakshatra(panchang)
-    yoga = _current_or_first(panchang.get("yogas") or panchang.get("yoga"))
-    karana = _current_or_first(panchang.get("karnas") or panchang.get("karana"))
-    vaara = _extract_vaara(panchang, query.date)
-
-    return {
-        "date": query.date,
-        "coordinates": normalize_coordinates(query.coordinates),
-        "calendar_type": query.calendar,
-        "language": query.language,
-        "source": "divineapi",
-        "hindu_calendar": _hindu_calendar(query, panchang, tithi),
-        "vaara": vaara,
-        "vaara_lord": WEEKDAY_LORDS.get(vaara, ""),
-        "tithi": _normalize_anga(tithi, "tithi"),
-        "nakshatra": _normalize_anga(nakshatra, "nakshatra"),
-        "yoga": _normalize_anga(yoga, "yoga"),
-        "karana": _normalize_anga(karana, "karana"),
-        "sunrise": _first_value(panchang, "sunrise", "sun_rise"),
-        "sunset": _first_value(panchang, "sunset", "sun_set"),
-        "moonrise": _first_value(panchang, "moonrise", "moon_rise"),
-        "moonset": _first_value(panchang, "moonset", "moon_set"),
-        "auspicious_period": _normalize_periods(auspicious, "Auspicious"),
-        "inauspicious_period": _normalize_periods(inauspicious, "Inauspicious"),
-        "choghadiya": _normalize_choghadiya(choghadiya),
-        "festivals": _normalize_festivals(festivals),
-        "hora": [],
-        "raw": {
-            "panchang": panchang,
-            "auspicious_timings": auspicious,
-            "inauspicious_timings": inauspicious,
-            "choghadiya": choghadiya,
-            "festivals": festivals,
-        },
-    }
-
-
-# Classical weekday → ruling planet (Vaar lord). Deterministic, no API needed.
-WEEKDAY_LORDS = {
-    "Sunday": "Surya (Sun)", "Monday": "Chandra (Moon)", "Tuesday": "Mangal (Mars)",
-    "Wednesday": "Budh (Mercury)", "Thursday": "Guru (Jupiter)", "Friday": "Shukra (Venus)",
-    "Saturday": "Shani (Saturn)",
-}
-
-
-def _extract_vaara(panchang: dict[str, Any], date_value: str) -> str:
-    """The weekday name. DivineAPI's find-panchang response doesn't reliably
-    expose a top-level 'vaar' string across all response variants we've seen,
-    so we ALWAYS fall back to computing it directly from the requested date
-    (a Gregorian weekday is a deterministic fact — no astrological calculation
-    or API call needed), and only prefer the API's value if it actually sent one.
-    """
-    api_value = _first_value(panchang, "vaar", "vaara", "weekday", "day_name")
-    if isinstance(api_value, str) and api_value.strip() and api_value.strip().isalpha():
-        return api_value.strip().title()
     try:
-        return datetime.strptime(date_value, "%Y-%m-%d").strftime("%A")
-    except Exception:
-        return ""
+        return response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Divine API returned non-JSON data") from exc
 
 
-def _extract_nakshatra(panchang: dict[str, Any]) -> dict[str, Any]:
-    """DivineAPI's find-panchang response nests Nakshatra very differently
-    from Tithi/Yoga/Karana: `nakshatras` is a WRAPPER object —
-    {zodiac_point: [...], nakshatra_list: [...], nakshatra_pada: [...]} —
-    not the nakshatra period itself. We need to reach one level deeper.
-    `nakshatra_pada` is preferred (it carries lord/deity/pada), falling back
-    to the simpler `nakshatra_list`. Older/alternate API responses that
-    return `nakshatra` as a flat string or a flat list are also handled.
-    """
-    raw = panchang.get("nakshatras")
-    if isinstance(raw, dict):
-        pada_list = raw.get("nakshatra_pada")
-        if isinstance(pada_list, list) and pada_list:
-            return pada_list[0] if isinstance(pada_list[0], dict) else {}
-        simple_list = raw.get("nakshatra_list")
-        if isinstance(simple_list, list) and simple_list:
-            return simple_list[0] if isinstance(simple_list[0], dict) else {}
-        return {}
-    if isinstance(raw, list) and raw:
-        return raw[0] if isinstance(raw[0], dict) else {}
-    if isinstance(raw, str) and raw.strip():
-        return {"name": raw.strip()}
-
-    # Fallback: some response variants use a singular "nakshatra" key instead.
-    single = panchang.get("nakshatra")
-    if isinstance(single, dict):
-        return single
-    if isinstance(single, str) and single.strip():
-        return {"name": single.strip()}
-    return {}
-
-
-def _data(response: dict[str, Any] | None) -> dict[str, Any]:
-    if not response:
-        return {}
+def unwrap_response(response: dict[str, Any]) -> dict[str, Any]:
     data = response.get("data", response)
-    return data if isinstance(data, dict) else {}
+    if isinstance(data, dict):
+        return data
+    return {"items": data}
 
 
-def _current_or_first(items: Any) -> dict[str, Any]:
-    if isinstance(items, dict):
-        return items
-    if isinstance(items, list) and items:
-        first = items[0]
-        return first if isinstance(first, dict) else ({"name": first} if isinstance(first, str) and first.strip() else {})
-    if isinstance(items, str) and items.strip():
-        return {"name": items.strip()}
-    return {}
+def choghadiya_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    data = unwrap_response(raw)
+    day_items = as_list(data.get("day") or data.get("day_choghadiya") or data.get("choghadiya_day") or data.get("day_time"))
+    night_items = as_list(data.get("night") or data.get("night_choghadiya") or data.get("choghadiya_night") or data.get("night_time"))
+    if not day_items and not night_items:
+        day_items = as_list(data.get("choghadiya") or data.get("items"))
 
-
-def _hindu_calendar(query: PanchangQuery, panchang: dict[str, Any], tithi: dict[str, Any]) -> dict[str, Any]:
-    chandramasa = _first_value(panchang, "chandramasa", "lunar_month", "hindu_month", "masa", "maas")
-    samvat = _first_value(panchang, "samvat", "vikram_samvat", "shaka_samvat", "vikram_samvat_year")
-    day_value = _first_value(tithi, "number", "tithi_number", "day")
-    return {
-        "name": query.calendar.title(),
-        "month_name": chandramasa or "",
-        "day": day_value,
-        "year": samvat,
-        "year_name": "",
-    }
-
-
-def _normalize_anga(item: dict[str, Any] | str, prefix: str) -> dict[str, Any]:
-    if isinstance(item, str):
-        item = {"name": item} if item.strip() else {}
-    if not isinstance(item, dict):
-        item = {}
-    lord = _first_value(item, "lord", "nak_lord", "ruling_planet")
-    if isinstance(lord, dict):
-        lord = _first_value(lord, "name", "lord", "planet")
-    return {
-        "id": _first_value(item, "id", "number", f"{prefix}_number", "nak_number"),
-        "name": _first_value(item, "name", f"{prefix}", f"{prefix}_name", "nak_name", "karana_name", "yoga_name"),
-        "paksha": _first_value(item, "paksha"),
-        "start": _first_value(item, "start", "start_time"),
-        "end": _first_value(item, "end", "end_time"),
-        "lord": {"name": lord} if lord else {},
-    }
-
-
-def _normalize_periods(data: dict[str, Any], period_type: str) -> list[dict[str, Any]]:
-    """DivineAPI's auspicious/inauspicious-timings responses are keyed by the
-    muhurat's raw slug (e.g. "brahma_muhurta", "gulkai_kaal") at the top level
-    of `data`, with each value being either a single {start_time,end_time}
-    dict, a list of such dicts, or an empty list when not applicable that day.
-    We keep both the raw `slug` (exact API field name) and a human `name`
-    (title-cased) so callers can do exact lookups instead of fuzzy text
-    matching. `type` here is only ever the literal "Auspicious"/"Inauspicious"
-    passed in by the caller — it is NOT a specific muhurat type, callers
-    should not rely on it for a descriptive label.
-    """
-    periods = []
-    for key, value in data.items():
-        if key in {"date", "sunrise", "sunset"} or not value:
-            continue
-        values = value if isinstance(value, list) else [value]
-        normalized = []
-        for item in values:
+    rows: list[dict[str, Any]] = []
+    for period, items in (("day", day_items), ("night", night_items)):
+        for item in items:
             if not isinstance(item, dict):
                 continue
-            start = _first_value(item, "start", "start_time")
-            end = _first_value(item, "end", "end_time")
-            if start and end:
-                normalized.append({"start": start, "end": end, "sign": item.get("sign")})
-        if normalized:
-            periods.append({"name": _label(key), "slug": key, "type": period_type, "period": normalized})
-    return periods
-
-
-def _normalize_choghadiya(data: dict[str, Any]) -> list[dict[str, Any]]:
-    output = []
-    for key, is_day in (("day_choghadiyas", True), ("night_choghadiyas", False)):
-        slots = data.get(key, {})
-        if not isinstance(slots, dict):
-            continue
-        for name, time_range in slots.items():
-            start, end = _split_range(str(time_range))
-            clean_name = name.replace("Next ", "")
-            output.append(
+            name = item.get("choghadiya") or item.get("name") or item.get("type") or item.get("muhurat")
+            start = item.get("start_time") or item.get("start") or item.get("from")
+            end = item.get("end_time") or item.get("end") or item.get("to")
+            rows.append(
                 {
-                    "name": clean_name,
-                    "type": _choghadiya_type(clean_name),
-                    "is_day": is_day,
+                    "period": period,
+                    "is_day": period == "day",
+                    "name": name,
+                    "time": time_range(item),
+                    "start_time": start,
+                    "end_time": end,
                     "start": start,
                     "end": end,
-                    "time": time_range,
+                    "nature": classify_choghadiya(name or item.get("nature")),
+                    "good_for": "Use for routine auspicious work" if classify_choghadiya(name or item.get("nature")) == "good" else "Avoid new beginnings",
+                    "raw": item,
                 }
             )
-    return output
+    return rows
 
 
-def _normalize_festivals(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """FIX: `data` is now the pre-flattened, already-filtered-to-this-day
-    payload produced in DivineApiClient.get_day():
-        {"festivals_for_day": [{name, slug, date, image, tradition, parana}, ...]}
-    (sourced from the English Calendar Festivals endpoint, one call per
-    month). This replaces the old logic that expected a raw per-day festival
-    response, which the previous endpoint never actually returned correctly.
-    """
-    rows = (data or {}).get("festivals_for_day") or []
-    festivals = []
-    for item in rows:
-        if not isinstance(item, dict):
-            continue
-        festivals.append(
-            {
-                "name": item.get("name") or "Festival",
-                "slug": item.get("slug") or "",
-                "date": item.get("date"),
-                "start_date": item.get("date"),
-                "end_date": item.get("date"),
-                "image": item.get("image"),
-                "tradition": item.get("tradition"),
-                "parana": item.get("parana"),
-            }
-        )
-    return festivals
+def classify_choghadiya(name: Any) -> str:
+    value = str(name or "").strip().lower()
+    if value in {"amrit", "shubh", "labh", "char"}:
+        return "good"
+    if value in {"rog", "kaal", "udveg"}:
+        return "bad"
+    return "neutral"
 
 
-def _first_value(source: dict[str, Any], *keys: str) -> Any:
+def timing_entry(raw: dict[str, Any], *keys: str) -> dict[str, str]:
     for key in keys:
-        value = source.get(key)
-        if value not in (None, "", []):
-            return value
-    return ""
+        value = raw.get(key)
+        if isinstance(value, list):
+            value = first_record(value)
+        if isinstance(value, dict):
+            return {"time": time_range(value), "start_time": value.get("start_time"), "end_time": value.get("end_time")}
+        if isinstance(value, str):
+            return {"time": value}
+    return {"time": ""}
 
 
-def _split_range(value: str) -> tuple[str, str]:
-    if " to " not in value:
-        return "", ""
-    start, end = value.split(" to ", 1)
-    return start.strip(), end.strip()
+def format_optional_time(value: Any) -> str:
+    if not value:
+        return ""
+    if isinstance(value, dict):
+        return time_range(value)
+    return str(value)
 
 
-def _choghadiya_type(name: str) -> str:
-    base = name.lower().replace("next ", "")
-    if base in {"amrit", "shubh", "labh"}:
-        return "Auspicious"
-    if base == "char":
-        return "Good"
-    if base in {"kaal", "rog", "udveg"}:
-        return "Inauspicious"
-    return ""
+def find_timing(raw: dict[str, Any], *keys: str) -> str:
+    entry = timing_entry(raw, *keys)
+    return entry.get("time") or ""
+
+
+def compact_raw(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: compact_raw(nested) for key, nested in value.items() if key != "raw"}
+    if isinstance(value, list):
+        return [compact_raw(item) for item in value]
+    return value
+
+
+def nested_records(data: Any, *keys: str) -> list[Any]:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in keys:
+            value = data.get(key)
+            if isinstance(value, list):
+                return value
+        return [data]
+    return []
+
+
+def primary_record(data: Any, *keys: str) -> dict[str, Any]:
+    return first_record(nested_records(data, *keys))
+
+
+def normalize_daily(
+    req: DailyPanchangRequest,
+    panchang_raw: dict[str, Any],
+    choghadiya_raw: dict[str, Any],
+    auspicious_raw: dict[str, Any],
+    inauspicious_raw: dict[str, Any],
+    festivals_for_day: list[dict[str, Any]],
+    place: str,
+    lat: float,
+    lon: float,
+    tz: float,
+) -> dict[str, Any]:
+    panchang = unwrap_response(panchang_raw)
+    auspicious = unwrap_response(auspicious_raw)
+    inauspicious = unwrap_response(inauspicious_raw)
+
+    dt = datetime.strptime(req.date, "%Y-%m-%d")
+    weekday = dt.strftime("%A")
+    nakshatra_data = panchang.get("nakshatras") or panchang.get("nakshatra")
+    sun_nakshatra_data = panchang.get("sun_nakshatras") or panchang.get("sun_nakshatra")
+
+    tithi = first_record(panchang.get("tithis") or panchang.get("tithi"))
+    nakshatra = primary_record(nakshatra_data, "nakshatra_pada", "nakshatra_list", "zodiac_point")
+    yoga = first_record(panchang.get("yogas") or panchang.get("yoga"))
+    karana = first_record(panchang.get("karnas") or panchang.get("karanas") or panchang.get("karana"))
+
+    brahma = timing_entry(auspicious, "brahma_muhurta", "brahma_muhurat")
+    abhijit = timing_entry(auspicious, "abhijit", "abhijit_muhurta", "abhijit_muhurat")
+    rahu = timing_entry(inauspicious, "rahu_kaal", "rahu_kalam", "rahukaal", "rahukaalam")
+    sunrise = panchang.get("sunrise") or auspicious.get("sunrise") or inauspicious.get("sunrise")
+    sunset = panchang.get("sunset") or auspicious.get("sunset") or inauspicious.get("sunset")
+    moonrise = panchang.get("moonrise") or panchang.get("moon_rise")
+    moonset = panchang.get("moonset") or panchang.get("moon_set")
+    choghadiya = choghadiya_items(choghadiya_raw)
+    current_choghadiya = choghadiya[0] if choghadiya else None
+    next_choghadiya = choghadiya[1] if len(choghadiya) > 1 else None
+
+    tithi_name = display_name(tithi)
+    nakshatra_name = display_name(nakshatra)
+    yoga_name = display_name(yoga)
+    karana_name = display_name(karana)
+
+    festivals = [
+        {
+            "name": item.get("name") or "Festival",
+            "slug": item.get("slug") or "",
+            "date": item.get("date"),
+            "start_date": item.get("date"),
+            "end_date": item.get("date"),
+            "image": item.get("image"),
+            "tradition": item.get("tradition"),
+            "parana": item.get("parana"),
+        }
+        for item in (festivals_for_day or [])
+    ]
+
+    return {
+        "source": "divineapi",
+        "date": req.date,
+        "display_date": dt.strftime("%d %B %Y").lstrip("0"),
+        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
+        "hindu_calendar": panchang.get("hindu_calendar") or panchang.get("calendar") or {},
+        "today_at_glance": (
+            f"{weekday}: {tithi_name or 'Tithi not available'}, {nakshatra_name or 'Nakshatra not available'}. "
+            f"Sunrise {format_optional_time(sunrise) or 'not available'}, sunset {format_optional_time(sunset) or 'not available'}."
+        ),
+        "tithi": {
+            "name": tithi_name,
+            "time": time_range(tithi),
+            "paksha": tithi.get("paksha"),
+            "number": tithi.get("number") or tithi.get("id"),
+            "nature": tithi.get("paksha") or tithi.get("type"),
+            "end_time": format_optional_time(tithi.get("end_time") or tithi.get("end")),
+            "raw": tithi,
+        },
+        "nakshatra": {
+            "name": nakshatra_name,
+            "time": time_range(nakshatra),
+            "lord": nakshatra.get("lord") or nakshatra.get("ruler") or nakshatra.get("deity"),
+            "quality": nakshatra.get("gana") or nakshatra.get("guna") or "",
+            "end_time": format_optional_time(nakshatra.get("end_time") or nakshatra.get("end")),
+            "raw": nakshatra,
+        },
+        "yoga": {"name": yoga_name, "time": time_range(yoga), "end_time": format_optional_time(yoga.get("end_time") or yoga.get("end")), "raw": yoga},
+        "karana": {"name": karana_name, "time": time_range(karana), "nature": karana.get("type") or "", "end_time": format_optional_time(karana.get("end_time") or karana.get("end")), "raw": karana},
+        "var": {"day": weekday, "lord": DAY_LORDS.get(weekday, "")},
+        "sunrise": sunrise,
+        "sunset": sunset,
+        "moonrise": moonrise,
+        "moonset": moonset,
+        "sun": panchang.get("sun") or {"sunrise": sunrise, "sunset": sunset},
+        "moon": panchang.get("moon") or {"moonrise": moonrise, "moonset": moonset},
+        "brahma_muhurat": {**brahma, "benefit": "Spiritual practice, japa, meditation and study"},
+        "abhijit_muhurat": {**abhijit, "benefit": "Auspicious work and important beginnings"},
+        "rahu_kaal": {**rahu, "benefit": "Avoid new auspicious beginnings"},
+        "choghadiya": choghadiya,
+        "current_choghadiya": current_choghadiya,
+        "next_choghadiya": next_choghadiya,
+        "auspicious_timings": auspicious,
+        "inauspicious_timings": inauspicious,
+        # FIX: festivals for this exact date, sourced from the English
+        # Calendar Festivals endpoint (fetched once per month, filtered here).
+        "festivals": festivals,
+        "auspicious_period": [
+            {
+                "slug": key,
+                "name": key.replace("_", " ").title(),
+                "period": as_list(value),
+            }
+            for key, value in auspicious.items()
+            if isinstance(value, (dict, list))
+        ],
+        "inauspicious_period": [
+            {
+                "slug": key,
+                "name": key.replace("_", " ").title(),
+                "period": as_list(value),
+            }
+            for key, value in inauspicious.items()
+            if isinstance(value, (dict, list))
+        ],
+        "all_panchang": {
+            "tithis": as_list(panchang.get("tithis") or panchang.get("tithi")),
+            "nakshatras": nested_records(nakshatra_data, "nakshatra_list", "nakshatra_pada", "zodiac_point"),
+            "sun_nakshatras": nested_records(sun_nakshatra_data, "nakshatra_list", "nakshatra_pada", "zodiac_point"),
+            "yogas": as_list(panchang.get("yogas") or panchang.get("yoga")),
+            "karnas": as_list(panchang.get("karnas") or panchang.get("karanas") or panchang.get("karana")),
+        },
+        "raw": compact_raw({
+            "find_panchang": panchang_raw,
+            "find_choghadiya": choghadiya_raw,
+            "auspicious_timings": auspicious_raw,
+            "inauspicious_timings": inauspicious_raw,
+        }),
+        "overall_day": "good",
+        "pandit_blessings": "May your day begin with clarity, devotion and auspicious intention.",
+        "do_today": [
+            "Use Brahma Muhurat for prayer, meditation and mantra japa.",
+            "Prefer Abhijit Muhurat or favorable Choghadiya for important work.",
+            "Check Tithi, Nakshatra, Yoga and Karana together before finalizing rituals.",
+        ],
+        "avoid_today": [
+            "Avoid starting new auspicious work during Rahu Kaal.",
+            "Avoid relying on one Panchang factor alone for major ceremonies.",
+        ],
+    }
+
+
+def fetch_calendar_day_from_divine(
+    req: DailyPanchangRequest,
+    month_festivals: Optional[list[dict[str, Any]]] = None,
+    place: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    tz: Optional[float] = None,
+) -> dict[str, Any]:
+    try:
+        parsed_date = datetime.strptime(req.date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="date must be in YYYY-MM-DD format") from exc
+
+    if place is None or lat is None or lon is None or tz is None:
+        lat, lon, tz, place = normalize_city(req)
+
+    language = req.language or "en"
+    payload = {
+        "api_key": divine_api_key(),
+        "day": parsed_date.day,
+        "month": parsed_date.month,
+        "year": parsed_date.year,
+        "place": place,
+        "lat": lat,
+        "lon": lon,
+        "tzone": tz,
+        "lan": language,
+    }
+
+    panchang_raw = divine_post(DIVINE_BASES["panchang"], payload)
+    choghadiya_raw = divine_post(DIVINE_BASES["choghadiya"], payload)
+    auspicious_raw = divine_post(DIVINE_BASES["auspicious"], payload)
+    inauspicious_raw = divine_post(DIVINE_BASES["inauspicious"], payload)
+
+    if month_festivals is None:
+        festivals_payload = {
+            "api_key": divine_api_key(),
+            "year": str(parsed_date.year),
+            "month": f"{parsed_date.month:02d}",
+            "place": place,
+            "lat": lat,
+            "lon": lon,
+            "tzone": tz,
+        }
+        try:
+            festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
+            month_festivals = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
+        except HTTPException:
+            month_festivals = []
+
+    festivals_for_day = [f for f in month_festivals if f.get("date") == req.date]
+    normalized = normalize_daily(
+        req,
+        panchang_raw,
+        choghadiya_raw,
+        auspicious_raw,
+        inauspicious_raw,
+        festivals_for_day,
+        place,
+        lat,
+        lon,
+        tz,
+    )
+    normalized["calendar_type"] = req.calendar or "amanta"
+    normalized["language"] = language
+    return normalized
+
+
+@router.get("/month")
+def get_panchang_month(
+    year: int,
+    month: int,
+    city: Optional[str] = "India",
+    coordinates: Optional[str] = None,
+    calendar: Optional[str] = "amanta",
+    language: Optional[str] = "en",
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    timezone: Optional[float] = None,
+):
+    """Calendar endpoint: DB-only read.
+
+    This endpoint intentionally does NOT call DivineAPI. Run
+    POST /api/panchang/calendar/seed-year once for the required year/location,
+    then the frontend calendar reads the stored data from panchang_cache.
+    """
+    if year < 1900 or year > 2100:
+        raise HTTPException(status_code=422, detail="year must be between 1900 and 2100")
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=422, detail="month must be between 1 and 12")
+
+    base_req = DailyPanchangRequest(
+        date=f"{year}-{month:02d}-01",
+        city=city,
+        coordinates=coordinates,
+        calendar=calendar,
+        language=language,
+        latitude=latitude,
+        longitude=longitude,
+        timezone=timezone,
+    )
+    lat, lon, tz, place = normalize_city(base_req)
+    calendar_type = calendar or "amanta"
+    language_code = language or "en"
+    coordinates_key = coordinates_text(lat, lon)
+    cached_days = get_cached_month_days(year, month, coordinates_key, calendar_type, language_code)
+
+    total_days = calendar_module.monthrange(year, month)[1]
+    missing_dates = [
+        f"{year}-{month:02d}-{day_number:02d}"
+        for day_number in range(1, total_days + 1)
+        if f"{year}-{month:02d}-{day_number:02d}" not in cached_days
+    ]
+    if missing_dates:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "Calendar data is not seeded in database for this month. Run /api/panchang/calendar/seed-year first.",
+                "missing_dates": missing_dates,
+            },
+        )
+
+    days = [cached_days[f"{year}-{month:02d}-{day_number:02d}"] for day_number in range(1, total_days + 1)]
+    for item in days:
+        item["cache"] = item.get("cache") or "database"
+
+    first_day = days[0] if days else {}
+    return {
+        "status": "ok",
+        "source": "database",
+        "year": year,
+        "month": month,
+        "calendar": calendar_type,
+        "language": language_code,
+        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
+        "hindu_calendar_meta": first_day.get("hindu_calendar") or {},
+        "days": days,
+    }
+
+
+@router.post("/calendar/seed-year")
+def seed_panchang_calendar_year(req: CalendarYearSeedRequest):
+    if req.year < 1900 or req.year > 2100:
+        raise HTTPException(status_code=422, detail="year must be between 1900 and 2100")
+
+    base_req = DailyPanchangRequest(
+        date=f"{req.year}-01-01",
+        city=req.city,
+        coordinates=req.coordinates,
+        calendar=req.calendar,
+        language=req.language,
+        latitude=req.latitude,
+        longitude=req.longitude,
+        timezone=req.timezone,
+    )
+    lat, lon, tz, place = normalize_city(base_req)
+    calendar_type = req.calendar or "amanta"
+    language = req.language or "en"
+    coordinates_key = coordinates_text(lat, lon)
+
+    generated = 0
+    skipped_existing = 0
+    failed: list[dict[str, str]] = []
+    start = date(req.year, 1, 1)
+    end = date(req.year, 12, 31)
+    current = start
+    month_festivals_by_month: dict[int, list[dict[str, Any]]] = {}
+
+    while current <= end:
+        date_value = current.isoformat()
+        if not req.overwrite and get_cached_day(date_value, coordinates_key, calendar_type, language):
+            skipped_existing += 1
+            current += timedelta(days=1)
+            continue
+
+        if current.month not in month_festivals_by_month:
+            festivals_payload = {
+                "api_key": divine_api_key(),
+                "year": str(req.year),
+                "month": f"{current.month:02d}",
+                "place": place,
+                "lat": lat,
+                "lon": lon,
+                "tzone": tz,
+            }
+            try:
+                festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
+                month_festivals_by_month[current.month] = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
+            except HTTPException:
+                month_festivals_by_month[current.month] = []
+
+        day_req = DailyPanchangRequest(
+            date=date_value,
+            city=req.city,
+            coordinates=req.coordinates,
+            calendar=calendar_type,
+            language=language,
+            latitude=req.latitude,
+            longitude=req.longitude,
+            timezone=req.timezone,
+        )
+        try:
+            normalized = fetch_calendar_day_from_divine(
+                day_req,
+                month_festivals_by_month[current.month],
+                place,
+                lat,
+                lon,
+                tz,
+            )
+            normalized["cache"] = "database"
+            save_day_cache(date_value, coordinates_key, calendar_type, language, normalized)
+            generated += 1
+        except HTTPException as exc:
+            failed.append({"date": date_value, "error": str(exc.detail)})
+
+        current += timedelta(days=1)
+
+    return {
+        "status": "ok" if not failed else "partial",
+        "source": "divineapi-to-database",
+        "year": req.year,
+        "calendar": calendar_type,
+        "language": language,
+        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
+        "generated": generated,
+        "skipped_existing": skipped_existing,
+        "failed_count": len(failed),
+        "failed": failed[:20],
+        "message": "Year calendar data is stored in database. Calendar month endpoint will now read DB only.",
+    }
+
+
+@router.post("/daily")
+def get_daily_panchang(req: DailyPanchangRequest):
+    try:
+        parsed_date = datetime.strptime(req.date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="date must be in YYYY-MM-DD format") from exc
+
+    lat, lon, tz, place = normalize_city(req)
+    payload = {
+        "api_key": divine_api_key(),
+        "day": int(req.date[8:10]),
+        "month": int(req.date[5:7]),
+        "year": int(req.date[0:4]),
+        "place": place,
+        "lat": lat,
+        "lon": lon,
+        "tzone": tz,
+        "lan": "en",
+    }
+
+    panchang_raw = divine_post(DIVINE_BASES["panchang"], payload)
+    choghadiya_raw = divine_post(DIVINE_BASES["choghadiya"], payload)
+    auspicious_raw = divine_post(DIVINE_BASES["auspicious"], payload)
+    inauspicious_raw = divine_post(DIVINE_BASES["inauspicious"], payload)
+
+    # FIX: festivals need their OWN payload — the English Calendar Festivals
+    # endpoint takes {api_key, year, month, place, lat, lon, tzone}, not a
+    # "day". Sending a "day" field to it (as the panchang/choghadiya/timings
+    # calls do above) is harmless but meaningless; it returns every festival
+    # for the whole month regardless, which we then filter down to this date.
+    festivals_payload = {
+        "api_key": divine_api_key(),
+        "year": str(parsed_date.year),
+        "month": f"{parsed_date.month:02d}",
+        "place": place,
+        "lat": lat,
+        "lon": lon,
+        "tzone": tz,
+    }
+    try:
+        festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
+        month_festivals = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
+    except HTTPException:
+        # Don't fail the whole daily Panchang if the festival feed hiccups —
+        # the rest of the day's data is still useful without it.
+        month_festivals = []
+
+    festivals_for_day = [f for f in month_festivals if f.get("date") == req.date]
+
+    return normalize_daily(
+        req,
+        panchang_raw,
+        choghadiya_raw,
+        auspicious_raw,
+        inauspicious_raw,
+        festivals_for_day,
+        place,
+        lat,
+        lon,
+        tz,
+    )
+
+
+def get_client() -> anthropic.Anthropic:
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise HTTPException(500, "ANTHROPIC_API_KEY not configured on server")
+    return anthropic.Anthropic(api_key=key)
+
+
+def ask_claude(prompt: str, max_tokens: int = 2500) -> dict[str, Any]:
+    client = get_client()
+    response = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = response.content[0].text.replace("```json", "").replace("```", "").strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(500, f"Failed to parse AI response: {exc}\nRaw: {raw[:200]}") from exc
+
+
+@router.post("/muhurat")
+def get_muhurat(req: MuhuratRequest):
+    try:
+        dt = datetime.strptime(req.date, "%Y-%m-%d")
+        full = dt.strftime("%d %B %Y").lstrip("0")
+        day = dt.strftime("%A")
+    except Exception:
+        full = req.date
+        day = ""
+
+    prompt = f"""You are a highly learned Vedic pandit - expert in Muhurat Shastra and Jyotish. A devotee seeks your guidance.
+
+QUERY:
+- Muhurat for: {req.muhurat_label} ({req.muhurat_hindi})
+- Date: {full} ({day})
+- Person's name: {req.name or 'Not provided'}
+- Rashi (Moon sign): {req.rashi or 'Not provided'}
+- City: {req.city or 'India (general)'}
+
+Analyse the tithi, nakshatra, yoga, var and planetary positions. Give a warm, authoritative pandit-style response.
+
+Return ONLY valid JSON, no markdown, start directly with {{:
+{{
+  "verdict": "excellent/good/average/avoid",
+  "verdict_reason": "One clear sentence why",
+  "pandit_message": "Warm, wise 3-4 sentence message to the devotee as a real pandit would speak",
+  "auspicious_timings": [
+    {{ "time": "07:15 AM - 09:00 AM", "quality": "Shreshtha (Best)", "reason": "" }}
+  ],
+  "timings_to_avoid": [
+    {{ "time": "", "reason": "" }}
+  ],
+  "tithi_today": {{ "name": "", "is_auspicious_for_this_muhurat": true, "reason": "" }},
+  "nakshatra_today": {{ "name": "", "is_auspicious_for_this_muhurat": true, "reason": "" }},
+  "rituals_recommended": ["ritual 1", "ritual 2", "ritual 3"],
+  "mantras": [
+    {{ "deity": "", "mantra": "", "chant_times": 108, "purpose": "" }}
+  ],
+  "special_notes": ["note 1", "note 2"],
+  "alternative_dates": [
+    {{ "date": "", "quality": "Excellent/Good", "reason": "" }}
+  ]
+}}"""
+
+    return ask_claude(prompt, max_tokens=2500)
