@@ -42,6 +42,71 @@ const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto
 const VERDICT_COLOR = { excellent: '#16a34a', good: '#2563eb', average: '#d97706', avoid: '#dc2626' };
 const VERDICT_BG = { excellent: '#f0fdf4', good: '#eff6ff', average: '#fffbeb', avoid: '#fef2f2' };
 
+/* ------------------------------------------------------------------ */
+/*  Field curation — turns raw DivineAPI keys into a clean, human      */
+/*  readable Panchang. This is the layer that used to be missing:      */
+/*  before, every key from the API (vriddhi, kshaya, paksha_randhra_   */
+/*  start_time, raw slugs, duplicated "_detailed" entries...) was      */
+/*  dumped straight into the UI. Everything below decides what's       */
+/*  worth showing, what it should be called, and what it means.        */
+/* ------------------------------------------------------------------ */
+
+// Keys that are internal/API bookkeeping and should never reach the UI.
+const HIDDEN_KEYS = new Set(['id', 'raw', 'paksha_randhra_start_time', 'vriddhi', 'kshaya']);
+
+// Friendly labels for known API field names (falls back to titleize()).
+const LABEL_MAP = {
+  tithi: 'Tithi', paksha: 'Paksha', number: 'Number', deity: 'Deity', type: 'Nature',
+  start_time: 'Starts', end_time: 'Ends', start: 'Starts', end: 'Ends',
+  nak_name: 'Nakshatra', nakshatra_name: 'Nakshatra', lord: 'Lord', pada: 'Pada',
+  yoga_number: 'Yoga No.', yoga_name: 'Yoga',
+  karana_name: 'Karana', mobility: 'Mobility', rulling_planet: 'Ruling Planet',
+  ruling_planet: 'Ruling Planet', devata: 'Deity', nature: 'Nature', sign: 'Sign',
+  sunrise: 'Sunrise', sunset: 'Sunset', moonrise: 'Moonrise', moonset: 'Moonset',
+  brahma_muhurat: 'Brahma Muhurat', abhijit_muhurat: 'Abhijit Muhurat', rahu_kaal: 'Rahu Kaal',
+};
+
+// Preferred display order — the "name" of a thing first, timing last.
+const FIELD_PRIORITY = [
+  'tithi', 'nak_name', 'nakshatra_name', 'yoga_name', 'karana_name',
+  'paksha', 'pada', 'mobility', 'deity', 'devata', 'ruling_planet', 'rulling_planet', 'lord',
+  'nature', 'type', 'number', 'yoga_number', 'sign', 'start_time', 'start', 'end_time', 'end',
+];
+
+// What each auspicious muhurat actually means — replaces a bare titleized slug.
+const AUSPICIOUS_MEANINGS = {
+  brahma_muhurta: { label: 'Brahma Muhurat', icon: '🕉️', note: 'Best for meditation, prayer and spiritual practice.' },
+  abhijit_muhurta: { label: 'Abhijit Muhurat', icon: '✳️', note: 'The most auspicious window of the day for important beginnings.' },
+  abhijit: { label: 'Abhijit Muhurat', icon: '✳️', note: 'The most auspicious window of the day for important beginnings.' },
+  godhuli_muhurta: { label: 'Godhuli Muhurat', icon: '🌇', note: 'Dusk period, favourable for weddings and ceremonies.' },
+  pratah_sandhya: { label: 'Pratah Sandhya', icon: '🌅', note: 'Morning twilight — good for prayer and daily rituals.' },
+  sayahana_sandhya: { label: 'Sayahana Sandhya', icon: '🌆', note: 'Evening twilight — good for prayer and daily rituals.' },
+  nishita_muhurta: { label: 'Nishita Muhurat', icon: '🌌', note: 'Midnight period, sacred for select poojas (e.g. Janmashtami).' },
+  vijay_muhurta: { label: 'Vijay Muhurat', icon: '🏆', note: 'Favourable for ventures where victory or success matters.' },
+  sarvartha_siddhi_yoga: { label: 'Sarvartha Siddhi Yoga', icon: '✨', note: 'A highly favourable yoga for success in any undertaking.' },
+  amrit_kaal: { label: 'Amrit Kaal', icon: '💧', note: 'Nectar period — favourable for most activities.' },
+};
+
+// What each inauspicious window means and why it should be avoided.
+const INAUSPICIOUS_MEANINGS = {
+  rahu_kaal: { label: 'Rahu Kaal', icon: '⊘', note: 'Avoid starting new or auspicious work.' },
+  gulkai_kaal: { label: 'Gulikai Kaal', icon: '⊘', note: 'Avoid important beginnings during this window.' },
+  yamaganda: { label: 'Yamaganda', icon: '⊘', note: 'Ruled by Yama — avoid launching new ventures.' },
+  baana: { label: 'Baana', icon: '⚠️', note: 'Inauspicious influence tied to the day\u2019s ruling sign.' },
+  panchaka: { label: 'Panchak', icon: '⚠️', note: 'Avoid construction, roofing and funeral rites during this period.' },
+  varjyam: { label: 'Varjyam', icon: '⊘', note: 'Best avoided for important tasks.' },
+  dur_muhurtam: { label: 'Dur Muhurat', icon: '⊘', note: 'An inauspicious muhurat, unfit for new beginnings.' },
+  hutashana_yoga: { label: 'Hutashana Yoga', icon: '🔥', note: 'Inauspicious yoga — exercise caution.' },
+  visha_yoga: { label: 'Visha Yoga', icon: '⚠️', note: '"Poison yoga" — considered inauspicious.' },
+  yamaghata_yoga: { label: 'Yamaghata Yoga', icon: '⚠️', note: 'Associated with obstacles — best avoided.' },
+  dagdha_yoga: { label: 'Dagdha Yoga', icon: '🔥', note: '"Burnt yoga" — avoid auspicious starts.' },
+  samvartaka_yoga: { label: 'Samvartaka Yoga', icon: '⚠️', note: 'Inauspicious yoga, best avoided for new work.' },
+  kakracha_yoga: { label: 'Kakracha Yoga', icon: '⚠️', note: 'Avoid important decisions during this period.' },
+  mrityu_yoga: { label: 'Mrityu Yoga', icon: '⚠️', note: 'Linked to danger — exercise extra caution.' },
+  vidaal_yoga: { label: 'Vidaal Yoga', icon: '⚠️', note: 'Inauspicious yoga, avoid new beginnings.' },
+  aadal_yoga: { label: 'Aadal Yoga', icon: '⚠️', note: 'Inauspicious yoga, avoid new beginnings.' },
+};
+
 function cleanValue(value) {
   if (value === null || value === undefined || value === '') return 'Not available';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -52,6 +117,16 @@ function cleanValue(value) {
     .filter(([, nested]) => nested !== null && nested !== undefined && nested !== '')
     .map(([key, nested]) => `${titleize(key)}: ${cleanValue(nested)}`)
     .join(' | ');
+}
+
+// A nested object like { name: 'Chandra' } (the shape "lord" comes back as)
+// should just read as "Chandra", not "Name: Chandra".
+function simplifyValue(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const keys = Object.keys(value);
+    if (keys.length === 1 && keys[0] === 'name') return value.name;
+  }
+  return value;
 }
 
 function titleize(value) {
@@ -247,254 +322,61 @@ function TimingCard({ title, value, note, tone }) {
   );
 }
 
-function ObjectGrid({ data }) {
-  const entries = Object.entries(data || {}).filter(([, value]) => {
-    if (value === null || value === undefined || value === '') return false;
-    if (typeof value === 'object') return false;
-    return true;
+/* ------------------------------------------------------------------ */
+/*  Curated record rendering (Tithi / Nakshatra / Yoga / Karana lists) */
+/* ------------------------------------------------------------------ */
+
+// Turns one raw anga record (a tithi, nakshatra, yoga or karana object)
+// into an ordered list of { key, label, value } plus any status badges
+// (Vriddhi/Kshaya), dropping internal fields entirely.
+function curateRecord(record) {
+  if (!record || typeof record !== 'object') return { fields: [], badges: [] };
+
+  const badges = [];
+  if (record.vriddhi === true || record.vriddhi === 'true') badges.push('Vriddhi Tithi');
+  if (record.kshaya === true || record.kshaya === 'true') badges.push('Kshaya Tithi');
+
+  const fields = Object.entries(record)
+    .filter(([key]) => !HIDDEN_KEYS.has(key))
+    .map(([key, value]) => ({
+      key,
+      label: LABEL_MAP[key] || titleize(key),
+      value: to12h(cleanValue(simplifyValue(value))),
+    }))
+    .filter((field) => field.value && field.value !== 'Not available');
+
+  fields.sort((a, b) => {
+    const ai = FIELD_PRIORITY.indexOf(a.key);
+    const bi = FIELD_PRIORITY.indexOf(b.key);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
   });
 
-  if (!entries.length) return null;
-
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10 }}>
-      {entries.map(([key, value]) => (
-        <div key={key} style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 8, padding: '10px 12px' }}>
-          <p style={{ fontFamily: UI_FONT, fontSize: 10, color: 'var(--text-light)', fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase' }}>
-            {titleize(key)}
-          </p>
-          <p style={{ fontFamily: UI_FONT, color: 'var(--text-mid)', fontSize: 13, marginTop: 5, lineHeight: 1.4 }}>
-            {to12h(cleanValue(value))}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function RecordList({ title, records }) {
-  const rows = Array.isArray(records) ? records.filter(Boolean) : [];
-  if (!rows.length) return null;
-
-  return (
-    <div style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 'var(--radius)', padding: 16 }}>
-      <p style={{ fontFamily: UI_FONT, fontWeight: 800, color: 'var(--brown)', fontSize: 12, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-        {title}
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12 }}>
-        {rows.map((record, index) => (
-          <div key={`${title}-${index}`} style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 8, padding: 12 }}>
-            <ObjectGrid data={record} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TimingsTable({ title, data, tone = 'green' }) {
-  const color = tone === 'red' ? '#dc2626' : '#16a34a';
-  const entries = Object.entries(data || {}).filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value));
-  if (!entries.length) return null;
-
-  return (
-    <div style={{ background: 'white', border: '1px solid var(--cream-dark)', borderRadius: 'var(--radius)', padding: 16 }}>
-      <p style={{ fontFamily: UI_FONT, fontWeight: 800, color, fontSize: 12, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-        {title}
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 10 }}>
-        {entries.map(([key, value]) => (
-          <div key={key} style={{ border: `1px solid ${color}33`, borderRadius: 8, padding: '11px 12px', background: tone === 'red' ? '#fef2f2' : '#f0fdf4' }}>
-            <p style={{ fontFamily: UI_FONT, color, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>{titleize(key)}</p>
-            <p style={{ fontFamily: UI_FONT, color: tone === 'red' ? '#991b1b' : '#166534', fontSize: 14, fontWeight: 700, marginTop: 5 }}>
-              {to12h(cleanValue(value))}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const HIDDEN_DETAIL_KEYS = new Set([
-  'raw',
-  'vriddhi',
-  'kshaya',
-  'paksha_randhra_start_time',
-  'paksha_randhra_end_time',
-  'paksha_randhra',
-  'is_current',
-  'current',
-  'date',
-]);
-
-const TIMING_META = {
-  brahma_muhurta: { name: 'Brahma Muhurat', note: 'Ideal for meditation, prayer and spiritual practice.' },
-  brahma_muhurat: { name: 'Brahma Muhurat', note: 'Ideal for meditation, prayer and spiritual practice.' },
-  abhijit: { name: 'Abhijit Muhurat', note: 'A powerful window for important work and new beginnings.' },
-  abhijit_muhurta: { name: 'Abhijit Muhurat', note: 'A powerful window for important work and new beginnings.' },
-  abhijit_muhurat: { name: 'Abhijit Muhurat', note: 'A powerful window for important work and new beginnings.' },
-  godhuli_muhurta: { name: 'Godhuli Muhurat', note: 'A gentle evening period used for worship and auspicious activity.' },
-  vijaya_muhurta: { name: 'Vijaya Muhurat', note: 'Favorable for decisive action, travel and important efforts.' },
-  amrit_kaalam: { name: 'Amrit Kaalam', note: 'A sweet, supportive period for auspicious work.' },
-  nishita_muhurta: { name: 'Nishita Muhurat', note: 'A midnight worship period, especially used for specific pujas.' },
-  ravi_yoga: { name: 'Ravi Yoga', note: 'A bright yoga considered helpful for overcoming obstacles.' },
-  sarvartha_siddhi_yoga: { name: 'Sarvartha Siddhi Yoga', note: 'A fulfillment-oriented yoga for constructive beginnings.' },
-  rahu_kaal: { name: 'Rahu Kaal', note: 'Avoid starting new work, ceremonies or major commitments.' },
-  rahu_kalam: { name: 'Rahu Kaal', note: 'Avoid starting new work, ceremonies or major commitments.' },
-  rahukaal: { name: 'Rahu Kaal', note: 'Avoid starting new work, ceremonies or major commitments.' },
-  yamaganda: { name: 'Yamaganda', note: 'Avoid auspicious starts and major commitments.' },
-  yama_gandam: { name: 'Yamaganda', note: 'Avoid auspicious starts and major commitments.' },
-  gulikai_kaal: { name: 'Gulikai Kaal', note: 'Traditionally avoided for beginning auspicious work.' },
-  gulkai_kaal: { name: 'Gulikai Kaal', note: 'Traditionally avoided for beginning auspicious work.' },
-  dur_muhurtam: { name: 'Dur Muhurtam', note: 'An inauspicious span; avoid starting important work.' },
-  varjyam: { name: 'Varjyam', note: 'A void period generally avoided for auspicious actions.' },
-  baana: { name: 'Baana', note: 'A caution period checked before rituals, travel and major starts.' },
-  bhadra: { name: 'Bhadra', note: 'Avoid auspicious work while Bhadra is active.' },
-  panchaka: { name: 'Panchaka', note: 'A caution period considered before house, travel and ritual work.' },
-  gand_mool: { name: 'Gand Mool', note: 'A sensitive Nakshatra period handled with care in rituals.' },
-  vidaal_yoga: { name: 'Vidaal Yoga', note: 'A caution yoga; avoid major auspicious beginnings.' },
-  aadal_yoga: { name: 'Aadal Yoga', note: 'A caution yoga; avoid major auspicious beginnings.' },
-};
-
-const RECORD_FIELD_LABELS = {
-  paksha: 'Paksha',
-  number: 'Number',
-  id: 'Number',
-  start: 'Starts',
-  start_time: 'Starts',
-  end: 'Ends',
-  end_time: 'Ends',
-  lord: 'Lord',
-  nak_lord: 'Lord',
-  deity: 'Deity',
-  gana: 'Gana',
-  guna: 'Guna',
-  pada: 'Pada',
-  charan: 'Pada',
-  rashi: 'Rashi',
-  zodiac: 'Zodiac',
-  zodiac_sign: 'Zodiac',
-  sign: 'Sign',
-  type: 'Type',
-};
-
-function isEmptyDetail(value) {
-  return value === null || value === undefined || value === '' || value === '-' || value === 'â€”';
-}
-
-function normalizeApiKey(key) {
-  return String(key || '').trim().toLowerCase().replace(/\s+/g, '_');
-}
-
-function detailTime(value) {
-  return to12h(cleanValue(value));
-}
-
-function displayDetailValue(value) {
-  if (typeof value === 'boolean') return value ? 'Yes' : '';
-  if (Array.isArray(value)) return value.filter(Boolean).map(displayDetailValue).filter(Boolean).join(', ');
-  if (value && typeof value === 'object') {
-    return value.name || value.full_name || value.title || value.value || '';
-  }
-  return detailTime(value);
+  return { fields, badges };
 }
 
 function flattenDetails(data, prefix = '') {
   if (!data || typeof data !== 'object') return [];
   return Object.entries(data).flatMap(([key, value]) => {
-    if (HIDDEN_DETAIL_KEYS.has(normalizeApiKey(key)) || isEmptyDetail(value) || value === false) return [];
-    const label = prefix ? `${prefix} ${titleize(key)}` : titleize(key);
+    if (HIDDEN_KEYS.has(key)) return [];
+    const labelKey = LABEL_MAP[key] || titleize(key);
+    const label = prefix ? `${prefix} ${labelKey}` : labelKey;
+    if (value === null || value === undefined || value === '') return [];
     if (Array.isArray(value)) {
-      const text = value.filter((item) => typeof item !== 'object').map(displayDetailValue).filter(Boolean).join(', ');
-      return text ? [{ label, value: text }] : [];
+      if (!value.length) return [];
+      if (value.every((item) => typeof item !== 'object')) {
+        return [{ label, value: value.join(', ') }];
+      }
+      return [];
     }
     if (typeof value === 'object') {
-      const text = displayDetailValue(value);
-      return text ? [{ label, value: text }] : flattenDetails(value, label);
+      return flattenDetails(value, label);
     }
     return [{ label, value }];
   });
 }
 
-function timingTitle(key) {
-  const normalized = normalizeApiKey(key);
-  return TIMING_META[normalized]?.name || titleize(key);
-}
-
-function timingNote(key, tone) {
-  const normalized = normalizeApiKey(key);
-  return TIMING_META[normalized]?.note || (tone === 'red'
-    ? 'Avoid this period for auspicious beginnings.'
-    : 'A supportive period for auspicious or devotional work.');
-}
-
-function hasTimingPeriod(value) {
-  if (!value) return false;
-  if (Array.isArray(value)) return value.some(hasTimingPeriod);
-  if (typeof value === 'string') return Boolean(value.trim());
-  if (typeof value !== 'object') return false;
-  return Boolean(
-    value.time ||
-    value.start ||
-    value.end ||
-    value.start_time ||
-    value.end_time ||
-    Object.values(value).some((nested) => Array.isArray(nested) && nested.some(hasTimingPeriod))
-  );
-}
-
-function formatTimingPeriod(value) {
-  if (!value) return '';
-  if (Array.isArray(value)) {
-    return value.map(formatTimingPeriod).filter(Boolean).join(' • ');
-  }
-  if (typeof value === 'string') return to12h(value);
-  if (typeof value !== 'object') return '';
-
-  if (value.time) return to12h(value.time);
-  const start = value.start || value.start_time || value.from || value.startTime;
-  const end = value.end || value.end_time || value.to || value.endTime;
-  if (start && end) return `${to12h(start)} - ${to12h(end)}`;
-  if (start || end) return to12h(start || end);
-
-  const nested = Object.values(value)
-    .filter((nestedValue) => Array.isArray(nestedValue) || (nestedValue && typeof nestedValue === 'object'))
-    .map(formatTimingPeriod)
-    .filter(Boolean);
-  return nested.join(' • ');
-}
-
-function recordName(record) {
-  return displayDetailValue(record?.name || record?.full_name || record?.tithi || record?.tithi_name || record?.nak_name || record?.nakshatra_name || record?.yoga_name || record?.karana_name || record?.karna_name || record?.type || record?.title || record?.number) || 'Panchang record';
-}
-
-function recordTiming(record) {
-  const formatted = formatTimingPeriod(record);
-  if (formatted) return formatted;
-  const start = record?.start || record?.start_time;
-  const end = record?.end || record?.end_time;
-  if (start && end) return `${to12h(start)} - ${to12h(end)}`;
-  return to12h(start || end || '');
-}
-
-function recordBadges(record) {
-  const badges = [];
-  if (record?.vriddhi === true) badges.push('Vriddhi Tithi');
-  if (record?.kshaya === true) badges.push('Kshaya Tithi');
-  return badges;
-}
-
-function curatedRecordFields(record) {
-  return Object.entries(RECORD_FIELD_LABELS)
-    .map(([key, label]) => {
-      const value = record?.[key];
-      const text = displayDetailValue(value);
-      return text ? { label, value: text } : null;
-    })
-    .filter(Boolean)
-    .filter((item, index, all) => all.findIndex((candidate) => candidate.label === item.label && candidate.value === item.value) === index)
-    .slice(0, 6);
+function detailTime(value) {
+  return to12h(cleanValue(value));
 }
 
 function DetailCard({ title, data, accent = '#c47a14' }) {
@@ -522,7 +404,10 @@ function DetailCard({ title, data, accent = '#c47a14' }) {
   );
 }
 
-function PanchangRecordTable({ title, records }) {
+// Replaces the old "PanchangRecordTable" key-dump. Shows only meaningful,
+// labeled fields per record (Tithi/Nakshatra/Yoga/Karana), with a status
+// badge row for Vriddhi/Kshaya instead of a raw "false" line.
+function AngaRecordList({ title, records }) {
   const rows = Array.isArray(records) ? records.filter((item) => item && typeof item === 'object') : [];
   if (!rows.length) return null;
 
@@ -532,54 +417,80 @@ function PanchangRecordTable({ title, records }) {
         {title}
       </p>
       <div style={{ display: 'grid', gap: 10 }}>
-        {rows.map((record, index) => (
-          <div key={`${title}-${index}`} style={{ background: '#fafafa', borderRadius: 8, padding: '11px 12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start', marginBottom: 9 }}>
-              <div>
-                <p style={{ fontFamily: UI_FONT, fontSize: 15, color: '#252525', fontWeight: 900, lineHeight: 1.25 }}>
-                  {recordName(record)}
-                </p>
-                {recordTiming(record) && (
-                  <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b5a24', fontWeight: 800, marginTop: 3 }}>
-                    {recordTiming(record)}
-                  </p>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {recordBadges(record).map((badge) => (
-                  <span key={badge} style={{ fontFamily: UI_FONT, fontSize: 10, color: '#9a3412', background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 50, padding: '3px 8px', fontWeight: 900, whiteSpace: 'nowrap' }}>
-                    {badge}
-                  </span>
+        {rows.map((record, index) => {
+          const { fields, badges } = curateRecord(record);
+          if (!fields.length) return null;
+          return (
+            <div key={`${title}-${index}`} style={{ background: '#fafafa', borderRadius: 8, padding: '11px 12px' }}>
+              {!!badges.length && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 9 }}>
+                  {badges.map((badge) => (
+                    <span key={badge} style={{
+                      fontFamily: UI_FONT, fontSize: 10, fontWeight: 900, color: '#9a5d12',
+                      background: '#fff1d9', borderRadius: 50, padding: '3px 10px',
+                      letterSpacing: '.04em', textTransform: 'uppercase',
+                    }}>
+                      {badge}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 8 }}>
+                {fields.slice(0, 10).map((item) => (
+                  <div key={`${title}-${index}-${item.key}`}>
+                    <p style={{ fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                      {item.label}
+                    </p>
+                    <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, marginTop: 3 }}>
+                      {item.value}
+                    </p>
+                  </div>
                 ))}
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8 }}>
-              {curatedRecordFields(record).map((item) => (
-                <div key={`${title}-${index}-${item.label}`}>
-                  <p style={{ fontFamily: UI_FONT, fontSize: 10, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-                    {item.label}
-                  </p>
-                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#252525', fontWeight: 800, marginTop: 3, lineHeight: 1.35 }}>
-                    {item.value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function TimingDetailList({ title, data, tone = 'green' }) {
+/* ------------------------------------------------------------------ */
+/*  Auspicious / Inauspicious timings — named, explained, correctly    */
+/*  formatted even when a muhurat has more than one window in a day.   */
+/* ------------------------------------------------------------------ */
+
+function formatPeriod(item) {
+  if (!item || typeof item !== 'object') return '';
+  const start = item.start_time || item.start;
+  const end = item.end_time || item.end;
+  if (!start || !end) return '';
+  const range = `${to12h(start)} - ${to12h(end)}`;
+  return item.sign ? `${range} (Sign: ${item.sign})` : range;
+}
+
+// A timing value may be a single {start,end} object OR a list of them
+// (e.g. Dur Muhurtam happens twice a day). Format every window cleanly
+// and join them, instead of the old behaviour of concatenating raw
+// "Start Time: ... End Time: ..." strings into one unreadable line.
+function formatTimingValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(formatPeriod).filter(Boolean).join('  •  ');
+  }
+  return formatPeriod(value);
+}
+
+function MuhuratTimingsGrid({ title, data, tone = 'green', meanings }) {
   const color = tone === 'red' ? '#dc2626' : '#16a34a';
   const bg = tone === 'red' ? '#fff5f5' : '#f5fff7';
-  const entries = Object.entries(data || {}).filter(([key, value]) => {
-    const normalized = normalizeApiKey(key);
-    if (HIDDEN_DETAIL_KEYS.has(normalized) || normalized.endsWith('_detailed')) return false;
-    return hasTimingPeriod(value);
-  });
+  const border = tone === 'red' ? '#fecaca' : '#bbf7d0';
+
+  const entries = Object.entries(data || {})
+    // "_detailed" variants duplicate the base entry with identical times.
+    .filter(([key]) => !key.toLowerCase().endsWith('_detailed'))
+    .map(([key, value]) => ({ key, text: formatTimingValue(value) }))
+    .filter((item) => item.text);
+
   if (!entries.length) return null;
 
   return (
@@ -587,20 +498,29 @@ function TimingDetailList({ title, data, tone = 'green' }) {
       <p style={{ fontFamily: UI_FONT, fontSize: 12, color, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>
         {title}
       </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }}>
-        {entries.map(([key, value]) => (
-          <div key={`${title}-${key}`} style={{ background: bg, borderRadius: 8, padding: '10px 11px' }}>
-            <p style={{ fontFamily: UI_FONT, fontSize: 11, color, fontWeight: 900, letterSpacing: '.06em', textTransform: 'uppercase' }}>
-              {timingTitle(key)}
-            </p>
-            <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#252525', fontWeight: 900, lineHeight: 1.35, marginTop: 5 }}>
-              {formatTimingPeriod(value) || 'Not available'}
-            </p>
-            <p style={{ fontFamily: UI_FONT, fontSize: 11, color: tone === 'red' ? '#991b1b' : '#166534', fontWeight: 700, lineHeight: 1.4, marginTop: 5 }}>
-              {timingNote(key, tone)}
-            </p>
-          </div>
-        ))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
+        {entries.map(({ key, text }) => {
+          const meta = (meanings && meanings[key.toLowerCase()]) || {
+            label: titleize(key),
+            icon: tone === 'red' ? '⊘' : '✦',
+            note: '',
+          };
+          return (
+            <div key={key} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 8, padding: '11px 12px' }}>
+              <p style={{ fontFamily: UI_FONT, fontSize: 12, color, fontWeight: 900 }}>
+                <span style={{ marginRight: 6 }}>{meta.icon}</span>{meta.label}
+              </p>
+              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: tone === 'red' ? '#991b1b' : '#166534', fontWeight: 800, marginTop: 6, lineHeight: 1.4 }}>
+                {text}
+              </p>
+              {!!meta.note && (
+                <p style={{ fontFamily: UI_FONT, fontSize: 11, color: tone === 'red' ? '#b45454' : '#4d7a45', marginTop: 4, lineHeight: 1.4 }}>
+                  {meta.note}
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -636,15 +556,15 @@ function PanchangDetails({ dailyResult }) {
           <DetailCard title="Moon Details" data={dailyResult.moon} accent="#2563eb" />
           <DetailCard title="Hindu Calendar" data={dailyResult.hindu_calendar} accent="#7c3aed" />
         </div>
-        <TimingDetailList title="Auspicious Timings" data={dailyResult.auspicious_timings} tone="green" />
-        <TimingDetailList title="Inauspicious Timings" data={dailyResult.inauspicious_timings} tone="red" />
+        <MuhuratTimingsGrid title="Auspicious Timings" data={dailyResult.auspicious_timings} tone="green" meanings={AUSPICIOUS_MEANINGS} />
+        <MuhuratTimingsGrid title="Inauspicious Timings" data={dailyResult.inauspicious_timings} tone="red" meanings={INAUSPICIOUS_MEANINGS} />
         {!!nightChoghadiya.length && <ChoghadiyaBlock title="Night Choghadiya" rows={nightChoghadiya} />}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
-          <PanchangRecordTable title="All Tithis" records={dailyResult.all_panchang?.tithis} />
-          <PanchangRecordTable title="All Nakshatras" records={dailyResult.all_panchang?.nakshatras} />
-          <PanchangRecordTable title="All Yogas" records={dailyResult.all_panchang?.yogas} />
-          <PanchangRecordTable title="All Karanas" records={dailyResult.all_panchang?.karnas} />
-          <PanchangRecordTable title="Sun Nakshatras" records={dailyResult.all_panchang?.sun_nakshatras} />
+          <AngaRecordList title="All Tithis" records={dailyResult.all_panchang?.tithis} />
+          <AngaRecordList title="All Nakshatras" records={dailyResult.all_panchang?.nakshatras} />
+          <AngaRecordList title="All Yogas" records={dailyResult.all_panchang?.yogas} />
+          <AngaRecordList title="All Karanas" records={dailyResult.all_panchang?.karnas} />
+          <AngaRecordList title="Sun Nakshatras" records={dailyResult.all_panchang?.sun_nakshatras} />
         </div>
       </div>
     </div>
