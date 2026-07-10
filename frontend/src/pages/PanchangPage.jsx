@@ -1169,4 +1169,4 @@ function MuhuratResult({ result, selectedType }) {
       </div>
     </div>
   );
-}
+} 
