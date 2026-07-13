@@ -34,9 +34,8 @@ export async function fetchChapters(slug) {
   return r.json(); // { chapters: [...] }
 }
 
-export async function fetchChapterVerses(slug, chapterNum, page = 1, pageSize = 100) {
-  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
-  const r = await fetch(`${BASE}/api/books/${slug}/chapters/${chapterNum}?${params}`);
+export async function fetchChapterVerses(slug, chapterNum) {
+  const r = await fetch(`${BASE}/api/books/${slug}/chapters/${chapterNum}`);
   if (!r.ok) throw new Error("Failed to load chapter");
   return r.json();
   // { chapter_number, title, summary, verse_count, verses: [...] }

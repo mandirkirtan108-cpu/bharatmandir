@@ -1,8 +1,9 @@
 import os, sys, time, httpx, re
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional, Tuple
+from typing import Optional
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.connection import get_db_cursor
@@ -36,48 +37,8 @@ def _fetch_json(url: str):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# BHAGAVAD GITA  (unchanged)
+# BHAGAVAD GITA  (vedicscriptures.github.io — all 21 commentators)
 # ═════════════════════════════════════════════════════════════════════════════
-
-_GITA_BASE = "https://raw.githubusercontent.com/gita/gita/main/data"
-
-_SOURCE_METADATA = {
-    "bhagavad_gita_api": {
-        "name": "gita/gita — Bhagavad Gita in JSON",
-        "url": "https://github.com/gita/gita",
-        "data_url": _GITA_BASE,
-        "license": "Unlicense",
-        "license_url": "https://github.com/gita/gita/blob/main/LICENSE",
-        "attribution": "Bhagavad Gita JSON dataset by gita/gita contributors",
-        "rights_note": (
-            "Repository data is published under the Unlicense. Translation and "
-            "commentary authors are identified per verse so their editions can be reviewed separately."
-        ),
-    },
-    "valmiki_ramayana": {
-        "name": "DharmicData — Valmiki Ramayana",
-        "url": "https://github.com/bhavykhatri/DharmicData/tree/main/ValmikiRamayana",
-        "data_url": "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main/ValmikiRamayana",
-        "license": "ODbL-1.0",
-        "license_url": "https://github.com/bhavykhatri/DharmicData/blob/main/LICENSE.txt",
-        "attribution": "DharmicData/bhavykhatri; upstream transcription: svenkatreddy/Ramayana_Book",
-        "rights_note": "Sanskrit source text only; no modern translation is included in this edition.",
-    },
-    "mahabharata": {
-        "name": "DharmicData — Mahabharata",
-        "url": "https://github.com/bhavykhatri/DharmicData/tree/main/Mahabharata",
-        "data_url": "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main/Mahabharata",
-        "license": "ODbL-1.0",
-        "license_url": "https://github.com/bhavykhatri/DharmicData/blob/main/LICENSE.txt",
-        "attribution": "DharmicData/bhavykhatri",
-        "rights_note": "Sanskrit source text only; no modern translation is included in this edition.",
-    },
-}
-
-
-def _source_for(api_source: str):
-    source = _SOURCE_METADATA.get(api_source)
-    return dict(source) if source else None
 
 _GITA_CHAPTERS = {
     1:  ("Arjuna Vishada Yoga", "Arjuna's Grief",
@@ -119,54 +80,79 @@ _GITA_CHAPTERS = {
 }
 
 
-def _load_gita_dataset():
-    cached = _cache_get("gita_dataset")
-    if cached:
+_GITA_VS_BASE = "https://vedicscriptures.github.io"
+
+# Every commentator code the vedicscriptures API may return per verse.
+# Each verse payload already embeds "author" inside its own object, so no
+# separate author/language lookup table is needed — we just copy through
+# whichever of these keys are present for that particular verse.
+_GITA_COMMENTATOR_CODES = {
+    "tej", "siva", "purohit", "chinmay", "san", "adi", "gambir", "madhav",
+    "anand", "rams", "raman", "abhinav", "sankar", "jaya", "vallabh",
+    "ms", "srid", "dhan", "venkat", "puru", "neel",
+}
+
+# Preference order for picking the single "headline" translation/commentary
+# shown by default in the reader UI. Full scholarly set still travels in
+# each verse's `commentaries` field for a future expanded/translator-picker view.
+_GITA_PRIMARY_TRANSLATION_ORDER = ["siva", "purohit", "gambir", "adi", "san", "raman"]
+
+
+def _fetch_gita_verse_raw(chapter_num: int, verse_num: int):
+    """Fetch + validate a single verse from the vedicscriptures API, cached 24h."""
+    cache_key = f"gita_verse_raw_{chapter_num}_{verse_num}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
         return cached
+    url = f"{_GITA_VS_BASE}/slok/{chapter_num}/{verse_num}"
     try:
-        verses       = _fetch_json(f"{_GITA_BASE}/verse.json")
-        translations = _fetch_json(f"{_GITA_BASE}/translation.json")
-        commentaries = _fetch_json(f"{_GITA_BASE}/commentary.json")
+        data = _fetch_json(url)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not load Gita dataset from GitHub: {e}")
-    trans_by_verse: dict = defaultdict(list)
-    for t in translations:
-        trans_by_verse[t["verse_id"]].append(t)
-    comm_by_verse: dict = defaultdict(list)
-    for c in commentaries:
-        comm_by_verse[c["verse_id"]].append(c)
-    dataset = (verses, dict(trans_by_verse), dict(comm_by_verse))
-    return _cache_set("gita_dataset", dataset)
+        print(f"[gita] fetch failed for {chapter_num}.{verse_num}: {e}")
+        return None
+    # Validate core fields before ever caching/serving — an incomplete
+    # payload should never get treated as good data.
+    if not data or "_id" not in data or not data.get("slok"):
+        print(f"[gita] invalid payload for {chapter_num}.{verse_num} — skipping")
+        return None
+    return _cache_set(cache_key, data)
 
 
-def _best_english_translation(verse_id: int, trans_by_verse: dict) -> Tuple[str, str]:
-    options = trans_by_verse.get(verse_id, [])
-    en = [t for t in options if t.get("lang") == "english"]
-    for author in ["Swami Sivananda", "Shri Purohit Swami", "Dr. S. Sankaranarayan",
-                   "Swami Gambirananda", "Swami Adidevananda"]:
-        for t in en:
-            if author.lower() in t.get("authorName", "").lower():
-                return t.get("description", ""), t.get("authorName", "")
-    return (en[0].get("description", ""), en[0].get("authorName", "")) if en else ("", "")
+def _build_gita_verse(payload: dict, chapter_num: int, verse_num: int) -> dict:
+    commentaries = {
+        code: payload[code] for code in _GITA_COMMENTATOR_CODES if payload.get(code)
+    }
 
+    translation = ""
+    for code in _GITA_PRIMARY_TRANSLATION_ORDER:
+        entry = commentaries.get(code)
+        if entry and entry.get("et"):
+            translation = entry["et"]
+            break
 
-def _best_english_commentary(verse_id: int, comm_by_verse: dict) -> Tuple[str, str]:
-    options = comm_by_verse.get(verse_id, [])
-    en = [c for c in options if c.get("lang") == "english"]
-    for c in en:
-        if "sivananda" in c.get("authorName", "").lower():
-            return c.get("description", ""), c.get("authorName", "")
-    return (en[0].get("description", ""), en[0].get("authorName", "")) if en else ("", "")
+    commentary = (commentaries.get("siva") or {}).get("ec", "")
+
+    return {
+        "verse_number":    verse_num,
+        "chapter_number":  chapter_num,
+        "sanskrit":        payload.get("slok", ""),
+        "transliteration": payload.get("transliteration", ""),
+        "word_meanings":   commentary,   # kept for backward compat with search()
+        "translation":     translation,
+        "commentary":      commentary,
+        "commentaries":    commentaries,  # full scholarly set, all available codes
+    }
 
 
 def _gita_chapters():
     cached = _cache_get("gita_chapters_list")
     if cached:
         return cached
-    verses, _, _ = _load_gita_dataset()
-    vc: dict = defaultdict(int)
-    for v in verses:
-        vc[v["chapter_number"]] += 1
+    try:
+        api_chapters = _fetch_json(f"{_GITA_VS_BASE}/chapters")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not load Gita chapter list: {e}")
+    vc = {ch.get("chapter_number"): ch.get("verses_count", 0) for ch in api_chapters}
     chapters = []
     for num in range(1, 19):
         title, subtitle, summary = _GITA_CHAPTERS.get(num, (f"Chapter {num}", "", ""))
@@ -187,28 +173,30 @@ def _gita_chapter_verses(chapter_num: int):
     cached = _cache_get(cache_key)
     if cached:
         return cached
-    verses, trans_by_verse, comm_by_verse = _load_gita_dataset()
+
     title, subtitle, summary = _GITA_CHAPTERS.get(chapter_num, (f"Chapter {chapter_num}", "", ""))
-    ch_verses = sorted(
-        [v for v in verses if v["chapter_number"] == chapter_num],
-        key=lambda v: v["verse_number"]
-    )
-    result_verses = []
-    for v in ch_verses:
-        vid = v["id"]
-        translation, translation_author = _best_english_translation(vid, trans_by_verse)
-        commentary, commentary_author = _best_english_commentary(vid, comm_by_verse)
-        result_verses.append({
-            "verse_number":    v["verse_number"],
-            "chapter_number":  chapter_num,
-            "sanskrit":        v.get("text", ""),
-            "transliteration": v.get("transliteration", ""),
-            "word_meanings":   v.get("word_meanings", ""),
-            "translation":     translation,
-            "translation_author": translation_author,
-            "commentary":      commentary,
-            "commentary_author": commentary_author,
-        })
+    verses_count = _gita_chapters()["chapters"][chapter_num - 1]["verse_count"]
+
+    # Fetch this chapter's verses concurrently — one HTTP call per verse,
+    # up to 78 for chapter 18, so serial fetching would be too slow on a
+    # cold cache. Bounded worker pool keeps us polite to the free API.
+    result_verses = [None] * verses_count
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futures = {
+            pool.submit(_fetch_gita_verse_raw, chapter_num, vn): vn
+            for vn in range(1, verses_count + 1)
+        }
+        for future in as_completed(futures):
+            verse_num = futures[future]
+            payload = future.result()
+            if payload:
+                result_verses[verse_num - 1] = _build_gita_verse(payload, chapter_num, verse_num)
+
+    result_verses = [v for v in result_verses if v is not None]
+    if len(result_verses) < verses_count:
+        print(f"[gita] chapter {chapter_num}: only {len(result_verses)}/{verses_count} verses "
+              f"fetched successfully — re-request later to retry the missing ones.")
+
     result = {
         "chapter_number": chapter_num,
         "title":          title,
@@ -216,9 +204,13 @@ def _gita_chapter_verses(chapter_num: int):
         "summary":        summary,
         "verse_count":    len(result_verses),
         "verses":         result_verses,
-        "source_credit":  _SOURCE_METADATA["bhagavad_gita_api"]["attribution"],
     }
-    return _cache_set(cache_key, result)
+    # Only cache a fully-complete chapter — a partial result (e.g. from a
+    # transient outage) should be retried on the next request, not locked
+    # in for 24 hours. Same principle as the DivineAPI cache validation.
+    if len(result_verses) == verses_count:
+        return _cache_set(cache_key, result)
+    return result
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -306,8 +298,8 @@ def _ramayana_kanda_verses(kanda_num: int):
             "label":           f"Sarga {sarg}, Shloka {shloka}",
             "sanskrit":        sanskrit,
             "transliteration": "",
-            # This dataset contains Sanskrit source text, not an English translation.
-            "translation":     "",
+            # No English translation in this dataset — show Sanskrit as the text
+            "translation":     sanskrit,
             "commentary":      "",
         })
 
@@ -319,7 +311,7 @@ def _ramayana_kanda_verses(kanda_num: int):
         "verse_count":     len(verses),
         "verses":          verses,
         "note":            "Valmiki Ramayana Sanskrit shlokas (Devanagari). English translation edition coming soon.",
-        "source_credit":   _SOURCE_METADATA["valmiki_ramayana"]["attribution"],
+        "source_credit":   "DharmicData/bhavykhatri (MIT) · Original source: svenkatreddy/Ramayana_Book",
     }
     return _cache_set(cache_key, result)
 
@@ -428,8 +420,8 @@ def _mahabharata_parva_verses(parva_num: int):
             "label":           f"Chapter {chapter_num}, Shloka {shloka_num}",
             "sanskrit":        sanskrit,
             "transliteration": "",
-            # This dataset contains Sanskrit source text, not an English translation.
-            "translation":     "",
+            # No English translation in dataset — show Sanskrit
+            "translation":     sanskrit,
             "commentary":      "",
         })
 
@@ -441,7 +433,7 @@ def _mahabharata_parva_verses(parva_num: int):
         "verse_count":     len(verses),
         "verses":          verses,
         "note":            "Mahabharata Sanskrit shlokas (Devanagari). English translation edition coming soon.",
-        "source_credit":   _SOURCE_METADATA["mahabharata"]["attribution"],
+        "source_credit":   "DharmicData/bhavykhatri (MIT)",
     }
     return _cache_set(cache_key, result)
 
@@ -935,37 +927,6 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
             "note": "Full verse text for this scripture is coming soon."}
 
 
-def _with_source(payload: dict, api_source: str):
-    result = dict(payload)
-    source = _source_for(api_source)
-    if source:
-        result["source"] = source
-    return result
-
-
-def _paginate_chapter(payload: dict, page: int, page_size: int):
-    """Limit large kandas/parvas before sending them to the browser."""
-    verses = payload.get("verses") or []
-    total = len(verses)
-    total_pages = max(1, (total + page_size - 1) // page_size)
-    if page > total_pages:
-        raise HTTPException(status_code=404, detail="Verse page not found")
-
-    start = (page - 1) * page_size
-    result = dict(payload)
-    result["verses"] = verses[start:start + page_size]
-    result["verse_count"] = total
-    result["pagination"] = {
-        "page": page,
-        "page_size": page_size,
-        "total_items": total,
-        "total_pages": total_pages,
-        "has_previous": page > 1,
-        "has_next": page < total_pages,
-    }
-    return result
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # API ENDPOINTS
 # ═════════════════════════════════════════════════════════════════════════════
@@ -982,12 +943,7 @@ def list_books():
             ORDER BY id
         """)
         books = cur.fetchall()
-    return {
-        "books": [
-            _with_source(dict(book), book["api_source"])
-            for book in books
-        ]
-    }
+    return {"books": [dict(b) for b in books]}
 
 
 @router.get("/api/books/{slug}")
@@ -1002,7 +958,7 @@ def get_book(slug: str):
         book = cur.fetchone()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    return _with_source(dict(book), book["api_source"])
+    return dict(book)
 
 
 @router.get("/api/books/{slug}/chapters")
@@ -1015,17 +971,11 @@ def get_chapters(slug: str):
         book = cur.fetchone()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    chapters = _dispatch_chapters(slug, book["api_source"], book["id"])
-    return _with_source(chapters, book["api_source"])
+    return _dispatch_chapters(slug, book["api_source"], book["id"])
 
 
 @router.get("/api/books/{slug}/chapters/{chapter_num}")
-def get_chapter_verses(
-    slug: str,
-    chapter_num: int,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(100, ge=1, le=200),
-):
+def get_chapter_verses(slug: str, chapter_num: int):
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT id, api_source, total_chapters
@@ -1034,9 +984,7 @@ def get_chapter_verses(
         book = cur.fetchone()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    chapter = _dispatch_chapter_verses(slug, book["api_source"], book["id"], chapter_num)
-    chapter = _paginate_chapter(chapter, page, page_size)
-    return _with_source(chapter, book["api_source"])
+    return _dispatch_chapter_verses(slug, book["api_source"], book["id"], chapter_num)
 
 
 @router.get("/api/books/{slug}/search")
