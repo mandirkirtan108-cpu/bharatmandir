@@ -3,8 +3,9 @@ routers/panchang.py - Panchang and Muhurat API.
 
 Daily Panchang uses Divine API.
 Muhurat Finder is intentionally kept on the existing Claude flow for now.
-City resolution uses OpenRouteService's Geocoding API (restricted to
-India) — no hardcoded city list. See geocode_city() below.
+City resolution AND city autocomplete both use OpenRouteService's Geocoding
+API (restricted to India) — no hardcoded city list. See geocode_city() and
+get_city_suggestions() below.
 """
 
 from __future__ import annotations
@@ -96,6 +97,13 @@ ORS_API_KEY_ENV_NAMES = (
 )
 
 ORS_GEOCODE_URL = "https://api.openrouteservice.org/geocode/search"
+
+# FIX: added. ORS ships a dedicated /geocode/autocomplete endpoint that is
+# tuned for "as-you-type" partial matches (unlike /geocode/search, which is
+# tuned for a single, final, fully-typed address). This backs the new
+# /city-suggestions endpoint below, which powers the dropdown in the
+# frontend's CityAutocomplete component.
+ORS_AUTOCOMPLETE_URL = "https://api.openrouteservice.org/geocode/autocomplete"
 
 # Every city this endpoint resolves is restricted to India (boundary.country
 # filter below), and all of India sits in a single timezone — this is a
@@ -287,6 +295,23 @@ VALID_CITY_LAYERS = {
     "region",
     "macroregion",
     "borough",
+}
+
+# FIX: added. Autocomplete (used for the dropdown-while-typing UX) is
+# intentionally more permissive than VALID_CITY_LAYERS above, which is used
+# by geocode_city() to validate a FINAL submitted value. Suggestions like
+# "Mandsaur Fort" or "Mandsaur Nai Abadi" come back on layers such as
+# "venue" or "street" — useful to show as options, but not something we'd
+# want geocode_city() silently accepting as "the city" once selected and
+# resubmitted. Selecting a suggestion re-sends its full label text through
+# the normal /daily or /muhurat flow, which re-resolves it via
+# geocode_city() using the stricter layer set.
+VALID_SUGGESTION_LAYERS = VALID_CITY_LAYERS | {
+    "venue",
+    "street",
+    "neighbourhood",
+    "borough",
+    "address",
 }
 
 
@@ -853,6 +878,83 @@ def fetch_calendar_day_from_divine(
     normalized["calendar_type"] = req.calendar or "amanta"
     normalized["language"] = language
     return normalized
+
+
+@router.get("/city-suggestions")
+def get_city_suggestions(query: str):
+    """Backs the frontend's live "type-ahead" dropdown (e.g. typing
+    "mandsaur" and seeing "Mandsaur Fort", "Mandsaur City", etc. — all
+    restricted to India).
+
+    Uses ORS's /geocode/autocomplete, which is purpose-built for partial,
+    in-progress text (unlike /geocode/search used by geocode_city(), which
+    expects a complete, final value). This endpoint is intentionally
+    lenient about layers (VALID_SUGGESTION_LAYERS) so useful partial
+    matches aren't hidden from the dropdown — the stricter validation in
+    geocode_city() still applies once the user actually submits a value,
+    whether typed freely or picked from this dropdown.
+    """
+    query = (query or "").strip()
+    if len(query) < 2:
+        return {"suggestions": []}
+
+    try:
+        response = requests.get(
+            ORS_AUTOCOMPLETE_URL,
+            params={
+                "api_key": ors_api_key(),
+                "text": query,
+                "boundary.country": "IN",
+                "size": 8,
+            },
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"OpenRouteService request failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        detail = response.text[:500] or response.reason
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenRouteService autocomplete error {response.status_code}: {detail}",
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="OpenRouteService returned non-JSON data") from exc
+
+    features = payload.get("features") or []
+    suggestions = []
+    for feature in features:
+        properties = feature.get("properties") or {}
+        layer = str(properties.get("layer") or "").lower()
+        if layer not in VALID_SUGGESTION_LAYERS:
+            continue
+        if not is_india_feature(properties):
+            continue
+
+        label_text = properties.get("label")
+        if not label_text:
+            continue
+
+        coordinates = pick(feature, "geometry", "coordinates", default=None) or []
+        lon = coordinates[0] if len(coordinates) > 0 else None
+        lat = coordinates[1] if len(coordinates) > 1 else None
+
+        suggestions.append(
+            {
+                "description": label_text,
+                # ORS doesn't hand out a stable Google-style "place_id";
+                # gid is its own permanent per-feature identifier and is
+                # unique enough to key a React list on.
+                "place_id": properties.get("gid"),
+                "latitude": lat,
+                "longitude": lon,
+            }
+        )
+
+    return {"suggestions": suggestions}
 
 
 @router.get("/month")
