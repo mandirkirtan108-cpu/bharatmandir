@@ -14,6 +14,7 @@ import {
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PanchangCalendar from '../components/PanchangCalendar';
+import CityAutocomplete from '../components/CityAutocomplete';
 
 const MUHURAT_TYPES = [
   { id: 'vivah', label: 'Vivah', hindi: 'Vivah', desc: 'Marriage ceremony' },
@@ -1040,14 +1041,11 @@ export default function PanchangPage() {
               </div>
               <div>
                 <label style={labelStyle}>City *</label>
-                <input
-                  type="text"
+                <CityAutocomplete
                   value={city}
-                  onChange={(e) => { setCity(e.target.value); setDailyError(null); }}
+                  onChange={(val) => { setCity(val); setDailyError(null); }}
                   placeholder="e.g. Ujjain, Mumbai"
                   style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
-                  onFocus={(e) => { e.target.style.borderColor = 'var(--saffron)'; }}
-                  onBlur={(e) => { e.target.style.borderColor = dailyError ? '#ef4444' : 'var(--cream-dark)'; }}
                 />
               </div>
               <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
@@ -1134,7 +1132,12 @@ export default function PanchangPage() {
               </div>
               <div>
                 <label style={labelStyle}>City</label>
-                <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Varanasi" style={inputStyle} />
+                <CityAutocomplete
+                  value={city}
+                  onChange={setCity}
+                  placeholder="e.g. Varanasi"
+                  style={inputStyle}
+                />
               </div>
             </div>
 
