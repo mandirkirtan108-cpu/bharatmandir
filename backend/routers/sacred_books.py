@@ -29,8 +29,8 @@ def _cache_set(key: str, data):
     return data
 
 
-def _fetch_json(url: str):
-    with httpx.Client(timeout=30, follow_redirects=True) as client:
+def _fetch_json(url: str, timeout: int = 30):
+    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
         r = client.get(url)
         r.raise_for_status()
         return r.json()
@@ -233,104 +233,146 @@ def _gita_chapter_verses(chapter_num: int):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# VALMIKI RAMAYANA  (bhavykhatri/DharmicData)
+# VALMIKI RAMAYANA  (Ashutosh-Vijay/Valmiki_Ramayan_Dataset — Sanskrit + English)
 # ═════════════════════════════════════════════════════════════════════════════
-# Actual JSON structure per entry:
-#   { "kaanda": "balakanda", "sarg": 1, "shloka": 1, "text": "<Sanskrit>" }
-# NOTE: No English translation in the dataset — Sanskrit text shown with note.
+# Single JSON file, ~23,291 shlokas across all 7 kandas. Each entry:
+#   { "kanda": "Bala Kanda", "sarga": 1, "shloka": 1,
+#     "shloka_text": "<Sanskrit>", "transliteration": "<IAST>",
+#     "translation": "<word-by-word gloss>", "explanation": "<readable English>",
+#     "comments": "<scholarly notes, may be null>" }
+# NOTE: the dataset's own "kanda" field text is identical to the kanda titles
+# already used below, so no separate name-mapping table is needed — we filter
+# the full dataset by title directly.
+# Source credits (per the dataset's README): M.N. Dutt's English translation
+# (1891–1894), the IIT Kanpur Valmiki Ramayana project, and Gyaandweep.
+# MIT licensed. Known caveats disclosed by the maintainer: a small number of
+# shlokas are merged due to OCR/formatting issues, and some entries are
+# missing an explanation/comment — handled below by falling back gracefully
+# rather than showing a blank field.
 
-_DHARMIC_BASE = "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main"
+_RAMAYAN_DATASET_URL = "https://raw.githubusercontent.com/Ashutosh-Vijay/Valmiki_Ramayan_Dataset/main/data/Valmiki_Ramayan_Shlokas.json"
 
 _RAMAYANA_KANDAS = {
-    1: ("Bala Kanda",       "बालकाण्ड",         "1_balakanda.json",
+    1: ("Bala Kanda",       "बालकाण्ड",
         "The story of Rama's divine birth in Ayodhya, his childhood, his training under sage Vishwamitra, and his winning of Princess Sita's hand in marriage by breaking the great bow of Shiva."),
-    2: ("Ayodhya Kanda",    "अयोध्याकाण्ड",     "2_ayodhyakanda.json",
+    2: ("Ayodhya Kanda",    "अयोध्याकाण्ड",
         "Rama is exiled for 14 years by King Dasharatha at Queen Kaikeyi's demand. He departs to the forest with Sita and Lakshmana. Dasharatha, grief-stricken, dies. Bharata refuses the throne and places Rama's sandals on it as regent."),
-    3: ("Aranya Kanda",     "अरण्यकाण्ड",       "3_aranyakanda.json",
+    3: ("Aranya Kanda",     "अरण्यकाण्ड",
         "Rama, Sita, and Lakshmana live in the Dandaka forest. Ravana, the demon king of Lanka, kidnaps Sita. The vulture Jatayu dies fighting to save her. Rama and Lakshmana begin their search."),
-    4: ("Kishkindha Kanda", "किष्किन्धाकाण्ड",  "4_kishkindhakanda.json",
+    4: ("Kishkindha Kanda", "किष्किन्धाकाण्ड",
         "Rama meets the monkey king Sugriva and his devoted general Hanuman. He helps Sugriva defeat his brother Vali. In gratitude, Sugriva sends the monkey army to search for Sita across the world."),
-    5: ("Sundara Kanda",    "सुन्दरकाण्ड",      "5_sundarakanda.json",
+    5: ("Sundara Kanda",    "सुन्दरकाण्ड",
         "Hanuman leaps across the ocean to Lanka, finds Sita imprisoned in Ashoka grove, delivers Rama's message, and returns with news of her whereabouts. This kanda celebrates Hanuman's devotion and courage."),
-    6: ("Yuddha Kanda",     "युद्धकाण्ड",       "6_yudhhakanda.json",
+    6: ("Yuddha Kanda",     "युद्धकाण्ड",
         "Rama builds a bridge across the ocean with the monkey army, invades Lanka, and wages a great war against Ravana. Ravana is slain. Sita passes the fire test, and Rama is restored to his rightful throne in Ayodhya."),
-    7: ("Uttara Kanda",     "उत्तरकाण्ड",       "7_uttarakanda.json",
+    7: ("Uttara Kanda",     "उत्तरकाण्ड",
         "Rama rules Ayodhya in the ideal Ram Rajya. Sita is exiled to the forest where she raises Rama's twin sons Lava and Kusha, before returning to Mother Earth."),
 }
 
 
-def _load_ramayana_kanda(kanda_num: int):
-    if kanda_num not in _RAMAYANA_KANDAS:
-        raise HTTPException(status_code=404, detail="Kanda not found")
-    cache_key = f"ramayana_kanda_{kanda_num}_raw"
+def _load_ramayana_full_dataset():
+    """Fetch the complete Ramayana dataset (~29 MB, all 7 kandas) once and
+    cache it for 24h. Individual kanda views are sliced from this in memory
+    rather than re-downloading per kanda."""
+    cache_key = "ramayana_full_dataset"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
-    _, _, filename, _ = _RAMAYANA_KANDAS[kanda_num]
-    url = f"{_DHARMIC_BASE}/ValmikiRamayana/{filename}"
     try:
-        data = _fetch_json(url)
+        data = _fetch_json(_RAMAYAN_DATASET_URL, timeout=90)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not load Ramayana kanda {kanda_num}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not load Ramayana dataset: {e}")
+    if not isinstance(data, list) or not data:
+        raise HTTPException(status_code=502, detail="Ramayana dataset returned empty/invalid data")
     return _cache_set(cache_key, data)
+
+
+def _clean_ramayana_sanskrit(text: str) -> str:
+    """Strip the trailing verse-citation marker (e.g. '।।1.1.1।।') baked into
+    shloka_text — it duplicates the sarga/shloka metadata we already show
+    separately, so it's just noise in the rendered Sanskrit line."""
+    if not text:
+        return text
+    return re.sub(r"।।\s*[\d.]+\s*।।\s*$", "", text).strip()
+
+
+def _build_ramayana_verse(entry: dict, kanda_num: int, verse_number: int) -> dict:
+    sarga  = entry.get("sarga", 0)
+    shloka = entry.get("shloka", verse_number)
+    word_meanings = entry.get("translation") or ""     # word-by-word Sanskrit->English gloss
+    explanation   = entry.get("explanation") or ""      # readable sentence translation
+    comments      = entry.get("comments") or ""         # scholarly notes (sometimes absent)
+
+    return {
+        "verse_number":    verse_number,
+        "chapter_number":  kanda_num,
+        "sarga":           sarga,
+        "shloka":          shloka,
+        "label":           f"Sarga {sarga}, Shloka {shloka}",
+        "sanskrit":        _clean_ramayana_sanskrit(entry.get("shloka_text", "")),
+        "transliteration": entry.get("transliteration", "") or "",
+        "word_meanings":   word_meanings,
+        # Fall back through explanation -> word gloss -> Sanskrit so a verse
+        # missing an English explanation (a known gap in this dataset) still
+        # shows something readable rather than a blank field.
+        "translation":     explanation or word_meanings,
+        "commentary":      comments,
+    }
 
 
 def _ramayana_chapters():
     cached = _cache_get("ramayana_chapters_list")
     if cached:
         return cached
+    full = _load_ramayana_full_dataset()
+    counts = defaultdict(int)
+    for entry in full:
+        counts[entry.get("kanda")] += 1
     chapters = []
-    for num, (title, sanskrit, filename, summary) in _RAMAYANA_KANDAS.items():
+    for num, (title, sanskrit, summary) in _RAMAYANA_KANDAS.items():
         chapters.append({
             "chapter_number": num,
             "title":          title,
             "sanskrit_title": sanskrit,
             "summary":        summary,
-            "verse_count":    None,
+            "verse_count":    counts.get(title, 0),
         })
     return _cache_set("ramayana_chapters_list", {"chapters": chapters})
 
 
 def _ramayana_kanda_verses(kanda_num: int):
+    if kanda_num not in _RAMAYANA_KANDAS:
+        raise HTTPException(status_code=404, detail="Kanda not found")
     cache_key = f"ramayana_kanda_{kanda_num}_verses"
     cached = _cache_get(cache_key)
     if cached:
         return cached
 
-    raw = _load_ramayana_kanda(kanda_num)
-    title_en, title_sa, _, summary = _RAMAYANA_KANDAS[kanda_num]
+    title, sanskrit_title, summary = _RAMAYANA_KANDAS[kanda_num]
+    full = _load_ramayana_full_dataset()
 
-    # Actual structure: { "kaanda": "balakanda", "sarg": 1, "shloka": 1, "text": "<Sanskrit>" }
-    verses = []
-    for i, entry in enumerate(raw):
-        sarg   = entry.get("sarg", 0)
-        shloka = entry.get("shloka", i + 1)
-        # "text" contains Sanskrit shloka
-        sanskrit = entry.get("text", "")
-        sanskrit = re.sub(r"<[^>]+>", " ", sanskrit).strip()
+    # The dataset isn't guaranteed to be pre-sorted within a kanda, so sort
+    # by (sarga, shloka) to get correct reading order before numbering verses.
+    kanda_entries = [e for e in full if e.get("kanda") == title]
+    kanda_entries.sort(key=lambda e: (e.get("sarga", 0), e.get("shloka", 0)))
 
-        verses.append({
-            "verse_number":    i + 1,
-            "chapter_number":  kanda_num,
-            "sarga":           sarg,
-            "shloka":          shloka,
-            "label":           f"Sarga {sarg}, Shloka {shloka}",
-            "sanskrit":        sanskrit,
-            "transliteration": "",
-            # No English translation in this dataset — show Sanskrit as the text
-            "translation":     sanskrit,
-            "commentary":      "",
-        })
+    if not kanda_entries:
+        raise HTTPException(status_code=502, detail=f"No verses found for {title} in dataset")
+
+    verses = [
+        _build_ramayana_verse(entry, kanda_num, i + 1)
+        for i, entry in enumerate(kanda_entries)
+    ]
 
     result = {
         "chapter_number":  kanda_num,
-        "title":           title_en,
-        "sanskrit_title":  title_sa,
+        "title":           title,
+        "sanskrit_title":  sanskrit_title,
         "summary":         summary,
         "verse_count":     len(verses),
         "verses":          verses,
-        "note":            "Valmiki Ramayana Sanskrit shlokas (Devanagari). English translation edition coming soon.",
-        "source_credit":   "DharmicData/bhavykhatri (MIT) · Original source: svenkatreddy/Ramayana_Book",
+        "source_credit":   "Ashutosh-Vijay/Valmiki_Ramayan_Dataset (MIT) — compiled from M.N. Dutt's "
+                            "translation, the IIT Kanpur Valmiki Ramayana project, and Gyaandweep.",
     }
     return _cache_set(cache_key, result)
 
@@ -341,6 +383,8 @@ def _ramayana_kanda_verses(kanda_num: int):
 # Actual JSON structure per entry:
 #   { "book": 1, "chapter": 1, "shloka": 0, "text": "<Sanskrit>" }
 # Files: mahabharata_book_{n}.json  (n = 1..18)
+
+_DHARMIC_BASE = "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main"
 
 _MAHABHARATA_PARVAS = {
     1:  ("Adi Parva",            "आदि पर्व",        "mahabharata_book_1.json",
@@ -1040,21 +1084,28 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
                 continue
 
     elif api_source == "valmiki_ramayana":
+        # The upgraded dataset carries real English translations, so search
+        # across Sanskrit, the readable translation, and the word-by-word
+        # gloss — not just Sanskrit as before.
         for kanda_num in range(1, 8):
             try:
                 data = _ramayana_kanda_verses(kanda_num)
                 for v in data.get("verses", []):
-                    if q_lower in (v.get("sanskrit") or "").lower():
+                    if (q_lower in (v.get("sanskrit") or "").lower() or
+                            q_lower in (v.get("translation") or "").lower() or
+                            q_lower in (v.get("word_meanings") or "").lower()):
                         results.append({
                             "chapter_number": kanda_num,
                             "verse_number":   v["verse_number"],
                             "chapter_title":  data["title"],
-                            "translation":    v["sanskrit"],
+                            "translation":    v.get("translation") or v.get("sanskrit", ""),
                             "sanskrit":       v.get("sanskrit", ""),
                             "label":          v.get("label", ""),
                         })
                         if len(results) >= 50:
                             break
+                if len(results) >= 50:
+                    break
             except Exception:
                 continue
 
