@@ -1334,7 +1334,7 @@ Return ONLY valid JSON, no markdown, start directly with {{:
     {{ "deity": "", "mantra": "", "chant_times": 108, "purpose": "" }}
   ],
   "special_notes": ["note 1", "note 2"],
-  "alternative_dates": [
+  "alternative_dates": [ 
     {{ "date": "", "quality": "Excellent/Good", "reason": "" }}
   ]
 }}"""
