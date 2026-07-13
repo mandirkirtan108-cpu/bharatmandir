@@ -22,6 +22,22 @@ function speakVerse(text) {
 function stopSpeaking() { window.speechSynthesis?.cancel(); }
 
 /* ═══════════════════════════════════════════════════════════════
+   SOURCE ATTRIBUTION — per api_source, shown on each book card
+═══════════════════════════════════════════════════════════════ */
+const SOURCE_LABELS = {
+  bhagavad_gita_api: 'vedicscriptures.github.io — 21 traditional commentators',
+  valmiki_ramayana:  'Valmiki_Ramayan_Dataset (MIT) — M.N. Dutt translation, IIT Kanpur, Gyaandweep',
+  mahabharata:       'DharmicData (MIT) — Sanskrit shlokas, English edition in progress',
+  hanuman_chalisa:   'Tulsidas, public domain — glosses & commentary curated in-house',
+  shiva_purana:      'Shiva Purana, public domain — Motilal Banarsidass edition',
+  devi_mahatmya:     'Devi Mahatmya / Durga Saptashati, public domain — Ramakrishna Math edition',
+};
+
+function getSourceLabel(book) {
+  return SOURCE_LABELS[book.api_source] || 'Traditional text';
+}
+
+/* ═══════════════════════════════════════════════════════════════
    BOOK ICON — Sacred book with OM printed on the cover,
    like a physical scripture (matches the uploaded reference image)
 ═══════════════════════════════════════════════════════════════ */
@@ -160,6 +176,13 @@ function BookCard({ book, isSelected, onSelect, progress }) {
             {book.total_chapters} ch · {(book.total_verses || 0).toLocaleString()} verses
           </div>
         </div>
+      </div>
+      <div style={{
+        fontSize: 10, color: 'var(--text-muted)',
+        marginBottom: pct > 0 ? 6 : 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        Source: <em>{getSourceLabel(book)}</em>
       </div>
       {pct > 0 && (
         <div>
@@ -604,7 +627,7 @@ export default function SacredBooksPage() {
                         </p>
 
                         {/* Meta tags — warm neutral */}
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                           {[book.tradition, book.language, `${book.total_chapters} ch`, `${(book.total_verses||0).toLocaleString()} verses`]
                             .filter(Boolean).map(tag => (
                             <span key={tag} style={{
@@ -615,6 +638,20 @@ export default function SacredBooksPage() {
                               border: '1px solid #e2d0be',
                             }}>{tag}</span>
                           ))}
+                        </div>
+
+                        {/* Source attribution */}
+                        <div style={{
+                          fontSize: 10.5, color: '#a07860',
+                          marginBottom: 13, lineHeight: 1.5,
+                          display: 'flex', alignItems: 'baseline', gap: 5,
+                        }}>
+                          <span style={{ opacity: 0.75, flexShrink: 0 }}>Source:</span>
+                          <span style={{
+                            fontStyle: 'italic',
+                            overflow: 'hidden', textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>{getSourceLabel(book)}</span>
                         </div>
 
                         {/* Hairline divider */}
@@ -765,6 +802,9 @@ export default function SacredBooksPage() {
                     </div>
                     <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 10 }}>{bk.title}</h2>
                     <p style={{ color: 'var(--text-light)', fontSize: 15, lineHeight: 1.7, maxWidth: 500, margin: '0 auto 20px' }}>{bk.description}</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 12, fontStyle: 'italic', margin: '0 auto 20px' }}>
+                      Source: {getSourceLabel(bk)}
+                    </p>
                     {getProgress(bk.slug)?.last_chapter && (
                       <button
                         onClick={() => handleSelectChapter(getProgress(bk.slug).last_chapter)}
