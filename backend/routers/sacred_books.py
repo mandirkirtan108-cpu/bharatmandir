@@ -118,10 +118,29 @@ def _fetch_gita_verse_raw(chapter_num: int, verse_num: int):
     return _cache_set(cache_key, data)
 
 
+def _clean_gita_gloss_text(text: str) -> str:
+    """The vedicscriptures API's word-meaning glossary fields (the 'ec' key)
+    use a bare '?' as the separator between a Sanskrit word and its English
+    gloss -- e.g. "dharmakshetre on the holy plain? kurukshetre in
+    Kurukshetra?" -- confirmed present in the API's own published docs, so
+    this is corrupted source data (almost certainly a dash that got mangled
+    during digitization), not something introduced by our fetch/cache layer.
+    Converts that separator into a proper dash for readability."""
+    if not text:
+        return text
+    return re.sub(r"\?(\s+)", r" –\1", text)
+
+
 def _build_gita_verse(payload: dict, chapter_num: int, verse_num: int) -> dict:
-    commentaries = {
-        code: payload[code] for code in _GITA_COMMENTATOR_CODES if payload.get(code)
-    }
+    commentaries = {}
+    for code in _GITA_COMMENTATOR_CODES:
+        entry = payload.get(code)
+        if not entry:
+            continue
+        entry = dict(entry)
+        if entry.get("ec"):
+            entry["ec"] = _clean_gita_gloss_text(entry["ec"])
+        commentaries[code] = entry
 
     translation = ""
     for code in _GITA_PRIMARY_TRANSLATION_ORDER:
