@@ -399,7 +399,7 @@ def geocode_city(city: str) -> tuple[float, float, str]:
                 "boundary.country": "IN",
                 "size": 5,
             },
-            timeout=15,
+            timeout=30,
         )
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"OpenRouteService request failed: {exc}") from exc
