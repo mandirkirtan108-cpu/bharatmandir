@@ -812,13 +812,11 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
     const fraction = Math.max(0, Math.min(1, (adjustedNow - active.start) / (active.end - active.start)));
     activePosition = ((active.index + fraction) / Math.max(segments.length, 1)) * 100;
   }
-  // FIX: segments is already chronologically sorted, so the next upcoming
-  // slot is simply the first one whose start is later today. The old code
-  // wrapped every earlier-today item to "tomorrow" before comparing, which
-  // made it always greater than nowMinutes — so .find() incorrectly
-  // returned the very first (already-passed) segment as "Next" instead of
-  // the real next slot.
-  const next = segments.find((item) => item.start !== null && item.start > nowMinutes) || segments[0];
+  const next = segments.find((item) => {
+    if (item.start === null) return false;
+    const adjustedStart = item.start < nowMinutes ? item.start + 24 * 60 : item.start;
+    return adjustedStart > nowMinutes;
+  }) || segments[0];
   const current = active || segments[0];
   const minutesToNext = next?.start !== null && next?.start !== undefined
     ? Math.max(0, Math.round(((next.start < nowMinutes ? next.start + 24 * 60 : next.start) - nowMinutes)))
