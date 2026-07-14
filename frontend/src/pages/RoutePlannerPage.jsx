@@ -388,7 +388,7 @@ export default function RoutePlannerPage() {
     <>
       <Navbar />
 
-      <section style={{ background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)', padding: '100px 12px', minHeight: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'white', boxSizing: 'border-box' }}>
+      <section style={{ background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)', padding: '100px 8px', minHeight: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'white', boxSizing: 'border-box' }}>
         <div style={{ maxWidth: 720, margin: '0 auto' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 16px', marginBottom: 14, color: '#FFD580', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600 }}>
             <Map size={13} /> Route Planner
