@@ -51,6 +51,14 @@ DIVINE_BASES = {
     # used "date-specific-festivals" endpoint never actually worked (it has
     # no day/month parameter at all).
     "festivals": "https://astroapi-3.divineapi.com/indian-api/v1/english-calendar-festivals",
+    # FIX: added. find-panchang never returns moonrise/moonset or any
+    # samvat/masa data — confirmed by inspecting its actual raw response.
+    # These three endpoints are DivineAPI's dedicated sources for that data
+    # (see developers.divineapi.com/indian-api/daily-panchang-api). They
+    # power the "Moon Details" and "Hindu Calendar" panels in normalize_daily().
+    "sun_and_moon": "https://astroapi-2.divineapi.com/indian-api/v2/find-sun-and-moon",
+    "samvat": "https://astroapi-2.divineapi.com/indian-api/v1/find-samvat",
+    "chandramasa": "https://astroapi-3.divineapi.com/indian-api/v2/chandramasa",
 }
 
 # FIX: the old hardcoded CITY_COORDINATES table (~22 cities) is gone. Any
@@ -141,7 +149,7 @@ class CalendarMonthSeedRequest(CalendarYearSeedRequest):
 
 class MuhuratRequest(BaseModel):
     muhurat_type: str
-    muhurat_label: str 
+    muhurat_label: str
     muhurat_hindi: str
     date: str
     name: Optional[str] = ""
@@ -573,10 +581,55 @@ def unwrap_response(response: dict[str, Any]) -> dict[str, Any]:
     return {"items": data}
 
 
+def parse_choghadiya_dict(entries: dict[str, Any], period: str) -> list[dict[str, Any]]:
+    """DivineAPI's find-choghadiya response returns two FLAT dicts —
+    "day_choghadiyas" and "night_choghadiyas" — mapping a period name
+    (e.g. "Rog", "Amrit", or the repeated 8th slot "Next Rog"/"Next Kaal")
+    directly to an already-12-hour-formatted "HH:MM AM to HH:MM AM[ Mon DD]"
+    string. This is a completely different shape from a list of
+    {start_time, end_time} dicts, which is what the old parser assumed —
+    that mismatch is why choghadiya always came back empty.
+    """
+    rows: list[dict[str, Any]] = []
+    for raw_name, time_text in (entries or {}).items():
+        if not isinstance(time_text, str) or " to " not in time_text:
+            continue
+        start, end = [part.strip() for part in time_text.split(" to ", 1)]
+        # "Next Rog" / "Next Kaal" is DivineAPI's label for the 8th slot,
+        # which is really just that same Choghadiya type recurring — strip
+        # the prefix so classify_choghadiya() (and the display name) treats
+        # it the same as any other "Rog"/"Kaal" slot.
+        name = re.sub(r"^Next\s+", "", raw_name).strip()
+        rows.append(
+            {
+                "period": period,
+                "is_day": period == "day",
+                "name": name,
+                "time": f"{start} - {end}",
+                "start_time": start,
+                "end_time": end,
+                "start": start,
+                "end": end,
+                "nature": classify_choghadiya(name),
+                "good_for": "Use for routine auspicious work" if classify_choghadiya(name) == "good" else "Avoid new beginnings",
+                "raw": {"label": raw_name, "text": time_text},
+            }
+        )
+    return rows
+
+
 def choghadiya_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
     data = unwrap_response(raw)
-    day_items = as_list(data.get("day") or data.get("day_choghadiya") or data.get("choghadiya_day") or data.get("day_time"))
-    night_items = as_list(data.get("night") or data.get("night_choghadiya") or data.get("choghadiya_night") or data.get("night_time"))
+    day_entries = data.get("day_choghadiyas") or data.get("day_choghadiya")
+    night_entries = data.get("night_choghadiyas") or data.get("night_choghadiya")
+
+    if isinstance(day_entries, dict) or isinstance(night_entries, dict):
+        return parse_choghadiya_dict(day_entries or {}, "day") + parse_choghadiya_dict(night_entries or {}, "night")
+
+    # Fallback for a possible alternate/older DivineAPI response shape:
+    # a list of {start_time, end_time} dicts under day/night keys.
+    day_items = as_list(data.get("day") or data.get("choghadiya_day") or data.get("day_time"))
+    night_items = as_list(data.get("night") or data.get("choghadiya_night") or data.get("night_time"))
     if not day_items and not night_items:
         day_items = as_list(data.get("choghadiya") or data.get("items"))
 
@@ -675,10 +728,21 @@ def normalize_daily(
     lat: float,
     lon: float,
     tz: float,
+    sun_moon_raw: Optional[dict[str, Any]] = None,
+    samvat_raw: Optional[dict[str, Any]] = None,
+    chandramasa_raw: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     panchang = unwrap_response(panchang_raw)
     auspicious = unwrap_response(auspicious_raw)
     inauspicious = unwrap_response(inauspicious_raw)
+    # FIX: find-panchang's own response has no moonrise/moonset and no
+    # samvat/masa data at all (confirmed from the raw JSON) — these three
+    # come from DivineAPI's dedicated find-sun-and-moon, find-samvat, and
+    # chandramasa endpoints instead. Each call is optional/best-effort: if
+    # one of these fails, the rest of the day's Panchang still renders.
+    sun_moon = unwrap_response(sun_moon_raw) if sun_moon_raw else {}
+    samvat = unwrap_response(samvat_raw) if samvat_raw else {}
+    chandramasa = unwrap_response(chandramasa_raw) if chandramasa_raw else {}
 
     dt = datetime.strptime(req.date, "%Y-%m-%d")
     weekday = dt.strftime("%A")
@@ -693,10 +757,29 @@ def normalize_daily(
     brahma = timing_entry(auspicious, "brahma_muhurta", "brahma_muhurat")
     abhijit = timing_entry(auspicious, "abhijit", "abhijit_muhurta", "abhijit_muhurat")
     rahu = timing_entry(inauspicious, "rahu_kaal", "rahu_kalam", "rahukaal", "rahukaalam")
-    sunrise = panchang.get("sunrise") or auspicious.get("sunrise") or inauspicious.get("sunrise")
-    sunset = panchang.get("sunset") or auspicious.get("sunset") or inauspicious.get("sunset")
-    moonrise = panchang.get("moonrise") or panchang.get("moon_rise")
-    moonset = panchang.get("moonset") or panchang.get("moon_set")
+    sunrise = panchang.get("sunrise") or auspicious.get("sunrise") or inauspicious.get("sunrise") or sun_moon.get("sunrise")
+    sunset = panchang.get("sunset") or auspicious.get("sunset") or inauspicious.get("sunset") or sun_moon.get("sunset")
+    moonrise = sun_moon.get("moonrise") or panchang.get("moonrise") or panchang.get("moon_rise")
+    moonset = sun_moon.get("moonset") or panchang.get("moonset") or panchang.get("moon_set")
+
+    # FIX: real Hindu Calendar panel data — Vikram/Shaka Samvat year+name
+    # from find-samvat, and the lunar month (Chandramasa) from chandramasa.
+    # Falls back to whatever (usually nothing) find-panchang itself returns
+    # under "hindu_calendar"/"calendar" if both dedicated calls failed.
+    hindu_calendar: dict[str, Any] = {}
+    if samvat:
+        hindu_calendar["vikram_samvat"] = samvat.get("vikram_year")
+        hindu_calendar["vikram_samvat_name"] = label(samvat.get("vikram_name") or "")
+        hindu_calendar["shaka_samvat"] = samvat.get("shaka_year")
+        hindu_calendar["shaka_samvat_name"] = label(samvat.get("shaka_name") or "")
+    if chandramasa:
+        hindu_calendar["chandramasa"] = chandramasa.get("chandramasa")
+        hindu_calendar["masa_type"] = chandramasa.get("type")
+        adhik_value = str(chandramasa.get("adhik") or "").strip().lower()
+        if adhik_value == "true":
+            hindu_calendar["adhik_masa"] = "Yes"
+    if not hindu_calendar:
+        hindu_calendar = panchang.get("hindu_calendar") or panchang.get("calendar") or {}
     choghadiya = choghadiya_items(choghadiya_raw)
     current_choghadiya = choghadiya[0] if choghadiya else None
     next_choghadiya = choghadiya[1] if len(choghadiya) > 1 else None
@@ -725,7 +808,7 @@ def normalize_daily(
         "date": req.date,
         "display_date": dt.strftime("%d %B %Y").lstrip("0"),
         "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
-        "hindu_calendar": panchang.get("hindu_calendar") or panchang.get("calendar") or {},
+        "hindu_calendar": hindu_calendar,
         "today_at_glance": (
             f"{weekday}: {tithi_name or 'Tithi not available'}, {nakshatra_name or 'Nakshatra not available'}. "
             f"Sunrise {format_optional_time(sunrise) or 'not available'}, sunset {format_optional_time(sunset) or 'not available'}."
@@ -797,6 +880,9 @@ def normalize_daily(
             "find_choghadiya": choghadiya_raw,
             "auspicious_timings": auspicious_raw,
             "inauspicious_timings": inauspicious_raw,
+            "find_sun_and_moon": sun_moon_raw,
+            "find_samvat": samvat_raw,
+            "find_chandramasa": chandramasa_raw,
         }),
         "overall_day": "good",
         "pandit_blessings": "May your day begin with clarity, devotion and auspicious intention.",
@@ -810,6 +896,27 @@ def normalize_daily(
             "Avoid relying on one Panchang factor alone for major ceremonies.",
         ],
     }
+
+
+def fetch_sun_moon_samvat_chandramasa(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Best-effort fetch of the three extra DivineAPI calls that back Moon
+    Details and Hindu Calendar. Each is independent and optional — a
+    failure on any one of these should not break the rest of the day's
+    Panchang, the same way festivals already degrade gracefully.
+    """
+    try:
+        sun_moon_raw = divine_post(DIVINE_BASES["sun_and_moon"], payload)
+    except HTTPException:
+        sun_moon_raw = {}
+    try:
+        samvat_raw = divine_post(DIVINE_BASES["samvat"], payload)
+    except HTTPException:
+        samvat_raw = {}
+    try:
+        chandramasa_raw = divine_post(DIVINE_BASES["chandramasa"], payload)
+    except HTTPException:
+        chandramasa_raw = {}
+    return sun_moon_raw, samvat_raw, chandramasa_raw
 
 
 def fetch_calendar_day_from_divine(
@@ -863,6 +970,7 @@ def fetch_calendar_day_from_divine(
             month_festivals = []
 
     festivals_for_day = [f for f in month_festivals if f.get("date") == req.date]
+    sun_moon_raw, samvat_raw, chandramasa_raw = fetch_sun_moon_samvat_chandramasa(payload)
     normalized = normalize_daily(
         req,
         panchang_raw,
@@ -874,6 +982,9 @@ def fetch_calendar_day_from_divine(
         lat,
         lon,
         tz,
+        sun_moon_raw,
+        samvat_raw,
+        chandramasa_raw,
     )
     normalized["calendar_type"] = req.calendar or "amanta"
     normalized["language"] = language
@@ -1259,6 +1370,7 @@ def get_daily_panchang(req: DailyPanchangRequest):
         month_festivals = []
 
     festivals_for_day = [f for f in month_festivals if f.get("date") == req.date]
+    sun_moon_raw, samvat_raw, chandramasa_raw = fetch_sun_moon_samvat_chandramasa(payload)
 
     return normalize_daily(
         req,
@@ -1271,6 +1383,9 @@ def get_daily_panchang(req: DailyPanchangRequest):
         lat,
         lon,
         tz,
+        sun_moon_raw,
+        samvat_raw,
+        chandramasa_raw,
     )
 
 
@@ -1334,7 +1449,7 @@ Return ONLY valid JSON, no markdown, start directly with {{:
     {{ "deity": "", "mantra": "", "chant_times": 108, "purpose": "" }}
   ],
   "special_notes": ["note 1", "note 2"],
-  "alternative_dates": [ 
+  "alternative_dates": [
     {{ "date": "", "quality": "Excellent/Good", "reason": "" }}
   ]
 }}"""

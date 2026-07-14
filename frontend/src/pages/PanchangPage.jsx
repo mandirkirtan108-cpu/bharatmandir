@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
-  Calendar,
   CheckCircle,
   Clock,
   Loader2,
@@ -666,9 +665,7 @@ function PanchangDetails({ dailyResult }) {
             <Panel icon={<Moon size={16} />} title="Moon Details" accent="#2563eb">
               <InfoRowList data={dailyResult.moon} />
             </Panel>
-            <Panel icon={<Calendar size={16} />} title="Hindu Calendar" accent="#7c3aed">
-              <InfoRowList data={dailyResult.hindu_calendar} />
-            </Panel>
+           
           </div>
         </div>
       )}
