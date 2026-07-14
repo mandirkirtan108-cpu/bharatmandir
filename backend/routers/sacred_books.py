@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from typing import Optional
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from bs4 import BeautifulSoup
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.connection import get_db_cursor
@@ -35,17 +34,6 @@ def _fetch_json(url: str):
         r = client.get(url)
         r.raise_for_status()
         return r.json()
-
-
-def _fetch_html(url: str) -> str:
-    # sacred-texts.com is an old, low-capacity single server — identify
-    # ourselves and use a longer timeout rather than hammering it with
-    # aggressive retries.
-    headers = {"User-Agent": "BharatMandir/1.0 (+https://bharatmandir.app; sacred-texts scraper, polite/low-concurrency)"}
-    with httpx.Client(timeout=30, follow_redirects=True, headers=headers) as client:
-        r = client.get(url)
-        r.raise_for_status()
-        return r.text
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -467,176 +455,6 @@ def _mahabharata_parva_verses(parva_num: int):
         "source_credit":   "DharmicData/bhavykhatri (MIT)",
     }
     return _cache_set(cache_key, result)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# MAHABHARATA — ENGLISH  (Kisari Mohan Ganguli translation, sacred-texts.com)
-# ═════════════════════════════════════════════════════════════════════════════
-# sacred-texts.com's own Sanskrit-index page states its Devanagari text "has
-# been cross-referenced with Ganguli's English translation on a book-by-book
-# basis. However, due to the mismatch in number of chapters per book, it was
-# not possible to cross-reference this at the chapter level." So this is
-# deliberately a SEPARATE book from the Sanskrit `mahabharata` above, rather
-# than faking a verse-by-verse pairing the source itself says isn't reliable.
-# Chapters here = the 18 Parvas (same as the Sanskrit book); "verses" = each
-# Parva's numbered Sections in Ganguli's prose translation — Sanskrit-less,
-# since that alignment can't be done honestly at this granularity.
-
-_MBH_BASE = "https://sacred-texts.com/hin"
-
-_MBH_NAV_MARKERS = (
-    "sacred texts", "hinduism", "mahabharata index", "internet sacred text archive",
-    "previous:", "next:", "cdshop", "return to hinduism index", "go to previous page",
-    "go to next page",
-)
-
-
-def _fetch_mbh_section_urls(parva_num: int):
-    """Scrapes a Parva's index.htm for its ordered list of Section page URLs.
-    Discovering the real count this way (rather than hardcoding it) avoids
-    silently truncating the very long Parvas like Adi Parva."""
-    cache_key = f"mbh_en_section_urls_{parva_num}"
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    url = f"{_MBH_BASE}/m{parva_num:02d}/index.htm"
-    try:
-        html = _fetch_html(url)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not load Mahabharata (English) Parva {parva_num} index: {e}")
-    soup = BeautifulSoup(html, "html.parser")
-    sections = []
-    for a in soup.find_all("a", href=True):
-        text = a.get_text(strip=True)
-        m = re.match(r"Section\s+(\d+)$", text, re.IGNORECASE)
-        if m:
-            sections.append((int(m.group(1)), a["href"]))
-    sections.sort(key=lambda s: s[0])
-    if not sections:
-        raise HTTPException(status_code=502, detail=f"No sections found for Mahabharata (English) Parva {parva_num} — index page format may have changed.")
-    return _cache_set(cache_key, sections)
-
-
-def _clean_mbh_section_html(html: str) -> str:
-    """Extracts the story prose from a sacred-texts.com section page,
-    stripping the header/footer navigation. This site has no semantic
-    div/id markup, so we filter at the paragraph level: drop <p> tags that
-    are short and match known nav phrases, keep the rest."""
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all(["script", "style"]):
-        tag.decompose()
-
-    paragraphs = []
-    for p in soup.find_all("p"):
-        text = p.get_text(" ", strip=True)
-        if not text:
-            continue
-        lower = text.lower()
-        if len(text) < 200 and any(marker in lower for marker in _MBH_NAV_MARKERS):
-            continue
-        if re.match(r"^\d+$", text):  # the bare section-number heading, e.g. "1"
-            continue
-        paragraphs.append(text)
-
-    return "\n\n".join(paragraphs).strip()
-
-
-def _fetch_mbh_section_text(parva_num: int, section_num: int, href: str):
-    cache_key = f"mbh_en_section_{parva_num}_{section_num}"
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    url = href if href.startswith("http") else f"{_MBH_BASE}/m{parva_num:02d}/{href}"
-    try:
-        html = _fetch_html(url)
-    except Exception as e:
-        print(f"[mbh-en] fetch failed for parva {parva_num} section {section_num}: {e}")
-        return None
-    text = _clean_mbh_section_html(html)
-    if not text or len(text) < 20:
-        print(f"[mbh-en] suspiciously short/empty extraction for parva {parva_num} section {section_num} — skipping")
-        return None
-    return _cache_set(cache_key, text)
-
-
-def _mahabharata_english_chapters():
-    cached = _cache_get("mahabharata_english_chapters_list")
-    if cached:
-        return cached
-    chapters = []
-    for num, (title, sanskrit, _, summary) in _MAHABHARATA_PARVAS.items():
-        try:
-            sections = _fetch_mbh_section_urls(num)
-            verse_count = len(sections)
-        except HTTPException:
-            verse_count = None
-        chapters.append({
-            "chapter_number": num,
-            "title":          title,
-            "sanskrit_title": sanskrit,
-            "summary":        summary,
-            "verse_count":    verse_count,
-        })
-    return _cache_set("mahabharata_english_chapters_list", {"chapters": chapters})
-
-
-def _mahabharata_english_parva_verses(parva_num: int):
-    if parva_num not in _MAHABHARATA_PARVAS:
-        raise HTTPException(status_code=404, detail="Parva not found")
-    cache_key = f"mbh_en_parva_{parva_num}_verses"
-    cached = _cache_get(cache_key)
-    if cached:
-        return cached
-
-    title_en, title_sa, _, summary = _MAHABHARATA_PARVAS[parva_num]
-    sections = _fetch_mbh_section_urls(parva_num)
-
-    # Concurrent, but modest worker count — sacred-texts.com is a single old
-    # server, not a modern API, and some Parvas (Adi especially) run 200+
-    # sections. Politeness matters more than raw speed here.
-    result_verses = [None] * len(sections)
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        futures = {
-            pool.submit(_fetch_mbh_section_text, parva_num, section_num, href): idx
-            for idx, (section_num, href) in enumerate(sections)
-        }
-        for future in as_completed(futures):
-            idx = futures[future]
-            section_num = sections[idx][0]
-            text = future.result()
-            if text:
-                result_verses[idx] = {
-                    "verse_number":    section_num,
-                    "chapter_number":  parva_num,
-                    "label":           f"Section {section_num}",
-                    "sanskrit":        "",
-                    "transliteration": "",
-                    "translation":     text,
-                    "commentary":      "",
-                }
-
-    result_verses = [v for v in result_verses if v is not None]
-    if len(result_verses) < len(sections):
-        print(f"[mbh-en] parva {parva_num}: only {len(result_verses)}/{len(sections)} sections "
-              f"fetched successfully — re-request later to retry the missing ones.")
-
-    result = {
-        "chapter_number":  parva_num,
-        "title":           title_en,
-        "sanskrit_title":  title_sa,
-        "summary":         summary,
-        "verse_count":     len(result_verses),
-        "verses":          result_verses,
-        "note":            ("Kisari Mohan Ganguli's public-domain English prose translation (1883–1896), "
-                             "organized by Section rather than by Sanskrit shloka. Per sacred-texts.com's own "
-                             "documentation, this translation cannot be reliably aligned chapter-by-chapter "
-                             "with the Sanskrit edition of this Parva — only at the whole-book level — so "
-                             "Sanskrit text is intentionally not paired with these sections."),
-        "source_credit":   "Kisari Mohan Ganguli translation (public domain), digitized by sacred-texts.com / Project Gutenberg",
-    }
-    if len(result_verses) == len(sections):
-        return _cache_set(cache_key, result)
-    return result
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1088,8 +906,6 @@ def _dispatch_chapters(slug: str, api_source: str, book_id: int):
         return _ramayana_chapters()
     if api_source == "mahabharata":
         return _mahabharata_chapters()
-    if api_source == "mahabharata_english":
-        return _mahabharata_english_chapters()
     if api_source == "hanuman_chalisa":
         return _hanuman_chalisa_chapters()
     if api_source == "shiva_purana":
@@ -1112,8 +928,6 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
         return _ramayana_kanda_verses(chapter_num)
     if api_source == "mahabharata":
         return _mahabharata_parva_verses(chapter_num)
-    if api_source == "mahabharata_english":
-        return _mahabharata_english_parva_verses(chapter_num)
     if api_source == "hanuman_chalisa":
         return _hanuman_chalisa_verses()
     if api_source == "shiva_purana":
@@ -1142,28 +956,7 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
 # sacred_books.id, so those two features are unavailable for static-only
 # books — everything else (browsing, reading, search) works fully.
 
-_STATIC_BOOKS = {
-    "mahabharata-english": {
-        "id": -1,
-        "slug": "mahabharata-english",
-        "title": "Mahabharata (English)",
-        "sanskrit_title": "महाभारतम्",
-        "deity": None,
-        "tradition": "Itihasa",
-        "language": "English",
-        "total_chapters": 18,
-        "total_verses": None,  # varies per Parva, computed live
-        "description": (
-            "Kisari Mohan Ganguli's complete public-domain English prose "
-            "translation of the Mahabharata (1883-1896), the only complete "
-            "English translation of the epic in existence. Organized by "
-            "Parva and Section."
-        ),
-        "icon_emoji": "📜",
-        "accent_color": "#9a5a2a",
-        "api_source": "mahabharata_english",
-    },
-}
+_STATIC_BOOKS = {}
 
 
 def _lookup_book(slug: str):
@@ -1286,25 +1079,6 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
                             "chapter_title":  data["title"],
                             "translation":    v["sanskrit"],
                             "sanskrit":       v.get("sanskrit", ""),
-                            "label":          v.get("label", ""),
-                        })
-                        if len(results) >= 50:
-                            break
-            except Exception:
-                continue
-
-    elif api_source == "mahabharata_english":
-        for parva_num in range(1, 19):
-            try:
-                data = _mahabharata_english_parva_verses(parva_num)
-                for v in data.get("verses", []):
-                    if q_lower in (v.get("translation") or "").lower():
-                        results.append({
-                            "chapter_number": parva_num,
-                            "verse_number":   v["verse_number"],
-                            "chapter_title":  data["title"],
-                            "translation":    v["translation"],
-                            "sanskrit":       "",
                             "label":          v.get("label", ""),
                         })
                         if len(results) >= 50:
