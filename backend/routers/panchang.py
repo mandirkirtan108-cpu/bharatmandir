@@ -141,7 +141,7 @@ class CalendarMonthSeedRequest(CalendarYearSeedRequest):
 
 class MuhuratRequest(BaseModel):
     muhurat_type: str
-    muhurat_label: str
+    muhurat_label: str 
     muhurat_hindi: str
     date: str
     name: Optional[str] = ""
