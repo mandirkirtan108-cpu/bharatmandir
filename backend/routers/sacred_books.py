@@ -896,6 +896,706 @@ def _devi_mahatmya_chapter_verses(chapter_num: int):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# RAMCHARITMANAS  (curated — Tulsidas, 7 kandas)
+# ═════════════════════════════════════════════════════════════════════════════
+# Tulsidas's Awadhi retelling of the Rama story (c. 1574 CE), same author as
+# the Hanuman Chalisa above. The full text runs to roughly 10,900 chaupais
+# and dohas across 7 kandas — far too large to hand-curate in full, so (as
+# with Shiva Purana / Devi Mahatmya above) we curate the best-known moments
+# per kanda rather than attempting a complete verse-by-verse edition.
+
+_RAMCHARITMANAS_KANDAS = {
+    1: ("Bala Kanda", "बालकाण्ड",
+        "Tulsidas opens with invocations to his gurus and the Divine, then narrates Rama's birth in Ayodhya, his childhood, Vishwamitra's tutelage, and the breaking of Shiva's bow to win Sita's hand.",
+        [
+            ("Invocation to the Guru", "Tulsidas opens by bowing to the dust of his Guru's lotus feet, which purify the mirror of the mind, before setting out to describe the spotless glory of Raghuvira (Rama) that grants the four fruits of life.", "The Manas's famous opening invocation, echoed later in the Hanuman Chalisa by the same author"),
+            ("Rama's Birth in Ayodhya", "King Dasharatha of Ayodhya, after long-awaited sons through the Putrakameshti yajna, rejoices as Kaushalya gives birth to Rama, an incarnation of Vishnu, alongside his brothers Bharata, Lakshmana, and Shatrughna.", "The divine birth narrative shared with the Valmiki Ramayana's Bala Kanda"),
+            ("Vishwamitra's Tutelage", "The sage Vishwamitra takes young Rama and Lakshmana to protect his forest sacrifice from demons, teaching them sacred weapons (astras) along the way and preparing Rama for his destiny.", "Rama's early training under sage Vishwamitra"),
+            ("The Breaking of Shiva's Bow", "At King Janaka's court in Mithila, Rama effortlessly lifts and breaks the mighty bow of Shiva that no other king could even move, winning the hand of Princess Sita in marriage.", "The pivotal Sita-swayamvara episode"),
+        ]),
+    2: ("Ayodhya Kanda", "अयोध्याकाण्ड",
+        "On the eve of Rama's coronation, Queen Kaikeyi is provoked by her maid Manthara into demanding Rama's 14-year exile and her own son Bharata's crowning. Rama departs for the forest; Bharata refuses the throne.",
+        [
+            ("Manthara's Provocation", "Manthara, Kaikeyi's hunchbacked maid, convinces the queen that Rama's coronation threatens her son Bharata's future, turning Kaikeyi's joy into jealousy and fear.", "The turning point that sets the exile in motion"),
+            ("Kaikeyi's Two Boons", "Kaikeyi reminds Dasharatha of two boons he once owed her, demanding Rama's 14-year exile to the forest and Bharata's coronation instead. Bound by his word, the grief-stricken king can only comply.", "Dasharatha's dilemma between truthfulness and love for Rama"),
+            ("Rama's Cheerful Obedience", "Rama accepts the exile without a trace of resentment, seeing obedience to his father's word as dharma itself. Sita and Lakshmana insist on accompanying him into the forest.", "Tulsidas's portrayal of Rama as the ideal of filial duty (maryada purushottama)"),
+            ("Bharata Refuses the Throne", "On learning of the events, Bharata is horrified and refuses to accept the kingdom gained through his mother's scheme. He travels to the forest to beg Rama to return, and when Rama insists on completing the exile, Bharata rules only as regent, placing Rama's sandals upon the throne.", "Bharata's devotion, considered the moral high point of this kanda"),
+        ]),
+    3: ("Aranya Kanda", "अरण्यकाण्ड",
+        "Life in the Dandaka forest; the demoness Shurpanakha's disfigurement, Ravana's abduction of Sita through the golden-deer ruse, and Jatayu's sacrifice.",
+        [
+            ("Shurpanakha's Rejection", "The demoness Shurpanakha, smitten with Rama, is rebuffed and then mocks Sita, provoking Lakshmana to disfigure her. She flees to her brother Ravana in Lanka seeking revenge.", "The provocation that draws Ravana's attention to Sita"),
+            ("The Golden Deer", "The demon Maricha, at Ravana's command, transforms into a dazzling golden deer to lure Rama away from the hermitage, leaving Sita momentarily unprotected.", "Ravana's ruse to separate Rama from Sita"),
+            ("The Abduction of Sita", "While Rama and Lakshmana are drawn away, Ravana appears disguised as an ascetic and abducts Sita, carrying her off in his aerial chariot to Lanka.", "The central crisis of the epic"),
+            ("Jatayu's Sacrifice", "The aged vulture-king Jatayu, seeing Sita's abduction, attacks Ravana's chariot to rescue her. Mortally wounded, he lives just long enough to tell Rama what happened before passing away in Rama's arms.", "Jatayu's devotion honoured by Rama performing his last rites"),
+        ]),
+    4: ("Kishkindha Kanda", "किष्किन्धाकाण्ड",
+        "Rama's alliance with the monkey-king Sugriva and his minister Hanuman; the killing of the tyrant Vali; the search for Sita begins.",
+        [
+            ("Meeting Hanuman and Sugriva", "In the Kishkindha forest, Rama and Lakshmana meet Hanuman, who recognises Rama's divinity, and through him the exiled monkey-king Sugriva, forging an alliance of mutual aid.", "The beginning of Rama's friendship with the vanara kingdom"),
+            ("The Slaying of Vali", "Rama helps Sugriva reclaim his kingdom and wife from his tyrannical brother Vali by killing Vali from concealment during their duel — an episode Tulsidas frames as restoring rightful dharma.", "One of the more debated episodes of the epic, addressed directly by Tulsidas through Rama's own explanation to the dying Vali"),
+            ("Sugriva's Coronation", "With Vali slain, Sugriva is crowned king of Kishkindha and pledges his monkey army to help Rama find Sita, fulfilling his debt of gratitude.", "The alliance that makes the rescue of Sita possible"),
+            ("The Search Begins", "Sugriva dispatches search parties of monkeys in all four directions. The southern party, led by Hanuman, Angada, and Jambavan, eventually learns of Sita's location in Lanka.", "Setting up the events of the Sundara Kanda"),
+        ]),
+    5: ("Sundara Kanda", "सुन्दरकाण्ड",
+        "Hanuman's leap across the ocean, his discovery of Sita in the Ashoka grove, the burning of Lanka, and his triumphant return — the most widely recited kanda of the Manas.",
+        [
+            ("Hanuman's Leap Across the Ocean", "Growing to an immense size, Hanuman leaps across the ocean to Lanka, overcoming the mountain Mainaka's offer of rest, the demoness Surasa's test, and the shadow-catching demon Simhika along the way.", "The most celebrated feat of the Sundara Kanda"),
+            ("Finding Sita in the Ashoka Grove", "Hanuman finds Sita, captive in Ravana's Ashoka grove, steadfastly refusing Ravana's advances. He identifies himself with Rama's signet ring and delivers a message of hope and reassurance.", "The emotional heart of the kanda"),
+            ("The Burning of Lanka", "Captured and mocked by Ravana's court, Hanuman allows his tail to be set alight — then uses the flames to burn down much of Lanka before extinguishing himself in the sea and escaping.", "Hanuman's fearless retaliation"),
+            ("The Return with News", "Hanuman leaps back across the ocean and reports to Rama that Sita has been found, setting in motion the building of the bridge and the war to come.", "The kanda's resolution, prized above all for devotees of Hanuman"),
+        ]),
+    6: ("Lanka Kanda", "लंकाकाण्ड",
+        "Also called Yuddha Kanda — the building of the bridge to Lanka, the great war with Ravana's forces, and Rama's final victory.",
+        [
+            ("Building the Bridge (Rama Setu)", "The monkey army, led by the engineers Nala and Nila, builds a floating bridge of stones across the ocean to Lanka, each stone inscribed with Rama's name.", "The famous Rama Setu bridge-building episode"),
+            ("Vibhishana's Surrender", "Ravana's righteous brother Vibhishana, unable to dissuade him from returning Sita, defects to Rama's side and is later crowned king of Lanka after the war.", "Vibhishana as an example of righteousness over blood loyalty"),
+            ("The Fall of Kumbhakarna and Meghnada", "Ravana's giant brother Kumbhakarna and his powerful son Indrajit (Meghnada) both fall in battle against the vanara army and Rama's brothers, weakening Ravana's forces decisively.", "Key turning points of the war"),
+            ("The Death of Ravana", "After a fierce final duel, Rama slays Ravana with a divine arrow aimed at his navel, where his life force was concealed, ending the ten-headed demon king's tyranny.", "The epic's climactic battle"),
+            ("Sita's Fire Test and the Return to Ayodhya", "Sita undergoes the Agni Pariksha (fire ordeal) to prove her purity, after which Rama, Sita, and Lakshmana return to Ayodhya, where Bharata joyfully restores the kingdom to Rama.", "The joyous conclusion of the exile, celebrated to this day as Diwali"),
+        ]),
+    7: ("Uttara Kanda", "उत्तरकाण्ड",
+        "Rama's ideal reign (Ram Rajya), Sita's later exile due to public rumour, the birth of Lava and Kusha, and the epic's closing teachings on devotion.",
+        [
+            ("Ram Rajya", "Rama's reign in Ayodhya becomes the very model of just and prosperous governance — a golden age remembered ever after as 'Ram Rajya', where dharma flourishes and all citizens live in harmony.", "The ideal of righteous kingship central to the Manas's teaching"),
+            ("Sita's Second Exile", "Hearing a washerman's doubt about Sita's purity after her long captivity, Rama, bound by his duty as king to public perception, reluctantly sends the pregnant Sita to the forest, where she is sheltered by the sage Valmiki.", "One of the epic's most poignant and debated episodes"),
+            ("Lava and Kusha", "Sita raises her twin sons Lava and Kusha in Valmiki's hermitage, where they are trained in the Vedas and in the very story of their father's deeds — the Ramayana itself.", "The frame in which the epic is said to have first been recited"),
+            ("Tulsidas's Closing Teaching", "The Manas closes not with narrative but with teaching: Tulsidas declares that the repetition of Rama's name (Rama-nama) is the surest raft across the ocean of worldly existence, open to every being regardless of caste or learning.", "The devotional (bhakti) message that made the Manas the most widely read scripture in North India"),
+        ]),
+}
+
+
+def _ramcharitmanas_chapters():
+    cached = _cache_get("ramcharitmanas_chapters")
+    if cached:
+        return cached
+    chapters = []
+    for num, (title, sanskrit, summary, verses) in _RAMCHARITMANAS_KANDAS.items():
+        chapters.append({
+            "chapter_number": num,
+            "title":          title,
+            "sanskrit_title": sanskrit,
+            "summary":        summary,
+            "verse_count":    len(verses),
+        })
+    return _cache_set("ramcharitmanas_chapters", {"chapters": chapters})
+
+
+def _ramcharitmanas_kanda_verses(kanda_num: int):
+    if kanda_num not in _RAMCHARITMANAS_KANDAS:
+        raise HTTPException(status_code=404, detail="Kanda not found")
+    title_en, title_sa, summary, key_verses = _RAMCHARITMANAS_KANDAS[kanda_num]
+    verses = []
+    for i, (vtitle, translation, commentary) in enumerate(key_verses):
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  kanda_num,
+            "label":           vtitle,
+            "sanskrit":        "",
+            "transliteration": "",
+            "translation":     translation,
+            "commentary":      commentary,
+        })
+    return {
+        "chapter_number":  kanda_num,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
+        "summary":         summary,
+        "verse_count":     len(verses),
+        "verses":          verses,
+        "note":            "Ramcharitmanas — curated key episodes per kanda. Full Awadhi chaupai-by-chaupai edition coming soon.",
+        "source_credit":   "Tulsidas, Ramcharitmanas (c. 1574 CE, public domain) — cf. F.S. Growse's English prose translation, The Rámáyana of Tulasidasa (1883, public domain)",
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UPANISHADS  (curated — 13 principal Upanishads)
+# ═════════════════════════════════════════════════════════════════════════════
+# The "principal Upanishads" traditionally commented on by Adi Shankara are
+# the first 10 below; Svetasvatara, Kaushitaki, and Maitri are very
+# commonly included alongside them to make the wider set of 13 referenced
+# in scholarship (e.g. Max Müller's Sacred Books of the East, vols. 1 & 15).
+
+_UPANISHADS = {
+    1:  ("Isha Upanishad", "ईशोपनिषद्", "Yajur Veda",
+         "The shortest and one of the most quoted Upanishads — only 18 verses — teaching that the divine pervades everything and that renunciation and action must be held together.",
+         [
+            ("Ishavasyam", "All this — whatever moves in this moving world — is enveloped by the Lord. Renounce it, then, and enjoy; do not covet the wealth of anyone.", "The opening verse and namesake of the Upanishad"),
+            ("Action and Renunciation United", "Performing works in this world, one should wish to live a hundred years. This alone is the way for you to live without works clinging to you — there is no other way.", "The Isha's distinctive teaching that right action, not mere withdrawal, is the path"),
+            ("The Golden Vessel", "The face of truth is covered by a golden disc. Remove it, O sustainer, so that one who is devoted to truth may see it.", "A celebrated verse on the veil between appearance and ultimate reality"),
+         ]),
+    2:  ("Kena Upanishad", "केनोपनिषद्", "Sama Veda",
+         "Opens with the question 'By whom (kena) willed does the mind go forth?' and teaches that Brahman is the power behind the powers of mind, speech, breath, and the senses — unknowable by ordinary knowing.",
+         [
+            ("By Whom Willed?", "By whom willed and directed does the mind go forth to its objects? By whom commanded does the first breath move? By whom willed do people utter this speech? Who is the god that directs the eye and the ear?", "The Upanishad's opening question"),
+            ("Known of No Knower", "It is other than the known, and beyond the unknown. So we have heard from the ancient teachers who explained this to us. That which is not expressed through speech, but by which speech itself is expressed — know that alone to be Brahman.", "The famous teaching that Brahman cannot be grasped as an object of ordinary knowledge"),
+            ("The Parable of Fire and Wind", "Fire once boasted it could burn anything, but when tested by a blade of grass placed before it by a mysterious spirit (Brahman in disguise), it could not burn it alone. Wind likewise could not blow it away. Only when Indra approached humbly did the spirit reveal itself as Brahman, the source of all power.", "A teaching story on the humbling of divine pride before the Absolute"),
+         ]),
+    3:  ("Katha Upanishad", "कठोपनिषद्", "Krishna Yajur Veda",
+         "The dialogue between the boy Nachiketa and Yama, the god of death, on the nature of the soul, the difference between the pleasant and the good, and the path beyond death.",
+         [
+            ("Nachiketa's Three Boons", "Sent to the abode of Death by his father's rash words, young Nachiketa waits three days unfed at Yama's door. Yama, ashamed, offers three boons. For the third, Nachiketa asks to know what happens to a person after death — the one question Yama tries hardest to deflect.", "The framing story of the Upanishad"),
+            ("The Good and the Pleasant", "The good is one thing, the pleasant another; both, of different aims, bind a person. It is well for one who chooses the good; one who chooses the pleasant misses the true end.", "One of the Upanishads' most quoted ethical teachings"),
+            ("The Chariot Simile", "Know the Self as the rider in a chariot, the body as the chariot itself. Know the intellect as the charioteer, and the mind as the reins. The senses are the horses, and the objects of sense their roads.", "The famous chariot analogy for self-mastery, later echoed in the Bhagavad Gita"),
+            ("Subtler Than the Subtle", "The Self is smaller than the small, greater than the great, hidden in the heart of every creature. One who is free from desire sees the majesty of the Self through the grace of the creator, and beyond sorrow.", "On the paradoxical, all-pervading nature of Atman"),
+         ]),
+    4:  ("Prashna Upanishad", "प्रश्नोपनिषद्", "Atharva Veda",
+         "Six disciples each ask the sage Pippalada one deep question — on the origin of beings, the nature of prana (life-force), sleep and dream, meditation on Om, and the nature of the sixteen-fold soul.",
+         [
+            ("The Origin of Beings", "Asked where creatures come from, Pippalada teaches that the Creator, desiring offspring, produced pairs — matter and life-breath (prana) — from which all beings arise.", "The cosmogonic teaching of the first question"),
+            ("The Glory of Prana", "Prana, the life-breath, is likened to a king whose ministers are the senses; when prana prepares to depart the body, all the senses depart with it, showing its supremacy among the body's faculties.", "The Prashna's extended meditation on the life-force"),
+            ("Meditation on Om", "Whoever meditates on the syllable Om with full understanding as the support for reaching the highest and the lowest is led, according to the depth of that meditation, either to a human birth, to the world of the moon, or to the world of Brahman itself.", "Teaching on Om as a graded vehicle of meditation"),
+         ]),
+    5:  ("Mundaka Upanishad", "मुण्डकोपनिषद्", "Atharva Veda",
+         "Distinguishes the 'lower knowledge' of ritual and scripture from the 'higher knowledge' of Brahman, using the image of two birds on one tree, and the arrow-and-target metaphor for meditation.",
+         [
+            ("Two Kinds of Knowledge", "There are two kinds of knowledge to be known — the higher and the lower. The lower is the four Vedas and their auxiliary sciences; the higher is that by which the Imperishable is apprehended.", "The Mundaka's foundational distinction between ritual learning and direct realization"),
+            ("Two Birds on One Tree", "Two birds, close companions, cling to the same tree. One eats the sweet fruit; the other looks on without eating. The eating bird is the individual self absorbed in experience; the watching bird is the Self as pure witness.", "One of the most celebrated images in all Upanishadic literature"),
+            ("Truth Alone Triumphs", "Truth alone triumphs, not falsehood. By truth the path is spread out, the pathway on which the sages, whose desires have been fulfilled, travel to where that supreme treasure of Truth resides.", "Satyameva Jayate — later adopted as India's national motto"),
+            ("The Bow and Arrow of Meditation", "Taking the great bow of the Upanishads, one should place upon it the arrow sharpened by devotion; drawing it back with a mind absorbed in the Self, one should penetrate that Imperishable as the target.", "The famous archery metaphor for one-pointed meditation on Brahman"),
+         ]),
+    6:  ("Mandukya Upanishad", "माण्डूक्योपनिषद्", "Atharva Veda",
+         "The shortest Upanishad, just 12 verses, yet considered the most philosophically dense — it identifies the syllable Om with the four states of consciousness: waking, dreaming, deep sleep, and the fourth, Turiya.",
+         [
+            ("Om Is All", "Om is imperishable. It is all — the past, present, future, and whatever transcends the three divisions of time — all of it is verily Om.", "The Mandukya's opening identification of Om with all of time and existence"),
+            ("The Four States", "The waking state is the sound A, experiencing the external world; the dreaming state is U, experiencing the subtle inner world; deep sleep is M, a state of undifferentiated bliss. Beyond all three, silent and whole, is Turiya — the fourth, the Self itself.", "The core teaching mapping the syllable Om onto the four states of consciousness"),
+            ("Turiya, the Fourth", "Turiya is not knowledge of the internal, nor of the external, nor of both together; it is not a mass of consciousness, nor simple consciousness, nor unconsciousness. It is unseen, ungraspable, the essence of the one Self, the cessation of all relative existence — that is the Self, and that is to be known.", "The description of the fourth, non-dual state, the goal of the entire Upanishad"),
+         ]),
+    7:  ("Taittiriya Upanishad", "तैत्तिरीयोपनिषद्", "Krishna Yajur Veda",
+         "Famous for its teaching of the five sheaths (koshas) that cover the Self, and its closing convocation address urging truthfulness, duty, and hospitality.",
+         [
+            ("The Five Sheaths (Koshas)", "The Self is covered by five sheaths, one within the other like nested boxes: the sheath of food (the physical body), the sheath of breath, the sheath of mind, the sheath of intellect, and innermost, the sheath of bliss — within which dwells the Self itself.", "The Taittiriya's celebrated Panchakosha (five-sheath) model of the human being"),
+            ("Brahman Is Bliss", "He who knows the bliss of Brahman, from which words turn back along with the mind, unable to reach it, fears nothing whatsoever.", "The teaching that Brahman's essential nature is Ananda, bliss"),
+            ("The Convocation Address", "Speak the truth. Practice virtue. Do not neglect your studies. Treat your mother, father, teacher, and guest as gods. Give with faith, in abundance, with modesty, and with sympathy. Let these be your vows.", "The Taittiriya's famous ethical instructions to departing students, still cited in Indian graduation ceremonies today"),
+         ]),
+    8:  ("Aitareya Upanishad", "ऐतरेयोपनिषद्", "Rig Veda",
+         "A short but foundational Upanishad on cosmology and the nature of consciousness, containing the celebrated declaration 'Prajnanam Brahma' — consciousness is Brahman.",
+         [
+            ("Creation from the Self", "In the beginning, the Self alone existed, nothing else stirring. It thought, 'Let me create the worlds,' and so created the heavens, the mid-region, the earth, and the waters.", "The Aitareya's account of creation as unfolding from the Self alone"),
+            ("The Self Enters the Body", "Having created the body, the Self wondered how it might enter it to experience it, and entered through the crown of the head, taking up residence within.", "On the indwelling presence of the Self within the created form"),
+            ("Prajnanam Brahma — Consciousness Is Brahman", "Whatever this is — whether the eye's seeing, the mind's thinking, or the breath's breathing — all of it is guided by consciousness (prajnana). That very consciousness is Brahman.", "One of the four Mahavakyas (great sayings) of the Upanishads, one drawn from each Veda"),
+         ]),
+    9:  ("Chandogya Upanishad", "छान्दोग्योपनिषद्", "Sama Veda",
+         "One of the longest and oldest Upanishads, containing the celebrated Uddalaka-Shvetaketu dialogue and its refrain 'Tat Tvam Asi' — Thou Art That.",
+         [
+            ("Tat Tvam Asi — Thou Art That", "Uddalaka teaches his son Shvetaketu through a series of examples — salt dissolved invisibly yet present throughout water, the unseen essence within a banyan seed — each time concluding: 'That subtle essence, this whole world has as its Self. That is Reality. That is the Self. Thou art That, Shvetaketu.'", "The most famous of the four Mahavakyas, repeated nine times across the dialogue"),
+            ("The Parable of the Bees and Honey", "As bees gather nectar from many different flowers and blend it into one undifferentiated honey, so do all beings, upon merging into pure Being in deep sleep, lose their sense of separateness — though they do not know this upon waking.", "An image of the underlying unity beneath apparent multiplicity"),
+            ("Satyakama Jabala's Honesty", "The boy Satyakama, unsure of his father's identity, honestly tells the sage Gautama that he does not know his lineage — a truthfulness so rare and admirable that the sage accepts him as a student regardless of birth.", "A widely cited episode emphasizing truthfulness over social status"),
+         ]),
+    10: ("Brihadaranyaka Upanishad", "बृहदारण्यकोपनिषद्", "Shukla Yajur Veda",
+         "The longest of the Upanishads, containing the sage Yajnavalkya's teachings to his wife Maitreyi on the nature of the Self, and the Mahavakya 'Aham Brahmasmi' — I am Brahman.",
+         [
+            ("Yajnavalkya and Maitreyi", "Preparing to renounce worldly life, the sage Yajnavalkya offers to divide his wealth between his two wives. Maitreyi asks: 'Would wealth make me immortal?' Told no, she replies: 'Then what should I do with what will not make me immortal? Teach me instead what you know of that.'", "A celebrated dialogue on the limits of material wealth and the pursuit of Self-knowledge"),
+            ("Aham Brahmasmi — I Am Brahman", "In the beginning, this universe was Brahman alone, and it knew only itself, thinking, 'I am Brahman.' Whoever among gods or humans awakens to this same truth becomes that very reality.", "The second of the four great Mahavakyas"),
+            ("Neti Neti — Not This, Not This", "The Self can only be described as 'not this, not this' (neti neti) — it is ungraspable, for it cannot be grasped; it is imperishable, unattached, unbound, and untroubled.", "The Upanishad's method of pointing to the Self through negation of all finite descriptions"),
+         ]),
+    11: ("Svetasvatara Upanishad", "श्वेताश्वतरोपनिषद्", "Krishna Yajur Veda",
+         "A theistic Upanishad that identifies the impersonal Brahman with a personal Lord (Ishvara, here as Rudra-Shiva), and introduces the Samkhya-Yoga concepts of Purusha and Prakriti.",
+         [
+            ("The One God Behind All Names", "He is the one God, hidden in all beings, all-pervading, the inner Self of all creatures, the overseer of all actions, dwelling in all beings, the witness, the pure consciousness alone, free of all qualities.", "The Svetasvatara's synthesis of the impersonal Brahman with a personal, worshipped Lord"),
+            ("The Two Birds Revisited", "Two birds, inseparable companions, cling to the same tree. One eats the fruit of the tree with relish; the other, not eating, merely looks on. Grieving over its own powerlessness, when it beholds the glory and greatness of the other, its grief passes away.", "A restatement of the Mundaka's image, here framed as liberation through recognizing the Lord's glory"),
+            ("Not by Reasoning Alone", "This Self is not to be attained through much learning, nor through intellect, nor through much hearing of scripture. It is attained by the one whom It chooses; to such a one the Self reveals its own true form.", "On grace as necessary alongside effort and study"),
+         ]),
+    12: ("Kaushitaki Upanishad", "कौषीतकि ब्राह्मणोपनिषद्", "Rig Veda",
+         "Contains the dialogue between King Ajatashatru and the proud Brahmin Balaki on the true nature of Brahman, and teachings on prana as the unifying life-principle.",
+         [
+            ("Ajatashatru Humbles Balaki", "The learned Balaki boasts to King Ajatashatru that he can teach him about Brahman, offering a dozen different identifications of gods and cosmic forces with Brahman. The king rejects each in turn, and finally, reversing roles, teaches the proud Brahmin himself the deeper truth of the Self.", "A striking episode where a kshatriya king instructs a Brahmin priest, illustrating that wisdom is not bound by social role"),
+            ("Prana as the Unifying Principle", "As the spokes are held together in the hub and felly of a wheel, so are all things held together in prana, in speech, and in mind.", "The Kaushitaki's teaching on the life-breath as the unifying support of all faculties"),
+            ("The Path of the Departed", "Those who depart this world travel first to the moon; those who cannot answer its questions are reborn into new bodies according to their deeds, while those who answer rightly proceed onward toward Brahman.", "An early articulation of the 'path of the fathers' and 'path of the gods' found across the Upanishads"),
+         ]),
+    13: ("Maitri Upanishad", "मैत्रायणीयोपनिषद्", "Krishna Yajur Veda",
+         "One of the later principal Upanishads, notable for its extended treatment of the mind as the cause of both bondage and liberation, and its synthesis with early Yoga and Samkhya ideas.",
+         [
+            ("The Mind as Cause of Bondage and Freedom", "Mind alone is the cause of bondage and liberation for human beings: bondage if attached to sense-objects, freedom if free from them. This is the definitive teaching.", "The Maitri's central psychological teaching on the mind's dual role"),
+            ("The King Brihadratha's Renunciation", "King Brihadratha, having placed his son on the throne, retreats to the forest in disgust at the fleeting nature of pleasures, seeking from the sage Shakayanya the knowledge that leads beyond the perishable body.", "The framing story that opens the Upanishad"),
+            ("Six-Limbed Yoga", "Breath control, withdrawal of the senses, meditation, concentration, contemplation, and absorption — these six are taught here as the limbs of yoga, an early ancestor of the eight-limbed system later systematized by Patanjali.", "An early Upanishadic articulation of yogic practice, predating the classical Yoga Sutras"),
+         ]),
+}
+
+
+def _upanishad_chapters():
+    cached = _cache_get("upanishad_chapters")
+    if cached:
+        return cached
+    chapters = []
+    for num, (title, sanskrit, veda, summary, verses) in _UPANISHADS.items():
+        chapters.append({
+            "chapter_number": num,
+            "title":          title,
+            "sanskrit_title": sanskrit,
+            "veda":           veda,
+            "summary":        summary,
+            "verse_count":    len(verses),
+        })
+    return _cache_set("upanishad_chapters", {"chapters": chapters})
+
+
+def _upanishad_chapter_verses(chapter_num: int):
+    if chapter_num not in _UPANISHADS:
+        raise HTTPException(status_code=404, detail="Upanishad not found (1–13 only)")
+    title_en, title_sa, veda, summary, key_verses = _UPANISHADS[chapter_num]
+    verses = []
+    for i, (vtitle, translation, commentary) in enumerate(key_verses):
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  chapter_num,
+            "label":           vtitle,
+            "sanskrit":        "",
+            "transliteration": "",
+            "translation":     translation,
+            "commentary":      commentary,
+        })
+    return {
+        "chapter_number":  chapter_num,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
+        "veda":            veda,
+        "summary":         summary,
+        "verse_count":     len(verses),
+        "verses":          verses,
+        "note":            "Curated key mantras per Upanishad. Full Sanskrit verse-by-verse edition coming soon.",
+        "source_credit":   "Principal Upanishads (public domain Sanskrit) — cf. Max Müller's English translation, Sacred Books of the East vols. 1 & 15 (1879, public domain)",
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# RIG VEDA  (curated — 10 mandalas, most celebrated hymns)
+# ═════════════════════════════════════════════════════════════════════════════
+# The Rig Veda has 1,028 hymns (~10,552 verses) across 10 mandalas — an
+# archive-scale corpus. Rather than a fragile page-by-page scrape of a
+# century-old translation, we curate the hymns of greatest historical and
+# philosophical significance from each mandala, in the spirit of Griffith's
+# 1896 translation (long public domain).
+
+_RIGVEDA_MANDALAS = {
+    1:  ("Mandala 1", "प्रथम मण्डलम्",
+         "The largest mandala (191 hymns), opening the Rig Veda with invocations to Agni and containing the celebrated 'Riddle Hymn'.",
+         [
+            ("Hymn to Agni (1.1)", "I laud Agni, the priest set before the sacrifice, the divine minister of the ritual, the invoker who bestows the greatest wealth. Through Agni one obtains wealth, and prosperity increasing day by day, most rich in heroes and renown.", "The very first hymn of the Rig Veda, addressed to the fire-god Agni as intermediary between humans and gods"),
+            ("The Riddle Hymn (1.164)", "Seven yoke the one-wheeled chariot drawn by a single horse with seven names; the wheel has three naves, is imperishable, and upon it rest all these worlds. This whole universe is founded on syllables of imperishable sound.", "A famously enigmatic hymn of cosmological riddles, among the most philosophically rich in the entire text"),
+         ]),
+    2:  ("Mandala 2", "द्वितीय मण्डलम्",
+         "Attributed to the Gritsamada family of sages, largely devoted to Agni and Indra.",
+         [
+            ("Hymn to Agni (2.1)", "Thou, Agni, art Indra, the bull of all that lives; thou art wide-striding Vishnu, worthy of worship. Thou art Brahmanaspati, the priest whose wealth is prayer; thou, O sustainer, art linked with holy thought.", "A hymn identifying Agni with the powers of many other gods, an early expression of unity behind the pantheon"),
+            ("Hymn to Brihaspati (2.23)", "We call on Brihaspati, chief and king of prayer, best of sages, whose might no foe can conquer; the beautiful, the ancient, the friend well-praised, whose aid the wise entreat.", "Praise of Brihaspati, the god of sacred speech and wisdom"),
+         ]),
+    3:  ("Mandala 3", "तृतीय मण्डलम्",
+         "Attributed to sage Vishwamitra, containing the Gayatri Mantra — perhaps the single most recited verse in all of Hindu practice.",
+         [
+            ("The Gayatri Mantra (3.62.10)", "Let us meditate on the most excellent light and power of that divine Sun (Savitr); may that radiance illumine our minds.", "The Gayatri Mantra, chanted daily by millions, attributed to sage Vishwamitra"),
+            ("Hymn to Mitra (3.59)", "Mitra, when he speaks, stirs the people to action; Mitra sustains both earth and heaven; Mitra beholds all beings with unwinking eye; to Mitra we bring our offering of clarified butter.", "Praise of Mitra, god of covenant, friendship, and the binding truth between beings"),
+         ]),
+    4:  ("Mandala 4", "चतुर्थ मण्डलम्",
+         "Attributed to the Vamadeva family, largely hymns to Agni and Indra with vivid nature imagery.",
+         [
+            ("Hymn to Agni (4.1)", "Thou, Agni, born through sacred acts, art established among mortal men as their guest; through thee the gods enjoy their share of the oblation, and through thee, O radiant one, do we prosper.", "Agni's role as the messenger carrying offerings from earth to the gods"),
+            ("The Falcon and the Soma (4.26–27)", "I was Manu, I was the sun, declares the soaring falcon, who carries the soma plant down from the heavens to the earth for the sacrifice — pursued swiftly by the archer Krishanu, yet outracing his arrow.", "A vivid mythic narrative of the eagle/falcon bringing soma to humankind"),
+         ]),
+    5:  ("Mandala 5", "पञ्चम मण्डलम्",
+         "Attributed to the Atri family, notable for its hymn to Parjanya, the rain-god.",
+         [
+            ("Hymn to Parjanya (5.83)", "Sing forth with these to mighty Parjanya, and magnify him; with reverence seek his favour; the roaring bull who quickens seed in creatures sends the rain-bearing clouds across the sky.", "A vivid nature hymn to the rain-god, celebrating the monsoon's life-giving power"),
+            ("Hymn to Agni (5.1)", "Awake, O Agni, as the friend of the dawn when she awakens; may all who worship gain the wide-spread wealth that comes from you.", "Agni invoked at the break of day, in step with dawn rituals"),
+         ]),
+    6:  ("Mandala 6", "षष्ठ मण्डलम्",
+         "Attributed to the Bharadvaja family, including a distinctive hymn on weapons and armour.",
+         [
+            ("Hymn to Arms (6.75)", "With the bow let us win cattle, with the bow let us win the fierce, hard-fought battle; the bow brings grief to the enemy; armed with the bow may we conquer every quarter.", "A striking hymn invoking the protective and martial power of the bow and armour, recited even today for protection"),
+            ("Riddle Hymn to Vishnu and Indra (6.9)", "One half of the day is dark, the other bright; both, though of one substance, revolve as if by magic. As a father, so is Agni to his son; may he come to us as our benevolent friend.", "A hymn playing on the riddle of day and night as expressions of a single underlying reality"),
+         ]),
+    7:  ("Mandala 7", "सप्तम मण्डलम्",
+         "Attributed to the sage Vasishtha, containing the celebrated 'Frog Hymn' and important hymns to Varuna.",
+         [
+            ("Hymn to Varuna (7.86)", "Wise and mighty are the works of him who fixed apart the wide earth and heaven; who spurred the high and starry sky to motion. If I have sinned against a friend through thoughtlessness, O Varuna, free me from that transgression.", "One of the Rig Veda's rare hymns of moral confession and appeal for forgiveness"),
+            ("The Frog Hymn (7.103)", "Like Brahmins seated round the brimming vessel, chanting on the holy Soma day, so, frogs, do you sit round the pool and celebrate the coming of the rains with croaking chorus.", "A playful hymn comparing the croaking of frogs at the monsoon's onset to Brahmin priests chanting at a sacrifice"),
+         ]),
+    8:  ("Mandala 8", "अष्टम मण्डलम्",
+         "Attributed largely to the Kanva family, rich in hymns to Soma and containing several 'danastuti' hymns praising royal patrons' generosity.",
+         [
+            ("Hymn to Soma (8.48)", "We have drunk the Soma; we have become immortal; we have gone to the light; we have found the gods. What can hostility now do to us, O immortal one, and what the malice of any mortal?", "One of the most famous hymns of the Rig Veda, celebrating the exalted, immortalizing effect of the sacred Soma drink"),
+            ("A Danastuti (Gift-Praise) Hymn (8.1)", "Let no one, not even a friend who wishes you ill, turn you from this path; sing to Indra, most manly of all, the bestower of great gifts to his devoted worshippers.", "An example of the danastuti genre, praising a patron's generosity to the officiating poet"),
+         ]),
+    9:  ("Mandala 9", "नवम मण्डलम्",
+         "Devoted entirely to Soma Pavamana — the purifying, clarifying flow of the sacred Soma juice as it is pressed for the ritual.",
+         [
+            ("Soma Pavamana (9.113)", "Where there is eternal light, in the world where the sun is placed, in that immortal, imperishable world, O purifying Soma, place me. Where there is joy and delight, where gladness and rejoicing dwell, where all desires are fulfilled — there, make me immortal.", "One of the most lyrical hymns in the Rig Veda, longing for the eternal, luminous world beyond death"),
+         ]),
+    10: ("Mandala 10", "दशम मण्डलम्",
+         "The latest and most philosophically developed mandala, containing the Purusha Sukta, the Nasadiya Sukta (Hymn of Creation), the Hiranyagarbha hymn, and the Devi Sukta.",
+         [
+            ("Purusha Sukta (10.90)", "The Cosmic Person (Purusha) has a thousand heads, a thousand eyes, a thousand feet; he pervades the earth on every side and extends beyond it by ten fingers' breadth. All beings are but a quarter of him; three-quarters, immortal, remain in heaven.", "The famous hymn of the Cosmic Person from whose sacrifice the universe and social orders are said to arise"),
+            ("Nasadiya Sukta — The Hymn of Creation (10.129)", "There was neither non-existence nor existence then; there was no realm of air, no sky beyond it. Who really knows? Who will here proclaim it? Whence was it born, whence came this creation? Even the gods came after its creation, so who truly knows whence it arose?", "Perhaps the most celebrated philosophical hymn in the Rig Veda, ending in radical, honest uncertainty about the origin of the universe"),
+            ("Hiranyagarbha Sukta (10.121)", "In the beginning arose the Golden Embryo (Hiranyagarbha); as soon as born, he was the one lord of all that is. He held the earth and this sky. To what god shall we offer our oblation?", "A hymn to the singular divine source of creation, its refrain 'Kasmai devaya havisha vidhema' ('to what god shall we offer?') echoed throughout"),
+            ("Devi Sukta (10.125)", "I move with the Rudras, with the Vasus, with the Adityas and All-Gods; I support both Mitra and Varuna, both Indra and Agni, and the two Ashvins. I am the sovereign queen, the gatherer-up of treasures, the first of those worthy of worship.", "A hymn spoken in the voice of the Goddess (Vak, speech personified) declaring her supremacy among all divine powers"),
+            ("The Gambler's Lament (10.34)", "The dice, rolling down from the tall Vibhidaka tree, roll me about as the wind tosses cotton. My wife holds me not dear, nor do others; I find no pleasure in the gambling hall, and yet I cannot leave the dice.", "A remarkably human, confessional hymn on the ruin brought by gambling addiction"),
+         ]),
+}
+
+
+def _rigveda_chapters():
+    cached = _cache_get("rigveda_chapters")
+    if cached:
+        return cached
+    chapters = []
+    for num, (title, sanskrit, summary, verses) in _RIGVEDA_MANDALAS.items():
+        chapters.append({
+            "chapter_number": num,
+            "title":          title,
+            "sanskrit_title": sanskrit,
+            "summary":        summary,
+            "verse_count":    len(verses),
+        })
+    return _cache_set("rigveda_chapters", {"chapters": chapters})
+
+
+def _rigveda_mandala_verses(mandala_num: int):
+    if mandala_num not in _RIGVEDA_MANDALAS:
+        raise HTTPException(status_code=404, detail="Mandala not found (1–10 only)")
+    title_en, title_sa, summary, key_verses = _RIGVEDA_MANDALAS[mandala_num]
+    verses = []
+    for i, (vtitle, translation, commentary) in enumerate(key_verses):
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  mandala_num,
+            "label":           vtitle,
+            "sanskrit":        "",
+            "transliteration": "",
+            "translation":     translation,
+            "commentary":      commentary,
+        })
+    return {
+        "chapter_number":  mandala_num,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
+        "summary":         summary,
+        "verse_count":     len(verses),
+        "verses":          verses,
+        "note":            "Curated selection of the most historically and philosophically significant hymns from this mandala. Full 1,028-hymn text coming soon.",
+        "source_credit":   "Rig Veda (public domain Sanskrit) — cf. Ralph T.H. Griffith's English translation, The Hymns of the Rigveda (1896, public domain)",
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# MANUSMRITI  (curated — 12 chapters)
+# ═════════════════════════════════════════════════════════════════════════════
+# The Manusmriti (Laws of Manu) is a Dharmashastra text of roughly 2,685
+# verses across 12 chapters. It is presented here as a historical legal and
+# ethical treatise for study purposes; several of its provisions on caste
+# and gender are widely and rightly contested today and are described here
+# descriptively, not as endorsement.
+
+_MANUSMRITI_CHAPTERS = {
+    1:  ("Creation", "सृष्टि",
+         "Cosmogony — the origin of the universe, the creation of Manu, and the divine basis claimed for dharma and the four varnas (social classes).",
+         [
+            ("The Self-Existent Creates", "The Self-Existent Lord, desiring to bring forth beings of many kinds from his own body, first created the waters and placed a seed in them, from which arose a golden egg, in which he himself was born as Brahma.", "The text's cosmogonic opening, framing all subsequent law as divinely grounded"),
+            ("The Four Varnas from the Cosmic Body", "For the growth of the worlds, from his mouth, arms, thighs, and feet, the Brahmin, Kshatriya, Vaishya, and Shudra are said to have been created, each assigned distinct duties.", "The text's foundational — and historically most contested — claim for the origin of the varna system"),
+            ("Dharma as the Only True Friend", "A person is born alone and dies alone; alone one enjoys the rewards of good deeds and alone bears the consequences of evil ones. Dharma alone will remain with a person after death; all else is left behind.", "A widely quoted verse on personal moral responsibility, independent of the varna material"),
+         ]),
+    2:  ("Sources of Dharma and the Student Stage", "धर्मस्य मूलानि",
+         "The scriptural and customary sources of dharma, followed by detailed rules for the brahmacharya (student) stage of life, including duties toward one's teacher.",
+         [
+            ("The Sources of Law", "The whole Veda is the first source of dharma; next, the tradition and virtuous conduct of those who know the Veda; then the customs of righteous persons; and finally, satisfaction of one's own conscience.", "The text's own account of its methodology and authority"),
+            ("Reverence for the Teacher (Guru)", "The teacher who imparts knowledge of the Self is to be honoured above the teacher of ordinary learning, for from that teacher comes an immortal birth of the mind, greater than the birth given by one's parents.", "On the elevated status accorded to spiritual teachers relative to birth parents"),
+            ("The Value of a Learned Person Regardless of Age", "A person is not to be considered venerable merely because their head has turned grey; even a child who has mastered knowledge is regarded by the wise as an elder.", "A verse valuing wisdom over mere seniority in age"),
+         ]),
+    3:  ("Marriage and the Householder", "विवाह एवं गृहस्थ",
+         "The eight recognized forms of marriage, the duties of the householder stage of life, and rules concerning hospitality to guests.",
+         [
+            ("The Eight Forms of Marriage", "Eight forms of marriage are described, ranging from the Brahma marriage (gift of a daughter to a learned suitor) to the much-criticized Rakshasa and Paishacha forms associated with abduction or deceit — the text itself ranks the former as commendable and the latter as blameworthy.", "The text's own internal hierarchy distinguishing approved from disapproved marriage customs"),
+            ("The Householder as the Support of All Stages", "As all rivers, great and small, find their rest in the ocean, so all the stages of life find their support in the householder; the householder stage is therefore declared the most important of the four ashramas.", "On the centrality of family and domestic life in the text's framework"),
+            ("Duty to the Unexpected Guest", "A guest who arrives at sunset should not be turned away; whether he comes at an unsuitable time or not, he should not go without food from a householder's house.", "A widely cited teaching on hospitality (atithi dharma)"),
+         ]),
+    4:  ("Rules of Livelihood", "जीविकोपाय",
+         "Guidance on earning a living, daily conduct, purity, study, and general ethical restraint for the householder.",
+         [
+            ("Right Means of Livelihood", "One should follow that mode of livelihood which causes no injury to others, or the least injury possible, except in times of extreme distress.", "A general ethical principle of minimizing harm in one's occupation"),
+            ("Restraint of Speech", "One should speak the truth, and speak what is pleasant; one should not speak an unpleasant truth, nor speak a pleasant falsehood — this is the eternal law.", "A frequently quoted teaching on truthful yet compassionate speech"),
+            ("Company and Character", "By company with the virtuous, even the wicked attain to goodness in time, as a cloth takes on the fragrance of the flowers it is kept among.", "A verse on the formative influence of one's associations"),
+         ]),
+    5:  ("Diet, Purification, and Duties of Women", "आहारशुद्धि एवं स्त्रीधर्म",
+         "Rules on permitted and forbidden foods, rites of purification, and — most contested historically — a chapter on the duties and subordination expected of women within the patriarchal household structure of the period.",
+         [
+            ("Rules on Diet", "Various rules on which foods are and are not to be consumed by different groups are set out at length, reflecting the ritual purity concerns characteristic of the text's era.", "A summary of the chapter's extensive dietary regulations"),
+            ("On the Independence of Women", "This chapter contains some of the Manusmriti's most widely criticized verses, asserting that a woman should be under the protection of her father in childhood, her husband in youth, and her son in old age, and should never be considered fit for independence.", "Historically significant and heavily criticized content, presented descriptively as part of the primary source rather than as an endorsed view"),
+            ("Honouring Women", "Elsewhere the same chapter states that where women are honoured, the gods are pleased, but where they are not honoured, all rites are fruitless — an internally inconsistent tension often noted by scholars studying the text.", "A frequently cited counterpoint verse, illustrating the text's internal contradictions on this subject"),
+         ]),
+    6:  ("The Forest Dweller and the Renunciate", "वानप्रस्थ एवं संन्यास",
+         "Duties of the vanaprastha (forest-dwelling) and sannyasa (renunciate) stages of life, describing detachment from worldly ties in pursuit of liberation.",
+         [
+            ("Entering the Forest", "When a householder sees his skin wrinkled and his hair turned grey, and sees his grandchildren, he may then resort to the forest, gradually loosening his ties to household life.", "The transition marking entry into the third stage of life"),
+            ("The Renunciate's Detachment", "The renunciate should wander alone, without a companion, seeking neither companionship nor solitude for its own sake, ever intent on realizing the Self, seeking that alone which is imperishable.", "The ideal of the wandering ascetic (sannyasi) seeking liberation"),
+            ("Equanimity in All Circumstances", "Neither by praise nor blame should the wise person be moved; free from attachment and aversion, treating all creatures as one's self, such a person is fit for liberation.", "A widely-quoted teaching on equanimity, echoing themes found across the Gita and Upanishads"),
+         ]),
+    7:  ("Duties of the King", "राजधर्म",
+         "Extensive guidance for kings on governance, justice, taxation, warfare, and the appointment of ministers — an early treatise on statecraft.",
+         [
+            ("The Divine Origin of Kingship", "Because all this world would perish without a ruler to punish wrongdoing, the Lord created the king by taking eternal particles from the essence of Indra, Vayu, Yama, and other gods.", "The text's justification for the institution of monarchy as necessary for social order"),
+            ("The King's Duty to Protect", "The king's chief duty is protection of his subjects; a king who protects his people according to the law and duly punishes those who deserve punishment thrives, while one who fails in this duty declines.", "The core justification for royal authority — protection in exchange for legitimacy"),
+            ("Choosing Wise Counsellors", "A king should appoint seven or eight ministers, learned in the sacred law, brave, experienced in war, of noble family, and tested for integrity, and should consult with them both individually and together before acting.", "Early guidance on collective, tested counsel in governance"),
+         ]),
+    8:  ("Law and Judicial Procedure", "व्यवहार",
+         "The longest chapter — detailed rules of civil and criminal law, including property disputes, contracts, witnesses, and penalties for various offenses.",
+         [
+            ("Eighteen Grounds for Litigation", "Eighteen categories of legal dispute are enumerated, including non-payment of debts, deposits, sale without ownership, boundary disputes, defamation, assault, and theft, forming an early systematic civil and criminal code.", "The chapter's organizing framework for legal disputes"),
+            ("The Standard for Judges", "A king or judge should decide cases only after examining the true facts, considering local custom, and consulting the sacred law texts; a judgment made through favoritism or in ignorance of the law is condemned as void.", "An early articulation of judicial impartiality and reliance on evidence"),
+            ("Graduated Punishment by Circumstance", "The text prescribes highly unequal punishments for identical offences depending on the varna of the offender and victim — provisions widely regarded by modern scholars as reflecting, and reinforcing, the caste hierarchy of its time.", "Historically significant and much-criticized content, noted here descriptively rather than endorsed"),
+         ]),
+    9:  ("Family Law and the Duties of Vaishyas and Shudras", "स्त्रीपुरुषधर्म एवं वैश्यशूद्रधर्म",
+         "Rules of inheritance, family property, remarriage, and the prescribed occupations of the vaishya and shudra varnas.",
+         [
+            ("Rules of Inheritance", "Detailed rules are given for the division of a father's property among sons, generally favouring the eldest son with a larger share while providing for younger sons and, in some verses, for unmarried daughters.", "An early system of inheritance law"),
+            ("Occupations of the Vaishya", "The vaishya is enjoined to tend cattle, engage in trade, lend money at interest, and cultivate the land, sustaining the material economy of society.", "The prescribed economic role of the merchant/agriculturalist class"),
+            ("Occupations of the Shudra", "The shudra is enjoined to serve the other three classes, a provision that, together with related verses restricting shudra access to education and ritual, is among the most widely condemned in the entire text by modern readers and reformers, including B.R. Ambedkar.", "Historically significant and heavily criticized content, included descriptively for its historical role rather than as endorsement"),
+         ]),
+    10: ("Mixed Castes and Duties in Times of Adversity", "वर्णसंकर एवं आपद्धर्म",
+         "Rules concerning the offspring of inter-varna unions, and exceptional conduct permitted for any varna during times of extreme hardship (apad-dharma).",
+         [
+            ("On Mixed Lineages", "The chapter classifies numerous mixed castes said to arise from unions between different varnas, assigning them specific hereditary occupations — a classification system modern historians view as reflecting later social stratification projected back onto the text.", "Historical content on the varna-sankara (mixed-caste) framework, presented descriptively"),
+            ("Exceptions in Times of Distress", "In times of extreme distress or famine, the text permits a Brahmin to take up occupations normally reserved for other varnas in order to survive, showing the system was not regarded as absolutely rigid even by the text itself.", "A notable acknowledgment of practical flexibility within the varna framework"),
+            ("Priority of Non-Violence Even in Adversity", "Even under the pressure of livelihood, one should not adopt a means of living that involves cruelty toward living beings; better a modest, harmless life than a prosperous one built on the suffering of others.", "An ethical constraint placed even upon the apad-dharma exceptions"),
+         ]),
+    11: ("Penances", "प्रायश्चित्त",
+         "An extensive catalogue of penances (prayashchitta) prescribed for various transgressions, along with rules on charitable giving.",
+         [
+            ("The Purpose of Penance", "Sinful acts committed by a person become known through their bodily marks and afflictions; penance is the means by which those consequences are removed and the mind restored to purity.", "The text's rationale for the practice of penance"),
+            ("Study, Fasting, and Charity as Purifiers", "Recitation of the Vedas, austerity, fasting, offering oblations, and truthfulness are each capable of destroying past faults, in proportion to the sincerity with which they are undertaken.", "General means of purification recommended across many offenses"),
+            ("Charity in Proportion to Ability", "Gifts should be given according to one's means and to those deserving of them; even a small gift given with faith and to a worthy recipient bears far greater fruit than a large gift given without faith.", "A widely-cited teaching on the spirit, not merely the scale, of charitable giving"),
+         ]),
+    12: ("Transmigration and Final Liberation", "कर्मफल एवं मोक्ष",
+         "The final chapter — the doctrine of karma and rebirth across the three gunas, and the path to ultimate liberation (moksha) through knowledge of the Self.",
+         [
+            ("The Threefold Fruit of Action", "Action performed with the body, speech, or mind yields good or bad results; the three kinds of action lead respectively to a good, mixed, or evil condition of existence for those subject to their consequences in future lives.", "The text's account of karma across the three domains of action"),
+            ("Rebirth According to the Gunas", "Those in whom sattva (goodness) predominates rise to the state of gods; those dominated by rajas (passion) are reborn as humans; those dominated by tamas (inertia) sink toward the state of animals — the guna framework shared with the Bhagavad Gita's later teaching.", "On the moral-cosmological framework of the three gunas determining rebirth"),
+            ("The Self Beyond All Distinctions", "One who recognizes the Self existing equally in all creatures, and behaves toward all beings as toward one's own self, attains the highest state — beyond all further transmigration.", "The text's concluding teaching, pointing toward liberation through recognition of the universal Self"),
+         ]),
+}
+
+
+def _manusmriti_chapters():
+    cached = _cache_get("manusmriti_chapters")
+    if cached:
+        return cached
+    chapters = []
+    for num, (title, sanskrit, summary, verses) in _MANUSMRITI_CHAPTERS.items():
+        chapters.append({
+            "chapter_number": num,
+            "title":          title,
+            "sanskrit_title": sanskrit,
+            "summary":        summary,
+            "verse_count":    len(verses),
+        })
+    return _cache_set("manusmriti_chapters", {"chapters": chapters})
+
+
+def _manusmriti_chapter_verses(chapter_num: int):
+    if chapter_num not in _MANUSMRITI_CHAPTERS:
+        raise HTTPException(status_code=404, detail="Chapter not found (1–12 only)")
+    title_en, title_sa, summary, key_verses = _MANUSMRITI_CHAPTERS[chapter_num]
+    verses = []
+    for i, (vtitle, translation, commentary) in enumerate(key_verses):
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  chapter_num,
+            "label":           vtitle,
+            "sanskrit":        "",
+            "transliteration": "",
+            "translation":     translation,
+            "commentary":      commentary,
+        })
+    return {
+        "chapter_number":  chapter_num,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
+        "summary":         summary,
+        "verse_count":     len(verses),
+        "verses":          verses,
+        "note":            "Manusmriti — curated key verses per chapter, presented as historical Dharmashastra text for study; several provisions on caste and gender are widely contested today. Full verse-by-verse edition coming soon.",
+        "source_credit":   "Manusmriti (public domain Sanskrit) — cf. Georg Bühler's English translation, The Laws of Manu, Sacred Books of the East vol. 25 (1886, public domain)",
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# VISHNU PURANA  (curated — 6 amshas/books)
+# ═════════════════════════════════════════════════════════════════════════════
+
+_VISHNU_PURANA_BOOKS = {
+    1: ("First Amsha — Creation", "प्रथम अंश",
+        "Cosmology and creation narrated by the sage Parashara to his disciple Maitreya, including the story of the devoted child-sage Dhruva and the demon-king Hiranyakashipu.",
+        [
+            ("Parashara's Discourse", "The sage Parashara, asked by his disciple Maitreya to explain the origin of the universe, begins the Vishnu Purana by describing Vishnu as both the material and efficient cause of creation — the universe emanating from, sustained by, and dissolving back into him.", "The frame narrative introducing the entire Purana"),
+            ("Dhruva's Devotion", "The young prince Dhruva, hurt by his stepmother's rejection, retreats to the forest and performs such intense devotion to Vishnu that he is granted an eternal, unmoving place in the sky — becoming the Pole Star (Dhruva Tara).", "One of the most beloved devotional stories of the Purana, still told to children today"),
+            ("Prahlada and Hiranyakashipu", "The demon-king Hiranyakashipu, having gained a near-invulnerability boon, persecutes his own son Prahlada for his unshakeable devotion to Vishnu. Vishnu ultimately appears as Narasimha, half-man half-lion, to slay the tyrant at twilight, on a threshold, neither indoors nor out — circumventing every term of his boon.", "The Narasimha avatara story, a major episode of divine protection of the devotee"),
+        ]),
+    2: ("Second Amsha — The World and Bharata", "द्वितीय अंश",
+        "The geography and cosmography of the seven dvipas (continents) with Jambudvipa and Bharatavarsha (India) at their centre, and the story of the sage-king Bharata.",
+        [
+            ("The Geography of Jambudvipa", "The Purana describes the world as composed of seven concentric island-continents (dvipas) separated by seas of different substances, with Jambudvipa — centred on Mount Meru — regarded as the innermost and holiest, containing Bharatavarsha, the land later known as India.", "The Purana's cosmographic map of the known and mythic world"),
+            ("King Bharata's Renunciation", "King Bharata, after a righteous reign, renounces his kingdom, but becomes so attached to a fawn he rescues that he is reborn first as a deer and then as a brahmin, illustrating how even a virtuous mind can be bound by subtle, unexamined attachment.", "A cautionary teaching on the danger of attachment, however seemingly innocent"),
+            ("Land Named for Bharata", "The land of Bharatavarsha (India) is said in the text to take its name either from this King Bharata or from an earlier king of the same name, son of Rishabha — the Purana itself notes both traditions.", "The Puranic explanation for the traditional Sanskrit name of India"),
+        ]),
+    3: ("Third Amsha — The Vedas and Social Order", "तृतीय अंश",
+        "The compilation of the Vedas by Vyasa across different cosmic ages, the duties proper to each varna and life-stage, and funeral rites (shraddha).",
+        [
+            ("Vyasa's Compilation of the Vedas", "In every Dvapara Yuga, an incarnation of Vyasa arises to divide the single, immense primeval Veda into four for the convenience of humankind, whose memory and capacity for austerity diminish across the ages.", "The Purana's account of how the four Vedas as we know them came to be organized"),
+            ("Duties Across Life's Stages", "The Purana enumerates the proper conduct expected in the stages of student, householder, forest-dweller, and renunciate, presenting them as complementary phases of a single well-ordered life rather than competing paths.", "A restatement of the ashrama system found across many Puranic and dharmashastra texts"),
+            ("Shraddha — Rites for the Ancestors", "Detailed instructions are given for the shraddha ceremony, performed to honour and sustain deceased ancestors, reflecting the importance of ancestor veneration in the tradition.", "On the ritual obligations owed to one's forebears"),
+        ]),
+    4: ("Fourth Amsha — Royal Genealogies", "चतुर्थ अंश",
+        "Extensive dynastic lists of the Solar (Suryavamsha) and Lunar (Chandravamsha) royal lineages, including the ancestors of Rama and the Pandavas.",
+        [
+            ("The Solar Dynasty", "The Purana traces the Solar dynasty from Vivasvat (the Sun) down through many generations to Ikshvaku and eventually to Rama of Ayodhya, situating the Ramayana's hero within a vast historical-mythic genealogy.", "The dynastic lineage claimed for Lord Rama"),
+            ("The Lunar Dynasty", "The Lunar dynasty is traced from the moon-god Soma down through Puru, Yayati, and the Kuru line, eventually reaching the generation of the Pandavas and Kauravas of the Mahabharata.", "The dynastic lineage claimed for the Mahabharata's protagonists"),
+            ("The Purpose of Genealogy", "The Purana states that hearing the genealogies of kings and sages purifies the listener of sin and confers merit equal to that of performing a great sacrifice — genealogy here functioning as a form of sacred remembrance, not mere record-keeping.", "The devotional significance the text itself attaches to these long king-lists"),
+        ]),
+    5: ("Fifth Amsha — The Life of Krishna", "पञ्चम अंश",
+        "One of the earliest and most complete Puranic accounts of Krishna's life — birth, childhood in Vrindavana, the slaying of Kansa, and his role in restoring dharma.",
+        [
+            ("Krishna's Birth in Prison", "Krishna is born to Devaki and Vasudeva in the prison of the tyrant Kansa, who has been warned that Devaki's eighth child will slay him. Vasudeva secretly carries the infant across the flooding Yamuna river to safety in Gokula, exchanging him for a girl child.", "The dramatic nativity narrative shared with other Krishna-centred Puranas"),
+            ("Govardhana Lifted", "When the villagers of Vrindavana are threatened by the wrath of Indra's storms after Krishna redirects their worship toward the local mountain, Krishna lifts Mount Govardhana on his little finger for seven days, sheltering the entire community beneath it.", "One of Krishna's most iconic childhood miracles"),
+            ("The Slaying of Kansa", "Krishna and his brother Balarama travel to Mathura and, in a public wrestling arena, Krishna kills the tyrant king Kansa, fulfilling the prophecy and freeing his imprisoned parents.", "The climactic episode of Krishna's youth, marking his emergence as a public deliverer from tyranny"),
+        ]),
+    6: ("Sixth Amsha — Kali Yuga and Dissolution", "षष्ठ अंश",
+        "A prophetic description of the moral decline of the Kali Yuga (the current age), followed by an account of the cosmic dissolution (pralaya) and teachings on final liberation.",
+        [
+            ("The Characteristics of Kali Yuga", "In the Kali Yuga, the text foretells, wealth alone will confer status, hypocrisy will be mistaken for virtue, marriage will be arranged by mutual consent alone without regard for family, and rulers will tax their subjects while providing no real protection.", "A frequently cited prophetic passage on moral decline in the present age"),
+            ("The Fourfold Dissolution", "The Purana describes dissolution occurring on multiple scales: the daily dissolution of sleep, the periodic dissolution at the end of each cosmic day of Brahma, the elemental dissolution at the end of Brahma's life, and the final, absolute dissolution into the unmanifest.", "The Purana's layered cosmology of time and dissolution"),
+            ("Liberation as Recognition, Not Escape", "True liberation, the text teaches through Parashara's final words to Maitreya, is not a physical departure to some other place but the recognition that one's own self was never actually bound — bondage itself being a product of ignorance (avidya).", "The Purana's closing teaching on the nature of moksha"),
+        ]),
+}
+
+
+def _vishnu_purana_chapters():
+    cached = _cache_get("vishnu_purana_chapters")
+    if cached:
+        return cached
+    chapters = []
+    for num, (title, sanskrit, summary, verses) in _VISHNU_PURANA_BOOKS.items():
+        chapters.append({
+            "chapter_number": num,
+            "title":          title,
+            "sanskrit_title": sanskrit,
+            "summary":        summary,
+            "verse_count":    len(verses),
+        })
+    return _cache_set("vishnu_purana_chapters", {"chapters": chapters})
+
+
+def _vishnu_purana_book_verses(book_num: int):
+    if book_num not in _VISHNU_PURANA_BOOKS:
+        raise HTTPException(status_code=404, detail="Amsha not found (1–6 only)")
+    title_en, title_sa, summary, key_verses = _VISHNU_PURANA_BOOKS[book_num]
+    verses = []
+    for i, (vtitle, translation, commentary) in enumerate(key_verses):
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  book_num,
+            "label":           vtitle,
+            "sanskrit":        "",
+            "transliteration": "",
+            "translation":     translation,
+            "commentary":      commentary,
+        })
+    return {
+        "chapter_number":  book_num,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
+        "summary":         summary,
+        "verse_count":     len(verses),
+        "verses":          verses,
+        "note":            "Vishnu Purana — curated key episodes per amsha (book). Full Sanskrit verse-by-verse edition coming soon.",
+        "source_credit":   "Vishnu Purana (public domain Sanskrit) — cf. H.H. Wilson's English translation, The Vishńu Puráńa (1840, public domain)",
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# YOGA SUTRAS OF PATANJALI  (curated — 4 padas)
+# ═════════════════════════════════════════════════════════════════════════════
+# The Yoga Sutras are short — only 196 sutras across 4 padas (chapters) —
+# so a substantially larger fraction of the actual text is represented here
+# than for the longer scriptures above, each sutra rendered in a concise
+# paraphrase true to its well-established public domain translations.
+
+_YOGA_SUTRAS_PADAS = {
+    1: ("Samadhi Pada", "समाधि पाद",
+        "The chapter on meditative absorption — defining yoga itself, the fluctuations of the mind it aims to still, and the varieties of samadhi.",
+        [
+            ("The Definition of Yoga (1.2)", "Yoga is the stilling of the fluctuations (vrittis) of the mind.", "The single most quoted sutra in the entire text, defining yoga's essential goal"),
+            ("Then the Seer Rests in Its Own Nature (1.3)", "When the mind's fluctuations are stilled, the seer (the Self) abides in its own true nature; at other times, it appears to take the form of whatever fluctuation arises.", "The consequence of achieving the stillness defined in 1.2"),
+            ("The Five Fluctuations (1.6)", "The fluctuations of the mind are of five kinds: right knowledge, misconception, imagination, sleep, and memory — whether or not they cause suffering.", "Patanjali's classification of all possible mental activity"),
+            ("Practice and Non-Attachment (1.12)", "These fluctuations of the mind are stilled through sustained practice (abhyasa) and non-attachment (vairagya) together — neither is sufficient alone.", "The Yoga Sutras' twin foundational methods"),
+            ("Obstacles on the Path (1.30)", "Disease, mental dullness, doubt, carelessness, laziness, sensory indulgence, false perception, failure to reach firm ground, and instability — these nine are the distractions that obstruct the mind's progress.", "Patanjali's enumeration of common obstacles to sustained practice"),
+        ]),
+    2: ("Sadhana Pada", "साधन पाद",
+        "The chapter of practice — introducing kriya yoga, the causes of suffering (kleshas), and the eight limbs (ashtanga) of yoga culminating in this chapter's first five limbs.",
+        [
+            ("Kriya Yoga (2.1)", "Yoga in practice is composed of discipline (tapas), self-study (svadhyaya), and surrender to the Divine (Ishvara-pranidhana).", "The practical, action-oriented yoga recommended for daily life"),
+            ("The Five Kleshas (2.3)", "Ignorance, egoism, attachment, aversion, and clinging to life are the five afflictions (kleshas) that are the root causes of all suffering.", "Patanjali's diagnosis of the sources of human suffering, with ignorance (avidya) as the root of the other four"),
+            ("The Eight Limbs of Yoga (2.29)", "The eight limbs of yoga are: yama (ethical restraints), niyama (observances), asana (posture), pranayama (breath control), pratyahara (withdrawal of the senses), dharana (concentration), dhyana (meditation), and samadhi (absorption).", "The famous ashtanga (eight-limbed) framework that structures the rest of the text"),
+            ("Steady and Comfortable Posture (2.46)", "Asana (posture) should be steady and comfortable.", "One of the most quoted sutras in modern yoga practice, though the original text says little else about physical postures specifically"),
+            ("The Yamas — Ethical Restraints (2.30)", "The yamas are: non-violence (ahimsa), truthfulness (satya), non-stealing (asteya), continence (brahmacharya), and non-possessiveness (aparigraha).", "The first and foundational limb of the eight, concerned with one's conduct toward others"),
+        ]),
+    3: ("Vibhuti Pada", "विभूति पाद",
+        "The chapter on the extraordinary powers (siddhis) said to arise from advanced yogic mastery, alongside a caution against becoming attached to them.",
+        [
+            ("Concentration, Meditation, and Absorption Together (3.4)", "Dharana, dhyana, and samadhi together, applied to a single object, constitute samyama — the combined instrument of deep yogic insight.", "The technical term samyama, central to this entire chapter's account of yogic powers"),
+            ("Powers Arising from Samyama", "Through samyama practiced upon particular objects, the text describes a range of extraordinary attainments — from knowledge of past and future to control over hunger, thirst, and physical strength.", "A general summary of the many specific siddhis catalogued across this pada"),
+            ("A Caution Against the Powers (3.37)", "These powers are considered accomplishments in the outward-turned, worldly state of mind, but are obstacles to samadhi itself — the very stillness that is yoga's actual goal.", "Patanjali's own warning that the siddhis are a distraction from, not the point of, yogic practice"),
+        ]),
+    4: ("Kaivalya Pada", "कैवल्य पाद",
+        "The final, shortest chapter — on kaivalya, the ultimate liberation and isolation of pure consciousness (purusha) from all worldly entanglement.",
+        [
+            ("The Unchanging Witness (4.18)", "The changing states of the mind are always known to their unchanging witness, the purusha (pure consciousness), because the purusha itself does not change.", "On the eternal, unmoving nature of the true Self compared to the ever-shifting mind"),
+            ("Kaivalya Defined (4.34)", "Kaivalya (final liberation) occurs when the three gunas, having fulfilled their purpose, revert to their source, and pure consciousness (purusha) stands established in its own true, isolated nature.", "The Yoga Sutras' closing definition of the goal of the entire eight-limbed path"),
+        ]),
+}
+
+
+def _yoga_sutras_chapters():
+    cached = _cache_get("yoga_sutras_chapters")
+    if cached:
+        return cached
+    chapters = []
+    for num, (title, sanskrit, summary, verses) in _YOGA_SUTRAS_PADAS.items():
+        chapters.append({
+            "chapter_number": num,
+            "title":          title,
+            "sanskrit_title": sanskrit,
+            "summary":        summary,
+            "verse_count":    len(verses),
+        })
+    return _cache_set("yoga_sutras_chapters", {"chapters": chapters})
+
+
+def _yoga_sutras_pada_verses(pada_num: int):
+    if pada_num not in _YOGA_SUTRAS_PADAS:
+        raise HTTPException(status_code=404, detail="Pada not found (1–4 only)")
+    title_en, title_sa, summary, key_verses = _YOGA_SUTRAS_PADAS[pada_num]
+    verses = []
+    for i, (vtitle, translation, commentary) in enumerate(key_verses):
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  pada_num,
+            "label":           vtitle,
+            "sanskrit":        "",
+            "transliteration": "",
+            "translation":     translation,
+            "commentary":      commentary,
+        })
+    return {
+        "chapter_number":  pada_num,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
+        "summary":         summary,
+        "verse_count":     len(verses),
+        "verses":          verses,
+        "note":            "Curated key sutras per pada, rendered as concise paraphrase. Full 196-sutra edition coming soon.",
+        "source_credit":   "Patanjali's Yoga Sutras (public domain Sanskrit) — cf. Charles Johnston's English translation, The Yoga Sutras of Patanjali (1912, public domain)",
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # ROUTING HELPERS
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -912,6 +1612,18 @@ def _dispatch_chapters(slug: str, api_source: str, book_id: int):
         return _shiva_purana_chapters()
     if api_source == "devi_mahatmya":
         return _devi_mahatmya_chapters()
+    if api_source == "ramcharitmanas":
+        return _ramcharitmanas_chapters()
+    if api_source == "upanishads":
+        return _upanishad_chapters()
+    if api_source == "rigveda":
+        return _rigveda_chapters()
+    if api_source == "manusmriti":
+        return _manusmriti_chapters()
+    if api_source == "vishnu_purana":
+        return _vishnu_purana_chapters()
+    if api_source == "yoga_sutras":
+        return _yoga_sutras_chapters()
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT chapter_number, title, summary, verse_count
@@ -934,6 +1646,18 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
         return _shiva_purana_chapter_verses(chapter_num)
     if api_source == "devi_mahatmya":
         return _devi_mahatmya_chapter_verses(chapter_num)
+    if api_source == "ramcharitmanas":
+        return _ramcharitmanas_kanda_verses(chapter_num)
+    if api_source == "upanishads":
+        return _upanishad_chapter_verses(chapter_num)
+    if api_source == "rigveda":
+        return _rigveda_mandala_verses(chapter_num)
+    if api_source == "manusmriti":
+        return _manusmriti_chapter_verses(chapter_num)
+    if api_source == "vishnu_purana":
+        return _vishnu_purana_book_verses(chapter_num)
+    if api_source == "yoga_sutras":
+        return _yoga_sutras_pada_verses(chapter_num)
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT chapter_number, title, summary, verse_count
@@ -947,7 +1671,8 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# STATIC BOOKS  (no DB row — metadata lives in code, content is scraped live)
+# STATIC BOOKS  (no DB row — metadata lives in code, content is scraped live
+# or curated in code)
 # ═════════════════════════════════════════════════════════════════════════════
 # For books where you don't want a `sacred_books` DB row at all, add an entry
 # here. list_books/get_book/get_chapters/get_chapter_verses/search all check
@@ -955,8 +1680,58 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
 # bookmarks (reading_progress / book_bookmarks tables) are FK'd to a real
 # sacred_books.id, so those two features are unavailable for static-only
 # books — everything else (browsing, reading, search) works fully.
+#
+# The six scriptures below (ids -1..-6) are added as static/curated entries
+# since they rely on hand-curated content rather than a live JSON API, in
+# the same style as the Shiva Purana / Devi Mahatmya / Hanuman Chalisa
+# sections above. If you'd rather they live in Postgres like the Gita and
+# the two epics, just insert matching rows into `sacred_books` with the
+# same `api_source` values and remove the corresponding entries here.
 
-_STATIC_BOOKS = {}
+_STATIC_BOOKS = {
+    "ramcharitmanas": {
+        "id": -1, "slug": "ramcharitmanas", "title": "Ramcharitmanas",
+        "sanskrit_title": "श्रीरामचरितमानस", "deity": "Rama", "tradition": "Vaishnavism",
+        "language": "Awadhi (with English notes)", "total_chapters": 7, "total_verses": None,
+        "description": "Tulsidas's 16th-century Awadhi retelling of the Rama story — the most widely read scripture in North Indian households, by the same author as the Hanuman Chalisa.",
+        "icon_emoji": "🏹", "accent_color": "#B45309", "api_source": "ramcharitmanas",
+    },
+    "upanishads": {
+        "id": -2, "slug": "upanishads", "title": "Upanishads",
+        "sanskrit_title": "उपनिषद्", "deity": None, "tradition": "Vedanta",
+        "language": "Sanskrit (with English notes)", "total_chapters": 13, "total_verses": None,
+        "description": "The philosophical core of the Vedas — 13 principal Upanishads exploring the nature of the Self (Atman), ultimate reality (Brahman), and the path to liberation.",
+        "icon_emoji": "🕉️", "accent_color": "#7C3AED", "api_source": "upanishads",
+    },
+    "rig-veda": {
+        "id": -3, "slug": "rig-veda", "title": "Rig Veda",
+        "sanskrit_title": "ऋग्वेद", "deity": None, "tradition": "Vedic",
+        "language": "Sanskrit (with English notes)", "total_chapters": 10, "total_verses": 10552,
+        "description": "The oldest of the four Vedas — 1,028 hymns across 10 mandalas, addressed to Agni, Indra, Soma, and the wider Vedic pantheon, including the philosophically celebrated Hymn of Creation.",
+        "icon_emoji": "🔥", "accent_color": "#DC2626", "api_source": "rigveda",
+    },
+    "manusmriti": {
+        "id": -4, "slug": "manusmriti", "title": "Manusmriti",
+        "sanskrit_title": "मनुस्मृति", "deity": None, "tradition": "Dharmashastra",
+        "language": "Sanskrit (with English notes)", "total_chapters": 12, "total_verses": 2685,
+        "description": "An ancient Dharmashastra (legal-ethical treatise) of roughly 2,685 verses covering cosmology, social duties, law, and liberation — presented here as a historical text for study; several of its provisions are widely contested today.",
+        "icon_emoji": "⚖️", "accent_color": "#57534E", "api_source": "manusmriti",
+    },
+    "vishnu-purana": {
+        "id": -5, "slug": "vishnu-purana", "title": "Vishnu Purana",
+        "sanskrit_title": "विष्णुपुराण", "deity": "Vishnu", "tradition": "Vaishnavism",
+        "language": "Sanskrit (with English notes)", "total_chapters": 6, "total_verses": None,
+        "description": "One of the oldest and most celebrated Puranas — cosmology, royal genealogies, and one of the earliest complete accounts of the life of Krishna, across 6 amshas (books).",
+        "icon_emoji": "🐚", "accent_color": "#1D4ED8", "api_source": "vishnu_purana",
+    },
+    "yoga-sutras": {
+        "id": -6, "slug": "yoga-sutras", "title": "Yoga Sutras of Patanjali",
+        "sanskrit_title": "योगसूत्र", "deity": None, "tradition": "Yoga",
+        "language": "Sanskrit (with English notes)", "total_chapters": 4, "total_verses": 196,
+        "description": "Patanjali's foundational 196-sutra treatise on the theory and practice of yoga, defining yoga as the stilling of the mind's fluctuations and laying out the eight-limbed (ashtanga) path.",
+        "icon_emoji": "🧘", "accent_color": "#0D9488", "api_source": "yoga_sutras",
+    },
+}
 
 
 def _lookup_book(slug: str):
@@ -1086,14 +1861,30 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
             except Exception:
                 continue
 
-    elif api_source in ("hanuman_chalisa", "shiva_purana", "devi_mahatmya"):
+    elif api_source in (
+        "hanuman_chalisa", "shiva_purana", "devi_mahatmya",
+        "ramcharitmanas", "upanishads", "rigveda", "manusmriti",
+        "vishnu_purana", "yoga_sutras",
+    ):
         try:
             if api_source == "hanuman_chalisa":
                 chapters = [_hanuman_chalisa_verses()]
             elif api_source == "shiva_purana":
                 chapters = [_shiva_purana_chapter_verses(n) for n in range(1, 8)]
-            else:
+            elif api_source == "devi_mahatmya":
                 chapters = [_devi_mahatmya_chapter_verses(n) for n in range(1, 14)]
+            elif api_source == "ramcharitmanas":
+                chapters = [_ramcharitmanas_kanda_verses(n) for n in range(1, 8)]
+            elif api_source == "upanishads":
+                chapters = [_upanishad_chapter_verses(n) for n in range(1, 14)]
+            elif api_source == "rigveda":
+                chapters = [_rigveda_mandala_verses(n) for n in range(1, 11)]
+            elif api_source == "manusmriti":
+                chapters = [_manusmriti_chapter_verses(n) for n in range(1, 13)]
+            elif api_source == "vishnu_purana":
+                chapters = [_vishnu_purana_book_verses(n) for n in range(1, 7)]
+            else:
+                chapters = [_yoga_sutras_pada_verses(n) for n in range(1, 5)]
             for ch_data in chapters:
                 for v in ch_data.get("verses", []):
                     if q_lower in (v.get("translation") or "").lower():
