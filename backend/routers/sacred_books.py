@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from bs4 import BeautifulSoup
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from db.connection import get_db_cursor
@@ -29,11 +30,22 @@ def _cache_set(key: str, data):
     return data
 
 
-def _fetch_json(url: str, timeout: int = 30):
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+def _fetch_json(url: str):
+    with httpx.Client(timeout=30, follow_redirects=True) as client:
         r = client.get(url)
         r.raise_for_status()
         return r.json()
+
+
+def _fetch_html(url: str) -> str:
+    # sacred-texts.com is an old, low-capacity single server — identify
+    # ourselves and use a longer timeout rather than hammering it with
+    # aggressive retries.
+    headers = {"User-Agent": "BharatMandir/1.0 (+https://bharatmandir.app; sacred-texts scraper, polite/low-concurrency)"}
+    with httpx.Client(timeout=30, follow_redirects=True, headers=headers) as client:
+        r = client.get(url)
+        r.raise_for_status()
+        return r.text
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -233,146 +245,104 @@ def _gita_chapter_verses(chapter_num: int):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# VALMIKI RAMAYANA  (Ashutosh-Vijay/Valmiki_Ramayan_Dataset — Sanskrit + English)
+# VALMIKI RAMAYANA  (bhavykhatri/DharmicData)
 # ═════════════════════════════════════════════════════════════════════════════
-# Single JSON file, ~23,291 shlokas across all 7 kandas. Each entry:
-#   { "kanda": "Bala Kanda", "sarga": 1, "shloka": 1,
-#     "shloka_text": "<Sanskrit>", "transliteration": "<IAST>",
-#     "translation": "<word-by-word gloss>", "explanation": "<readable English>",
-#     "comments": "<scholarly notes, may be null>" }
-# NOTE: the dataset's own "kanda" field text is identical to the kanda titles
-# already used below, so no separate name-mapping table is needed — we filter
-# the full dataset by title directly.
-# Source credits (per the dataset's README): M.N. Dutt's English translation
-# (1891–1894), the IIT Kanpur Valmiki Ramayana project, and Gyaandweep.
-# MIT licensed. Known caveats disclosed by the maintainer: a small number of
-# shlokas are merged due to OCR/formatting issues, and some entries are
-# missing an explanation/comment — handled below by falling back gracefully
-# rather than showing a blank field.
+# Actual JSON structure per entry:
+#   { "kaanda": "balakanda", "sarg": 1, "shloka": 1, "text": "<Sanskrit>" }
+# NOTE: No English translation in the dataset — Sanskrit text shown with note.
 
-_RAMAYAN_DATASET_URL = "https://raw.githubusercontent.com/Ashutosh-Vijay/Valmiki_Ramayan_Dataset/main/data/Valmiki_Ramayan_Shlokas.json"
+_DHARMIC_BASE = "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main"
 
 _RAMAYANA_KANDAS = {
-    1: ("Bala Kanda",       "बालकाण्ड",
+    1: ("Bala Kanda",       "बालकाण्ड",         "1_balakanda.json",
         "The story of Rama's divine birth in Ayodhya, his childhood, his training under sage Vishwamitra, and his winning of Princess Sita's hand in marriage by breaking the great bow of Shiva."),
-    2: ("Ayodhya Kanda",    "अयोध्याकाण्ड",
+    2: ("Ayodhya Kanda",    "अयोध्याकाण्ड",     "2_ayodhyakanda.json",
         "Rama is exiled for 14 years by King Dasharatha at Queen Kaikeyi's demand. He departs to the forest with Sita and Lakshmana. Dasharatha, grief-stricken, dies. Bharata refuses the throne and places Rama's sandals on it as regent."),
-    3: ("Aranya Kanda",     "अरण्यकाण्ड",
+    3: ("Aranya Kanda",     "अरण्यकाण्ड",       "3_aranyakanda.json",
         "Rama, Sita, and Lakshmana live in the Dandaka forest. Ravana, the demon king of Lanka, kidnaps Sita. The vulture Jatayu dies fighting to save her. Rama and Lakshmana begin their search."),
-    4: ("Kishkindha Kanda", "किष्किन्धाकाण्ड",
+    4: ("Kishkindha Kanda", "किष्किन्धाकाण्ड",  "4_kishkindhakanda.json",
         "Rama meets the monkey king Sugriva and his devoted general Hanuman. He helps Sugriva defeat his brother Vali. In gratitude, Sugriva sends the monkey army to search for Sita across the world."),
-    5: ("Sundara Kanda",    "सुन्दरकाण्ड",
+    5: ("Sundara Kanda",    "सुन्दरकाण्ड",      "5_sundarakanda.json",
         "Hanuman leaps across the ocean to Lanka, finds Sita imprisoned in Ashoka grove, delivers Rama's message, and returns with news of her whereabouts. This kanda celebrates Hanuman's devotion and courage."),
-    6: ("Yuddha Kanda",     "युद्धकाण्ड",
+    6: ("Yuddha Kanda",     "युद्धकाण्ड",       "6_yudhhakanda.json",
         "Rama builds a bridge across the ocean with the monkey army, invades Lanka, and wages a great war against Ravana. Ravana is slain. Sita passes the fire test, and Rama is restored to his rightful throne in Ayodhya."),
-    7: ("Uttara Kanda",     "उत्तरकाण्ड",
+    7: ("Uttara Kanda",     "उत्तरकाण्ड",       "7_uttarakanda.json",
         "Rama rules Ayodhya in the ideal Ram Rajya. Sita is exiled to the forest where she raises Rama's twin sons Lava and Kusha, before returning to Mother Earth."),
 }
 
 
-def _load_ramayana_full_dataset():
-    """Fetch the complete Ramayana dataset (~29 MB, all 7 kandas) once and
-    cache it for 24h. Individual kanda views are sliced from this in memory
-    rather than re-downloading per kanda."""
-    cache_key = "ramayana_full_dataset"
+def _load_ramayana_kanda(kanda_num: int):
+    if kanda_num not in _RAMAYANA_KANDAS:
+        raise HTTPException(status_code=404, detail="Kanda not found")
+    cache_key = f"ramayana_kanda_{kanda_num}_raw"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
+    _, _, filename, _ = _RAMAYANA_KANDAS[kanda_num]
+    url = f"{_DHARMIC_BASE}/ValmikiRamayana/{filename}"
     try:
-        data = _fetch_json(_RAMAYAN_DATASET_URL, timeout=90)
+        data = _fetch_json(url)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not load Ramayana dataset: {e}")
-    if not isinstance(data, list) or not data:
-        raise HTTPException(status_code=502, detail="Ramayana dataset returned empty/invalid data")
+        raise HTTPException(status_code=502, detail=f"Could not load Ramayana kanda {kanda_num}: {e}")
     return _cache_set(cache_key, data)
-
-
-def _clean_ramayana_sanskrit(text: str) -> str:
-    """Strip the trailing verse-citation marker (e.g. '।।1.1.1।।') baked into
-    shloka_text — it duplicates the sarga/shloka metadata we already show
-    separately, so it's just noise in the rendered Sanskrit line."""
-    if not text:
-        return text
-    return re.sub(r"।।\s*[\d.]+\s*।।\s*$", "", text).strip()
-
-
-def _build_ramayana_verse(entry: dict, kanda_num: int, verse_number: int) -> dict:
-    sarga  = entry.get("sarga", 0)
-    shloka = entry.get("shloka", verse_number)
-    word_meanings = entry.get("translation") or ""     # word-by-word Sanskrit->English gloss
-    explanation   = entry.get("explanation") or ""      # readable sentence translation
-    comments      = entry.get("comments") or ""         # scholarly notes (sometimes absent)
-
-    return {
-        "verse_number":    verse_number,
-        "chapter_number":  kanda_num,
-        "sarga":           sarga,
-        "shloka":          shloka,
-        "label":           f"Sarga {sarga}, Shloka {shloka}",
-        "sanskrit":        _clean_ramayana_sanskrit(entry.get("shloka_text", "")),
-        "transliteration": entry.get("transliteration", "") or "",
-        "word_meanings":   word_meanings,
-        # Fall back through explanation -> word gloss -> Sanskrit so a verse
-        # missing an English explanation (a known gap in this dataset) still
-        # shows something readable rather than a blank field.
-        "translation":     explanation or word_meanings,
-        "commentary":      comments,
-    }
 
 
 def _ramayana_chapters():
     cached = _cache_get("ramayana_chapters_list")
     if cached:
         return cached
-    full = _load_ramayana_full_dataset()
-    counts = defaultdict(int)
-    for entry in full:
-        counts[entry.get("kanda")] += 1
     chapters = []
-    for num, (title, sanskrit, summary) in _RAMAYANA_KANDAS.items():
+    for num, (title, sanskrit, filename, summary) in _RAMAYANA_KANDAS.items():
         chapters.append({
             "chapter_number": num,
             "title":          title,
             "sanskrit_title": sanskrit,
             "summary":        summary,
-            "verse_count":    counts.get(title, 0),
+            "verse_count":    None,
         })
     return _cache_set("ramayana_chapters_list", {"chapters": chapters})
 
 
 def _ramayana_kanda_verses(kanda_num: int):
-    if kanda_num not in _RAMAYANA_KANDAS:
-        raise HTTPException(status_code=404, detail="Kanda not found")
     cache_key = f"ramayana_kanda_{kanda_num}_verses"
     cached = _cache_get(cache_key)
     if cached:
         return cached
 
-    title, sanskrit_title, summary = _RAMAYANA_KANDAS[kanda_num]
-    full = _load_ramayana_full_dataset()
+    raw = _load_ramayana_kanda(kanda_num)
+    title_en, title_sa, _, summary = _RAMAYANA_KANDAS[kanda_num]
 
-    # The dataset isn't guaranteed to be pre-sorted within a kanda, so sort
-    # by (sarga, shloka) to get correct reading order before numbering verses.
-    kanda_entries = [e for e in full if e.get("kanda") == title]
-    kanda_entries.sort(key=lambda e: (e.get("sarga", 0), e.get("shloka", 0)))
+    # Actual structure: { "kaanda": "balakanda", "sarg": 1, "shloka": 1, "text": "<Sanskrit>" }
+    verses = []
+    for i, entry in enumerate(raw):
+        sarg   = entry.get("sarg", 0)
+        shloka = entry.get("shloka", i + 1)
+        # "text" contains Sanskrit shloka
+        sanskrit = entry.get("text", "")
+        sanskrit = re.sub(r"<[^>]+>", " ", sanskrit).strip()
 
-    if not kanda_entries:
-        raise HTTPException(status_code=502, detail=f"No verses found for {title} in dataset")
-
-    verses = [
-        _build_ramayana_verse(entry, kanda_num, i + 1)
-        for i, entry in enumerate(kanda_entries)
-    ]
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  kanda_num,
+            "sarga":           sarg,
+            "shloka":          shloka,
+            "label":           f"Sarga {sarg}, Shloka {shloka}",
+            "sanskrit":        sanskrit,
+            "transliteration": "",
+            # No English translation in this dataset — show Sanskrit as the text
+            "translation":     sanskrit,
+            "commentary":      "",
+        })
 
     result = {
         "chapter_number":  kanda_num,
-        "title":           title,
-        "sanskrit_title":  sanskrit_title,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
         "summary":         summary,
         "verse_count":     len(verses),
         "verses":          verses,
-        "source_credit":   "Ashutosh-Vijay/Valmiki_Ramayan_Dataset (MIT) — compiled from M.N. Dutt's "
-                            "translation, the IIT Kanpur Valmiki Ramayana project, and Gyaandweep.",
+        "note":            "Valmiki Ramayana Sanskrit shlokas (Devanagari). English translation edition coming soon.",
+        "source_credit":   "DharmicData/bhavykhatri (MIT) · Original source: svenkatreddy/Ramayana_Book",
     }
     return _cache_set(cache_key, result)
 
@@ -383,8 +353,6 @@ def _ramayana_kanda_verses(kanda_num: int):
 # Actual JSON structure per entry:
 #   { "book": 1, "chapter": 1, "shloka": 0, "text": "<Sanskrit>" }
 # Files: mahabharata_book_{n}.json  (n = 1..18)
-
-_DHARMIC_BASE = "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main"
 
 _MAHABHARATA_PARVAS = {
     1:  ("Adi Parva",            "आदि पर्व",        "mahabharata_book_1.json",
@@ -502,13 +470,178 @@ def _mahabharata_parva_verses(parva_num: int):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# MAHABHARATA — ENGLISH  (Kisari Mohan Ganguli translation, sacred-texts.com)
+# ═════════════════════════════════════════════════════════════════════════════
+# sacred-texts.com's own Sanskrit-index page states its Devanagari text "has
+# been cross-referenced with Ganguli's English translation on a book-by-book
+# basis. However, due to the mismatch in number of chapters per book, it was
+# not possible to cross-reference this at the chapter level." So this is
+# deliberately a SEPARATE book from the Sanskrit `mahabharata` above, rather
+# than faking a verse-by-verse pairing the source itself says isn't reliable.
+# Chapters here = the 18 Parvas (same as the Sanskrit book); "verses" = each
+# Parva's numbered Sections in Ganguli's prose translation — Sanskrit-less,
+# since that alignment can't be done honestly at this granularity.
+
+_MBH_BASE = "https://sacred-texts.com/hin"
+
+_MBH_NAV_MARKERS = (
+    "sacred texts", "hinduism", "mahabharata index", "internet sacred text archive",
+    "previous:", "next:", "cdshop", "return to hinduism index", "go to previous page",
+    "go to next page",
+)
+
+
+def _fetch_mbh_section_urls(parva_num: int):
+    """Scrapes a Parva's index.htm for its ordered list of Section page URLs.
+    Discovering the real count this way (rather than hardcoding it) avoids
+    silently truncating the very long Parvas like Adi Parva."""
+    cache_key = f"mbh_en_section_urls_{parva_num}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    url = f"{_MBH_BASE}/m{parva_num:02d}/index.htm"
+    try:
+        html = _fetch_html(url)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not load Mahabharata (English) Parva {parva_num} index: {e}")
+    soup = BeautifulSoup(html, "html.parser")
+    sections = []
+    for a in soup.find_all("a", href=True):
+        text = a.get_text(strip=True)
+        m = re.match(r"Section\s+(\d+)$", text, re.IGNORECASE)
+        if m:
+            sections.append((int(m.group(1)), a["href"]))
+    sections.sort(key=lambda s: s[0])
+    if not sections:
+        raise HTTPException(status_code=502, detail=f"No sections found for Mahabharata (English) Parva {parva_num} — index page format may have changed.")
+    return _cache_set(cache_key, sections)
+
+
+def _clean_mbh_section_html(html: str) -> str:
+    """Extracts the story prose from a sacred-texts.com section page,
+    stripping the header/footer navigation. This site has no semantic
+    div/id markup, so we filter at the paragraph level: drop <p> tags that
+    are short and match known nav phrases, keep the rest."""
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup.find_all(["script", "style"]):
+        tag.decompose()
+
+    paragraphs = []
+    for p in soup.find_all("p"):
+        text = p.get_text(" ", strip=True)
+        if not text:
+            continue
+        lower = text.lower()
+        if len(text) < 200 and any(marker in lower for marker in _MBH_NAV_MARKERS):
+            continue
+        if re.match(r"^\d+$", text):  # the bare section-number heading, e.g. "1"
+            continue
+        paragraphs.append(text)
+
+    return "\n\n".join(paragraphs).strip()
+
+
+def _fetch_mbh_section_text(parva_num: int, section_num: int, href: str):
+    cache_key = f"mbh_en_section_{parva_num}_{section_num}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    url = href if href.startswith("http") else f"{_MBH_BASE}/m{parva_num:02d}/{href}"
+    try:
+        html = _fetch_html(url)
+    except Exception as e:
+        print(f"[mbh-en] fetch failed for parva {parva_num} section {section_num}: {e}")
+        return None
+    text = _clean_mbh_section_html(html)
+    if not text or len(text) < 20:
+        print(f"[mbh-en] suspiciously short/empty extraction for parva {parva_num} section {section_num} — skipping")
+        return None
+    return _cache_set(cache_key, text)
+
+
+def _mahabharata_english_chapters():
+    cached = _cache_get("mahabharata_english_chapters_list")
+    if cached:
+        return cached
+    chapters = []
+    for num, (title, sanskrit, _, summary) in _MAHABHARATA_PARVAS.items():
+        try:
+            sections = _fetch_mbh_section_urls(num)
+            verse_count = len(sections)
+        except HTTPException:
+            verse_count = None
+        chapters.append({
+            "chapter_number": num,
+            "title":          title,
+            "sanskrit_title": sanskrit,
+            "summary":        summary,
+            "verse_count":    verse_count,
+        })
+    return _cache_set("mahabharata_english_chapters_list", {"chapters": chapters})
+
+
+def _mahabharata_english_parva_verses(parva_num: int):
+    if parva_num not in _MAHABHARATA_PARVAS:
+        raise HTTPException(status_code=404, detail="Parva not found")
+    cache_key = f"mbh_en_parva_{parva_num}_verses"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    title_en, title_sa, _, summary = _MAHABHARATA_PARVAS[parva_num]
+    sections = _fetch_mbh_section_urls(parva_num)
+
+    # Concurrent, but modest worker count — sacred-texts.com is a single old
+    # server, not a modern API, and some Parvas (Adi especially) run 200+
+    # sections. Politeness matters more than raw speed here.
+    result_verses = [None] * len(sections)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {
+            pool.submit(_fetch_mbh_section_text, parva_num, section_num, href): idx
+            for idx, (section_num, href) in enumerate(sections)
+        }
+        for future in as_completed(futures):
+            idx = futures[future]
+            section_num = sections[idx][0]
+            text = future.result()
+            if text:
+                result_verses[idx] = {
+                    "verse_number":    section_num,
+                    "chapter_number":  parva_num,
+                    "label":           f"Section {section_num}",
+                    "sanskrit":        "",
+                    "transliteration": "",
+                    "translation":     text,
+                    "commentary":      "",
+                }
+
+    result_verses = [v for v in result_verses if v is not None]
+    if len(result_verses) < len(sections):
+        print(f"[mbh-en] parva {parva_num}: only {len(result_verses)}/{len(sections)} sections "
+              f"fetched successfully — re-request later to retry the missing ones.")
+
+    result = {
+        "chapter_number":  parva_num,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
+        "summary":         summary,
+        "verse_count":     len(result_verses),
+        "verses":          result_verses,
+        "note":            ("Kisari Mohan Ganguli's public-domain English prose translation (1883–1896), "
+                             "organized by Section rather than by Sanskrit shloka. Per sacred-texts.com's own "
+                             "documentation, this translation cannot be reliably aligned chapter-by-chapter "
+                             "with the Sanskrit edition of this Parva — only at the whole-book level — so "
+                             "Sanskrit text is intentionally not paired with these sections."),
+        "source_credit":   "Kisari Mohan Ganguli translation (public domain), digitized by sacred-texts.com / Project Gutenberg",
+    }
+    if len(result_verses) == len(sections):
+        return _cache_set(cache_key, result)
+    return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # HANUMAN CHALISA  (hardcoded — Tulsidas, public domain)
 # ═════════════════════════════════════════════════════════════════════════════
-
-# Word-by-word glosses and short commentary are hand-curated (not scraped from
-# any single site) against the standard scholarly reading of the text — there
-# is no structured multi-commentator API for the Chalisa the way there is for
-# the Gita, since it's a single fixed 40-verse hymn rather than a large corpus.
 
 _HANUMAN_CHALISA_DOHA_INTRO = [
     {
@@ -518,8 +651,7 @@ _HANUMAN_CHALISA_DOHA_INTRO = [
         "sanskrit": "श्रीगुरु चरन सरोज रज निज मनु मुकुरु सुधारि।\nबरनउँ रघुबर बिमल जसु जो दायकु फल चारि॥",
         "transliteration": "Shri Guru charan saroj raj nij manu mukuru sudhari.\nBarnau Raghubar bimal jasu jo daayaku phala chari.",
         "translation": "Cleansing the mirror of my mind with the dust of the lotus feet of my Guru, I narrate the pure and sacred glory of Shri Raghuvira which bestows the four fruits of life (Dharma, Artha, Kama, Moksha).",
-        "word_meanings": "श्रीगुरु – revered Guru; चरन – feet; सरोज – lotus; रज – dust; निज – one's own; मनु – mind; मुकुरु – mirror; सुधारि – polishing, cleansing; बरनउँ – I narrate; रघुबर – best of the Raghu dynasty (Rama); बिमल – pure, spotless; जसु – glory, fame; दायकु – bestower; फल चारि – four fruits (Dharma, Artha, Kama, Moksha).",
-        "commentary": "Tulsidas opens by asking his Guru's grace to clear the 'mirror' of his own mind before attempting to sing Rama's glory — devotion begins with humility, not skill.",
+        "commentary": "",
     },
     {
         "verse_number": -1,
@@ -528,212 +660,131 @@ _HANUMAN_CHALISA_DOHA_INTRO = [
         "sanskrit": "बुद्धिहीन तनु जानिके सुमिरौं पवन-कुमार।\nबल बुधि बिद्या देहु मोहिं हरहु कलेस बिकार॥",
         "transliteration": "Buddhihin tanu janike sumirau Pavan-Kumara.\nBala budhi bidya dehu mohi harahu kalesha bikara.",
         "translation": "Knowing this body to be devoid of intelligence, I remember you, O son of the Wind. Grant me strength, wisdom, and knowledge, and remove my afflictions and impurities.",
-        "word_meanings": "बुद्धिहीन – devoid of intellect; तनु – body; जानिके – knowing; सुमिरौं – I invoke, remember; पवन-कुमार – son of the Wind (Hanuman); बल – strength; बुधि – intelligence; बिद्या – knowledge; देहु – grant; मोहिं – to me; हरहु – remove; कलेस – afflictions; बिकार – impurities, disorders.",
-        "commentary": "Recognizing his own limits, Tulsidas turns directly to Hanuman before addressing Rama — establishing Hanuman as the gateway through whom strength and clarity are received.",
+        "commentary": "",
     },
 ]
 
 _HANUMAN_CHALISA_VERSES = [
     ("जय हनुमान ज्ञान गुन सागर। जय कपीस तिहुँ लोक उजागर॥",
      "Jai Hanuman gyan gun saagar. Jai Kapis tihun lok ujaagar.",
-     "Victory to Hanuman, ocean of wisdom and virtue. Victory to the Lord of Monkeys who illuminates all three worlds.",
-     "जय – victory/glory to; ज्ञान – knowledge; गुन – virtue; सागर – ocean; कपीस – lord of the monkeys; तिहुँ लोक – the three worlds; उजागर – illuminator, renowned.",
-     "The opening line hails Hanuman as both scholar (ocean of wisdom) and king (lord of monkeys) — knowledge and leadership united in one figure."),
+     "Victory to Hanuman, ocean of wisdom and virtue. Victory to the Lord of Monkeys who illuminates all three worlds."),
     ("राम दूत अतुलित बल धामा। अंजनि-पुत्र पवनसुत नामा॥",
      "Ram doot atulit bal dhaama. Anjani-putra Pavansut naama.",
-     "You are the divine messenger of Rama, the abode of immeasurable strength. You are known as the son of Anjani and the son of the wind.",
-     "राम दूत – messenger of Rama; अतुलित – incomparable; बल – strength; धामा – abode; अंजनि-पुत्र – son of Anjani; पवनसुत – son of the Wind; नामा – named.",
-     "His identity is given entirely through relationships — messenger, son, elemental offspring — situating his power within lineage and service rather than as an isolated force."),
+     "You are the divine messenger of Rama, the abode of immeasurable strength. You are known as the son of Anjani and the son of the wind."),
     ("महाबीर बिक्रम बजरंगी। कुमति निवार सुमति के संगी॥",
      "Mahabir bikram Bajrangi. Kumati nivar sumati ke sangi.",
-     "O mighty hero of tremendous courage, with a body as strong as a thunderbolt! You remove evil intellect and are a companion of good wisdom.",
-     "महाबीर – great hero; बिक्रम – valorous; बजरंगी – one with a thunderbolt-like (vajra) body; कुमति – evil intellect; निवार – remover; सुमति – good sense; संगी – companion.",
-     "Strength is paired directly with moral clarity here — Hanuman doesn't just defeat external enemies, he clears the 'bad thinking' that clouds the devotee's own mind."),
+     "O mighty hero of tremendous courage, with a body as strong as a thunderbolt! You remove evil intellect and are a companion of good wisdom."),
     ("कंचन बरन बिराज सुबेसा। कानन कुंडल कुंचित केसा॥",
      "Kanchan baran biraaj subesa. Kaanan kundal kunchit kesa.",
-     "Your complexion is golden and your dress is resplendent. You wear earrings in your ears and have curly hair.",
-     "कंचन बरन – golden-complexioned; बिराज – shines, is resplendent; सुबेसा – well-attired; कानन कुंडल – earrings in the ears; कुंचित केसा – curly hair.",
-     "A rare moment of physical description in the hymn — Hanuman is painted not as fearsome but as radiant and adorned; devotion sees beauty in its object."),
+     "Your complexion is golden and your dress is resplendent. You wear earrings in your ears and have curly hair."),
     ("हाथ बज्र औ ध्वजा बिराजै। काँधे मूँज जनेऊ साजै॥",
      "Haath bajra au dhvaja birajai. Kaandhe moonj janeu saajai.",
-     "In your hand gleams the thunderbolt and a flag. A sacred thread of munja grass adorns your shoulder.",
-     "हाथ – hand; बज्र – mace/thunderbolt weapon; ध्वजा – flag, banner; बिराजै – adorns; काँधे – shoulder; मूँज जनेऊ – sacred thread of munja grass; साजै – adorns.",
-     "The mace signals martial power while the sacred thread signals brahmacharya and ritual purity — Hanuman is drawn as warrior and ascetic at once."),
+     "In your hand gleams the thunderbolt and a flag. A sacred thread of munja grass adorns your shoulder."),
     ("संकर सुवन केसरीनंदन। तेज प्रताप महा जग बंदन॥",
      "Sankar suvan Kesarinandan. Tej pratap maha jag bandan.",
-     "O son of Shiva and beloved of Kesari! Your brilliance and glory are revered throughout the world.",
-     "संकर सुवन – son/manifestation of Shiva; केसरीनंदन – son of Kesari; तेज – brilliance; प्रताप – glory; जग बंदन – worshipped by the world.",
-     "This line quietly asserts Hanuman's dual parentage — of Shiva in essence, of Kesari in birth — a detail devotees often cite as proof of his singular status."),
+     "O son of Shiva and beloved of Kesari! Your brilliance and glory are revered throughout the world."),
     ("विद्यावान गुणी अति चातुर। राम काज करिबे को आतुर॥",
      "Vidyaavan guni ati chaatur. Ram kaaj karibe ko aaatur.",
-     "You are learned, virtuous, and supremely clever. You are ever eager to carry out the tasks of Rama.",
-     "विद्यावान – learned; गुणी – virtuous; अति चातुर – extremely clever, skillful; राम काज – Rama's work; करिबे को आतुर – eager to perform.",
-     "Learning and cleverness are named as virtues only because they are entirely at another's service — skill without a purpose beyond itself isn't the ideal here."),
+     "You are learned, virtuous, and supremely clever. You are ever eager to carry out the tasks of Rama."),
     ("प्रभु चरित्र सुनिबे को रसिया। राम लखन सीता मन बसिया॥",
      "Prabhu charitra sunibe ko rasiya. Ram Lakhan Sita man basiya.",
-     "You delight in listening to the stories of the Lord. Ram, Lakshman, and Sita dwell in your heart.",
-     "प्रभु चरित्र – the Lord's deeds/life-story; सुनिबे को रसिया – one who delights in hearing; राम लखन सीता – Rama, Lakshmana, Sita; मन बसिया – dwell in the heart.",
-     "Before Hanuman does anything, he simply loves to listen — devotion begins as attentive love of the story, not as action."),
+     "You delight in listening to the stories of the Lord. Ram, Lakshman, and Sita dwell in your heart."),
     ("सूक्ष्म रूप धरि सियहिं दिखावा। बिकट रूप धरि लंक जरावा॥",
      "Sookshm roop dhari Siyahi dikhaava. Bikat roop dhari Lanka jaraava.",
-     "You appeared before Sita in a tiny form, and assumed a terrifying form to burn Lanka.",
-     "सूक्ष्म रूप – a minute form; धरि – taking; सियहिं दिखावा – revealed himself to Sita; बिकट रूप – a terrifying, enormous form; लंक जरावा – burned Lanka.",
-     "The same being who shrinks to comfort a grieving Sita later grows to terrify a tyrant — his form always answers the need of the moment, never his own ego."),
+     "You appeared before Sita in a tiny form, and assumed a terrifying form to burn Lanka."),
     ("भीम रूप धरि असुर सँहारे। रामचंद्र के काज सँवारे॥",
      "Bheem roop dhari asur sanhaare. Ramachandra ke kaaj sanwaare.",
-     "Taking a fearsome form you slew the demons and accomplished the tasks of Shri Ramachandra.",
-     "भीम रूप – a fearsome form; धरि – assuming; असुर सँहारे – destroyed the demons; रामचंद्र के काज – Rama's tasks; सँवारे – accomplished.",
-     "His destructive power is framed only as a means to an end — 'Rama's work accomplished' — never as conquest for its own sake."),
+     "Taking a fearsome form you slew the demons and accomplished the tasks of Shri Ramachandra."),
     ("लाय सजीवन लखन जियाये। श्रीरघुबीर हरषि उर लाये॥",
      "Laay sanjivan Lakhan jiyaaye. Shri Raghubir harashi ur laaye.",
-     "You brought the Sanjeevani herb and revived Lakshmana. Shri Raghuvira, overjoyed, embraced you to his heart.",
-     "लाय – bringing; सजीवन – the life-restoring Sanjeevani herb; लखन जियाये – revived Lakshmana; श्रीरघुबीर – Shri Rama; हरषि – joyfully; उर लाये – embraced to the heart.",
-     "Often read as the emotional peak of the hymn — an act of service answered not with reward but with an embrace, the real currency of relationship."),
+     "You brought the Sanjeevani herb and revived Lakshmana. Shri Raghuvira, overjoyed, embraced you to his heart."),
     ("रघुपति कीन्ही बहुत बड़ाई। तुम मम प्रिय भरतहि सम भाई॥",
      "Raghupati kinhi bahut badai. Tum mam priya Bharatahi sam bhai.",
-     "The Lord of the Raghus praised you greatly, saying: You are as dear to me as my own brother Bharata.",
-     "रघुपति – Lord of the Raghus (Rama); कीन्ही बहुत बड़ाई – praised greatly; तुम मम प्रिय – you are dear to me; भरतहि सम भाई – like a brother, equal to Bharata.",
-     "Being placed on par with Bharata — Rama's own brother — is the highest honor the text can offer a devotee outside the family by blood."),
+     "The Lord of the Raghus praised you greatly, saying: You are as dear to me as my own brother Bharata."),
     ("सहस बदन तुम्हरो जस गावैं। अस कहि श्रीपति कंठ लगावैं॥",
      "Sahas badan tumharo jas gaavain. As kahi Shripati kanth lagavain.",
-     "The thousand-headed Shesha sings your praises — saying this, the Lord of Lakshmi (Rama) embraced you.",
-     "सहस बदन – the thousand-headed one (Shesha Naga); तुम्हरो जस गावैं – sings your praises; श्रीपति – Lord of Lakshmi (Rama); कंठ लगावैं – embraces.",
-     "Even the cosmic serpent supporting the universe is said to sing Hanuman's glory — recognition of his greatness spans every scale of creation."),
+     "The thousand-headed Shesha sings your praises — saying this, the Lord of Lakshmi (Rama) embraced you."),
     ("सनकादिक ब्रह्मादि मुनीसा। नारद सारद सहित अहीसा॥",
      "Sankaadik Brahmaadi muneesa. Naarad Sarad sahit Aheesa.",
-     "Sages like Sanaka, Brahma and other great sages, Narada, Saraswati, and the Lord of serpents (Shesha) —",
-     "सनकादिक – the sage Sanaka and his brothers; ब्रह्मादि मुनीसा – Brahma and the great sages; नारद सारद – the sage Narada and goddess Saraswati; अहीसा – lord of serpents (Shesha).",
-     "A roll-call of the tradition's greatest names, gathered simply to say: all of them, too, praise Hanuman."),
+     "Sages like Sanaka, Brahma and other great sages, Narada, Saraswati, and the Lord of serpents (Shesha) —"),
     ("जम कुबेर दिगपाल जहाँ ते। कबि कोबिद कहि सके कहाँ ते॥",
      "Yam Kuber Digpaal jahaan te. Kabi kobid kahi sake kahaan te.",
-     "Yama, Kubera, the guardians of the directions — neither poets nor scholars can fully describe your glory.",
-     "जम – Yama, god of death; कुबेर – god of wealth; दिगपाल – guardians of the directions; कबि कोबिद – poets and scholars; कहि सके कहाँ ते – how could they possibly describe.",
-     "A humble turn rather than a boastful one — if even Yama and Kubera can't capture his glory fully, no poet should claim the last word either."),
+     "Yama, Kubera, the guardians of the directions — neither poets nor scholars can fully describe your glory."),
     ("तुम उपकार सुग्रीवहिं कीन्हा। राम मिलाय राज पद दीन्हा॥",
      "Tum upkaar Sugreevahi keenha. Ram milaay raaj pad deenha.",
-     "You did a great service to Sugriva — you united him with Rama and restored his lost kingdom to him.",
-     "तुम उपकार – you did a favor; सुग्रीवहिं – to Sugriva; राम मिलाय – united with Rama; राज पद दीन्हा – restored the throne.",
-     "Hanuman's diplomacy — introducing Sugriva to Rama — matters as much as his strength; not every act of service in the epic is a battle."),
+     "You did a great service to Sugriva — you united him with Rama and restored his lost kingdom to him."),
     ("तुम्हरो मंत्र बिभीषन माना। लंकेस्वर भए सब जग जाना॥",
      "Tumharo mantra Vibheeshan maana. Lankeshwar bhaye sab jag jaana.",
-     "Vibhishana accepted your counsel, and became the Lord of Lanka — as all the world knows.",
-     "तुम्हरो मंत्र – your counsel; बिभीषन माना – Vibhishana accepted; लंकेस्वर भए – became Lord of Lanka; सब जग जाना – the whole world knows.",
-     "Vibhishana's rise to the throne of Lanka is credited to advice, not conquest — Hanuman's gifts extend to wise counsel as much as valor."),
+     "Vibhishana accepted your counsel, and became the Lord of Lanka — as all the world knows."),
     ("जुग सहस्र जोजन पर भानू। लील्यो ताहि मधुर फल जानू॥",
      "Yug sahastra jojan par bhaanu. Lilyo taahi madhur phal jaanu.",
-     "The sun, millions of yojanas away, you swallowed thinking it to be a sweet fruit — such was your childhood feat.",
-     "जुग सहस्र जोजन – many thousands of yojanas (a vast cosmic distance) away; भानू – the sun; लील्यो – swallowed; मधुर फल जानू – mistaking it for a sweet fruit.",
-     "A childhood tale of boundless, almost comic confidence — long before his adult feats, Hanuman's scale was already superhuman."),
+     "The sun, millions of yojanas away, you swallowed thinking it to be a sweet fruit — such was your childhood feat."),
     ("प्रभु मुद्रिका मेलि मुख माहीं। जलधि लाँघि गये अचरज नाहीं॥",
      "Prabhu mudrika meli mukh maahin. Jaladhi laanghi gaye acharaj naahin.",
-     "Holding the Lord's signet ring in your mouth, you leapt across the ocean — no wonder there!",
-     "प्रभु मुद्रिका – the Lord's ring; मेलि मुख माहीं – placing in the mouth; जलधि लाँघि गये – leapt across the ocean; अचरज नाहीं – no wonder.",
-     "After the sun story, this lands as dry understatement: given what he did as a child, crossing an ocean as an adult is 'no surprise at all.'"),
+     "Holding the Lord's signet ring in your mouth, you leapt across the ocean — no wonder there!"),
     ("दुर्गम काज जगत के जेते। सुगम अनुग्रह तुम्हरे तेते॥",
      "Durgam kaaj jagat ke jete. Sugam anugraha tumhre tete.",
-     "All the difficult tasks of the world become easy by your grace.",
-     "दुर्गम काज – difficult tasks; जगत के जेते – as many as exist in the world; सुगम – made easy; अनुग्रह तुम्हरे – by your grace; तेते – that many.",
-     "Following the specific stories, this generalizes the pattern — his grace doesn't solve one problem, it changes the category 'difficult' itself."),
+     "All the difficult tasks of the world become easy by your grace."),
     ("राम दुआरे तुम रखवारे। होत न आज्ञा बिनु पैसारे॥",
      "Ram duaare tum rakhwaare. Hot na aagya binu paisaare.",
-     "You are the guardian at Rama's gate. None may enter without your permission.",
-     "राम दुआरे – at Rama's door; तुम रखवारे – you are the guardian; होत न – it does not happen; आज्ञा बिनु – without permission; पैसारे – entry.",
-     "Positions Hanuman as intermediary of grace itself — access to the divine is said to run through devotion to him first."),
+     "You are the guardian at Rama's gate. None may enter without your permission."),
     ("सब सुख लहै तुम्हारी सरना। तुम रक्षक काहू को डर ना॥",
      "Sab sukh lahai tumhaari sarna. Tum rakshak kaahu ko dar na.",
-     "All happiness is obtained by taking refuge in you. With you as protector, there is nothing to fear.",
-     "सब सुख लहै – all happiness is obtained; तुम्हारी सरना – in your refuge; तुम रक्षक – you the protector; काहू को डर ना – no fear to anyone.",
-     "The promise is total: refuge with Hanuman is framed as sufficient protection, needing no further guarantee."),
+     "All happiness is obtained by taking refuge in you. With you as protector, there is nothing to fear."),
     ("आपन तेज सम्हारो आपै। तीनों लोक हाँक ते काँपै॥",
      "Aapan tej samhaaro aapai. Teenon lok haank te kaanpai.",
-     "Only you can contain your own power. All three worlds tremble at your roar.",
-     "आपन तेज – your own splendor/power; सम्हारो आपै – you alone can contain; तीनों लोक – the three worlds; हाँक ते काँपै – tremble at your roar.",
-     "A statement of scale — his power is self-contained, needing no external check because nothing external could provide one."),
+     "Only you can contain your own power. All three worlds tremble at your roar."),
     ("भूत पिसाच निकट नहिं आवै। महाबीर जब नाम सुनावै॥",
      "Bhoot pisaach nikat nahin aavai. Mahabir jab naam sunaavai.",
-     "Ghosts and evil spirits dare not come near when the name of Mahavira Hanuman is uttered.",
-     "भूत पिसाच – ghosts and evil spirits; निकट नहिं आवै – do not come near; महाबीर – the great hero; जब नाम सुनावै – when his name is uttered.",
-     "The most commonly chanted verse for protection — the spoken name itself is treated as a sufficient deterrent."),
+     "Ghosts and evil spirits dare not come near when the name of Mahavira Hanuman is uttered."),
     ("नासै रोग हरै सब पीरा। जपत निरंतर हनुमत बीरा॥",
      "Naasai rog harai sab peera. Japat nirantar Hanumat beera.",
-     "All diseases are destroyed and all pain is removed by the continuous chanting of Hanuman's name.",
-     "नासै रोग – disease is destroyed; हरै सब पीरा – removes all pain; जपत निरंतर – by continuous chanting; हनुमत बीरा – of the hero Hanuman.",
-     "Healing here is claimed as a fruit of steady repetition, not a single recitation — consistency, not intensity, is the operative practice."),
+     "All diseases are destroyed and all pain is removed by the continuous chanting of Hanuman's name."),
     ("संकट ते हनुमान छुड़ावै। मन क्रम बचन ध्यान जो लावै॥",
      "Sankat te Hanuman chhudaavai. Man kram bachan dhyan jo laavai.",
-     "Hanuman delivers from all distress those who contemplate him in thought, word, and deed.",
-     "संकट ते – from difficulty; हनुमान छुड़ावै – Hanuman frees; मन क्रम बचन – in thought, deed, and word; ध्यान जो लावै – whoever fixes attention.",
-     "Thought, action, and speech aligned together is the actual condition set for his help — not mere belief, but consistency across all three."),
+     "Hanuman delivers from all distress those who contemplate him in thought, word, and deed."),
     ("सब पर राम तपस्वी राजा। तिन के काज सकल तुम साजा॥",
      "Sab par Ram tapasvi raaja. Tin ke kaaj sakal tum saaja.",
-     "Rama is the sovereign and supreme ascetic over all. You accomplish all his works.",
-     "सब पर – above all; राम तपस्वी राजा – Rama, the ascetic-king; तिन के काज – his tasks; सकल तुम साजा – all accomplished by you.",
-     "Even while praising Hanuman extravagantly, the hymn keeps returning to place Rama above him — the servant never eclipses the master."),
+     "Rama is the sovereign and supreme ascetic over all. You accomplish all his works."),
     ("और मनोरथ जो कोई लावै। सोइ अमित जीवन फल पावै॥",
      "Aur manorath jo koi laavai. Soi amit jeevan phal paavai.",
-     "Whoever brings any desire to you, they receive the boundless fruit of life.",
-     "और मनोरथ – any other wish; जो कोई लावै – whoever brings; सोइ – that person; अमित जीवन फल – boundless fruit of life; पावै – obtains.",
-     "Extends the promise beyond spiritual liberation to ordinary human wishes — the hymn doesn't separate worldly desire from devotional practice."),
+     "Whoever brings any desire to you, they receive the boundless fruit of life."),
     ("चारों जुग परताप तुम्हारा। है परसिद्ध जगत उजियारा॥",
      "Chaaron yug partaap tumhaara. Hai parsiddh jagat ujiyaara.",
-     "Your glory shines across all four ages. Your fame illuminates the entire world.",
-     "चारों जुग – across all four cosmic ages; परताप तुम्हारा – your glory; है परसिद्ध – is renowned; जगत उजियारा – illuminates the world.",
-     "Unlike figures tied to a single era, Hanuman is described as a constant presence across all of cosmic time — a rare distinction."),
+     "Your glory shines across all four ages. Your fame illuminates the entire world."),
     ("साधु-संत के तुम रखवारे। असुर निकंदन राम दुलारे॥",
      "Saadhu sant ke tum rakhwaare. Asur nikandan Ram dulaare.",
-     "You are the protector of saints and sages, the destroyer of demons, and the beloved of Rama.",
-     "साधु-संत – saints and sages; के तुम रखवारे – you are their protector; असुर निकंदन – destroyer of demons; राम दुलारे – beloved of Rama.",
-     "Two roles held together in one line — guardian to the gentle, destroyer to the hostile — protection and destruction as two faces of the same devotion."),
+     "You are the protector of saints and sages, the destroyer of demons, and the beloved of Rama."),
     ("अष्ट सिद्धि नौ निधि के दाता। अस बर दीन जानकी माता॥",
      "Asht siddhi nau nidhi ke daataa. As bar deen Janaki maata.",
-     "You are the bestower of the eight mystic powers and nine divine treasures — such is the boon granted by Mother Janaki (Sita).",
-     "अष्ट सिद्धि – the eight mystic powers; नौ निधि – the nine treasures; के दाता – bestower of; अस बर दीन – granted such a boon; जानकी माता – Mother Janaki (Sita).",
-     "The power to grant siddhis is credited not as Hanuman's own but as a boon received from Sita — his authority is itself an inheritance of grace."),
+     "You are the bestower of the eight mystic powers and nine divine treasures — such is the boon granted by Mother Janaki (Sita)."),
     ("राम रसायन तुम्हरे पासा। सदा रहो रघुपति के दासा॥",
      "Ram rasaayan tumhre paasaa. Sadaa raho Raghupati ke daasaa.",
-     "You hold the elixir of Rama's name. Remain always the devoted servant of Shri Raghupati.",
-     "राम रसायन – the elixir of Rama's name; तुम्हरे पासा – is with you; सदा रहो – remain forever; रघुपति के दासा – a servant of Rama.",
-     "'Rasayan' means an alchemical elixir — Hanuman holds the one true cure, framed entirely through his identity as servant rather than independent power."),
+     "You hold the elixir of Rama's name. Remain always the devoted servant of Shri Raghupati."),
     ("तुम्हरे भजन राम को पावै। जनम-जनम के दुख बिसरावै॥",
      "Tumhre bhajan Ram ko paavai. Janam janam ke dukh bisraavai.",
-     "By singing your praises one attains Rama, and the sorrows of countless births are forgotten.",
-     "तुम्हरे भजन – by devotion to you; राम को पावै – one attains Rama; जनम-जनम के दुख – sorrows of countless births; बिसरावै – dissolves.",
-     "States plainly what the hymn implies throughout — devotion to Hanuman is a direct path to Rama, not a detour from it."),
+     "By singing your praises one attains Rama, and the sorrows of countless births are forgotten."),
     ("अंत काल रघुबर पुर जाई। जहाँ जन्म हरि-भक्त कहाई॥",
      "Ant kaal Raghubarpuree jaaee. Jahaan janm Hari bhakt kahaaee.",
-     "At the time of death one goes to the abode of Shri Raghuvira, and wherever one is born one is known as a devotee of Hari.",
-     "अंत काल – at the time of death; रघुबर पुर जाई – goes to Rama's abode; जहाँ जन्म – or wherever born; हरि-भक्त कहाई – is called a devotee of Hari.",
-     "A promise about the moment of death itself — liberation into Rama's abode, or if reborn, being recognizably devoted, so the thread is never lost."),
+     "At the time of death one goes to the abode of Shri Raghuvira, and wherever one is born one is known as a devotee of Hari."),
     ("और देवता चित्त न धरई। हनुमत सेइ सर्ब सुख करई॥",
      "Aur devata chitt na dharai. Hanumat sei sarb sukh karai.",
-     "Without giving your heart to other deities, by serving Hanuman alone all happiness is achieved.",
-     "और देवता – other deities; चित्त न धरई – need not be held in mind; हनुमत सेइ – by serving Hanuman alone; सर्ब सुख करई – all happiness is accomplished.",
-     "A strong exclusive claim typical of bhakti hymns to a single chosen deity — sufficiency, not exclusion of other gods, is the intended emphasis."),
+     "Without giving your heart to other deities, by serving Hanuman alone all happiness is achieved."),
     ("संकट कटै मिटै सब पीरा। जो सुमिरै हनुमत बलबीरा॥",
      "Sankat katai mitai sab peera. Jo sumirai Hanumat Balbeera.",
-     "All suffering is cut away and all pain is erased for one who remembers mighty Hanuman.",
-     "संकट कटै – difficulty is cut away; मिटै सब पीरा – all pain is erased; जो सुमिरै – whoever remembers; हनुमत बलबीरा – mighty and brave Hanuman.",
-     "Echoes verse 26 almost exactly — a deliberate repetition typical of devotional hymns meant to be internalized through recitation, not read once."),
+     "All suffering is cut away and all pain is erased for one who remembers mighty Hanuman."),
     ("जय जय जय हनुमान गोसाईं। कृपा करहु गुरुदेव की नाईं॥",
      "Jai Jai Jai Hanuman Gosain. Kripa karahu Gurudev ki naayin.",
-     "Victory, victory, victory to Hanuman the Lord! Shower your grace upon me as a Guru upon his disciple.",
-     "जय जय जय – victory, victory, victory; हनुमान गोसाईं – Lord Hanuman; कृपा करहु – bestow grace; गुरुदेव की नाईं – as a Guru does to a disciple.",
-     "The triple 'victory' marks the hymn's turn toward its closing benediction — asking now not for tasks accomplished but simply for grace."),
+     "Victory, victory, victory to Hanuman the Lord! Shower your grace upon me as a Guru upon his disciple."),
     ("जो सत बार पाठ कर कोई। छूटहि बंदि महा सुख होई॥",
      "Jo sat baar paath kar koi. Chhootahi bandi mahaa sukh hoi.",
-     "Whoever recites this Chalisa a hundred times is freed from the bondage of worldly existence and attains supreme happiness.",
-     "जो सत बार – whoever a hundred times; पाठ कर कोई – recites; छूटहि बंदि – is freed from bondage; महा सुख होई – attains great happiness.",
-     "Introduces the 'phalashruti' — the promised fruit of recitation, a convention common to Hindu devotional hymns stating what regular practice yields."),
+     "Whoever recites this Chalisa a hundred times is freed from the bondage of worldly existence and attains supreme happiness."),
     ("जो यह पढ़ै हनुमान चालीसा। होय सिद्धि साखी गौरीसा॥",
      "Jo yah padhai Hanuman Chalisa. Hoy siddhi saakhi Gaureesha.",
-     "Whoever reads this Hanuman Chalisa attains perfection — Lord Shiva himself is witness to this.",
-     "जो यह पढ़ै – whoever reads this; होय सिद्धि – attains perfection/success; साखी गौरीसा – with Lord Shiva (husband of Gauri) as witness.",
-     "Invoking Shiva as witness lends the promise weight — in the Shaiva tradition Hanuman is himself considered a form of Shiva, so this line closes a subtle circle."),
+     "Whoever reads this Hanuman Chalisa attains perfection — Lord Shiva himself is witness to this."),
     ("तुलसीदास सदा हरि चेरा। कीजै नाथ हृदय मह डेरा॥",
      "Tulsidas sadaa Hari cheraa. Keejai naath hriday mah deraa.",
-     "Tulsidas is ever a servant of Hari. O Lord, make your abode in his heart.",
-     "तुलसीदास – Tulsidas (the poet); सदा हरि चेरा – is always a servant of Hari; कीजै नाथ – O Lord, please make; हृदय मह डेरा – your dwelling in my heart.",
-     "The poet signs off in the first person, turning the final line into his own personal prayer — a convention (bhanita) marking authorship in Bhakti poetry."),
+     "Tulsidas is ever a servant of Hari. O Lord, make your abode in his heart."),
 ]
 
 _HANUMAN_CHALISA_DOHA_CLOSING = {
@@ -743,8 +794,7 @@ _HANUMAN_CHALISA_DOHA_CLOSING = {
     "sanskrit": "पवनतनय संकट हरन, मंगल मूरति रूप।\nराम लखन सीता सहित, हृदय बसहु सुर भूप॥",
     "transliteration": "Pavantanay sankat haran, mangal moorati roop.\nRam Lakhan Sita sahit, hriday basahu sur bhoop.",
     "translation": "O son of the Wind, remover of all distress, embodiment of auspiciousness! O king of the gods, dwell in my heart together with Rama, Lakshmana, and Sita.",
-    "word_meanings": "पवनतनय – son of the Wind; संकट हरन – remover of difficulties; मंगल मूरति रूप – embodiment of auspiciousness; राम लखन सीता सहित – together with Rama, Lakshmana, and Sita; हृदय बसहु – dwell in the heart; सुर भूप – king among gods.",
-    "commentary": "The closing doha widens the request from Tulsidas's own heart to the reader's — Hanuman is asked to dwell not alone but together with the entire divine family he served.",
+    "commentary": "",
 }
 
 
@@ -754,7 +804,7 @@ def _hanuman_chalisa_chapters():
             "chapter_number": 1,
             "title":          "Hanuman Chalisa",
             "sanskrit_title": "हनुमान चालीसा",
-            "summary":        "The complete 40-verse devotional hymn composed by Tulsidas in Awadhi Hindi, singing the glories of Lord Hanuman — with two introductory and one closing doha, each verse carrying a word-by-word gloss and short commentary.",
+            "summary":        "The complete 40-verse devotional hymn composed by Tulsidas in Awadhi Hindi, singing the glories of Lord Hanuman — with two introductory and one closing doha.",
             "verse_count":    43,
         }
     ]}
@@ -762,7 +812,7 @@ def _hanuman_chalisa_chapters():
 
 def _hanuman_chalisa_verses():
     verses = list(_HANUMAN_CHALISA_DOHA_INTRO)
-    for i, (sk, tl, tr, wm, cm) in enumerate(_HANUMAN_CHALISA_VERSES):
+    for i, (sk, tl, tr) in enumerate(_HANUMAN_CHALISA_VERSES):
         verses.append({
             "verse_number":    i + 1,
             "chapter_number":  1,
@@ -770,29 +820,17 @@ def _hanuman_chalisa_verses():
             "sanskrit":        sk,
             "transliteration": tl,
             "translation":     tr,
-            "word_meanings":   wm,
-            "commentary":      cm,
-            # Sequential position only (1-based), NOT a verified audio timestamp.
-            # There's no authoritative timing dataset for this hymn — this field
-            # just lets a frontend keep a played-verse highlight in sync with
-            # whichever audio track it's given, by counting verse boundaries
-            # rather than claiming a specific second offset.
-            "audio_cue_index": i + 1,
+            "commentary":      "",
         })
     verses.append(_HANUMAN_CHALISA_DOHA_CLOSING)
     return {
         "chapter_number":  1,
         "title":           "Hanuman Chalisa",
         "sanskrit_title":  "हनुमान चालीसा",
-        "summary":         "The complete 40-verse devotional hymn composed by Tulsidas in Awadhi Hindi, singing the glories of Lord Hanuman — with two introductory and one closing doha, each verse carrying a word-by-word gloss and short commentary.",
+        "summary":         "The complete 40-verse devotional hymn composed by Tulsidas in Awadhi Hindi, singing the glories of Lord Hanuman — with two introductory and one closing doha.",
         "verse_count":     len(verses),
         "verses":          verses,
-        "source_credit":   "Tulsidas (c.1574 CE), public domain text. Word-by-word glosses and commentary "
-                            "curated against the standard scholarly reading of the hymn (no single external source).",
-        "note":            "No verified audio-timing dataset exists for this hymn, so verses carry a sequential "
-                            "'audio_cue_index' rather than fabricated second-level timestamps. If a specific "
-                            "recording is chosen for the app, its real per-verse timestamps should be measured "
-                            "against that file and stored here instead.",
+        "source_credit":   "Tulsidas (c.1574 CE), public domain text",
     }
 
 
@@ -1050,6 +1088,8 @@ def _dispatch_chapters(slug: str, api_source: str, book_id: int):
         return _ramayana_chapters()
     if api_source == "mahabharata":
         return _mahabharata_chapters()
+    if api_source == "mahabharata_english":
+        return _mahabharata_english_chapters()
     if api_source == "hanuman_chalisa":
         return _hanuman_chalisa_chapters()
     if api_source == "shiva_purana":
@@ -1072,6 +1112,8 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
         return _ramayana_kanda_verses(chapter_num)
     if api_source == "mahabharata":
         return _mahabharata_parva_verses(chapter_num)
+    if api_source == "mahabharata_english":
+        return _mahabharata_english_parva_verses(chapter_num)
     if api_source == "hanuman_chalisa":
         return _hanuman_chalisa_verses()
     if api_source == "shiva_purana":
@@ -1091,6 +1133,57 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# STATIC BOOKS  (no DB row — metadata lives in code, content is scraped live)
+# ═════════════════════════════════════════════════════════════════════════════
+# For books where you don't want a `sacred_books` DB row at all, add an entry
+# here. list_books/get_book/get_chapters/get_chapter_verses/search all check
+# this registry before touching Postgres. Note: reading progress and
+# bookmarks (reading_progress / book_bookmarks tables) are FK'd to a real
+# sacred_books.id, so those two features are unavailable for static-only
+# books — everything else (browsing, reading, search) works fully.
+
+_STATIC_BOOKS = {
+    "mahabharata-english": {
+        "id": -1,
+        "slug": "mahabharata-english",
+        "title": "Mahabharata (English)",
+        "sanskrit_title": "महाभारतम्",
+        "deity": None,
+        "tradition": "Itihasa",
+        "language": "English",
+        "total_chapters": 18,
+        "total_verses": None,  # varies per Parva, computed live
+        "description": (
+            "Kisari Mohan Ganguli's complete public-domain English prose "
+            "translation of the Mahabharata (1883-1896), the only complete "
+            "English translation of the epic in existence. Organized by "
+            "Parva and Section."
+        ),
+        "icon_emoji": "📜",
+        "accent_color": "#9a5a2a",
+        "api_source": "mahabharata_english",
+    },
+}
+
+
+def _lookup_book(slug: str):
+    """Returns a book dict for either a static (code-defined) book or a DB
+    row, or None if the slug matches neither. Checked in that order so a
+    static entry always wins if a slug were ever to collide."""
+    if slug in _STATIC_BOOKS:
+        return _STATIC_BOOKS[slug]
+    with get_db_cursor() as cur:
+        cur.execute("""
+            SELECT id, slug, title, sanskrit_title, deity, tradition,
+                   language, total_chapters, total_verses, description,
+                   icon_emoji, accent_color, api_source
+            FROM sacred_books WHERE slug = %s AND is_active = TRUE
+        """, (slug,))
+        row = cur.fetchone()
+    return dict(row) if row else None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # API ENDPOINTS
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -1105,33 +1198,22 @@ def list_books():
             WHERE is_active = TRUE
             ORDER BY id
         """)
-        books = cur.fetchall()
-    return {"books": [dict(b) for b in books]}
+        books = [dict(b) for b in cur.fetchall()]
+    books.extend(_STATIC_BOOKS.values())
+    return {"books": books}
 
 
 @router.get("/api/books/{slug}")
 def get_book(slug: str):
-    with get_db_cursor() as cur:
-        cur.execute("""
-            SELECT id, slug, title, sanskrit_title, deity, tradition,
-                   language, total_chapters, total_verses, description,
-                   icon_emoji, accent_color, api_source
-            FROM sacred_books WHERE slug = %s AND is_active = TRUE
-        """, (slug,))
-        book = cur.fetchone()
+    book = _lookup_book(slug)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    return dict(book)
+    return book
 
 
 @router.get("/api/books/{slug}/chapters")
 def get_chapters(slug: str):
-    with get_db_cursor() as cur:
-        cur.execute("""
-            SELECT id, api_source, total_chapters
-            FROM sacred_books WHERE slug = %s AND is_active = TRUE
-        """, (slug,))
-        book = cur.fetchone()
+    book = _lookup_book(slug)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     return _dispatch_chapters(slug, book["api_source"], book["id"])
@@ -1139,12 +1221,7 @@ def get_chapters(slug: str):
 
 @router.get("/api/books/{slug}/chapters/{chapter_num}")
 def get_chapter_verses(slug: str, chapter_num: int):
-    with get_db_cursor() as cur:
-        cur.execute("""
-            SELECT id, api_source, total_chapters
-            FROM sacred_books WHERE slug = %s AND is_active = TRUE
-        """, (slug,))
-        book = cur.fetchone()
+    book = _lookup_book(slug)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     return _dispatch_chapter_verses(slug, book["api_source"], book["id"], chapter_num)
@@ -1152,12 +1229,7 @@ def get_chapter_verses(slug: str, chapter_num: int):
 
 @router.get("/api/books/{slug}/search")
 def search_in_book(slug: str, q: str = Query(..., min_length=2)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT api_source FROM sacred_books WHERE slug = %s AND is_active = TRUE",
-            (slug,)
-        )
-        book = cur.fetchone()
+    book = _lookup_book(slug)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -1184,28 +1256,21 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
                 continue
 
     elif api_source == "valmiki_ramayana":
-        # The upgraded dataset carries real English translations, so search
-        # across Sanskrit, the readable translation, and the word-by-word
-        # gloss — not just Sanskrit as before.
         for kanda_num in range(1, 8):
             try:
                 data = _ramayana_kanda_verses(kanda_num)
                 for v in data.get("verses", []):
-                    if (q_lower in (v.get("sanskrit") or "").lower() or
-                            q_lower in (v.get("translation") or "").lower() or
-                            q_lower in (v.get("word_meanings") or "").lower()):
+                    if q_lower in (v.get("sanskrit") or "").lower():
                         results.append({
                             "chapter_number": kanda_num,
                             "verse_number":   v["verse_number"],
                             "chapter_title":  data["title"],
-                            "translation":    v.get("translation") or v.get("sanskrit", ""),
+                            "translation":    v["sanskrit"],
                             "sanskrit":       v.get("sanskrit", ""),
                             "label":          v.get("label", ""),
                         })
                         if len(results) >= 50:
                             break
-                if len(results) >= 50:
-                    break
             except Exception:
                 continue
 
@@ -1221,6 +1286,25 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
                             "chapter_title":  data["title"],
                             "translation":    v["sanskrit"],
                             "sanskrit":       v.get("sanskrit", ""),
+                            "label":          v.get("label", ""),
+                        })
+                        if len(results) >= 50:
+                            break
+            except Exception:
+                continue
+
+    elif api_source == "mahabharata_english":
+        for parva_num in range(1, 19):
+            try:
+                data = _mahabharata_english_parva_verses(parva_num)
+                for v in data.get("verses", []):
+                    if q_lower in (v.get("translation") or "").lower():
+                        results.append({
+                            "chapter_number": parva_num,
+                            "verse_number":   v["verse_number"],
+                            "chapter_title":  data["title"],
+                            "translation":    v["translation"],
+                            "sanskrit":       "",
                             "label":          v.get("label", ""),
                         })
                         if len(results) >= 50:
@@ -1266,6 +1350,15 @@ class ProgressUpdate(BaseModel):
 
 @router.post("/api/books/progress")
 def save_progress(data: ProgressUpdate):
+    if data.slug in _STATIC_BOOKS:
+        # No DB row for this book (see _STATIC_BOOKS) -- can't persist or
+        # compute against a real total_verses. Return a best-effort percent
+        # so the reader's progress bar still works within this session;
+        # it just won't survive a reload or show up in "Continue Reading".
+        total_chapters = _STATIC_BOOKS[data.slug]["total_chapters"] or 1
+        percent = min(round((data.last_chapter / total_chapters) * 100, 2), 100)
+        return {"status": "unsupported", "percent_done": percent}
+
     with get_db_cursor() as cur:
         cur.execute(
             "SELECT id, total_chapters, total_verses FROM sacred_books WHERE slug = %s",
