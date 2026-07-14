@@ -16,3 +16,4 @@ openai
 resend
 pydantic[email]
 cloudinary
+beautifulsoup4
