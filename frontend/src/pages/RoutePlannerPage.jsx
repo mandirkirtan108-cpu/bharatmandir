@@ -394,7 +394,7 @@ export default function RoutePlannerPage() {
             <Map size={13} /> Route Planner
           </div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1, margin: 0 }}>
-            Your Journey, <span style={{ color: '#FFD580' }}>Verified Path</span>
+            <span style={{ color: '#ffffff' }}>Your Journey,</span> <span style={{ color: '#FFD580' }}>Verified Path</span>
           </h1>
           <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: 15, maxWidth: 560, margin: '12px auto 0', lineHeight: 1.7, fontFamily: UI_FONT }}>
             Plan a real road route and discover curated sacred stops on known pilgrimage corridors.
