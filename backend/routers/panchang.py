@@ -639,14 +639,23 @@ def choghadiya_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
             if not isinstance(item, dict):
                 continue
             name = item.get("choghadiya") or item.get("name") or item.get("type") or item.get("muhurat")
-            start = item.get("start_time") or item.get("start") or item.get("from")
-            end = item.get("end_time") or item.get("end") or item.get("to")
+            raw_start = item.get("start_time") or item.get("start") or item.get("from")
+            raw_end = item.get("end_time") or item.get("end") or item.get("to")
+            # FIX: this fallback branch's data can come back as bare integer
+            # minutes-since-midnight (e.g. 369, 468...) instead of formatted
+            # time strings — that's what produced "369 - 468" style labels
+            # in the Choghadiya timeline. minutes_to_clock() converts those;
+            # already-formatted strings (containing ":" or AM/PM) pass
+            # through untouched via the "or raw_start" fallback.
+            start = minutes_to_clock(raw_start) or raw_start
+            end = minutes_to_clock(raw_end) or raw_end
+            time_display = f"{start} - {end}" if start and end else time_range(item)
             rows.append(
                 {
                     "period": period,
                     "is_day": period == "day",
                     "name": name,
-                    "time": time_range(item),
+                    "time": time_display,
                     "start_time": start,
                     "end_time": end,
                     "start": start,
@@ -657,6 +666,29 @@ def choghadiya_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return rows
+
+def minutes_to_clock(value: Any) -> Optional[str]:
+    """Converts a bare 'minutes since midnight' number (e.g. 369) into a
+    12-hour clock string ("6:09 AM"). Leaves already-formatted time
+    strings (containing ':' or AM/PM) untouched — only bare numeric
+    values get converted, since that's the shape DivineAPI's choghadiya
+    fallback data comes back in for some responses.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        total = int(round(value))
+    elif isinstance(value, str) and re.fullmatch(r"\d+(\.\d+)?", value.strip()):
+        total = int(round(float(value.strip())))
+    else:
+        return None
+    total = total % (24 * 60)
+    hour, minute = divmod(total, 60)
+    suffix = "AM" if hour < 12 else "PM"
+    hour12 = hour % 12 or 12
+    return f"{hour12}:{minute:02d} {suffix}"
 
 
 def classify_choghadiya(name: Any) -> str:
