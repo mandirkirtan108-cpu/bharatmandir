@@ -585,16 +585,23 @@ def parse_choghadiya_dict(entries: dict[str, Any], period: str) -> list[dict[str
     """DivineAPI's find-choghadiya response returns two FLAT dicts —
     "day_choghadiyas" and "night_choghadiyas" — mapping a period name
     (e.g. "Rog", "Amrit", or the repeated 8th slot "Next Rog"/"Next Kaal")
-    directly to an already-12-hour-formatted "HH:MM AM to HH:MM AM[ Mon DD]"
-    string. This is a completely different shape from a list of
-    {start_time, end_time} dicts, which is what the old parser assumed —
-    that mismatch is why choghadiya always came back empty.
+    to a "<value> to <value>" string.
+
+    FIX: that value is NOT always an already-formatted clock string — it
+    can be a bare "minutes since midnight" number as text (e.g.
+    "351 to 452"), which is what produced raw "369 - 468" style labels in
+    the UI. minutes_to_clock() converts a bare-number side; an already
+    clock-formatted side (e.g. "6:09 AM") passes through unchanged since
+    minutes_to_clock() returns None for non-numeric text and the "or"
+    fallback keeps the original string.
     """
     rows: list[dict[str, Any]] = []
     for raw_name, time_text in (entries or {}).items():
         if not isinstance(time_text, str) or " to " not in time_text:
             continue
-        start, end = [part.strip() for part in time_text.split(" to ", 1)]
+        start_raw, end_raw = [part.strip() for part in time_text.split(" to ", 1)]
+        start = minutes_to_clock(start_raw) or start_raw
+        end = minutes_to_clock(end_raw) or end_raw
         # "Next Rog" / "Next Kaal" is DivineAPI's label for the 8th slot,
         # which is really just that same Choghadiya type recurring — strip
         # the prefix so classify_choghadiya() (and the display name) treats
@@ -616,7 +623,6 @@ def parse_choghadiya_dict(entries: dict[str, Any], period: str) -> list[dict[str
             }
         )
     return rows
-
 
 def choghadiya_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
     data = unwrap_response(raw)
