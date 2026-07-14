@@ -8,6 +8,15 @@ import {
 } from '../services/sacredBooksApi';
 
 /* ═══════════════════════════════════════════════════════════════
+   THEME — matches the hero banner gradient (brown → saffron/gold)
+   Used everywhere instead of each book's own accent_color so the
+   whole reading experience stays visually consistent with the hero.
+═══════════════════════════════════════════════════════════════ */
+const THEME_COLOR = '#8b3a15';       // primary brown-orange (matches hero mid-tone)
+const THEME_COLOR_DARK = '#5c2208';  // darker brown (matches hero gradient start)
+const THEME_GOLD = '#FFD580';        // gold accent (matches hero highlight text)
+
+/* ═══════════════════════════════════════════════════════════════
    AUDIO — Web Speech API
 ═══════════════════════════════════════════════════════════════ */
 function speakVerse(text) {
@@ -41,7 +50,7 @@ function getSourceLabel(book) {
    BOOK ICON — Sacred book with OM printed on the cover,
    like a physical scripture (matches the uploaded reference image)
 ═══════════════════════════════════════════════════════════════ */
-function BookIcon({ size = 48, color = '#c2410c', style = {} }) {
+function BookIcon({ size = 48, color = THEME_COLOR, style = {} }) {
   return (
     <svg
       width={size}
@@ -148,8 +157,8 @@ function BookCard({ book, isSelected, onSelect, progress }) {
       style={{
         width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
         padding: '14px 16px',
-        background: isSelected ? `${book.accent_color}15` : 'white',
-        borderLeft: `3px solid ${isSelected ? book.accent_color : 'transparent'}`,
+        background: isSelected ? `${THEME_COLOR}15` : 'white',
+        borderLeft: `3px solid ${isSelected ? THEME_COLOR : 'transparent'}`,
         borderBottom: '1px solid var(--cream-dark)',
         transition: 'all 0.18s',
       }}
@@ -157,19 +166,19 @@ function BookCard({ book, isSelected, onSelect, progress }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
         <div style={{
           width: 32, height: 32,
-          background: `${book.accent_color}15`,
-          border: `1px solid ${book.accent_color}30`,
+          background: `${THEME_COLOR}15`,
+          border: `1px solid ${THEME_COLOR}30`,
           borderRadius: 8,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>
-          <BookIcon size={22} color={book.accent_color} />
+          <BookIcon size={22} color={THEME_COLOR} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontFamily: 'var(--font-display)',
             fontSize: 14, fontWeight: 700,
-            color: isSelected ? book.accent_color : 'var(--brown)',
+            color: isSelected ? THEME_COLOR : 'var(--brown)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{book.title}</div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -186,7 +195,7 @@ function BookCard({ book, isSelected, onSelect, progress }) {
       </div>
       {pct > 0 && (
         <div>
-          <ProgressBar percent={pct} color={book.accent_color} />
+          <ProgressBar percent={pct} color={THEME_COLOR} />
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{pct}% read</div>
         </div>
       )}
@@ -700,7 +709,7 @@ export default function SacredBooksPage() {
             }}>
               <button
                 onClick={() => setView('library')}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: bk.accent_color, fontSize: 13, fontWeight: 600, padding: 0 }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: THEME_COLOR, fontSize: 13, fontWeight: 600, padding: 0 }}
               >Library</button>
               <span>›</span>
               <span style={{ color: 'var(--brown)', fontWeight: 600 }}>{bk.title}</span>
@@ -712,7 +721,7 @@ export default function SacredBooksPage() {
                 onClick={() => setSidebarOpen(o => !o)}
                 style={{
                   width: '100%', padding: '12px 16px', marginBottom: 12,
-                  background: bk.accent_color, color: 'white',
+                  background: THEME_COLOR, color: 'white',
                   border: 'none', borderRadius: 'var(--radius)',
                   fontSize: 13, fontWeight: 700, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -730,15 +739,32 @@ export default function SacredBooksPage() {
                 style={{
                   background: 'white',
                   borderRadius: 'var(--radius-lg)',
-                  border: `2px solid ${bk.accent_color}`,
+                  border: `2px solid ${THEME_COLOR}`,
                   overflow: 'hidden',
                   position: 'sticky', top: 84,
                   maxHeight: 'calc(100vh - 100px)',
                   display: 'flex', flexDirection: 'column',
                 }}
               >
-                <div style={{ padding: '16px', background: bk.accent_color, borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  background: `linear-gradient(135deg, ${THEME_COLOR_DARK} 0%, ${THEME_COLOR} 100%)`,
+                  borderBottom: '1px solid rgba(0,0,0,0.1)',
+                }}>
+                  {/* Back to All Books */}
+                  <button
+                    onClick={() => setView('library')}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '10px 16px',
+                      background: 'rgba(0,0,0,0.15)',
+                      border: 'none', borderBottom: '1px solid rgba(255,255,255,0.12)',
+                      color: THEME_GOLD, fontSize: 12, fontWeight: 700,
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>‹</span> Back to All Books
+                  </button>
+                  <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <BookIcon size={28} color="rgba(255,255,255,0.95)" />
                     <div>
                       <div style={{ fontFamily: 'var(--font-display)', color: 'white', fontWeight: 700, fontSize: 15 }}>{bk.title}</div>
@@ -747,7 +773,7 @@ export default function SacredBooksPage() {
                   </div>
                 </div>
                 <div style={{ overflowY: 'auto', flex: 1 }}>
-                  {loadingChapters ? <Spinner color={bk.accent_color} /> : (
+                  {loadingChapters ? <Spinner color={THEME_COLOR} /> : (
                     chapters.map(ch => (
                       <button
                         key={ch.chapter_number}
@@ -755,8 +781,8 @@ export default function SacredBooksPage() {
                         style={{
                           width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
                           padding: '11px 14px',
-                          background: selectedChapter === ch.chapter_number ? `${bk.accent_color}18` : 'transparent',
-                          borderLeft: `3px solid ${selectedChapter === ch.chapter_number ? bk.accent_color : 'transparent'}`,
+                          background: selectedChapter === ch.chapter_number ? `${THEME_COLOR}18` : 'transparent',
+                          borderLeft: `3px solid ${selectedChapter === ch.chapter_number ? THEME_COLOR : 'transparent'}`,
                           borderBottom: '1px solid var(--cream-dark)',
                           transition: 'all 0.15s',
                         }}
@@ -764,7 +790,7 @@ export default function SacredBooksPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{
                             minWidth: 24, height: 24, borderRadius: 6,
-                            background: selectedChapter === ch.chapter_number ? bk.accent_color : 'var(--cream-mid)',
+                            background: selectedChapter === ch.chapter_number ? THEME_COLOR : 'var(--cream-mid)',
                             color: selectedChapter === ch.chapter_number ? 'white' : 'var(--text-muted)',
                             fontSize: 11, fontWeight: 700,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -772,7 +798,7 @@ export default function SacredBooksPage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{
                               fontSize: 12, fontWeight: 600,
-                              color: selectedChapter === ch.chapter_number ? bk.accent_color : 'var(--brown)',
+                              color: selectedChapter === ch.chapter_number ? THEME_COLOR : 'var(--brown)',
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                             }}>{ch.title || ch.name_translated || `Chapter ${ch.chapter_number}`}</div>
                             <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{ch.verse_count || ch.verses_count} verses</div>
@@ -788,17 +814,17 @@ export default function SacredBooksPage() {
                 {!selectedChapter && (
                   <div style={{
                     background: 'white', borderRadius: 16,
-                    border: `2px solid ${bk.accent_color}`,
+                    border: `2px solid ${THEME_COLOR}`,
                     padding: '48px 32px', textAlign: 'center',
                   }}>
                     <div style={{
                       width: 80, height: 80, borderRadius: 20,
-                      background: `${bk.accent_color}12`,
-                      border: `2px solid ${bk.accent_color}40`,
+                      background: `${THEME_COLOR}12`,
+                      border: `2px solid ${THEME_COLOR}40`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       margin: '0 auto 20px',
                     }}>
-                      <BookIcon size={52} color={bk.accent_color} />
+                      <BookIcon size={52} color={THEME_COLOR} />
                     </div>
                     <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 10 }}>{bk.title}</h2>
                     <p style={{ color: 'var(--text-light)', fontSize: 15, lineHeight: 1.7, maxWidth: 500, margin: '0 auto 20px' }}>{bk.description}</p>
@@ -810,7 +836,7 @@ export default function SacredBooksPage() {
                         onClick={() => handleSelectChapter(getProgress(bk.slug).last_chapter)}
                         style={{
                           padding: '12px 28px', borderRadius: 99,
-                          background: bk.accent_color, color: 'white',
+                          background: THEME_COLOR, color: 'white',
                           border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
                         }}
                       >Continue from Chapter {getProgress(bk.slug).last_chapter} ›</button>
@@ -820,8 +846,8 @@ export default function SacredBooksPage() {
                 )}
 
                 {selectedChapter && loadingVerses && (
-                  <div style={{ background: 'white', borderRadius: 16, border: `2px solid ${bk.accent_color}`, padding: 40 }}>
-                    <Spinner color={bk.accent_color} />
+                  <div style={{ background: 'white', borderRadius: 16, border: `2px solid ${THEME_COLOR}`, padding: 40 }}>
+                    <Spinner color={THEME_COLOR} />
                     <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>Loading verses…</p>
                   </div>
                 )}
@@ -830,12 +856,12 @@ export default function SacredBooksPage() {
                   <div>
                     <div style={{
                       background: 'white', borderRadius: 16,
-                      border: `2px solid ${bk.accent_color}`,
+                      border: `2px solid ${THEME_COLOR}`,
                       padding: '24px 28px', marginBottom: 20,
                     }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                         <div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: bk.accent_color, letterSpacing: '0.07em', marginBottom: 6 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: THEME_COLOR, letterSpacing: '0.07em', marginBottom: 6 }}>
                             CHAPTER {selectedChapter}
                           </div>
                           <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 22, marginBottom: 8 }}>
@@ -852,11 +878,11 @@ export default function SacredBooksPage() {
                         </div>
                         <div>
                           <div style={{
-                            background: `${bk.accent_color}15`, borderRadius: 'var(--radius)',
+                            background: `${THEME_COLOR}15`, borderRadius: 'var(--radius)',
                             padding: '10px 16px', textAlign: 'center',
-                            border: `1px solid ${bk.accent_color}30`,
+                            border: `1px solid ${THEME_COLOR}30`,
                           }}>
-                            <div style={{ fontSize: 22, fontWeight: 700, color: bk.accent_color, fontFamily: 'var(--font-display)' }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: THEME_COLOR, fontFamily: 'var(--font-display)' }}>
                               {chapterData.verse_count || chapterData.verses?.length || 0}
                             </div>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Verses</div>
@@ -866,14 +892,14 @@ export default function SacredBooksPage() {
                       <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                         {selectedChapter > 1 && (
                           <button onClick={() => handleSelectChapter(selectedChapter - 1)} style={{
-                            padding: '8px 16px', borderRadius: 99, border: `1px solid ${bk.accent_color}44`,
-                            background: 'transparent', color: bk.accent_color, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                            padding: '8px 16px', borderRadius: 99, border: `1px solid ${THEME_COLOR}44`,
+                            background: 'transparent', color: THEME_COLOR, cursor: 'pointer', fontSize: 13, fontWeight: 600,
                           }}>‹ Previous Chapter</button>
                         )}
                         {selectedChapter < bk.total_chapters && (
                           <button onClick={() => handleSelectChapter(selectedChapter + 1)} style={{
                             padding: '8px 16px', borderRadius: 99, border: 'none',
-                            background: bk.accent_color, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                            background: THEME_COLOR, color: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 600,
                           }}>Next Chapter ›</button>
                         )}
                       </div>
@@ -886,13 +912,13 @@ export default function SacredBooksPage() {
                         placeholder={`Search in ${bk.title}…`}
                         style={{
                           flex: 1, padding: '10px 16px', borderRadius: 99,
-                          border: `2px solid ${bk.accent_color}40`, background: 'white',
+                          border: `2px solid ${THEME_COLOR}40`, background: 'white',
                           fontSize: 13, fontFamily: 'var(--font-body)', outline: 'none',
                         }}
                       />
                       <button type="submit" style={{
                         padding: '10px 20px', borderRadius: 99, border: 'none',
-                        background: bk.accent_color, color: 'white',
+                        background: THEME_COLOR, color: 'white',
                         fontSize: 13, fontWeight: 700, cursor: 'pointer',
                       }}>Search</button>
                     </form>
@@ -910,7 +936,7 @@ export default function SacredBooksPage() {
                         key={`${verse.chapter_number}-${verse.verse_number}`}
                         verse={verse}
                         bookSlug={bk.slug}
-                        bookColor={bk.accent_color}
+                        bookColor={THEME_COLOR}
                         bookmarks={bookmarks}
                         onBookmarkToggle={handleBookmarkToggle}
                         speakingVerse={speakingVerse}
@@ -921,14 +947,14 @@ export default function SacredBooksPage() {
                     <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
                       {selectedChapter > 1 && (
                         <button onClick={() => handleSelectChapter(selectedChapter - 1)} style={{
-                          padding: '12px 24px', borderRadius: 99, border: `1px solid ${bk.accent_color}44`,
-                          background: 'transparent', color: bk.accent_color, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                          padding: '12px 24px', borderRadius: 99, border: `1px solid ${THEME_COLOR}44`,
+                          background: 'transparent', color: THEME_COLOR, cursor: 'pointer', fontSize: 14, fontWeight: 700,
                         }}>‹ Previous Chapter</button>
                       )}
                       {selectedChapter < bk.total_chapters && (
                         <button onClick={() => handleSelectChapter(selectedChapter + 1)} style={{
                           padding: '12px 24px', borderRadius: 99, border: 'none',
-                          background: bk.accent_color, color: 'white', cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                          background: THEME_COLOR, color: 'white', cursor: 'pointer', fontSize: 14, fontWeight: 700,
                           marginLeft: 'auto',
                         }}>Next Chapter ›</button>
                       )}
@@ -965,8 +991,7 @@ export default function SacredBooksPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {bookmarks.map(bm => {
-                  const bookMeta = books.find(b => b.slug === bm.slug);
-                  const color = bookMeta?.accent_color || 'var(--saffron)';
+                  const color = THEME_COLOR;
                   return (
                     <div
                       key={bm.id}
@@ -1051,7 +1076,7 @@ export default function SacredBooksPage() {
               }}>← Back to Reader</button>
             </div>
 
-            {searching && <Spinner color={bk?.accent_color} />}
+            {searching && <Spinner color={THEME_COLOR} />}
 
             {!searching && searchResults && (
               <div>
@@ -1063,10 +1088,10 @@ export default function SacredBooksPage() {
                   searchResults.results.map((r, i) => (
                     <div key={i} style={{
                       background: 'white', borderRadius: 14,
-                      border: `2px solid ${bk?.accent_color}`,
+                      border: `2px solid ${THEME_COLOR}`,
                       padding: '16px 20px', marginBottom: 12,
                     }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: bk?.accent_color, marginBottom: 6, letterSpacing: '0.06em' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: THEME_COLOR, marginBottom: 6, letterSpacing: '0.06em' }}>
                         {r.chapter_title} · {r.chapter_number}.{r.verse_number}
                       </div>
                       <p style={{ fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.75, margin: '0 0 10px' }}>
@@ -1082,7 +1107,7 @@ export default function SacredBooksPage() {
                         }}
                         style={{
                           padding: '5px 14px', borderRadius: 99, border: 'none',
-                          background: bk?.accent_color, color: 'white',
+                          background: THEME_COLOR, color: 'white',
                           fontSize: 12, fontWeight: 600, cursor: 'pointer',
                         }}
                       >Read in Context ›</button>
