@@ -399,7 +399,7 @@ def geocode_city(city: str) -> tuple[float, float, str]:
                 "boundary.country": "IN",
                 "size": 5,
             },
-            timeout=15,
+            timeout=30,
         )
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"OpenRouteService request failed: {exc}") from exc
@@ -585,16 +585,23 @@ def parse_choghadiya_dict(entries: dict[str, Any], period: str) -> list[dict[str
     """DivineAPI's find-choghadiya response returns two FLAT dicts —
     "day_choghadiyas" and "night_choghadiyas" — mapping a period name
     (e.g. "Rog", "Amrit", or the repeated 8th slot "Next Rog"/"Next Kaal")
-    directly to an already-12-hour-formatted "HH:MM AM to HH:MM AM[ Mon DD]"
-    string. This is a completely different shape from a list of
-    {start_time, end_time} dicts, which is what the old parser assumed —
-    that mismatch is why choghadiya always came back empty.
+    to a "<value> to <value>" string.
+
+    FIX: that value is NOT always an already-formatted clock string — it
+    can be a bare "minutes since midnight" number as text (e.g.
+    "351 to 452"), which is what produced raw "369 - 468" style labels in
+    the UI. minutes_to_clock() converts a bare-number side; an already
+    clock-formatted side (e.g. "6:09 AM") passes through unchanged since
+    minutes_to_clock() returns None for non-numeric text and the "or"
+    fallback keeps the original string.
     """
     rows: list[dict[str, Any]] = []
     for raw_name, time_text in (entries or {}).items():
         if not isinstance(time_text, str) or " to " not in time_text:
             continue
-        start, end = [part.strip() for part in time_text.split(" to ", 1)]
+        start_raw, end_raw = [part.strip() for part in time_text.split(" to ", 1)]
+        start = minutes_to_clock(start_raw) or start_raw
+        end = minutes_to_clock(end_raw) or end_raw
         # "Next Rog" / "Next Kaal" is DivineAPI's label for the 8th slot,
         # which is really just that same Choghadiya type recurring — strip
         # the prefix so classify_choghadiya() (and the display name) treats
@@ -617,7 +624,6 @@ def parse_choghadiya_dict(entries: dict[str, Any], period: str) -> list[dict[str
         )
     return rows
 
-
 def choghadiya_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
     data = unwrap_response(raw)
     day_entries = data.get("day_choghadiyas") or data.get("day_choghadiya")
@@ -639,14 +645,23 @@ def choghadiya_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
             if not isinstance(item, dict):
                 continue
             name = item.get("choghadiya") or item.get("name") or item.get("type") or item.get("muhurat")
-            start = item.get("start_time") or item.get("start") or item.get("from")
-            end = item.get("end_time") or item.get("end") or item.get("to")
+            raw_start = item.get("start_time") or item.get("start") or item.get("from")
+            raw_end = item.get("end_time") or item.get("end") or item.get("to")
+            # FIX: this fallback branch's data can come back as bare integer
+            # minutes-since-midnight (e.g. 369, 468...) instead of formatted
+            # time strings — that's what produced "369 - 468" style labels
+            # in the Choghadiya timeline. minutes_to_clock() converts those;
+            # already-formatted strings (containing ":" or AM/PM) pass
+            # through untouched via the "or raw_start" fallback.
+            start = minutes_to_clock(raw_start) or raw_start
+            end = minutes_to_clock(raw_end) or raw_end
+            time_display = f"{start} - {end}" if start and end else time_range(item)
             rows.append(
                 {
                     "period": period,
                     "is_day": period == "day",
                     "name": name,
-                    "time": time_range(item),
+                    "time": time_display,
                     "start_time": start,
                     "end_time": end,
                     "start": start,
@@ -657,6 +672,29 @@ def choghadiya_items(raw: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return rows
+
+def minutes_to_clock(value: Any) -> Optional[str]:
+    """Converts a bare 'minutes since midnight' number (e.g. 369) into a
+    12-hour clock string ("6:09 AM"). Leaves already-formatted time
+    strings (containing ':' or AM/PM) untouched — only bare numeric
+    values get converted, since that's the shape DivineAPI's choghadiya
+    fallback data comes back in for some responses.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        total = int(round(value))
+    elif isinstance(value, str) and re.fullmatch(r"\d+(\.\d+)?", value.strip()):
+        total = int(round(float(value.strip())))
+    else:
+        return None
+    total = total % (24 * 60)
+    hour, minute = divmod(total, 60)
+    suffix = "AM" if hour < 12 else "PM"
+    hour12 = hour % 12 or 12
+    return f"{hour12}:{minute:02d} {suffix}"
 
 
 def classify_choghadiya(name: Any) -> str:

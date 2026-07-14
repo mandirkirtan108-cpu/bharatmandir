@@ -137,15 +137,39 @@ function to12h(timeStr) {
   });
 }
 
+// Converts a bare "minutes since midnight" number (e.g. 369) into a
+// 12-hour clock string ("6:09 AM"). This is the safety-net for whenever
+// the backend sends raw integer minutes instead of a formatted time —
+// whatever shape arrives, this guarantees a correct on-screen time.
+function minutesToClock(totalMinutesRaw) {
+  const total = Math.round(Number(totalMinutesRaw));
+  if (Number.isNaN(total)) return '';
+  const normalized = ((total % 1440) + 1440) % 1440;
+  const hour = Math.floor(normalized / 60);
+  const minute = normalized % 60;
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, '0')} ${suffix}`;
+}
+
 // Extracts just the HH:MM portion of a full "2026-07-08 10:38:00" style
 // string and formats it — used everywhere we want a clean time without
 // the date prefix cluttering the row. This is the ONLY function that
 // should be used to render a single time value; to12h() alone is not
 // enough because it leaves any leading date text untouched.
+//
+// FIX: now also detects a bare numeric value (e.g. "369" or 369) and
+// treats it as minutes-since-midnight, converting it directly — this is
+// what fixes the raw "369 - 468" style labels regardless of whether the
+// backend has actually started sending formatted times yet.
 function formatTimeOnly(raw) {
-  if (!raw) return '';
-  const match = String(raw).match(/(\d{1,2}):(\d{2})/);
-  return match ? to12h(match[0]) : to12h(raw);
+  if (raw === null || raw === undefined || raw === '') return '';
+  const text = String(raw).trim();
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    return minutesToClock(text);
+  }
+  const match = text.match(/(\d{1,2}):(\d{2})/);
+  return match ? to12h(match[0]) : to12h(text);
 }
 
 // Cleans a "start - end" style range where start/end may themselves be
@@ -172,9 +196,19 @@ function shortTime(value) {
   return formatTimeOnly(firstTimePart(value)).replace(/\s/g, '');
 }
 
+// FIX: now also handles a bare numeric value (e.g. "369") by treating it
+// directly as minutes-since-midnight, instead of only parsing "HH:MM"
+// style strings. This is what makes the Choghadiya timeline's "Now"
+// marker, active-period highlight, and "Next" calculation correct even
+// when the backend sends raw minute numbers for start/end.
 function parseTimeToMinutes(value) {
-  if (!value) return null;
+  if (value === null || value === undefined || value === '') return null;
   const text = String(value).trim();
+
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    return Math.round(Number(text)) % 1440;
+  }
+
   const iso = text.match(/T?(\d{1,2}):(\d{2})(?::\d{2})?/);
   if (!iso) return null;
 
@@ -434,8 +468,7 @@ function flattenDetails(data, prefix = '') {
 // FIX: was `to12h(cleanValue(value))`, which — same as TimingCard above —
 // left the date prefix in place for any full "YYYY-MM-DD HH:MM:SS" value.
 // formatTimeOnly() strips it, so every row in Daily Timings / Sun Details /
-// Moon Details / Hindu Calendar shows a clean "4:23 AM" instead of
-// "2026-07-10 4:23 AM".
+// Moon Details shows a clean "4:23 AM" instead of "2026-07-10 4:23 AM".
 function detailTime(value) {
   return formatTimeOnly(cleanValue(value));
 }
@@ -647,7 +680,7 @@ function PanchangDetails({ dailyResult }) {
           Full Panchang Details
         </h3>
         <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b8b8b', fontWeight: 800 }}>
-          Sunrise, moon timings, calendar, periods and Panchang records
+          Sunrise, moon timings, periods and Panchang records
         </span>
       </div>
 
@@ -665,7 +698,6 @@ function PanchangDetails({ dailyResult }) {
             <Panel icon={<Moon size={16} />} title="Moon Details" accent="#2563eb">
               <InfoRowList data={dailyResult.moon} />
             </Panel>
-           
           </div>
         </div>
       )}
