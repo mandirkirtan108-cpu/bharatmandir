@@ -896,116 +896,131 @@ def _devi_mahatmya_chapter_verses(chapter_num: int):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# RAMCHARITMANAS  (curated — Tulsidas, 7 kandas)
+# RAMCHARITMANAS  (WirelessAlien/Ramcharitmanas dataset — full Devanagari text)
 # ═════════════════════════════════════════════════════════════════════════════
-# Tulsidas's Awadhi retelling of the Rama story (c. 1574 CE), same author as
-# the Hanuman Chalisa above. The full text runs to roughly 10,900 chaupais
-# and dohas across 7 kandas — far too large to hand-curate in full, so (as
-# with Shiva Purana / Devi Mahatmya above) we curate the best-known moments
-# per kanda rather than attempting a complete verse-by-verse edition.
+# Tulsidas's 16th-century Awadhi retelling of the Rama story, same author as
+# the Hanuman Chalisa above. Unlike the curated-highlights approach used for
+# Shiva Purana / Devi Mahatmya, the full text is available here as a real
+# dataset (no English translation in the source, same situation as Valmiki
+# Ramayana / Mahabharata above), so we serve it in full rather than curating
+# a handful of episodes.
+#
+# Actual JSON structure per kanda file (list of blocks, one array per kanda):
+#   { "verse-number": 5.1, "content": "चौपाई\r\n...\r\n\r\nदोहा/सोरठा\r\n...।।1।।" }
+# Each block is one chaupai group ending in its doha/sortha — the
+# "verse-number" field is a JSON float (e.g. kanda 5, block "10" round-trips
+# as 5.1 due to trailing-zero loss), so we use the array position instead,
+# which reproduces the traditional per-kanda doha numbering exactly.
 
+_RCM_BASE = "https://raw.githubusercontent.com/WirelessAlien/Ramcharitmanas/main/main/data/verses"
+
+# (title, sanskrit_title, filename, verse_count, summary)
+# verse_count values were confirmed by fetching each file directly.
 _RAMCHARITMANAS_KANDAS = {
-    1: ("Bala Kanda", "बालकाण्ड",
-        "Tulsidas opens with invocations to his gurus and the Divine, then narrates Rama's birth in Ayodhya, his childhood, Vishwamitra's tutelage, and the breaking of Shiva's bow to win Sita's hand.",
-        [
-            ("Invocation to the Guru", "Tulsidas opens by bowing to the dust of his Guru's lotus feet, which purify the mirror of the mind, before setting out to describe the spotless glory of Raghuvira (Rama) that grants the four fruits of life.", "The Manas's famous opening invocation, echoed later in the Hanuman Chalisa by the same author"),
-            ("Rama's Birth in Ayodhya", "King Dasharatha of Ayodhya, after long-awaited sons through the Putrakameshti yajna, rejoices as Kaushalya gives birth to Rama, an incarnation of Vishnu, alongside his brothers Bharata, Lakshmana, and Shatrughna.", "The divine birth narrative shared with the Valmiki Ramayana's Bala Kanda"),
-            ("Vishwamitra's Tutelage", "The sage Vishwamitra takes young Rama and Lakshmana to protect his forest sacrifice from demons, teaching them sacred weapons (astras) along the way and preparing Rama for his destiny.", "Rama's early training under sage Vishwamitra"),
-            ("The Breaking of Shiva's Bow", "At King Janaka's court in Mithila, Rama effortlessly lifts and breaks the mighty bow of Shiva that no other king could even move, winning the hand of Princess Sita in marriage.", "The pivotal Sita-swayamvara episode"),
-        ]),
-    2: ("Ayodhya Kanda", "अयोध्याकाण्ड",
-        "On the eve of Rama's coronation, Queen Kaikeyi is provoked by her maid Manthara into demanding Rama's 14-year exile and her own son Bharata's crowning. Rama departs for the forest; Bharata refuses the throne.",
-        [
-            ("Manthara's Provocation", "Manthara, Kaikeyi's hunchbacked maid, convinces the queen that Rama's coronation threatens her son Bharata's future, turning Kaikeyi's joy into jealousy and fear.", "The turning point that sets the exile in motion"),
-            ("Kaikeyi's Two Boons", "Kaikeyi reminds Dasharatha of two boons he once owed her, demanding Rama's 14-year exile to the forest and Bharata's coronation instead. Bound by his word, the grief-stricken king can only comply.", "Dasharatha's dilemma between truthfulness and love for Rama"),
-            ("Rama's Cheerful Obedience", "Rama accepts the exile without a trace of resentment, seeing obedience to his father's word as dharma itself. Sita and Lakshmana insist on accompanying him into the forest.", "Tulsidas's portrayal of Rama as the ideal of filial duty (maryada purushottama)"),
-            ("Bharata Refuses the Throne", "On learning of the events, Bharata is horrified and refuses to accept the kingdom gained through his mother's scheme. He travels to the forest to beg Rama to return, and when Rama insists on completing the exile, Bharata rules only as regent, placing Rama's sandals upon the throne.", "Bharata's devotion, considered the moral high point of this kanda"),
-        ]),
-    3: ("Aranya Kanda", "अरण्यकाण्ड",
-        "Life in the Dandaka forest; the demoness Shurpanakha's disfigurement, Ravana's abduction of Sita through the golden-deer ruse, and Jatayu's sacrifice.",
-        [
-            ("Shurpanakha's Rejection", "The demoness Shurpanakha, smitten with Rama, is rebuffed and then mocks Sita, provoking Lakshmana to disfigure her. She flees to her brother Ravana in Lanka seeking revenge.", "The provocation that draws Ravana's attention to Sita"),
-            ("The Golden Deer", "The demon Maricha, at Ravana's command, transforms into a dazzling golden deer to lure Rama away from the hermitage, leaving Sita momentarily unprotected.", "Ravana's ruse to separate Rama from Sita"),
-            ("The Abduction of Sita", "While Rama and Lakshmana are drawn away, Ravana appears disguised as an ascetic and abducts Sita, carrying her off in his aerial chariot to Lanka.", "The central crisis of the epic"),
-            ("Jatayu's Sacrifice", "The aged vulture-king Jatayu, seeing Sita's abduction, attacks Ravana's chariot to rescue her. Mortally wounded, he lives just long enough to tell Rama what happened before passing away in Rama's arms.", "Jatayu's devotion honoured by Rama performing his last rites"),
-        ]),
-    4: ("Kishkindha Kanda", "किष्किन्धाकाण्ड",
-        "Rama's alliance with the monkey-king Sugriva and his minister Hanuman; the killing of the tyrant Vali; the search for Sita begins.",
-        [
-            ("Meeting Hanuman and Sugriva", "In the Kishkindha forest, Rama and Lakshmana meet Hanuman, who recognises Rama's divinity, and through him the exiled monkey-king Sugriva, forging an alliance of mutual aid.", "The beginning of Rama's friendship with the vanara kingdom"),
-            ("The Slaying of Vali", "Rama helps Sugriva reclaim his kingdom and wife from his tyrannical brother Vali by killing Vali from concealment during their duel — an episode Tulsidas frames as restoring rightful dharma.", "One of the more debated episodes of the epic, addressed directly by Tulsidas through Rama's own explanation to the dying Vali"),
-            ("Sugriva's Coronation", "With Vali slain, Sugriva is crowned king of Kishkindha and pledges his monkey army to help Rama find Sita, fulfilling his debt of gratitude.", "The alliance that makes the rescue of Sita possible"),
-            ("The Search Begins", "Sugriva dispatches search parties of monkeys in all four directions. The southern party, led by Hanuman, Angada, and Jambavan, eventually learns of Sita's location in Lanka.", "Setting up the events of the Sundara Kanda"),
-        ]),
-    5: ("Sundara Kanda", "सुन्दरकाण्ड",
-        "Hanuman's leap across the ocean, his discovery of Sita in the Ashoka grove, the burning of Lanka, and his triumphant return — the most widely recited kanda of the Manas.",
-        [
-            ("Hanuman's Leap Across the Ocean", "Growing to an immense size, Hanuman leaps across the ocean to Lanka, overcoming the mountain Mainaka's offer of rest, the demoness Surasa's test, and the shadow-catching demon Simhika along the way.", "The most celebrated feat of the Sundara Kanda"),
-            ("Finding Sita in the Ashoka Grove", "Hanuman finds Sita, captive in Ravana's Ashoka grove, steadfastly refusing Ravana's advances. He identifies himself with Rama's signet ring and delivers a message of hope and reassurance.", "The emotional heart of the kanda"),
-            ("The Burning of Lanka", "Captured and mocked by Ravana's court, Hanuman allows his tail to be set alight — then uses the flames to burn down much of Lanka before extinguishing himself in the sea and escaping.", "Hanuman's fearless retaliation"),
-            ("The Return with News", "Hanuman leaps back across the ocean and reports to Rama that Sita has been found, setting in motion the building of the bridge and the war to come.", "The kanda's resolution, prized above all for devotees of Hanuman"),
-        ]),
-    6: ("Lanka Kanda", "लंकाकाण्ड",
-        "Also called Yuddha Kanda — the building of the bridge to Lanka, the great war with Ravana's forces, and Rama's final victory.",
-        [
-            ("Building the Bridge (Rama Setu)", "The monkey army, led by the engineers Nala and Nila, builds a floating bridge of stones across the ocean to Lanka, each stone inscribed with Rama's name.", "The famous Rama Setu bridge-building episode"),
-            ("Vibhishana's Surrender", "Ravana's righteous brother Vibhishana, unable to dissuade him from returning Sita, defects to Rama's side and is later crowned king of Lanka after the war.", "Vibhishana as an example of righteousness over blood loyalty"),
-            ("The Fall of Kumbhakarna and Meghnada", "Ravana's giant brother Kumbhakarna and his powerful son Indrajit (Meghnada) both fall in battle against the vanara army and Rama's brothers, weakening Ravana's forces decisively.", "Key turning points of the war"),
-            ("The Death of Ravana", "After a fierce final duel, Rama slays Ravana with a divine arrow aimed at his navel, where his life force was concealed, ending the ten-headed demon king's tyranny.", "The epic's climactic battle"),
-            ("Sita's Fire Test and the Return to Ayodhya", "Sita undergoes the Agni Pariksha (fire ordeal) to prove her purity, after which Rama, Sita, and Lakshmana return to Ayodhya, where Bharata joyfully restores the kingdom to Rama.", "The joyous conclusion of the exile, celebrated to this day as Diwali"),
-        ]),
-    7: ("Uttara Kanda", "उत्तरकाण्ड",
-        "Rama's ideal reign (Ram Rajya), Sita's later exile due to public rumour, the birth of Lava and Kusha, and the epic's closing teachings on devotion.",
-        [
-            ("Ram Rajya", "Rama's reign in Ayodhya becomes the very model of just and prosperous governance — a golden age remembered ever after as 'Ram Rajya', where dharma flourishes and all citizens live in harmony.", "The ideal of righteous kingship central to the Manas's teaching"),
-            ("Sita's Second Exile", "Hearing a washerman's doubt about Sita's purity after her long captivity, Rama, bound by his duty as king to public perception, reluctantly sends the pregnant Sita to the forest, where she is sheltered by the sage Valmiki.", "One of the epic's most poignant and debated episodes"),
-            ("Lava and Kusha", "Sita raises her twin sons Lava and Kusha in Valmiki's hermitage, where they are trained in the Vedas and in the very story of their father's deeds — the Ramayana itself.", "The frame in which the epic is said to have first been recited"),
-            ("Tulsidas's Closing Teaching", "The Manas closes not with narrative but with teaching: Tulsidas declares that the repetition of Rama's name (Rama-nama) is the surest raft across the ocean of worldly existence, open to every being regardless of caste or learning.", "The devotional (bhakti) message that made the Manas the most widely read scripture in North India"),
-        ]),
+    1: ("Bala Kanda", "बालकाण्ड", "balkanda.json", 361,
+        "Tulsidas opens with invocations to his gurus and the Divine, then narrates Rama's birth in Ayodhya, his childhood, Vishwamitra's tutelage, and the breaking of Shiva's bow to win Sita's hand."),
+    2: ("Ayodhya Kanda", "अयोध्याकाण्ड", "ayodhyakanda.json", 326,
+        "On the eve of Rama's coronation, Queen Kaikeyi is provoked by her maid Manthara into demanding Rama's 14-year exile and her own son Bharata's crowning. Rama departs for the forest; Bharata refuses the throne."),
+    3: ("Aranya Kanda", "अरण्यकाण्ड", "aranyakanda.json", 46,
+        "Life in the Dandaka forest; the demoness Shurpanakha's disfigurement, Ravana's abduction of Sita through the golden-deer ruse, and Jatayu's sacrifice."),
+    4: ("Kishkindha Kanda", "किष्किन्धाकाण्ड", "kishkindhakanda.json", 30,
+        "Rama's alliance with the monkey-king Sugriva and his minister Hanuman; the killing of the tyrant Vali; the search for Sita begins."),
+    5: ("Sundara Kanda", "सुन्दरकाण्ड", "sundarkanda.json", 60,
+        "Hanuman's leap across the ocean, his discovery of Sita in the Ashoka grove, the burning of Lanka, and his triumphant return — the most widely recited kanda of the Manas."),
+    6: ("Lanka Kanda", "लंकाकाण्ड", "lankakanda.json", 121,
+        "Also called Yuddha Kanda — the building of the bridge to Lanka, the great war with Ravana's forces, and Rama's final victory."),
+    7: ("Uttara Kanda", "उत्तरकाण्ड", "uttarakanda.json", 130,
+        "Rama's ideal reign (Ram Rajya), Sita's later exile due to public rumour, the birth of Lava and Kusha, and the epic's closing teachings on devotion."),
 }
 
 
+def _load_ramcharitmanas_kanda_raw(kanda_num: int):
+    """Fetch + validate one kanda's full block list from the WirelessAlien
+    dataset, cached 24h. Same validate-before-cache principle used
+    elsewhere in this file: a malformed payload is never treated as good
+    data or locked into the cache."""
+    if kanda_num not in _RAMCHARITMANAS_KANDAS:
+        raise HTTPException(status_code=404, detail="Kanda not found")
+    cache_key = f"rcm_kanda_{kanda_num}_raw"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    _, _, filename, _, _ = _RAMCHARITMANAS_KANDAS[kanda_num]
+    url = f"{_RCM_BASE}/{filename}"
+    try:
+        data = _fetch_json(url)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not load Ramcharitmanas kanda {kanda_num}: {e}")
+    if not isinstance(data, list) or not data:
+        raise HTTPException(status_code=502, detail=f"Unexpected Ramcharitmanas payload for kanda {kanda_num}")
+    return _cache_set(cache_key, data)
+
+
+def _clean_rcm_block(text: str) -> str:
+    """Normalize the source's \\r\\n line endings and collapse stray
+    whitespace, while keeping the चौपाई / दोहा-सोरठा section breaks
+    (blank line) that structure each block."""
+    if not text:
+        return text
+    text = text.replace("\r\n", "\n")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _ramcharitmanas_chapters():
-    cached = _cache_get("ramcharitmanas_chapters")
+    cached = _cache_get("ramcharitmanas_chapters_list")
     if cached:
         return cached
     chapters = []
-    for num, (title, sanskrit, summary, verses) in _RAMCHARITMANAS_KANDAS.items():
+    for num, (title, sanskrit, _filename, verse_count, summary) in _RAMCHARITMANAS_KANDAS.items():
         chapters.append({
             "chapter_number": num,
             "title":          title,
             "sanskrit_title": sanskrit,
             "summary":        summary,
-            "verse_count":    len(verses),
+            "verse_count":    verse_count,
         })
-    return _cache_set("ramcharitmanas_chapters", {"chapters": chapters})
+    return _cache_set("ramcharitmanas_chapters_list", {"chapters": chapters})
 
 
 def _ramcharitmanas_kanda_verses(kanda_num: int):
     if kanda_num not in _RAMCHARITMANAS_KANDAS:
         raise HTTPException(status_code=404, detail="Kanda not found")
-    title_en, title_sa, summary, key_verses = _RAMCHARITMANAS_KANDAS[kanda_num]
+    cache_key = f"rcm_kanda_{kanda_num}_verses"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    raw = _load_ramcharitmanas_kanda_raw(kanda_num)
+    title_en, title_sa, _filename, _expected_count, summary = _RAMCHARITMANAS_KANDAS[kanda_num]
+
     verses = []
-    for i, (vtitle, translation, commentary) in enumerate(key_verses):
+    for i, entry in enumerate(raw):
+        block = _clean_rcm_block(entry.get("content", ""))
         verses.append({
             "verse_number":    i + 1,
             "chapter_number":  kanda_num,
-            "label":           vtitle,
-            "sanskrit":        "",
+            "label":           f"Doha {i + 1}",
+            "sanskrit":        block,
             "transliteration": "",
-            "translation":     translation,
-            "commentary":      commentary,
+            # No English translation in this dataset — show Devanagari,
+            # same convention used for Valmiki Ramayana / Mahabharata above.
+            "translation":     block,
+            "commentary":      "",
         })
-    return {
+
+    result = {
         "chapter_number":  kanda_num,
         "title":           title_en,
         "sanskrit_title":  title_sa,
         "summary":         summary,
         "verse_count":     len(verses),
         "verses":          verses,
-        "note":            "Ramcharitmanas — curated key episodes per kanda. Full Awadhi chaupai-by-chaupai edition coming soon.",
-        "source_credit":   "Tulsidas, Ramcharitmanas (c. 1574 CE, public domain) — cf. F.S. Growse's English prose translation, The Rámáyana of Tulasidasa (1883, public domain)",
+        "note":            "Full Ramcharitmanas Devanagari text, grouped by chaupai/doha block, following the standard text underlying the widely-used Gita Press, Gorakhpur edition. English translation edition coming soon.",
+        "source_credit":   "Tulsidas, Ramcharitmanas (c. 1574 CE, public domain) — text: WirelessAlien/Ramcharitmanas dataset (Unlicense), sourced from the IIT Kanpur Ramcharitmanas project (ramcharitmanas.iitk.ac.in)",
     }
+    return _cache_set(cache_key, result)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1692,8 +1707,8 @@ _STATIC_BOOKS = {
     "ramcharitmanas": {
         "id": -1, "slug": "ramcharitmanas", "title": "Ramcharitmanas",
         "sanskrit_title": "श्रीरामचरितमानस", "deity": "Rama", "tradition": "Vaishnavism",
-        "language": "Awadhi (with English notes)", "total_chapters": 7, "total_verses": None,
-        "description": "Tulsidas's 16th-century Awadhi retelling of the Rama story — the most widely read scripture in North Indian households, by the same author as the Hanuman Chalisa.",
+        "language": "Awadhi (Devanagari)", "total_chapters": 7, "total_verses": 1074,
+        "description": "Tulsidas's 16th-century Awadhi retelling of the Rama story — the most widely read scripture in North Indian households, by the same author as the Hanuman Chalisa. Full Devanagari text across all 7 kandas.",
         "icon_emoji": "🏹", "accent_color": "#B45309", "api_source": "ramcharitmanas",
     },
     "upanishads": {
