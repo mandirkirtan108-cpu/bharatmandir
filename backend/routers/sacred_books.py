@@ -1,4 +1,4 @@
-import os, sys, time, httpx, re
+import os, sys, time, httpx, re, html
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -1811,6 +1811,114 @@ def _yoga_sutras_pada_verses(pada_num: int):
     }
 
 
+# =============================================================================
+# BHAGAVATA PURANA / SRIMAD BHAGAVATAM
+# GRETIL scholarly e-text, complete across all 12 skandhas. The source is
+# romanized Sanskrit (Unicode/IAST-like transliteration), not an English
+# translation. Verse references are preserved exactly as BhP_CC.CH.VVV.
+# =============================================================================
+
+_BHAGAVATA_GRETIL_URL = (
+    "https://gretil.sub.uni-goettingen.de/gretil/1_sanskr/3_purana/"
+    "bhagp/bhp1-12u.htm"
+)
+
+_BHAGAVATA_CANTO_TITLES = {
+    1: "Creation", 2: "The Cosmic Manifestation", 3: "The Status Quo",
+    4: "The Creation of the Fourth Order", 5: "The Creative Impetus",
+    6: "Prescribed Duties for Mankind", 7: "The Science of God",
+    8: "Withdrawal of the Cosmic Creations", 9: "Liberation",
+    10: "The Summum Bonum", 11: "General History", 12: "The Age of Deterioration",
+}
+
+
+def _load_bhagavata_text():
+    cache_key = "bhagavata_gretil_parsed_v1"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        with httpx.Client(timeout=60, follow_redirects=True) as client:
+            response = client.get(_BHAGAVATA_GRETIL_URL)
+            response.raise_for_status()
+            source = response.text
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not load Bhagavata Purana from GRETIL: {exc}",
+        )
+
+    # Each real verse ends with // BhP_CC.CH.VVV //. Lines ending in /0 are
+    # speaker headings and remain attached to the following verse as context.
+    marker = re.compile(r"//\s*BhP_(\d{2})\.(\d{2})\.(\d{3})\s*//\*?")
+    matches = list(marker.finditer(source))
+    if not matches:
+        raise HTTPException(status_code=502, detail="GRETIL Bhagavata text format changed")
+
+    by_canto = defaultdict(list)
+    previous_end = source.rfind("<hr", 0, matches[0].start())
+    previous_end = previous_end if previous_end >= 0 else 0
+    for match in matches:
+        canto, adhyaya, verse = (int(value) for value in match.groups())
+        raw = source[previous_end:match.start()]
+        previous_end = match.end()
+        raw = re.sub(r"<[^>]+>", " ", raw)
+        raw = html.unescape(raw)
+        raw = re.sub(r"BhP_\d{2}\.\d{2}\.\d{3}/0", " ", raw)
+        raw = raw.replace("$", "\n").replace("&", "\n").replace("%", "\n")
+        text_value = re.sub(r"[ \t]+", " ", raw)
+        text_value = re.sub(r"\s*\n\s*", "\n", text_value).strip(" \n/*")
+        if not text_value:
+            continue
+        by_canto[canto].append({
+            "verse_number": len(by_canto[canto]) + 1,
+            "chapter_number": canto,
+            "adhyaya": adhyaya,
+            "shloka": verse,
+            "label": f"Adhyaya {adhyaya}, Verse {verse}",
+            "reference": f"BhP_{canto:02d}.{adhyaya:02d}.{verse:03d}",
+            "sanskrit": "",
+            "transliteration": text_value,
+            # Reader compatibility: it expects a non-empty translation field.
+            # This is deliberately the source transliteration, never presented
+            # as an English translation.
+            "translation": text_value,
+            "commentary": "",
+        })
+    return _cache_set(cache_key, dict(by_canto))
+
+
+def _bhagavata_chapters():
+    by_canto = _load_bhagavata_text()
+    return {"chapters": [
+        {
+            "chapter_number": canto,
+            "title": f"Canto {canto} — {_BHAGAVATA_CANTO_TITLES[canto]}",
+            "sanskrit_title": f"Skandha {canto}",
+            "summary": "Romanized Sanskrit source text, grouped by adhyaya and verse.",
+            "verse_count": len(by_canto.get(canto, [])),
+        }
+        for canto in range(1, 13)
+    ]}
+
+
+def _bhagavata_canto_verses(canto_num: int):
+    if canto_num not in range(1, 13):
+        raise HTTPException(status_code=404, detail="Canto not found (1–12 only)")
+    verses = _load_bhagavata_text().get(canto_num, [])
+    return {
+        "chapter_number": canto_num,
+        "title": f"Canto {canto_num} — {_BHAGAVATA_CANTO_TITLES[canto_num]}",
+        "sanskrit_title": f"Skandha {canto_num}",
+        "summary": "Complete romanized Sanskrit e-text for this skandha.",
+        "verse_count": len(verses),
+        "verses": verses,
+        "note": "Source text is romanized Sanskrit; no English translation is claimed.",
+        "source_credit": "GRETIL: Bhagavata-Puranam, Skandhas 1–12; contributed by Ulrich Stiehl",
+        "source_url": _BHAGAVATA_GRETIL_URL,
+    }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # ROUTING HELPERS
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1844,6 +1952,8 @@ def _dispatch_chapters(slug: str, api_source: str, book_id: int):
         return _vishnu_purana_chapters()
     if api_source == "yoga_sutras":
         return _yoga_sutras_chapters()
+    if api_source == "bhagavata_purana":
+        return _bhagavata_chapters()
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT chapter_number, title, summary, verse_count
@@ -1882,6 +1992,8 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
         return _vishnu_purana_book_verses(chapter_num)
     if api_source == "yoga_sutras":
         return _yoga_sutras_pada_verses(chapter_num)
+    if api_source == "bhagavata_purana":
+        return _bhagavata_canto_verses(chapter_num)
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT chapter_number, title, summary, verse_count
@@ -1920,6 +2032,16 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
 # these in, so filenames and JSON shapes below are confirmed, not guessed.
 
 _STATIC_BOOKS = {
+    "bhagavata-purana": {
+        "id": -9, "slug": "bhagavata-purana",
+        "title": "Bhagavata Purana (Srimad Bhagavatam)",
+        "sanskrit_title": "श्रीमद्भागवतपुराण", "deity": "Krishna",
+        "tradition": "Vaishnavism", "language": "Sanskrit (romanized Unicode)",
+        "total_chapters": 12, "total_verses": None,
+        "description": "The complete Bhagavata Purana source text across all 12 skandhas, preserving GRETIL's canto, adhyaya, and verse references.",
+        "icon_emoji": "🪷", "accent_color": "#7C3AED",
+        "api_source": "bhagavata_purana",
+    },
     "ramcharitmanas": {
         "id": -1, "slug": "ramcharitmanas", "title": "Ramcharitmanas",
         "sanskrit_title": "श्रीरामचरितमानस", "deity": "Rama", "tradition": "Vaishnavism",
@@ -2171,7 +2293,7 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
     elif api_source in (
         "hanuman_chalisa", "shiva_purana", "devi_mahatmya",
         "ramcharitmanas", "upanishads", "manusmriti",
-        "vishnu_purana", "yoga_sutras",
+        "vishnu_purana", "yoga_sutras", "bhagavata_purana",
     ):
         try:
             if api_source == "hanuman_chalisa":
@@ -2188,6 +2310,8 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
                 chapters = [_manusmriti_chapter_verses(n) for n in range(1, 13)]
             elif api_source == "vishnu_purana":
                 chapters = [_vishnu_purana_book_verses(n) for n in range(1, 7)]
+            elif api_source == "bhagavata_purana":
+                chapters = [_bhagavata_canto_verses(n) for n in range(1, 13)]
             else:
                 chapters = [_yoga_sutras_pada_verses(n) for n in range(1, 5)]
             for ch_data in chapters:
