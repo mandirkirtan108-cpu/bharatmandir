@@ -5,10 +5,13 @@ import {
   CheckCircle,
   Clock,
   Loader2,
+  MapPin,
   Moon,
+  Navigation,
   Sparkles,
   Star,
   Sun,
+  X,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -894,9 +897,88 @@ export default function PanchangPage() {
   const [dailyError, setDailyError] = useState(null);
   const [muhuratError, setMuhuratError] = useState(null);
 
+  // ── Location auto-fill (same navigator.geolocation logic as the
+  // Temple Search page's "Search Nearby" feature). Coordinates are
+  // captured directly and, where the backend supports it (the /daily
+  // Panchang endpoint accepts latitude/longitude), sent straight through
+  // — the city text is only used for display and for the Muhurat
+  // endpoint, which is city-text only.
+  const [locLoading, setLocLoading] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [usingLocation, setUsingLocation] = useState(false);
+  const [userCoords, setUserCoords] = useState(null);
+
   const selectedType = MUHURAT_TYPES.find((m) => m.id === selected);
 
+  // Reverse-geocodes lat/lng into a human-readable "City, State" label
+  // using OpenStreetMap's free Nominatim API (no key required), so the
+  // City field autofills with an actual place name instead of raw
+  // coordinates. If it fails for any reason, we fall back to showing the
+  // coordinates themselves so the field is never left blank.
+  const reverseGeocodeCity = async (latitude, longitude) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`
+      );
+      const data = await res.json();
+      const addr = data.address || {};
+      const cityName = addr.city || addr.town || addr.village || addr.municipality || addr.county || addr.state_district || '';
+      const stateName = addr.state || '';
+      const resolved = cityName
+        ? (stateName && stateName !== cityName ? `${cityName}, ${stateName}` : cityName)
+        : `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
+      setCity(resolved);
+    } catch (err) {
+      setCity(`${latitude.toFixed(3)}, ${longitude.toFixed(3)}`);
+    } finally {
+      setLocLoading(false);
+    }
+  };
+
+  const getUserLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Your browser does not support location access.');
+      return;
+    }
+    setLocLoading(true);
+    setLocationError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setUserCoords({ lat: latitude, lng: longitude });
+        setUsingLocation(true);
+        setDailyError(null);
+        reverseGeocodeCity(latitude, longitude);
+      },
+      () => {
+        setLocationError('Location access denied. Please allow location in your browser and try again.');
+        setLocLoading(false);
+      },
+      { timeout: 10000 }
+    );
+  };
+
+  // Lets the person drop back into manual typing at any time — clears
+  // the detected coordinates and the auto-filled text so CityAutocomplete
+  // behaves exactly as it did before (free typing + its own suggestions).
+  const clearLocation = () => {
+    setUsingLocation(false);
+    setUserCoords(null);
+    setLocationError('');
+    setCity('');
+  };
+
+  // Typing (or picking a suggestion) in either City field should stop
+  // treating the request as location-based, so a manually-typed city
+  // isn't silently overridden by stale coordinates.
+  const handleCityChange = (val) => {
+    setCity(val);
+    setDailyError(null);
+    setUsingLocation(false);
+  };
+
   const fetchDailyPanchang = async () => {
+    if (!city.trim() || dailyLoading) return;
     setDailyLoading(true);
     setDailyResult(null);
     setDailyError(null);
@@ -904,7 +986,15 @@ export default function PanchangPage() {
       const res = await fetch(`${API_BASE}/api/panchang/daily`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, city: city || 'India' }),
+        body: JSON.stringify({
+          date,
+          city: city || 'India',
+          // When the request came from "Use My Location", send the raw
+          // coordinates too — the backend's normalize_city() prefers
+          // explicit latitude/longitude over free-text city geocoding,
+          // so this is more accurate than re-geocoding the label text.
+          ...(usingLocation && userCoords ? { latitude: userCoords.lat, longitude: userCoords.lng } : {}),
+        }),
       });
       const data = await res.json();
       // FIX: backend now returns a 422 with a clear message when the typed
@@ -926,6 +1016,7 @@ export default function PanchangPage() {
       setMuhuratError('Please select an occasion first.');
       return;
     }
+    if (loading) return;
     setLoading(true);
     setResult(null);
     setMuhuratError(null);
@@ -985,6 +1076,21 @@ export default function PanchangPage() {
     gap: 10,
     alignItems: 'flex-start',
     maxWidth: 640,
+  };
+  const locButtonStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '4px 10px',
+    borderRadius: 20,
+    border: '1.5px solid var(--saffron)',
+    background: locLoading ? 'var(--cream-dark)' : 'rgba(232,101,10,0.06)',
+    color: 'var(--saffron-dark)',
+    fontFamily: UI_FONT,
+    fontSize: 11,
+    fontWeight: 800,
+    cursor: locLoading ? 'wait' : 'pointer',
+    whiteSpace: 'nowrap',
   };
 
   return (
@@ -1058,36 +1164,75 @@ export default function PanchangPage() {
                   : 'Select date and city to view daily Panchang'}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
-              <div>
-                <label style={labelStyle}>Date</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => { setDate(e.target.value); setResult(null); setDailyResult(null); }}
-                  style={{ ...inputStyle, width: 192, height: 44, background: '#fff', border: '1px solid #e7d8c6', borderRadius: 9 }}
-                />
+
+            {/* Enter key anywhere in this block submits the Daily Panchang query */}
+            <div
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !dailyLoading && city.trim()) {
+                  e.preventDefault();
+                  fetchDailyPanchang();
+                }
+              }}
+            >
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 8 }}>
+                <div>
+                  <label style={labelStyle}>Date</label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => { setDate(e.target.value); setResult(null); setDailyResult(null); }}
+                    style={{ ...inputStyle, width: 192, height: 44, background: '#fff', border: '1px solid #e7d8c6', borderRadius: 9 }}
+                  />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>City *</label>
+                    {!usingLocation && (
+                      <button type="button" onClick={getUserLocation} disabled={locLoading} style={locButtonStyle}>
+                        <Navigation size={11} />
+                        {locLoading ? 'Locating…' : 'Use My Location'}
+                      </button>
+                    )}
+                  </div>
+                  <CityAutocomplete
+                    value={city}
+                    onChange={handleCityChange}
+                    placeholder="e.g. Ujjain, Mumbai"
+                    style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
+                  />
+                  {usingLocation && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800 }}>
+                        <MapPin size={11} /> Location detected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={clearLocation}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px' }}
+                      >
+                        <X size={11} /> Type manually
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
+                  {dailyLoading ? (
+                    <>
+                      <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading...
+                    </>
+                  ) : (
+                    <>
+                      Get Panchang
+                    </>
+                  )}
+                </button>
               </div>
-              <div>
-                <label style={labelStyle}>City *</label>
-                <CityAutocomplete
-                  value={city}
-                  onChange={(val) => { setCity(val); setDailyError(null); }}
-                  placeholder="e.g. Ujjain, Mumbai"
-                  style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
-                />
-              </div>
-              <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
-                {dailyLoading ? (
-                  <>
-                    <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading...
-                  </>
-                ) : (
-                  <>
-                    Get Panchang
-                  </>
-                )}
-              </button>
+
+              {locationError && (
+                <p style={{ marginTop: 4, marginBottom: 12, fontSize: 12, color: '#c0392b', lineHeight: 1.5, background: '#fdecea', padding: '6px 10px', borderRadius: 6, maxWidth: 420 }}>
+                  ⚠️ {locationError}
+                </p>
+              )}
             </div>
 
             {dailyError && (
@@ -1143,44 +1288,76 @@ export default function PanchangPage() {
               </div>
             </div>
 
-            <div className="muhurat-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}>
-              <div>
-                <label style={labelStyle}>Date</label>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, background: 'var(--cream)' }} />
+            {/* Enter key anywhere in this block submits the Muhurat search */}
+            <div
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !loading) {
+                  e.preventDefault();
+                  findMuhurat();
+                }
+              }}
+            >
+              <div className="muhurat-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}>
+                <div>
+                  <label style={labelStyle}>Date</label>
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, background: 'var(--cream)' }} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Your Name (optional)</label>
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rahul Sharma" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Rashi (Moon Sign)</label>
+                  <select value={rashi} onChange={(e) => setRashi(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                    <option value="">Select your Rashi...</option>
+                    {RASHI_LIST.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>City</label>
+                    {!usingLocation && (
+                      <button type="button" onClick={getUserLocation} disabled={locLoading} style={{ ...locButtonStyle, padding: '3px 8px', fontSize: 10 }}>
+                        <Navigation size={10} />
+                        {locLoading ? 'Locating…' : 'My Location'}
+                      </button>
+                    )}
+                  </div>
+                  <CityAutocomplete
+                    value={city}
+                    onChange={handleCityChange}
+                    placeholder="e.g. Varanasi"
+                    style={inputStyle}
+                  />
+                  {usingLocation && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800 }}>
+                        <MapPin size={11} /> Location detected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={clearLocation}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px' }}
+                      >
+                        <X size={11} /> Type manually
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div>
-                <label style={labelStyle}>Your Name (optional)</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rahul Sharma" style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Rashi (Moon Sign)</label>
-                <select value={rashi} onChange={(e) => setRashi(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value="">Select your Rashi...</option>
-                  {RASHI_LIST.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>City</label>
-                <CityAutocomplete
-                  value={city}
-                  onChange={setCity}
-                  placeholder="e.g. Varanasi"
-                  style={inputStyle}
-                />
-              </div>
-            </div>
 
-            <button className="btn-primary" onClick={findMuhurat} disabled={loading} style={{ width: '100%', justifyContent: 'center', padding: '15px', fontSize: 15, borderRadius: 50, gap: 10 }}>
-              {loading ? (
-                <>
-                  <Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Muhurat...
-                </>
-              ) : (
-                <>
-                  <Sparkles size={18} /> Find Auspicious Muhurat
-                </>
-              )}
-            </button>
+              <button className="btn-primary" onClick={findMuhurat} disabled={loading} style={{ width: '100%', justifyContent: 'center', padding: '15px', fontSize: 15, borderRadius: 50, gap: 10 }}>
+                {loading ? (
+                  <>
+                    <Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Muhurat...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={18} /> Find Auspicious Muhurat
+                  </>
+                )}
+              </button>
+            </div>
 
             {!loading && !result && (
               <div style={{ marginTop: 28, textAlign: 'center', padding: '28px 24px', background: 'var(--cream)', borderRadius: 'var(--radius)', border: '1px dashed var(--cream-dark)' }}>
