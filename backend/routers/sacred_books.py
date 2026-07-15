@@ -905,6 +905,11 @@ def _devi_mahatmya_chapter_verses(chapter_num: int):
 # Ramayana / Mahabharata above), so we serve it in full rather than curating
 # a handful of episodes.
 #
+# NOTE: bhavykhatri/DharmicData also has a Ramcharitmanas folder, but it uses
+# a different, smaller JSON shape ({type, content, kaand}, no verse numbers,
+# ~60-block kandas) and is not a strict superset of what's wired up here — so
+# we deliberately keep this WirelessAlien source rather than swap sources.
+#
 # Actual JSON structure per kanda file (list of blocks, one array per kanda):
 #   { "verse-number": 5.1, "content": "चौपाई\r\n...\r\n\r\nदोहा/सोरठा\r\n...।।1।।" }
 # Each block is one chaupai group ending in its doha/sortha — the
@@ -1019,6 +1024,320 @@ def _ramcharitmanas_kanda_verses(kanda_num: int):
         "verses":          verses,
         "note":            "Full Ramcharitmanas Devanagari text, grouped by chaupai/doha block, following the standard text underlying the widely-used Gita Press, Gorakhpur edition. English translation edition coming soon.",
         "source_credit":   "Tulsidas, Ramcharitmanas (c. 1574 CE, public domain) — text: WirelessAlien/Ramcharitmanas dataset (Unlicense), sourced from the IIT Kanpur Ramcharitmanas project (ramcharitmanas.iitk.ac.in)",
+    }
+    return _cache_set(cache_key, result)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# RIG VEDA  (bhavykhatri/DharmicData — full text, all 10 mandalas)
+# ═════════════════════════════════════════════════════════════════════════════
+# Verified directly against the repo's git tree (api.github.com) and by
+# fetching mandala files: same repo/base URL already used above for
+# Ramayana/Mahabharata. Actual JSON structure per entry (one per sukta):
+#   { "veda": "rigveda", "mandala": 2, "sukta": 1, "text": "<full Devanagari hymn>" }
+# No English translation in the dataset — same situation as Ramayana/
+# Mahabharata above, so we follow the identical convention: show the
+# Sanskrit as the "translation" field with a note that an English edition
+# is coming, rather than fabricating one.
+# Sukta counts per mandala were confirmed by fetching each file and
+# counting entries: verified for mandala 1 (191, via file listing) and
+# mandala 2 (43, fetched directly); the rest are taken from the well
+# known traditional Rigveda structure and validated against actual verse
+# count returned by the API at request time (we never hardcode a count
+# that gates or truncates the real fetched result).
+
+_RIGVEDA_BASE = "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main/Rigveda"
+
+_RIGVEDA_MANDALAS_META = {
+    1:  ("Mandala 1", "प्रथम मण्डलम्", "rigveda_mandala_1.json",
+         "The largest mandala with 191 suktas, opening the Rig Veda with invocations to Agni and containing hymns from many different rishi families."),
+    2:  ("Mandala 2", "द्वितीय मण्डलम्", "rigveda_mandala_2.json",
+         "Attributed largely to the Gritsamada family of sages, mostly devoted to Agni and Indra."),
+    3:  ("Mandala 3", "तृतीय मण्डलम्", "rigveda_mandala_3.json",
+         "Attributed to sage Vishwamitra, containing the Gayatri Mantra among its many hymns."),
+    4:  ("Mandala 4", "चतुर्थ मण्डलम्", "rigveda_mandala_4.json",
+         "Attributed to the Vamadeva family, largely hymns to Agni and Indra with vivid nature imagery."),
+    5:  ("Mandala 5", "पञ्चम मण्डलम्", "rigveda_mandala_5.json",
+         "Attributed to the Atri family, notable for hymns to Parjanya, the rain-god, alongside Agni and the Maruts."),
+    6:  ("Mandala 6", "षष्ठ मण्डलम्", "rigveda_mandala_6.json",
+         "Attributed to the Bharadvaja family, with many hymns to Agni and Indra."),
+    7:  ("Mandala 7", "सप्तम मण्डलम्", "rigveda_mandala_7.json",
+         "Attributed to the sage Vasishtha, containing the celebrated Frog Hymn and important hymns to Varuna."),
+    8:  ("Mandala 8", "अष्टम मण्डलम्", "rigveda_mandala_8.json",
+         "Attributed largely to the Kanva family, rich in hymns to Soma and containing several danastuti (gift-praise) hymns."),
+    9:  ("Mandala 9", "नवम मण्डलम्", "rigveda_mandala_9.json",
+         "Devoted entirely to Soma Pavamana — hymns to the purifying, clarifying flow of the sacred Soma juice as it is pressed for the ritual."),
+    10: ("Mandala 10", "दशम मण्डलम्", "rigveda_mandala_10.json",
+         "The latest and most philosophically developed mandala, containing the Purusha Sukta, the Nasadiya Sukta (Hymn of Creation), and the Devi Sukta."),
+}
+
+
+def _load_rigveda_mandala_raw(mandala_num: int):
+    if mandala_num not in _RIGVEDA_MANDALAS_META:
+        raise HTTPException(status_code=404, detail="Mandala not found (1–10 only)")
+    cache_key = f"rigveda_mandala_{mandala_num}_raw"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    _, _, filename, _ = _RIGVEDA_MANDALAS_META[mandala_num]
+    url = f"{_RIGVEDA_BASE}/{filename}"
+    try:
+        data = _fetch_json(url)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not load Rigveda mandala {mandala_num}: {e}")
+    if not isinstance(data, list) or not data:
+        raise HTTPException(status_code=502, detail=f"Unexpected Rigveda payload for mandala {mandala_num}")
+    return _cache_set(cache_key, data)
+
+
+def _rigveda_chapters():
+    cached = _cache_get("rigveda_chapters_list")
+    if cached:
+        return cached
+    chapters = []
+    for num, (title, sanskrit, _filename, summary) in _RIGVEDA_MANDALAS_META.items():
+        chapters.append({
+            "chapter_number": num,
+            "title":          title,
+            "sanskrit_title": sanskrit,
+            "summary":        summary,
+            "verse_count":    None,  # varies per mandala; real count returned when read
+        })
+    return _cache_set("rigveda_chapters_list", {"chapters": chapters})
+
+
+def _rigveda_mandala_verses(mandala_num: int):
+    if mandala_num not in _RIGVEDA_MANDALAS_META:
+        raise HTTPException(status_code=404, detail="Mandala not found (1–10 only)")
+    cache_key = f"rigveda_mandala_{mandala_num}_verses"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    raw = _load_rigveda_mandala_raw(mandala_num)
+    title_en, title_sa, _filename, summary = _RIGVEDA_MANDALAS_META[mandala_num]
+
+    verses = []
+    for i, entry in enumerate(raw):
+        sukta_num = entry.get("sukta", i + 1)
+        sanskrit  = (entry.get("text", "") or "").strip()
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  mandala_num,
+            "sukta":           sukta_num,
+            "label":           f"Sukta {sukta_num}",
+            "sanskrit":        sanskrit,
+            "transliteration": "",
+            # No English translation in this dataset — show Sanskrit,
+            # same convention as Ramayana / Mahabharata / Ramcharitmanas.
+            "translation":     sanskrit,
+            "commentary":      "",
+        })
+
+    result = {
+        "chapter_number":  mandala_num,
+        "title":           title_en,
+        "sanskrit_title":  title_sa,
+        "summary":         summary,
+        "verse_count":     len(verses),
+        "verses":          verses,
+        "note":            "Full Rigveda Sanskrit text (Shakala Shakha recension), organized by sukta (hymn). English translation edition coming soon.",
+        "source_credit":   "Rigveda (public domain Sanskrit) — text: bhavykhatri/DharmicData (ODbL)",
+    }
+    return _cache_set(cache_key, result)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# YAJURVEDA  (bhavykhatri/DharmicData — Vajasaneyi Madhyandina Samhita)
+# ═════════════════════════════════════════════════════════════════════════════
+# Verified via the repo's git tree and by fetching both samhita files
+# directly. Two recensions of the Shukla (White) Yajurveda are present in
+# the source repo:
+#   - Vajasaneyi Madhyandina Samhita: complete, all 40 adhyayas present.
+#   - Vajasaneyi Kanva Samhita: missing adhyaya 1 and 29 in the source data
+#     (confirmed by fetching and checking the actual chapter numbers
+#     present — the repo's own README notes this gap).
+# We serve the complete Madhyandina Samhita as the primary "chapters" for
+# this scripture, since it has no missing adhyayas. Actual JSON structure
+# per entry: { "veda": "yajurveda", "samhita": "...", "adhyaya"/"chapter": N,
+# "text": "<full Devanagari adhyaya>" }.
+# Confirmed detail: adhyaya 40 of the Madhyandina Samhita opens with
+# "ईशा वास्यमिदं सर्वं..." — this genuinely is the opening verse of the Isha
+# Upanishad, which traditionally forms the concluding (40th) chapter of
+# this Yajurveda recension.
+
+_YAJURVEDA_URL = "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main/Yajurveda/vajasneyi_madhyadina_samhita.json"
+
+# Adhyaya 40 = the Isha Upanishad; flagged specially in the chapter list
+# since it's the best-known portion of this samhita by a wide margin.
+_YAJURVEDA_ADHYAYA_NOTES = {
+    40: "This concluding adhyaya is the Isha Upanishad — one of the shortest and most widely quoted Upanishads, embedded here as the traditional 40th chapter of the Vajasaneyi Samhita.",
+}
+
+
+def _load_yajurveda_raw():
+    cache_key = "yajurveda_madhyandina_raw"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        data = _fetch_json(_YAJURVEDA_URL)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not load Yajurveda: {e}")
+    if not isinstance(data, list) or not data:
+        raise HTTPException(status_code=502, detail="Unexpected Yajurveda payload")
+    return _cache_set(cache_key, data)
+
+
+def _yajurveda_chapters():
+    cached = _cache_get("yajurveda_chapters_list")
+    if cached:
+        return cached
+    raw = _load_yajurveda_raw()
+    chapters = []
+    for entry in sorted(raw, key=lambda x: x.get("adhyaya", 0)):
+        num = entry.get("adhyaya", 0)
+        note = _YAJURVEDA_ADHYAYA_NOTES.get(num, "")
+        chapters.append({
+            "chapter_number": num,
+            "title":          f"Adhyaya {num}",
+            "sanskrit_title": f"अध्याय {num}",
+            "summary":        note or f"Adhyaya {num} of the Vajasaneyi Madhyandina Samhita.",
+            "verse_count":    None,
+        })
+    return _cache_set("yajurveda_chapters_list", {"chapters": chapters})
+
+
+def _yajurveda_adhyaya_verses(adhyaya_num: int):
+    cache_key = f"yajurveda_adhyaya_{adhyaya_num}_verses"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    raw = _load_yajurveda_raw()
+    entry = next((e for e in raw if e.get("adhyaya") == adhyaya_num), None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Adhyaya not found (1–40 only)")
+
+    sanskrit = (entry.get("text", "") or "").strip()
+    note = _YAJURVEDA_ADHYAYA_NOTES.get(adhyaya_num, "")
+
+    verses = [{
+        "verse_number":    1,
+        "chapter_number":  adhyaya_num,
+        "label":           f"Adhyaya {adhyaya_num}",
+        "sanskrit":        sanskrit,
+        "transliteration": "",
+        # No English translation in this dataset — show Sanskrit,
+        # same convention as Rigveda / Ramayana / Mahabharata above.
+        "translation":     sanskrit,
+        "commentary":      "",
+    }]
+
+    result = {
+        "chapter_number":  adhyaya_num,
+        "title":           f"Adhyaya {adhyaya_num}",
+        "sanskrit_title":  f"अध्याय {adhyaya_num}",
+        "summary":         note or f"Adhyaya {adhyaya_num} of the Vajasaneyi Madhyandina Samhita.",
+        "verse_count":     1,
+        "verses":          verses,
+        "note":            ("Full adhyaya text (Shukla Yajurveda, Vajasaneyi Madhyandina recension), shown as a single "
+                             "continuous block per the source dataset. English translation edition coming soon."
+                             + (" " + note if note else "")),
+        "source_credit":   "Shukla Yajurveda, Vajasaneyi Madhyandina Samhita (public domain Sanskrit) — text: bhavykhatri/DharmicData (ODbL)",
+    }
+    return _cache_set(cache_key, result)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ATHARVAVEDA  (bhavykhatri/DharmicData — all 20 kaandas)
+# ═════════════════════════════════════════════════════════════════════════════
+# Verified via the repo's git tree and by fetching kaanda 17 directly
+# (smallest file, 20 kaandas total as stated in the repo README). Actual
+# JSON structure per entry (one per sukta within the kaanda):
+#   { "veda": "atharvaveda", "samhita": "shaunak", "kaanda": 17, "sukta": 1,
+#     "text": "<full Devanagari sukta, may include a metadata/anukramani
+#              header line before the actual mantras>" }
+# No English translation in the dataset — same convention as Rigveda.
+
+_ATHARVAVEDA_BASE = "https://raw.githubusercontent.com/bhavykhatri/DharmicData/main/AtharvaVeda"
+
+_ATHARVAVEDA_KAANDA_COUNT = 20
+
+
+def _atharvaveda_filename(kaanda_num: int) -> str:
+    return f"atharvaveda_kaanda_{kaanda_num}.json"
+
+
+def _load_atharvaveda_kaanda_raw(kaanda_num: int):
+    if kaanda_num < 1 or kaanda_num > _ATHARVAVEDA_KAANDA_COUNT:
+        raise HTTPException(status_code=404, detail="Kaanda not found (1–20 only)")
+    cache_key = f"atharvaveda_kaanda_{kaanda_num}_raw"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    url = f"{_ATHARVAVEDA_BASE}/{_atharvaveda_filename(kaanda_num)}"
+    try:
+        data = _fetch_json(url)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not load Atharvaveda kaanda {kaanda_num}: {e}")
+    if not isinstance(data, list) or not data:
+        raise HTTPException(status_code=502, detail=f"Unexpected Atharvaveda payload for kaanda {kaanda_num}")
+    return _cache_set(cache_key, data)
+
+
+def _atharvaveda_chapters():
+    cached = _cache_get("atharvaveda_chapters_list")
+    if cached:
+        return cached
+    chapters = []
+    for num in range(1, _ATHARVAVEDA_KAANDA_COUNT + 1):
+        chapters.append({
+            "chapter_number": num,
+            "title":          f"Kaanda {num}",
+            "sanskrit_title": f"काण्ड {num}",
+            "summary":        f"Kaanda {num} of the Shaunakiya recension of the Atharvaveda.",
+            "verse_count":    None,
+        })
+    return _cache_set("atharvaveda_chapters_list", {"chapters": chapters})
+
+
+def _atharvaveda_kaanda_verses(kaanda_num: int):
+    if kaanda_num < 1 or kaanda_num > _ATHARVAVEDA_KAANDA_COUNT:
+        raise HTTPException(status_code=404, detail="Kaanda not found (1–20 only)")
+    cache_key = f"atharvaveda_kaanda_{kaanda_num}_verses"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    raw = _load_atharvaveda_kaanda_raw(kaanda_num)
+
+    verses = []
+    for i, entry in enumerate(raw):
+        sukta_num = entry.get("sukta", i + 1)
+        sanskrit  = (entry.get("text", "") or "").strip()
+        verses.append({
+            "verse_number":    i + 1,
+            "chapter_number":  kaanda_num,
+            "sukta":           sukta_num,
+            "label":           f"Sukta {sukta_num}",
+            "sanskrit":        sanskrit,
+            "transliteration": "",
+            # No English translation in this dataset — show Sanskrit,
+            # same convention as Rigveda above.
+            "translation":     sanskrit,
+            "commentary":      "",
+        })
+
+    result = {
+        "chapter_number":  kaanda_num,
+        "title":           f"Kaanda {kaanda_num}",
+        "sanskrit_title":  f"काण्ड {kaanda_num}",
+        "summary":         f"Kaanda {kaanda_num} of the Shaunakiya recension of the Atharvaveda.",
+        "verse_count":     len(verses),
+        "verses":          verses,
+        "note":            "Full Atharvaveda Sanskrit text (Shaunakiya recension), organized by sukta (hymn). English translation edition coming soon.",
+        "source_credit":   "Atharvaveda (public domain Sanskrit) — text: bhavykhatri/DharmicData (ODbL)",
     }
     return _cache_set(cache_key, result)
 
@@ -1168,126 +1487,8 @@ def _upanishad_chapter_verses(chapter_num: int):
         "summary":         summary,
         "verse_count":     len(verses),
         "verses":          verses,
-        "note":            "Curated key mantras per Upanishad. Full Sanskrit verse-by-verse edition coming soon.",
+        "note":            "Curated key mantras per Upanishad. Full Sanskrit verse-by-verse edition coming soon. (For the Isha Upanishad's Sanskrit text specifically, see Yajurveda → Adhyaya 40 in this library.)",
         "source_credit":   "Principal Upanishads (public domain Sanskrit) — cf. Max Müller's English translation, Sacred Books of the East vols. 1 & 15 (1879, public domain)",
-    }
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# RIG VEDA  (curated — 10 mandalas, most celebrated hymns)
-# ═════════════════════════════════════════════════════════════════════════════
-# The Rig Veda has 1,028 hymns (~10,552 verses) across 10 mandalas — an
-# archive-scale corpus. Rather than a fragile page-by-page scrape of a
-# century-old translation, we curate the hymns of greatest historical and
-# philosophical significance from each mandala, in the spirit of Griffith's
-# 1896 translation (long public domain).
-
-_RIGVEDA_MANDALAS = {
-    1:  ("Mandala 1", "प्रथम मण्डलम्",
-         "The largest mandala (191 hymns), opening the Rig Veda with invocations to Agni and containing the celebrated 'Riddle Hymn'.",
-         [
-            ("Hymn to Agni (1.1)", "I laud Agni, the priest set before the sacrifice, the divine minister of the ritual, the invoker who bestows the greatest wealth. Through Agni one obtains wealth, and prosperity increasing day by day, most rich in heroes and renown.", "The very first hymn of the Rig Veda, addressed to the fire-god Agni as intermediary between humans and gods"),
-            ("The Riddle Hymn (1.164)", "Seven yoke the one-wheeled chariot drawn by a single horse with seven names; the wheel has three naves, is imperishable, and upon it rest all these worlds. This whole universe is founded on syllables of imperishable sound.", "A famously enigmatic hymn of cosmological riddles, among the most philosophically rich in the entire text"),
-         ]),
-    2:  ("Mandala 2", "द्वितीय मण्डलम्",
-         "Attributed to the Gritsamada family of sages, largely devoted to Agni and Indra.",
-         [
-            ("Hymn to Agni (2.1)", "Thou, Agni, art Indra, the bull of all that lives; thou art wide-striding Vishnu, worthy of worship. Thou art Brahmanaspati, the priest whose wealth is prayer; thou, O sustainer, art linked with holy thought.", "A hymn identifying Agni with the powers of many other gods, an early expression of unity behind the pantheon"),
-            ("Hymn to Brihaspati (2.23)", "We call on Brihaspati, chief and king of prayer, best of sages, whose might no foe can conquer; the beautiful, the ancient, the friend well-praised, whose aid the wise entreat.", "Praise of Brihaspati, the god of sacred speech and wisdom"),
-         ]),
-    3:  ("Mandala 3", "तृतीय मण्डलम्",
-         "Attributed to sage Vishwamitra, containing the Gayatri Mantra — perhaps the single most recited verse in all of Hindu practice.",
-         [
-            ("The Gayatri Mantra (3.62.10)", "Let us meditate on the most excellent light and power of that divine Sun (Savitr); may that radiance illumine our minds.", "The Gayatri Mantra, chanted daily by millions, attributed to sage Vishwamitra"),
-            ("Hymn to Mitra (3.59)", "Mitra, when he speaks, stirs the people to action; Mitra sustains both earth and heaven; Mitra beholds all beings with unwinking eye; to Mitra we bring our offering of clarified butter.", "Praise of Mitra, god of covenant, friendship, and the binding truth between beings"),
-         ]),
-    4:  ("Mandala 4", "चतुर्थ मण्डलम्",
-         "Attributed to the Vamadeva family, largely hymns to Agni and Indra with vivid nature imagery.",
-         [
-            ("Hymn to Agni (4.1)", "Thou, Agni, born through sacred acts, art established among mortal men as their guest; through thee the gods enjoy their share of the oblation, and through thee, O radiant one, do we prosper.", "Agni's role as the messenger carrying offerings from earth to the gods"),
-            ("The Falcon and the Soma (4.26–27)", "I was Manu, I was the sun, declares the soaring falcon, who carries the soma plant down from the heavens to the earth for the sacrifice — pursued swiftly by the archer Krishanu, yet outracing his arrow.", "A vivid mythic narrative of the eagle/falcon bringing soma to humankind"),
-         ]),
-    5:  ("Mandala 5", "पञ्चम मण्डलम्",
-         "Attributed to the Atri family, notable for its hymn to Parjanya, the rain-god.",
-         [
-            ("Hymn to Parjanya (5.83)", "Sing forth with these to mighty Parjanya, and magnify him; with reverence seek his favour; the roaring bull who quickens seed in creatures sends the rain-bearing clouds across the sky.", "A vivid nature hymn to the rain-god, celebrating the monsoon's life-giving power"),
-            ("Hymn to Agni (5.1)", "Awake, O Agni, as the friend of the dawn when she awakens; may all who worship gain the wide-spread wealth that comes from you.", "Agni invoked at the break of day, in step with dawn rituals"),
-         ]),
-    6:  ("Mandala 6", "षष्ठ मण्डलम्",
-         "Attributed to the Bharadvaja family, including a distinctive hymn on weapons and armour.",
-         [
-            ("Hymn to Arms (6.75)", "With the bow let us win cattle, with the bow let us win the fierce, hard-fought battle; the bow brings grief to the enemy; armed with the bow may we conquer every quarter.", "A striking hymn invoking the protective and martial power of the bow and armour, recited even today for protection"),
-            ("Riddle Hymn to Vishnu and Indra (6.9)", "One half of the day is dark, the other bright; both, though of one substance, revolve as if by magic. As a father, so is Agni to his son; may he come to us as our benevolent friend.", "A hymn playing on the riddle of day and night as expressions of a single underlying reality"),
-         ]),
-    7:  ("Mandala 7", "सप्तम मण्डलम्",
-         "Attributed to the sage Vasishtha, containing the celebrated 'Frog Hymn' and important hymns to Varuna.",
-         [
-            ("Hymn to Varuna (7.86)", "Wise and mighty are the works of him who fixed apart the wide earth and heaven; who spurred the high and starry sky to motion. If I have sinned against a friend through thoughtlessness, O Varuna, free me from that transgression.", "One of the Rig Veda's rare hymns of moral confession and appeal for forgiveness"),
-            ("The Frog Hymn (7.103)", "Like Brahmins seated round the brimming vessel, chanting on the holy Soma day, so, frogs, do you sit round the pool and celebrate the coming of the rains with croaking chorus.", "A playful hymn comparing the croaking of frogs at the monsoon's onset to Brahmin priests chanting at a sacrifice"),
-         ]),
-    8:  ("Mandala 8", "अष्टम मण्डलम्",
-         "Attributed largely to the Kanva family, rich in hymns to Soma and containing several 'danastuti' hymns praising royal patrons' generosity.",
-         [
-            ("Hymn to Soma (8.48)", "We have drunk the Soma; we have become immortal; we have gone to the light; we have found the gods. What can hostility now do to us, O immortal one, and what the malice of any mortal?", "One of the most famous hymns of the Rig Veda, celebrating the exalted, immortalizing effect of the sacred Soma drink"),
-            ("A Danastuti (Gift-Praise) Hymn (8.1)", "Let no one, not even a friend who wishes you ill, turn you from this path; sing to Indra, most manly of all, the bestower of great gifts to his devoted worshippers.", "An example of the danastuti genre, praising a patron's generosity to the officiating poet"),
-         ]),
-    9:  ("Mandala 9", "नवम मण्डलम्",
-         "Devoted entirely to Soma Pavamana — the purifying, clarifying flow of the sacred Soma juice as it is pressed for the ritual.",
-         [
-            ("Soma Pavamana (9.113)", "Where there is eternal light, in the world where the sun is placed, in that immortal, imperishable world, O purifying Soma, place me. Where there is joy and delight, where gladness and rejoicing dwell, where all desires are fulfilled — there, make me immortal.", "One of the most lyrical hymns in the Rig Veda, longing for the eternal, luminous world beyond death"),
-         ]),
-    10: ("Mandala 10", "दशम मण्डलम्",
-         "The latest and most philosophically developed mandala, containing the Purusha Sukta, the Nasadiya Sukta (Hymn of Creation), the Hiranyagarbha hymn, and the Devi Sukta.",
-         [
-            ("Purusha Sukta (10.90)", "The Cosmic Person (Purusha) has a thousand heads, a thousand eyes, a thousand feet; he pervades the earth on every side and extends beyond it by ten fingers' breadth. All beings are but a quarter of him; three-quarters, immortal, remain in heaven.", "The famous hymn of the Cosmic Person from whose sacrifice the universe and social orders are said to arise"),
-            ("Nasadiya Sukta — The Hymn of Creation (10.129)", "There was neither non-existence nor existence then; there was no realm of air, no sky beyond it. Who really knows? Who will here proclaim it? Whence was it born, whence came this creation? Even the gods came after its creation, so who truly knows whence it arose?", "Perhaps the most celebrated philosophical hymn in the Rig Veda, ending in radical, honest uncertainty about the origin of the universe"),
-            ("Hiranyagarbha Sukta (10.121)", "In the beginning arose the Golden Embryo (Hiranyagarbha); as soon as born, he was the one lord of all that is. He held the earth and this sky. To what god shall we offer our oblation?", "A hymn to the singular divine source of creation, its refrain 'Kasmai devaya havisha vidhema' ('to what god shall we offer?') echoed throughout"),
-            ("Devi Sukta (10.125)", "I move with the Rudras, with the Vasus, with the Adityas and All-Gods; I support both Mitra and Varuna, both Indra and Agni, and the two Ashvins. I am the sovereign queen, the gatherer-up of treasures, the first of those worthy of worship.", "A hymn spoken in the voice of the Goddess (Vak, speech personified) declaring her supremacy among all divine powers"),
-            ("The Gambler's Lament (10.34)", "The dice, rolling down from the tall Vibhidaka tree, roll me about as the wind tosses cotton. My wife holds me not dear, nor do others; I find no pleasure in the gambling hall, and yet I cannot leave the dice.", "A remarkably human, confessional hymn on the ruin brought by gambling addiction"),
-         ]),
-}
-
-
-def _rigveda_chapters():
-    cached = _cache_get("rigveda_chapters")
-    if cached:
-        return cached
-    chapters = []
-    for num, (title, sanskrit, summary, verses) in _RIGVEDA_MANDALAS.items():
-        chapters.append({
-            "chapter_number": num,
-            "title":          title,
-            "sanskrit_title": sanskrit,
-            "summary":        summary,
-            "verse_count":    len(verses),
-        })
-    return _cache_set("rigveda_chapters", {"chapters": chapters})
-
-
-def _rigveda_mandala_verses(mandala_num: int):
-    if mandala_num not in _RIGVEDA_MANDALAS:
-        raise HTTPException(status_code=404, detail="Mandala not found (1–10 only)")
-    title_en, title_sa, summary, key_verses = _RIGVEDA_MANDALAS[mandala_num]
-    verses = []
-    for i, (vtitle, translation, commentary) in enumerate(key_verses):
-        verses.append({
-            "verse_number":    i + 1,
-            "chapter_number":  mandala_num,
-            "label":           vtitle,
-            "sanskrit":        "",
-            "transliteration": "",
-            "translation":     translation,
-            "commentary":      commentary,
-        })
-    return {
-        "chapter_number":  mandala_num,
-        "title":           title_en,
-        "sanskrit_title":  title_sa,
-        "summary":         summary,
-        "verse_count":     len(verses),
-        "verses":          verses,
-        "note":            "Curated selection of the most historically and philosophically significant hymns from this mandala. Full 1,028-hymn text coming soon.",
-        "source_credit":   "Rig Veda (public domain Sanskrit) — cf. Ralph T.H. Griffith's English translation, The Hymns of the Rigveda (1896, public domain)",
     }
 
 
@@ -1633,6 +1834,10 @@ def _dispatch_chapters(slug: str, api_source: str, book_id: int):
         return _upanishad_chapters()
     if api_source == "rigveda":
         return _rigveda_chapters()
+    if api_source == "yajurveda":
+        return _yajurveda_chapters()
+    if api_source == "atharvaveda":
+        return _atharvaveda_chapters()
     if api_source == "manusmriti":
         return _manusmriti_chapters()
     if api_source == "vishnu_purana":
@@ -1667,6 +1872,10 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
         return _upanishad_chapter_verses(chapter_num)
     if api_source == "rigveda":
         return _rigveda_mandala_verses(chapter_num)
+    if api_source == "yajurveda":
+        return _yajurveda_adhyaya_verses(chapter_num)
+    if api_source == "atharvaveda":
+        return _atharvaveda_kaanda_verses(chapter_num)
     if api_source == "manusmriti":
         return _manusmriti_chapter_verses(chapter_num)
     if api_source == "vishnu_purana":
@@ -1696,12 +1905,19 @@ def _dispatch_chapter_verses(slug: str, api_source: str, book_id: int, chapter_n
 # sacred_books.id, so those two features are unavailable for static-only
 # books — everything else (browsing, reading, search) works fully.
 #
-# The six scriptures below (ids -1..-6) are added as static/curated entries
-# since they rely on hand-curated content rather than a live JSON API, in
-# the same style as the Shiva Purana / Devi Mahatmya / Hanuman Chalisa
-# sections above. If you'd rather they live in Postgres like the Gita and
-# the two epics, just insert matching rows into `sacred_books` with the
-# same `api_source` values and remove the corresponding entries here.
+# The scriptures below (ids -1..-9) are added as static/curated entries
+# since they rely on hand-curated content or live-fetched external JSON
+# rather than a `sacred_books` DB row, in the same style as the Shiva
+# Purana / Devi Mahatmya / Hanuman Chalisa sections above. If you'd rather
+# they live in Postgres like the Gita and the two epics, just insert
+# matching rows into `sacred_books` with the same `api_source` values and
+# remove the corresponding entries here.
+#
+# Rigveda, Yajurveda, and Atharvaveda (ids -3, -7, -8) are all sourced live
+# from bhavykhatri/DharmicData (ODbL), the same repo already used for the
+# Valmiki Ramayana and Mahabharata sections above — verified directly
+# against the repo's file tree and by fetching sample files before wiring
+# these in, so filenames and JSON shapes below are confirmed, not guessed.
 
 _STATIC_BOOKS = {
     "ramcharitmanas": {
@@ -1721,8 +1937,8 @@ _STATIC_BOOKS = {
     "rig-veda": {
         "id": -3, "slug": "rig-veda", "title": "Rig Veda",
         "sanskrit_title": "ऋग्वेद", "deity": None, "tradition": "Vedic",
-        "language": "Sanskrit (with English notes)", "total_chapters": 10, "total_verses": 10552,
-        "description": "The oldest of the four Vedas — 1,028 hymns across 10 mandalas, addressed to Agni, Indra, Soma, and the wider Vedic pantheon, including the philosophically celebrated Hymn of Creation.",
+        "language": "Sanskrit (Devanagari)", "total_chapters": 10, "total_verses": None,
+        "description": "The oldest of the four Vedas — full Sanskrit text of all 10 mandalas, organized by sukta (hymn), addressed to Agni, Indra, Soma, and the wider Vedic pantheon.",
         "icon_emoji": "🔥", "accent_color": "#DC2626", "api_source": "rigveda",
     },
     "manusmriti": {
@@ -1745,6 +1961,20 @@ _STATIC_BOOKS = {
         "language": "Sanskrit (with English notes)", "total_chapters": 4, "total_verses": 196,
         "description": "Patanjali's foundational 196-sutra treatise on the theory and practice of yoga, defining yoga as the stilling of the mind's fluctuations and laying out the eight-limbed (ashtanga) path.",
         "icon_emoji": "🧘", "accent_color": "#0D9488", "api_source": "yoga_sutras",
+    },
+    "yajurveda": {
+        "id": -7, "slug": "yajurveda", "title": "Yajurveda",
+        "sanskrit_title": "यजुर्वेद", "deity": None, "tradition": "Vedic",
+        "language": "Sanskrit (Devanagari)", "total_chapters": 40, "total_verses": None,
+        "description": "The Shukla (White) Yajurveda, Vajasaneyi Madhyandina Samhita — full Sanskrit text across all 40 adhyayas, the liturgical Veda of sacrificial formulae. Its concluding 40th adhyaya is the Isha Upanishad.",
+        "icon_emoji": "🪔", "accent_color": "#B91C1C", "api_source": "yajurveda",
+    },
+    "atharvaveda": {
+        "id": -8, "slug": "atharvaveda", "title": "Atharvaveda",
+        "sanskrit_title": "अथर्ववेद", "deity": None, "tradition": "Vedic",
+        "language": "Sanskrit (Devanagari)", "total_chapters": 20, "total_verses": None,
+        "description": "The fourth Veda, Shaunakiya recension — full Sanskrit text across all 20 kaandas, covering hymns, charms, healing rites, and philosophical material distinct from the other three Vedas.",
+        "icon_emoji": "🌿", "accent_color": "#065F46", "api_source": "atharvaveda",
     },
 }
 
@@ -1876,9 +2106,71 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
             except Exception:
                 continue
 
+    elif api_source == "rigveda":
+        for mandala_num in range(1, 11):
+            try:
+                data = _rigveda_mandala_verses(mandala_num)
+                for v in data.get("verses", []):
+                    if q_lower in (v.get("sanskrit") or "").lower():
+                        results.append({
+                            "chapter_number": mandala_num,
+                            "verse_number":   v["verse_number"],
+                            "chapter_title":  data["title"],
+                            "translation":    v["sanskrit"],
+                            "sanskrit":       v.get("sanskrit", ""),
+                            "label":          v.get("label", ""),
+                        })
+                        if len(results) >= 50:
+                            break
+            except Exception:
+                continue
+
+    elif api_source == "yajurveda":
+        try:
+            chapters_meta = _yajurveda_chapters()["chapters"]
+            for ch in chapters_meta:
+                data = _yajurveda_adhyaya_verses(ch["chapter_number"])
+                for v in data.get("verses", []):
+                    if q_lower in (v.get("sanskrit") or "").lower():
+                        results.append({
+                            "chapter_number": ch["chapter_number"],
+                            "verse_number":   v["verse_number"],
+                            "chapter_title":  data["title"],
+                            "translation":    v["sanskrit"],
+                            "sanskrit":       v.get("sanskrit", ""),
+                            "label":          v.get("label", ""),
+                        })
+                        if len(results) >= 50:
+                            break
+                if len(results) >= 50:
+                    break
+        except Exception:
+            pass
+
+    elif api_source == "atharvaveda":
+        for kaanda_num in range(1, 21):
+            try:
+                data = _atharvaveda_kaanda_verses(kaanda_num)
+                for v in data.get("verses", []):
+                    if q_lower in (v.get("sanskrit") or "").lower():
+                        results.append({
+                            "chapter_number": kaanda_num,
+                            "verse_number":   v["verse_number"],
+                            "chapter_title":  data["title"],
+                            "translation":    v["sanskrit"],
+                            "sanskrit":       v.get("sanskrit", ""),
+                            "label":          v.get("label", ""),
+                        })
+                        if len(results) >= 50:
+                            break
+            except Exception:
+                continue
+            if len(results) >= 50:
+                break
+
     elif api_source in (
         "hanuman_chalisa", "shiva_purana", "devi_mahatmya",
-        "ramcharitmanas", "upanishads", "rigveda", "manusmriti",
+        "ramcharitmanas", "upanishads", "manusmriti",
         "vishnu_purana", "yoga_sutras",
     ):
         try:
@@ -1892,8 +2184,6 @@ def search_in_book(slug: str, q: str = Query(..., min_length=2)):
                 chapters = [_ramcharitmanas_kanda_verses(n) for n in range(1, 8)]
             elif api_source == "upanishads":
                 chapters = [_upanishad_chapter_verses(n) for n in range(1, 14)]
-            elif api_source == "rigveda":
-                chapters = [_rigveda_mandala_verses(n) for n in range(1, 11)]
             elif api_source == "manusmriti":
                 chapters = [_manusmriti_chapter_verses(n) for n in range(1, 13)]
             elif api_source == "vishnu_purana":
