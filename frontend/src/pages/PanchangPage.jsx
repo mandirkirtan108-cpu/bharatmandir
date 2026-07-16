@@ -1204,35 +1204,32 @@ export default function PanchangPage() {
                   />
                 </div>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                    <label style={{ ...labelStyle, marginBottom: 0 }}>City *</label>
-                    {!usingLocation && (
-                      <button type="button" onClick={getUserLocation} disabled={locLoading} style={locButtonStyle}>
-                        <Navigation size={11} />
-                        {locLoading ? 'Locating…' : 'Use My Location'}
-                      </button>
-                    )}
-                  </div>
-                 <CityAutocomplete
-                    value={city}
-                    onChange={handleCityChange}
-                    placeholder="e.g. Ujjain, Mumbai"
-                    style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginTop: usingLocation ? 8 : 0 }}>
-                    {usingLocation && (
-                      <>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800 }}>
+                  <label style={labelStyle}>City *</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <CityAutocomplete
+                      value={city}
+                      onChange={handleCityChange}
+                      placeholder="e.g. Ujjain, Mumbai"
+                      style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
+                    />
+                    {usingLocation ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 44 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' }}>
                           <MapPin size={11} /> Location detected
                         </span>
                         <button
                           type="button"
                           onClick={clearLocation}
-                          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px' }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px', whiteSpace: 'nowrap' }}
                         >
                           <X size={11} /> Type manually
                         </button>
-                      </>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={getUserLocation} disabled={locLoading} style={{ ...locButtonStyle, height: 44, padding: '0 14px' }}>
+                        <Navigation size={11} />
+                        {locLoading ? 'Locating…' : 'Use My Location'}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1335,35 +1332,32 @@ export default function PanchangPage() {
                   </select>
                 </div>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                    <label style={{ ...labelStyle, marginBottom: 0 }}>City</label>
-                    {!usingLocation && (
-                      <button type="button" onClick={getUserLocation} disabled={locLoading} style={{ ...locButtonStyle, padding: '3px 8px', fontSize: 10 }}>
-                        <Navigation size={10} />
-                        {locLoading ? 'Locating…' : 'My Location'}
-                      </button>
-                    )}
-                  </div>
-                  <CityAutocomplete
-                    value={city}
-                    onChange={handleCityChange}
-                    placeholder="e.g. Varanasi"
-                    style={inputStyle}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginTop: usingLocation ? 8 : 0 }}>
-                    {usingLocation && (
-                      <>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800 }}>
+                  <label style={labelStyle}>City</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <CityAutocomplete
+                      value={city}
+                      onChange={handleCityChange}
+                      placeholder="e.g. Varanasi"
+                      style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                    />
+                    {usingLocation ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' }}>
                           <MapPin size={11} /> Location detected
                         </span>
                         <button
                           type="button"
                           onClick={clearLocation}
-                          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px' }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px', whiteSpace: 'nowrap' }}
                         >
                           <X size={11} /> Type manually
                         </button>
-                      </>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={getUserLocation} disabled={locLoading} style={{ ...locButtonStyle, padding: '3px 8px', fontSize: 10, flexShrink: 0 }}>
+                        <Navigation size={10} />
+                        {locLoading ? 'Locating…' : 'My Location'}
+                      </button>
                     )}
                   </div>
                 </div>
