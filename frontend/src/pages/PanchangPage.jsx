@@ -658,15 +658,28 @@ function ChoghadiyaChips({ rows }) {
 function PanchangDetails({ dailyResult }) {
   const [activeTab, setActiveTab] = useState('overview');
   const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
+  // Brahma Muhurat / Abhijit Muhurat / Rahu Kaal are intentionally left out
+  // here — they already have their own colored cards directly above this
+  // panel, so repeating them in the list would just be the same fact twice.
   const mainTimings = {
     sunrise: dailyResult.sunrise,
     sunset: dailyResult.sunset,
     moonrise: dailyResult.moonrise,
     moonset: dailyResult.moonset,
-    brahma_muhurat: dailyResult.brahma_muhurat?.time,
-    abhijit_muhurat: dailyResult.abhijit_muhurat?.time,
-    rahu_kaal: dailyResult.rahu_kaal?.time,
   };
+
+  // Sun/Moon "details" panels used to just repeat sunrise/sunset and
+  // moonrise/moonset — the exact same two lines already in Daily Timings
+  // above. Only pass through fields that aren't already shown there, and
+  // skip a panel entirely once it has nothing new to say.
+  const sunExtra = dailyResult.sun
+    ? Object.fromEntries(Object.entries(dailyResult.sun).filter(([key]) => !['sunrise', 'sunset'].includes(key)))
+    : null;
+  const moonExtra = dailyResult.moon
+    ? Object.fromEntries(Object.entries(dailyResult.moon).filter(([key]) => !['moonrise', 'moonset'].includes(key)))
+    : null;
+  const hasSunExtra = sunExtra && Object.values(sunExtra).some((v) => v !== null && v !== undefined && v !== '');
+  const hasMoonExtra = moonExtra && Object.values(moonExtra).some((v) => v !== null && v !== undefined && v !== '');
 
   const angaGroups = [
     { key: 'tithis', title: 'All Tithis', icon: <Moon size={16} />, accent: '#c47a14', records: dailyResult.all_panchang?.tithis },
@@ -694,14 +707,20 @@ function PanchangDetails({ dailyResult }) {
           <Panel icon={<Clock size={16} />} title="Daily Timings" accent="#c47a14">
             <InfoRowList data={mainTimings} />
           </Panel>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14 }}>
-            <Panel icon={<Sun size={16} />} title="Sun Details" accent="#d97706">
-              <InfoRowList data={dailyResult.sun} />
-            </Panel>
-            <Panel icon={<Moon size={16} />} title="Moon Details" accent="#2563eb">
-              <InfoRowList data={dailyResult.moon} />
-            </Panel>
-          </div>
+          {(hasSunExtra || hasMoonExtra) && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14 }}>
+              {hasSunExtra && (
+                <Panel icon={<Sun size={16} />} title="Sun Details" accent="#d97706">
+                  <InfoRowList data={sunExtra} />
+                </Panel>
+              )}
+              {hasMoonExtra && (
+                <Panel icon={<Moon size={16} />} title="Moon Details" accent="#2563eb">
+                  <InfoRowList data={moonExtra} />
+                </Panel>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1102,7 +1121,7 @@ export default function PanchangPage() {
           overflow: 'hidden',
           color: 'white',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '50px 12px',
+          padding: '34px 12px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -1119,7 +1138,7 @@ export default function PanchangPage() {
               border: '1px solid rgba(255,213,128,0.3)',
               borderRadius: 50,
               padding: '5px 16px',
-              marginBottom: 14,
+              marginBottom: 10,
               color: 'rgba(255,213,128,0.85)',
               fontSize: 11,
               letterSpacing: '.1em',
