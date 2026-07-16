@@ -7,6 +7,7 @@ import { Sun } from 'lucide-react';
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
 
 export default function SpiritualGuidePage() {
+  const { t } = useTranslation();
   return (
     <>
       <Navbar />
@@ -56,7 +57,7 @@ export default function SpiritualGuidePage() {
               whiteSpace: 'nowrap',
               fontFamily: UI_FONT,
             }}>
-              <Sun size={11} /> AI Spiritual Guide
+              <Sun size={11} /> {t('guide.badge')}
             </div>
 
             {/* Title */}
@@ -68,8 +69,7 @@ export default function SpiritualGuidePage() {
               color: '#ffffff',
               width: '100%',
             }}>
-              Your Troubles —{' '}
-              <span style={{ color: '#FFD580' }}>Divine Guidance</span>
+              {t('guide.title')}
             </h1>
 
             {/* Subtitle */}
@@ -81,11 +81,7 @@ export default function SpiritualGuidePage() {
               textAlign: 'center',
               fontFamily: UI_FONT,
             }}>
-              Share your concerns and receive compassionate wisdom —
-              mantras, rituals, deity recommendations, in{' '}
-              <strong style={{ fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
-                Hindi, English, or Hinglish
-              </strong>.
+              {t('guide.subtitle')}
             </p>
           </div>
         </section>
@@ -108,8 +104,7 @@ export default function SpiritualGuidePage() {
             opacity: 0.85,
             fontFamily: UI_FONT,
           }}>
-            🙏 This guide is for spiritual inspiration only. Please consult qualified professionals
-            for medical, legal, or financial decisions.
+            🙏 {t('guide.disclaimer')}
           </p>
         </section>
 

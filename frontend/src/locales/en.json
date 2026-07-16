@@ -476,7 +476,56 @@
     "source_partnership": "🤝 Partnership",
     "source_csv": "📁 CSV Import"
   },
+  "book_category": {
+    "not_found": "Category not found", "back_library": "Back to Library", "all_categories": "All Categories",
+    "folder_count_one": "{{count}} book in this folder", "folder_count_other": "{{count}} books in this folder",
+    "filter_placeholder": "Filter books, deities, traditions...", "empty": "No books found in this folder yet.",
+    "chapters_short_one": "{{count}} ch", "chapters_short_other": "{{count}} ch", "verses_one": "{{count}} verse", "verses_other": "{{count}} verses",
+    "progress": "Chapter {{chapter}} · {{percent}}% read", "continue": "Continue Reading ›", "start": "Start Reading ›"
+  },
+  "book_reader": {
+    "back_library": "Back to Library", "reader": "Reader", "bookmarks": "Bookmarks ({{count}})", "search": "Search",
+    "back_to": "Back to {{category}}", "chapters_one": "{{count}} chapter", "chapters_other": "{{count}} chapters",
+    "verses_one": "{{count}} verse", "verses_other": "{{count}} verses", "continue_chapter": "Continue from Chapter {{chapter}}",
+    "select_chapter": "Select a chapter to begin reading", "loading_verses": "Loading verses...", "search_in": "Search in {{title}}...",
+    "your_bookmarks": "Your Bookmarks ({{count}})", "search_results": "Search Results", "back_reader": "Back to Reader"
+  },
+  "route_page": {
+    "badge": "Route Planner", "title": "Your Journey — Verified Path", "subtitle": "Plan a real road route and discover curated sacred stops on known pilgrimage corridors.",
+    "form_title": "Plan Your Spiritual Route", "form_subtitle": "Distance, duration, and route line are calculated by OpenRouteService.",
+    "from": "From", "to": "To", "from_placeholder": "e.g. Indore", "to_placeholder": "e.g. Ujjain", "travel_mode": "Travel Mode",
+    "mode_car": "Car", "mode_bike": "Bike", "mode_train": "Train", "mode_bus": "Bus", "preferences": "Temple Preferences",
+    "calculating": "Calculating route...", "submit": "Plan My Spiritual Route"
+  },
+  "books": {
+    "badge": "Sacred Scriptures of Bharat", "title": "Read the Sacred Books", "subtitle": "Full text · Verse-by-verse · Sanskrit · Audio · Bookmarks · Reading progress",
+    "library": "Sacred Library", "filter_placeholder": "Filter categories, books...", "open_folder": "Open Folder", "count_one": "{{count}} book", "count_other": "{{count}} books",
+    "categories": {
+      "gita": { "label": "Bhagavad Gita", "description": "The song of God — 700 verses of divine wisdom spoken by Krishna to Arjuna." },
+      "itihasa": { "label": "Itihasa (Epics)", "description": "The great epics — Ramayana, Mahabharata, and Ramcharitmanas." },
+      "purana": { "label": "Puranas", "description": "Ancient cosmological and devotional texts of Bharat." },
+      "chalisa": { "label": "Chalisa", "description": "Devotional 40-verse hymns of praise." },
+      "veda": { "label": "Vedas", "description": "The four foundational scriptures — Rig, Yajur, Sama, Atharva." },
+      "upanishad": { "label": "Upanishads", "description": "The philosophical core of the Vedas — Atman, Brahman, and liberation." },
+      "dharmashastra": { "label": "Dharmashastra", "description": "Ancient legal and ethical treatises." },
+      "yoga": { "label": "Yoga", "description": "Patanjali's foundational treatise on yoga." }
+    }
+  },
+  "guide": {
+    "badge": "AI Spiritual Guide", "title": "Your Troubles — Divine Guidance", "subtitle": "Share your concerns and receive compassionate wisdom — mantras, rituals and deity recommendations in Hindi, English, or Hinglish.",
+    "disclaimer": "This guide is for spiritual inspiration only. Please consult qualified professionals for medical, legal, or financial decisions.",
+    "welcome": "Namaste. I am your BharatMandir Spiritual Guide.\n\nPlease share your concerns, questions, or spiritual needs — I will offer guidance through mantras, prayers, rituals, and temple recommendations.\n\nYou may write in Hindi or English — I will respond in the same language.",
+    "chat_title": "Adhyatmik Margdarshak", "chat_subtitle": "AI Spiritual Guide · BharatMandir", "online": "Online", "quick_topics": "Quick Topics:",
+    "topic_1": "Financial Stress", "topic_2": "Family Conflict", "topic_3": "Health Concern", "topic_4": "Seeking Peace", "topic_5": "Career Guidance", "topic_6": "Grief & Loss",
+    "guiding": "Guiding you...", "placeholder": "Share your concern or question... (Hindi or English)", "send": "Send", "footer_note": "Spiritual inspiration only — not a substitute for professional advice."
+  },
   "panchang": {
+    "hero_title": "AI Pandit Ji — Panchang & Muhurat",
+    "today_title": "Today's Panchang",
+    "select_hint": "Select date and city to view daily Panchang",
+    "locating": "Locating...",
+    "use_location": "Use My Location",
+    "get_button": "Get Panchang",
     "badge": "🗓️ Vedic Panchang",
     "title": "Panchang",
     "title_span": "& Muhurat",
