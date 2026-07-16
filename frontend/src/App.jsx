@@ -3,7 +3,7 @@ import { LangProvider }          from './LangContext';
 import ProtectedRoute            from './components/ProtectedRoute';
 import HomePage                  from './pages/HomePage';
 import TempleDetailPage          from './pages/TempleDetailPage';
-import TempleQRPage              from './pages/TempleQRPage';
+import TempleQRPage               from './pages/TempleQRPage';
 import SearchPage                from './pages/SearchPage';
 import RoutePlannerPage          from './pages/RoutePlannerPage';
 import AdminAddTemplePage        from './pages/AdminAddTemplePage';
@@ -14,6 +14,8 @@ import AdminAddFestivalPage      from './pages/AdminAddFestivalPage';
 import AdminPanelPage            from './pages/AdminPanelPage';
 import AdminLoginPage            from './pages/AdminLoginPage';
 import SacredBooksPage           from './pages/SacredBooksPage';
+import SacredBookCategoryPage    from './pages/SacredBookCategoryPage';
+import SacredBookReaderPage      from './pages/SacredBookReaderPage';
 import LoginPage                 from './pages/LoginPage';
 import SignupPage                from './pages/SignupPage';
 import UserProfilePage           from './pages/UserProfilePage';
@@ -46,8 +48,16 @@ export default function App() {
           <Route path="/panchang"        element={<PanchangPage />} />
           <Route path="/spiritual-guide" element={<SpiritualGuidePage />} />
           <Route path="/festivals"       element={<FestivalCalendarPage />} />
-          <Route path="/sacred-books"    element={<SacredBooksPage />} />
           <Route path="/profile"         element={<UserProfilePage />} />
+
+          {/* ── Sacred Books Library — 3-level nested routes ──
+              /sacred-books                     → category folders (Purana, Chalisa, Ved, Upanishad...)
+              /sacred-books/:category           → all books inside that folder
+              /sacred-books/:category/:slug     → verse-by-verse reader for one book
+          ─────────────────────────────────────────────────── */}
+          <Route path="/sacred-books"                element={<SacredBooksPage />} />
+          <Route path="/sacred-books/:category"       element={<SacredBookCategoryPage />} />
+          <Route path="/sacred-books/:category/:slug" element={<SacredBookReaderPage />} />
 
           {/* ── Blog (public) ───────────────────────────────── */}
           <Route path="/blog"            element={<BlogPage />} />
