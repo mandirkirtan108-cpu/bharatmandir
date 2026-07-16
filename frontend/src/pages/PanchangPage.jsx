@@ -1213,26 +1213,28 @@ export default function PanchangPage() {
                       </button>
                     )}
                   </div>
-                  <CityAutocomplete
+                 <CityAutocomplete
                     value={city}
                     onChange={handleCityChange}
                     placeholder="e.g. Ujjain, Mumbai"
                     style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
                   />
-                  {usingLocation && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800 }}>
-                        <MapPin size={11} /> Location detected
-                      </span>
-                      <button
-                        type="button"
-                        onClick={clearLocation}
-                        style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px' }}
-                      >
-                        <X size={11} /> Type manually
-                      </button>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginTop: usingLocation ? 8 : 0 }}>
+                    {usingLocation && (
+                      <>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800 }}>
+                          <MapPin size={11} /> Location detected
+                        </span>
+                        <button
+                          type="button"
+                          onClick={clearLocation}
+                          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px' }}
+                        >
+                          <X size={11} /> Type manually
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
                   {dailyLoading ? (
@@ -1348,20 +1350,22 @@ export default function PanchangPage() {
                     placeholder="e.g. Varanasi"
                     style={inputStyle}
                   />
-                  {usingLocation && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800 }}>
-                        <MapPin size={11} /> Location detected
-                      </span>
-                      <button
-                        type="button"
-                        onClick={clearLocation}
-                        style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px' }}
-                      >
-                        <X size={11} /> Type manually
-                      </button>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginTop: usingLocation ? 8 : 0 }}>
+                    {usingLocation && (
+                      <>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800 }}>
+                          <MapPin size={11} /> Location detected
+                        </span>
+                        <button
+                          type="button"
+                          onClick={clearLocation}
+                          style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-light)', fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 4px' }}
+                        >
+                          <X size={11} /> Type manually
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
