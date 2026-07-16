@@ -11,6 +11,7 @@ get_city_suggestions() below.
 from __future__ import annotations
 
 import calendar as calendar_module
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 import json
@@ -941,20 +942,26 @@ def fetch_sun_moon_samvat_chandramasa(payload: dict[str, Any]) -> tuple[dict[str
     Details and Hindu Calendar. Each is independent and optional — a
     failure on any one of these should not break the rest of the day's
     Panchang, the same way festivals already degrade gracefully.
+
+    FIX: these three calls used to run one after another (sequential
+    requests.post calls). They don't depend on each other, so they're now
+    fired concurrently on a small thread pool — total wait time drops to
+    roughly the slowest single call instead of the sum of all three.
     """
-    try:
-        sun_moon_raw = divine_post(DIVINE_BASES["sun_and_moon"], payload)
-    except HTTPException:
-        sun_moon_raw = {}
-    try:
-        samvat_raw = divine_post(DIVINE_BASES["samvat"], payload)
-    except HTTPException:
-        samvat_raw = {}
-    try:
-        chandramasa_raw = divine_post(DIVINE_BASES["chandramasa"], payload)
-    except HTTPException:
-        chandramasa_raw = {}
-    return sun_moon_raw, samvat_raw, chandramasa_raw
+    endpoints = {
+        "sun_moon": DIVINE_BASES["sun_and_moon"],
+        "samvat": DIVINE_BASES["samvat"],
+        "chandramasa": DIVINE_BASES["chandramasa"],
+    }
+    results: dict[str, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(divine_post, url, payload): key for key, url in endpoints.items()}
+        for future, key in futures.items():
+            try:
+                results[key] = future.result()
+            except HTTPException:
+                results[key] = {}
+    return results["sun_moon"], results["samvat"], results["chandramasa"]
 
 
 def fetch_calendar_day_from_divine(
@@ -1380,16 +1387,11 @@ def get_daily_panchang(req: DailyPanchangRequest):
         "lan": "en",
     }
 
-    panchang_raw = divine_post(DIVINE_BASES["panchang"], payload)
-    choghadiya_raw = divine_post(DIVINE_BASES["choghadiya"], payload)
-    auspicious_raw = divine_post(DIVINE_BASES["auspicious"], payload)
-    inauspicious_raw = divine_post(DIVINE_BASES["inauspicious"], payload)
-
     # FIX: festivals need their OWN payload — the English Calendar Festivals
     # endpoint takes {api_key, year, month, place, lat, lon, tzone}, not a
-    # "day". Sending a "day" field to it (as the panchang/choghadiya/timings
-    # calls do above) is harmless but meaningless; it returns every festival
-    # for the whole month regardless, which we then filter down to this date.
+    # "day". Sending a "day" field to it is harmless but meaningless; it
+    # returns every festival for the whole month regardless, which we then
+    # filter down to this date.
     festivals_payload = {
         "api_key": divine_api_key(),
         "year": str(parsed_date.year),
@@ -1399,16 +1401,66 @@ def get_daily_panchang(req: DailyPanchangRequest):
         "lon": lon,
         "tzone": tz,
     }
-    try:
-        festivals_raw = divine_post(DIVINE_BASES["festivals"], festivals_payload)
-        month_festivals = flatten_english_calendar_festivals(festivals_raw.get("data", {}))
-    except HTTPException:
-        # Don't fail the whole daily Panchang if the festival feed hiccups —
-        # the rest of the day's data is still useful without it.
-        month_festivals = []
 
+    # FIX: this endpoint used to make 8 Divine API calls back-to-back
+    # (panchang, choghadiya, auspicious, inauspicious, festivals, sun/moon,
+    # samvat, chandramasa) — each ~1.5-2s, so total response time was
+    # 14-15s. None of these calls depends on another's result, so they're
+    # now all fired concurrently on a thread pool. Total wait time drops to
+    # roughly the slowest single call (~2-3s) instead of the sum of all 8.
+    #
+    # "required" calls must succeed for a valid Panchang response — if any
+    # of these fail, we raise immediately, same as the old sequential code
+    # would have. "optional" calls degrade gracefully to {} on failure,
+    # exactly like the previous try/except blocks did.
+    required_calls = {
+        "panchang": (DIVINE_BASES["panchang"], payload),
+        "choghadiya": (DIVINE_BASES["choghadiya"], payload),
+        "auspicious": (DIVINE_BASES["auspicious"], payload),
+        "inauspicious": (DIVINE_BASES["inauspicious"], payload),
+    }
+    optional_calls = {
+        "festivals": (DIVINE_BASES["festivals"], festivals_payload),
+        "sun_and_moon": (DIVINE_BASES["sun_and_moon"], payload),
+        "samvat": (DIVINE_BASES["samvat"], payload),
+        "chandramasa": (DIVINE_BASES["chandramasa"], payload),
+    }
+    all_calls = {**required_calls, **optional_calls}
+
+    results: dict[str, dict[str, Any]] = {}
+    errors: dict[str, HTTPException] = {}
+
+    with ThreadPoolExecutor(max_workers=len(all_calls)) as executor:
+        futures = {
+            executor.submit(divine_post, url, body): key
+            for key, (url, body) in all_calls.items()
+        }
+        for future, key in futures.items():
+            try:
+                results[key] = future.result()
+            except HTTPException as exc:
+                errors[key] = exc
+
+    # A required call failing should still surface as a real error, same
+    # as the old sequential divine_post() calls would have raised inline.
+    for key in required_calls:
+        if key in errors:
+            raise errors[key]
+
+    panchang_raw = results["panchang"]
+    choghadiya_raw = results["choghadiya"]
+    auspicious_raw = results["auspicious"]
+    inauspicious_raw = results["inauspicious"]
+
+    festivals_raw = results.get("festivals") if "festivals" not in errors else None
+    month_festivals = (
+        flatten_english_calendar_festivals(festivals_raw.get("data", {})) if festivals_raw else []
+    )
     festivals_for_day = [f for f in month_festivals if f.get("date") == req.date]
-    sun_moon_raw, samvat_raw, chandramasa_raw = fetch_sun_moon_samvat_chandramasa(payload)
+
+    sun_moon_raw = results.get("sun_and_moon") or {}
+    samvat_raw = results.get("samvat") or {}
+    chandramasa_raw = results.get("chandramasa") or {}
 
     return normalize_daily(
         req,
