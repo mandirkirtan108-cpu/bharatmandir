@@ -476,6 +476,20 @@
     "source_partnership": "🤝 साझेदारी",
     "source_csv": "📁 CSV आयात"
   },
+  "book_category": {
+    "not_found": "श्रेणी नहीं मिली", "back_library": "पुस्तकालय पर वापस जाएँ", "all_categories": "सभी श्रेणियाँ",
+    "folder_count_one": "इस फ़ोल्डर में {{count}} पुस्तक", "folder_count_other": "इस फ़ोल्डर में {{count}} पुस्तकें",
+    "filter_placeholder": "पुस्तक, देवता या परंपरा खोजें...", "empty": "इस फ़ोल्डर में अभी कोई पुस्तक नहीं मिली।",
+    "chapters_short_one": "{{count}} अध्याय", "chapters_short_other": "{{count}} अध्याय", "verses_one": "{{count}} श्लोक", "verses_other": "{{count}} श्लोक",
+    "progress": "अध्याय {{chapter}} · {{percent}}% पढ़ा", "continue": "पढ़ना जारी रखें ›", "start": "पढ़ना शुरू करें ›"
+  },
+  "book_reader": {
+    "back_library": "पुस्तकालय पर वापस जाएँ", "reader": "पाठक", "bookmarks": "बुकमार्क ({{count}})", "search": "खोजें",
+    "back_to": "{{category}} पर वापस जाएँ", "chapters_one": "{{count}} अध्याय", "chapters_other": "{{count}} अध्याय",
+    "verses_one": "{{count}} श्लोक", "verses_other": "{{count}} श्लोक", "continue_chapter": "अध्याय {{chapter}} से जारी रखें",
+    "select_chapter": "पढ़ना शुरू करने के लिए अध्याय चुनें", "loading_verses": "श्लोक लोड हो रहे हैं...", "search_in": "{{title}} में खोजें...",
+    "your_bookmarks": "आपके बुकमार्क ({{count}})", "search_results": "खोज परिणाम", "back_reader": "पाठक पर वापस जाएँ"
+  },
   "route_page": {
     "badge": "मार्ग योजनाकार", "title": "आपकी यात्रा — सत्यापित मार्ग", "subtitle": "वास्तविक सड़क मार्ग बनाएँ और प्रसिद्ध तीर्थ मार्गों पर चुने हुए पवित्र पड़ाव खोजें।",
     "form_title": "अपना आध्यात्मिक मार्ग बनाएँ", "form_subtitle": "दूरी, समय और मार्ग रेखा OpenRouteService द्वारा गणना की जाती है।",

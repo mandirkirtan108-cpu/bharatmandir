@@ -476,6 +476,20 @@
     "source_partnership": "🤝 Partnership",
     "source_csv": "📁 CSV Import"
   },
+  "book_category": {
+    "not_found": "Category not found", "back_library": "Back to Library", "all_categories": "All Categories",
+    "folder_count_one": "{{count}} book in this folder", "folder_count_other": "{{count}} books in this folder",
+    "filter_placeholder": "Filter books, deities, traditions...", "empty": "No books found in this folder yet.",
+    "chapters_short_one": "{{count}} ch", "chapters_short_other": "{{count}} ch", "verses_one": "{{count}} verse", "verses_other": "{{count}} verses",
+    "progress": "Chapter {{chapter}} · {{percent}}% read", "continue": "Continue Reading ›", "start": "Start Reading ›"
+  },
+  "book_reader": {
+    "back_library": "Back to Library", "reader": "Reader", "bookmarks": "Bookmarks ({{count}})", "search": "Search",
+    "back_to": "Back to {{category}}", "chapters_one": "{{count}} chapter", "chapters_other": "{{count}} chapters",
+    "verses_one": "{{count}} verse", "verses_other": "{{count}} verses", "continue_chapter": "Continue from Chapter {{chapter}}",
+    "select_chapter": "Select a chapter to begin reading", "loading_verses": "Loading verses...", "search_in": "Search in {{title}}...",
+    "your_bookmarks": "Your Bookmarks ({{count}})", "search_results": "Search Results", "back_reader": "Back to Reader"
+  },
   "route_page": {
     "badge": "Route Planner", "title": "Your Journey — Verified Path", "subtitle": "Plan a real road route and discover curated sacred stops on known pilgrimage corridors.",
     "form_title": "Plan Your Spiritual Route", "form_subtitle": "Distance, duration, and route line are calculated by OpenRouteService.",
