@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { MapPin, Navigation, Star, AlertCircle, Loader2, ExternalLink, Map } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -272,6 +273,7 @@ function RouteMap({ result }) {
 }
 
 export default function RoutePlannerPage() {
+  const { t } = useTranslation();
   const [form, setForm] = useState({ start: '', destination: '', travel_mode: 'car', time_available: '6', preferences: [] });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -391,13 +393,13 @@ export default function RoutePlannerPage() {
       <section style={{ background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)', padding: '65px 15px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'white', boxSizing: 'border-box' }}>
         <div style={{ maxWidth: 720, margin: '0 auto' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 16px', marginBottom: 14, color: '#FFD580', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600 }}>
-            <Map size={13} /> Route Planner
+            <Map size={13} /> {t('route_page.badge')}
           </div>
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1, margin: 0 }}>
-            <span style={{ color: '#ffffff' }}>Your Journey,</span> <span style={{ color: '#FFD580' }}>Verified Path</span>
+            {t('route_page.title')}
           </h1>
           <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: 15, maxWidth: 560, margin: '12px auto 0', lineHeight: 1.7, fontFamily: UI_FONT }}>
-            Plan a real road route and discover curated sacred stops on known pilgrimage corridors.
+            {t('route_page.subtitle')}
           </p>
         </div>
       </section>
@@ -405,16 +407,16 @@ export default function RoutePlannerPage() {
       <section style={{ background: '#F7F2EC', padding: '48px 20px 80px' }}>
         <div style={{ maxWidth: 980, margin: '0 auto' }}>
           <div style={{ background: 'white', borderRadius: 20, boxShadow: '0 4px 32px rgba(61,31,0,0.09)', border: '1px solid #EDE0CC', padding: '34px' }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#7a3208', margin: '0 0 4px' }}>Plan Your Spiritual Route</h2>
-            <p style={{ fontFamily: UI_FONT, color: '#9A7150', fontSize: 14, margin: '0 0 28px' }}>Distance, duration, and route line are calculated by OpenRouteService.</p>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#7a3208', margin: '0 0 4px' }}>{t('route_page.form_title')}</h2>
+            <p style={{ fontFamily: UI_FONT, color: '#9A7150', fontSize: 14, margin: '0 0 28px' }}>{t('route_page.form_subtitle')}</p>
 
             <div className="route-form-inner" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 24 }}>
-              <CityAutocomplete label="From" placeholder="e.g. Indore" value={form.start} onChange={(val) => setForm((prev) => ({ ...prev, start: val }))} icon={<MapPin size={16} color="#E8650A" />} />
-              <CityAutocomplete label="To" placeholder="e.g. Ujjain" value={form.destination} onChange={(val) => setForm((prev) => ({ ...prev, destination: val }))} icon={<Navigation size={16} color="#6B3A1F" />} />
+              <CityAutocomplete label={t('route_page.from')} placeholder={t('route_page.from_placeholder')} value={form.start} onChange={(val) => setForm((prev) => ({ ...prev, start: val }))} icon={<MapPin size={16} color="#E8650A" />} />
+              <CityAutocomplete label={t('route_page.to')} placeholder={t('route_page.to_placeholder')} value={form.destination} onChange={(val) => setForm((prev) => ({ ...prev, destination: val }))} icon={<Navigation size={16} color="#6B3A1F" />} />
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <h3 style={sectionLabelStyle}>Travel Mode</h3>
+              <h3 style={sectionLabelStyle}>{t('route_page.travel_mode')}</h3>
               <div className="mode-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
                 {TRAVEL_MODES.map((m) => {
                   const active = form.travel_mode === m.value;
@@ -430,7 +432,7 @@ export default function RoutePlannerPage() {
                       fontSize: 13,
                       fontWeight: 700,
                     }}>
-                      {m.label}
+                      {t(`route_page.mode_${m.value}`)}
                     </button>
                   );
                 })}
@@ -438,7 +440,7 @@ export default function RoutePlannerPage() {
             </div>
 
             <div style={{ marginBottom: 28 }}>
-              <h3 style={sectionLabelStyle}>Temple Preferences</h3>
+              <h3 style={sectionLabelStyle}>{t('route_page.preferences')}</h3>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {PREF_OPTIONS.map((p) => {
                   const active = form.preferences.includes(p);
@@ -462,7 +464,7 @@ export default function RoutePlannerPage() {
             </div>
 
             <button onClick={handleSubmit} disabled={loading} style={{ width: '100%', justifyContent: 'center', padding: '15px', borderRadius: 12, border: 'none', background: loading ? '#C8956A' : 'linear-gradient(135deg, #3D1F00 0%, #B84D00 50%, #E8650A 100%)', color: 'white', fontSize: 15, fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--font-display)' }}>
-              {loading ? <><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Calculating route...</> : 'Plan My Spiritual Route'}
+              {loading ? <><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> {t('route_page.calculating')}</> : t('route_page.submit')}
             </button>
 
             {error && (

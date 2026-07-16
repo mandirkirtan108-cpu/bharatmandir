@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { fetchBooks } from '../services/sacredBooksApi';
@@ -10,6 +11,7 @@ import {
 
 export default function SacredBooksPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -58,7 +60,7 @@ export default function SacredBooksPage() {
               textTransform: 'uppercase', fontWeight: 500, backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
             }}>
               <BookIcon size={16} color="rgba(255,213,128,0.9)" />
-              Sacred Scriptures of Bharat
+              {t('books.badge')}
             </div>
 
             <h1 style={{
@@ -67,14 +69,14 @@ export default function SacredBooksPage() {
               marginBottom: 10, marginTop: 0, textShadow: '0 4px 40px rgba(0,0,0,0.3)',
               color: '#ffffff', width: '100%',
             }}>
-              Read the <span style={{ color: '#FFD580' }}>Sacred Books</span>
+              {t('books.title')}
             </h1>
 
             <p style={{
               color: 'rgba(255,255,255,0.7)', fontSize: 14, width: '100%', maxWidth: 520,
               margin: '0 0 22px 0', fontWeight: 300, lineHeight: 1.7, textAlign: 'center',
             }}>
-              Full text · Verse-by-verse · Sanskrit · Audio · Bookmarks · Reading progress
+              {t('books.subtitle')}
             </p>
           </div>
         </div>
@@ -83,10 +85,10 @@ export default function SacredBooksPage() {
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
             <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 22 }}>
-              Sacred Library
+              {t('books.library')}
             </h2>
             <input
-              placeholder="Filter categories, books…"
+              placeholder={t('books.filter_placeholder')}
               value={filter}
               onChange={e => setFilter(e.target.value)}
               style={{
@@ -138,7 +140,7 @@ export default function SacredBooksPage() {
                         <h3 style={{
                           fontFamily: 'var(--font-display)', color: '#ffffff', fontSize: 17, fontWeight: 700,
                           margin: 0, marginBottom: 2,
-                        }}>{cat.label}</h3>
+                        }}>{t(`books.categories.${cat.key}.label`, { defaultValue: cat.label })}</h3>
                         <div style={{ fontFamily: 'var(--font-hindi)', fontSize: 13, color: 'rgba(255,213,128,0.8)' }}>
                           {cat.sanskrit}
                         </div>
@@ -147,18 +149,18 @@ export default function SacredBooksPage() {
 
                     <div style={{ padding: '15px 18px 18px' }}>
                       <p style={{ fontSize: 13, color: '#6b5744', lineHeight: 1.72, marginBottom: 13, marginTop: 0 }}>
-                        {cat.description}
+                        {t(`books.categories.${cat.key}.description`, { defaultValue: cat.description })}
                       </p>
                       <div style={{ height: 1, background: '#eee5d9', marginBottom: 13 }} />
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#8b3a15' }}>
-                          Open Folder ›
+                          {t('books.open_folder')} ›
                         </span>
                         <span style={{
                           fontSize: 10, color: '#a07860', background: '#f4ede4',
                           padding: '2px 8px', borderRadius: 99, border: '1px solid #e2d0be',
                         }}>
-                          {loading ? '…' : `${catBooks.length} book${catBooks.length === 1 ? '' : 's'}`}
+                          {loading ? '…' : t('books.count', { count: catBooks.length })}
                         </span>
                       </div>
                     </div>
