@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import {
@@ -19,7 +18,6 @@ export default function SacredBookReaderPage() {
   const { category, slug } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useTranslation();
   const cat = getCategoryByKey(category);
 
   const [books, setBooks] = useState([]);
@@ -201,7 +199,7 @@ export default function SacredBookReaderPage() {
           <button onClick={() => navigate('/sacred-books')} style={{
             marginTop: 16, padding: '10px 22px', borderRadius: 99, border: 'none',
             background: THEME_COLOR, color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-          }}>← {t('book_reader.back_library')}</button>
+          }}>← Back to Library</button>
         </div>
         <Footer />
       </>
@@ -234,7 +232,7 @@ export default function SacredBookReaderPage() {
                 display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.08)',
                 border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 14px',
                 color: 'rgba(255,213,128,0.85)', fontSize: 11, cursor: 'pointer', backdropFilter: 'blur(8px)',
-              }}>‹ {t('book_category.all_categories')}</button>
+              }}>‹ All Categories</button>
               <button onClick={() => navigate(`/sacred-books/${cat.key}`)} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.08)',
                 border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 14px',
@@ -255,9 +253,9 @@ export default function SacredBookReaderPage() {
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', width: '100%' }}>
               {[
-                { id: 'reader',    label: t('book_reader.reader') },
-                { id: 'bookmarks', label: t('book_reader.bookmarks', { count: bookmarks.length }) },
-                { id: 'search',    label: t('book_reader.search') },
+                { id: 'reader',    label: 'Reader' },
+                { id: 'bookmarks', label: `Bookmarks (${bookmarks.length})` },
+                { id: 'search',    label: 'Search' },
               ].map(tab => (
                 <button key={tab.id} onClick={() => setView(tab.id)} style={{
                   padding: '8px 20px', borderRadius: 50, cursor: 'pointer', fontSize: 13, fontWeight: 600,
@@ -303,13 +301,13 @@ export default function SacredBookReaderPage() {
                     background: 'rgba(0,0,0,0.15)', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.12)',
                     color: THEME_GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', textAlign: 'left',
                   }}>
-                    <span style={{ fontSize: 14 }}>‹</span> {t('book_reader.back_to', { category: t(`books.categories.${cat.key}.label`, { defaultValue: cat.label }) })}
+                    <span style={{ fontSize: 14 }}>‹</span> Back to {cat.label}
                   </button>
                   <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: 10 }}>
                     <BookIcon size={28} color="rgba(255,255,255,0.95)" />
                     <div>
                       <div style={{ fontFamily: 'var(--font-display)', color: 'white', fontWeight: 700, fontSize: 15 }}>{bk.title}</div>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>{t('book_reader.chapters', { count: bk.total_chapters })}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>{bk.total_chapters} chapters</div>
                     </div>
                   </div>
                 </div>
@@ -335,7 +333,7 @@ export default function SacredBookReaderPage() {
                               color: selectedChapter === ch.chapter_number ? THEME_COLOR : 'var(--brown)',
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                             }}>{ch.title || ch.name_translated || `Chapter ${ch.chapter_number}`}</div>
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('book_reader.verses', { count: ch.verse_count || ch.verses_count })}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{ch.verse_count || ch.verses_count} verses</div>
                           </div>
                         </div>
                       </button>
@@ -363,16 +361,16 @@ export default function SacredBookReaderPage() {
                       <button onClick={() => handleSelectChapter(getProgress(bk.slug).last_chapter)} style={{
                         padding: '12px 28px', borderRadius: 99, background: THEME_COLOR, color: 'white',
                         border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700,
-                      }}>{t('book_reader.continue_chapter', { chapter: getProgress(bk.slug).last_chapter })} ›</button>
+                      }}>Continue from Chapter {getProgress(bk.slug).last_chapter} ›</button>
                     )}
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 16 }}>← {t('book_reader.select_chapter')}</p>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 16 }}>← Select a chapter to begin reading</p>
                   </div>
                 )}
 
                 {selectedChapter && loadingVerses && (
                   <div style={{ background: 'white', borderRadius: 16, border: `2px solid ${THEME_COLOR}`, padding: 40 }}>
                     <Spinner color={THEME_COLOR} />
-                    <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>{t('book_reader.loading_verses')}</p>
+                    <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>Loading verses…</p>
                   </div>
                 )}
 
@@ -428,7 +426,7 @@ export default function SacredBookReaderPage() {
                       <input
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        placeholder={t('book_reader.search_in', { title: bk.title })}
+                        placeholder={`Search in ${bk.title}…`}
                         style={{
                           flex: 1, padding: '10px 16px', borderRadius: 99, border: `2px solid ${THEME_COLOR}40`,
                           background: 'white', fontSize: 13, fontFamily: 'var(--font-body)', outline: 'none',
@@ -437,7 +435,7 @@ export default function SacredBookReaderPage() {
                       <button type="submit" style={{
                         padding: '10px 20px', borderRadius: 99, border: 'none',
                         background: THEME_COLOR, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                      }}>{t('book_reader.search')}</button>
+                      }}>Search</button>
                     </form>
 
                     {chapterData.note && (
@@ -484,7 +482,7 @@ export default function SacredBookReaderPage() {
         {view === 'bookmarks' && (
           <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 20px' }}>
             <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', marginBottom: 20, fontSize: 22 }}>
-              {t('book_reader.your_bookmarks', { count: bookmarks.length })}
+              Your Bookmarks ({bookmarks.length})
             </h2>
             {bookmarks.length === 0 ? (
               <div style={{
@@ -544,7 +542,7 @@ export default function SacredBookReaderPage() {
         {view === 'search' && (
           <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-              <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 22 }}>{t('book_reader.search_results')}</h2>
+              <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 22 }}>Search Results</h2>
               {searchResults && (
                 <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                   {searchResults.total} results for "{searchResults.query}"
@@ -554,7 +552,7 @@ export default function SacredBookReaderPage() {
                 marginLeft: 'auto', padding: '7px 16px', borderRadius: 99,
                 border: '1px solid var(--cream-dark)', background: 'white',
                 color: 'var(--text-light)', fontSize: 12, cursor: 'pointer',
-              }}>← {t('book_reader.back_reader')}</button>
+              }}>← Back to Reader</button>
             </div>
 
             {searching && <Spinner color={THEME_COLOR} />}
