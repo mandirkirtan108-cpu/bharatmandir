@@ -41,14 +41,14 @@ export default function SearchPage() {
     { value: 'name_desc',    label: t('sort.name_desc') },
     { value: 'rating_desc',  label: t('sort.rating_desc') },
     { value: 'city_asc',     label: t('sort.city_asc') },
-    { value: 'distance_asc', label: 'Nearest First' },
+    { value: 'distance_asc', label: t('sort.distance_asc') },
   ];
 
   const PER_PAGE = 12;
 
   const getUserLocation = () => {
     if (!navigator.geolocation) {
-      setLocationError('Your browser does not support location access.');
+      setLocationError(t('search.location_unsupported'));
       return;
     }
     setLocLoading(true);
@@ -60,7 +60,7 @@ export default function SearchPage() {
         setLocLoading(false);
       },
       () => {
-        setLocationError('Location access denied. Please allow location in your browser and try again.');
+        setLocationError(t('search.location_denied'));
         setLocLoading(false);
       },
       { timeout: 10000 }
@@ -226,7 +226,7 @@ export default function SearchPage() {
       textTransform: 'uppercase', fontWeight: 500,
       backdropFilter: 'blur(8px)',
       whiteSpace: 'nowrap',
-    }}>🛕 Temple Discovery</div>
+    }}>🛕 {t('search.badge')}</div>
 
     {/* Title */}
     <h1 style={{
@@ -237,8 +237,7 @@ export default function SearchPage() {
       color: '#ffffff',
       width: '100%',
     }}>
-      Find Your{' '}
-      <span style={{ color: '#FFD580' }}>Temple</span>
+      {t('search.title')}
     </h1>
 
     {/* Subtitle */}
@@ -249,7 +248,7 @@ export default function SearchPage() {
       fontWeight: 300, lineHeight: 1.7,
       textAlign: 'center',
     }}>
-      Search by name, deity, city, or use filters to discover sacred temples
+      {t('search.subtitle')}
     </p>
 
     {/* Search bar */}
@@ -352,10 +351,10 @@ export default function SearchPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--brown)', fontFamily: 'var(--font-display)', lineHeight: 1.2 }}>
-                    Search Nearby Temples
+                    {t('search.nearby_title')}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 1 }}>
-                    Find temples within a radius
+                    {t('search.nearby_subtitle')}
                   </div>
                 </div>
               </div>
@@ -386,7 +385,7 @@ export default function SearchPage() {
                   }}
                 >
                   <Navigation size={15} />
-                  {locLoading ? 'Getting your location…' : 'Use My Location'}
+                  {locLoading ? t('search.getting_location') : t('search.use_location')}
                 </button>
               )}
 
@@ -400,12 +399,12 @@ export default function SearchPage() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, padding: '5px 10px', background: '#eafaf1', borderRadius: 20, width: 'fit-content' }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#27ae60', display: 'inline-block' }} />
-                    <span style={{ fontSize: 11, color: '#27ae60', fontWeight: 600 }}>Location detected</span>
+                    <span style={{ fontSize: 11, color: '#27ae60', fontWeight: 600 }}>{t('search.location_detected')}</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)', fontFamily: 'var(--font-display)' }}>
-                      Search Radius
+                      {t('search.radius')}
                     </span>
                     <span style={{
                       background: 'var(--saffron)', color: 'white',
@@ -453,7 +452,7 @@ export default function SearchPage() {
                     cursor: 'pointer', fontFamily: 'var(--font-display)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                   }}>
-                    <X size={12} /> Disable Nearby Search
+                    <X size={12} /> {t('search.disable_nearby')}
                   </button>
                 </div>
               )}
@@ -495,7 +494,7 @@ export default function SearchPage() {
                   : <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--brown)' }}>
                       {nearbyMode && userLocation
                         ? <><MapPin size={14} style={{ display: 'inline', marginRight: 4, color: 'var(--saffron)' }} />
-                            {total} {total !== 1 ? 'temples' : 'temple'} within {radiusKm} km</>
+                            {t('search.within_radius', { count: total, radius: radiusKm })}</>
                         : <>{total} {total !== 1 ? t('temples_count_plural') : t('temples_count_singular')} {t('search.found')}</>
                       }
                     </span>
@@ -512,7 +511,7 @@ export default function SearchPage() {
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
                 {nearbyMode && (
                   <span style={{ background: '#27ae60', color: 'white', padding: '3px 12px', borderRadius: 50, fontSize: 12, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={disableNearby}>
-                    📍 Within {radiusKm} km <X size={10} />
+                    📍 {t('search.within', { radius: radiusKm })} <X size={10} />
                   </span>
                 )}
                 {selectedSects.map(s => (
@@ -532,7 +531,7 @@ export default function SearchPage() {
               <div className="loading-wrap" style={{ minHeight: 200 }}>
                 <div className="spinner" />
                 <span className="loading-text">
-                  {nearbyMode ? 'Searching nearby temples…' : t('search.searching')}
+                  {nearbyMode ? t('search.searching_nearby') : t('search.searching')}
                 </span>
               </div>
             )}
@@ -548,19 +547,19 @@ export default function SearchPage() {
                 <div className="empty-icon">{nearbyMode ? '📍' : '🔍'}</div>
                 <div className="empty-title">
                   {nearbyMode
-                    ? `No temples found within ${radiusKm} km`
+                    ? t('search.none_within', { radius: radiusKm })
                     : t('no_temples')
                   }
                 </div>
                 <p className="empty-msg">
                   {nearbyMode
-                    ? 'Try increasing the radius or removing other filters.'
+                    ? t('search.increase_hint')
                     : t('search.empty_msg')
                   }
                 </p>
                 <button className="btn-primary" style={{ marginTop: 16 }}
                   onClick={nearbyMode ? () => setRadiusKm(prev => Math.min(prev + 20, 100)) : clearAllFilters}>
-                  {nearbyMode ? 'Increase Radius' : t('search.clear_filters')}
+                  {nearbyMode ? t('search.increase_radius') : t('search.clear_filters')}
                 </button>
               </div>
             )}

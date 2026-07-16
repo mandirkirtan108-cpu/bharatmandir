@@ -220,13 +220,45 @@
     "searching": "Searching...",
     "found": "found",
     "empty_msg": "Try different keywords or clear some filters",
-    "clear_filters": "Clear Filters"
+    "clear_filters": "Clear Filters",
+    "badge": "Temple Discovery",
+    "nearby_title": "Search Nearby Temples",
+    "nearby_subtitle": "Find temples within a radius",
+    "getting_location": "Getting your location...",
+    "use_location": "Use My Location",
+    "location_detected": "Location detected",
+    "location_unsupported": "Your browser does not support location access.",
+    "location_denied": "Location access denied. Please allow location in your browser and try again.",
+    "radius": "Search Radius",
+    "disable_nearby": "Disable Nearby Search",
+    "within_radius": "{{count}} temples within {{radius}} km",
+    "within": "Within {{radius}} km",
+    "searching_nearby": "Searching nearby temples...",
+    "none_within": "No temples found within {{radius}} km",
+    "increase_hint": "Try increasing the radius or removing other filters.",
+    "increase_radius": "Increase Radius"
   },
   "sort": {
     "name_asc": "Name (A → Z)",
     "name_desc": "Name (Z → A)",
     "rating_desc": "Highest Rated",
-    "city_asc": "City (A → Z)"
+    "city_asc": "City (A → Z)",
+    "distance_asc": "Nearest First"
+  },
+  "blog": {
+    "badge": "Spiritual Blog",
+    "title": "Divine Wisdom & Stories",
+    "subtitle": "Explore spiritual insights, temple stories, and sacred knowledge curated by our team.",
+    "search_placeholder": "Search blogs by title, author...",
+    "loading": "Loading divine content...",
+    "no_match": "No blogs match your search",
+    "empty_title": "No Blog Posts Yet",
+    "try_keywords": "Try different keywords.",
+    "empty_subtitle": "Divine wisdom is on its way — check back soon!",
+    "card_tag": "BLOG",
+    "post_tag": "BLOG POST",
+    "read": "Read",
+    "back": "Back to Blogs"
   },
   "pagination": {
     "prev": "← Previous",

@@ -23,7 +23,7 @@ i18n
     // Browser language detector was auto-setting lang to 'hi'/'mr'/'ta'
     // for Indian users, triggering Anthropic API translation calls that
     // fail on live (no valid API key in browser env) → blank page.
-    lng: 'en',
+    supportedLngs: ['en', 'hi', 'mr', 'ta'],
 
     interpolation: { escapeValue: false },
     detection: {

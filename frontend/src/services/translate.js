@@ -1,35 +1,3 @@
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
-
-// Fix: translate.js is in src/services/, locales are in src/locales/
-import en from '../locales/en.json';
-import hi from '../locales/hi.json';
-import mr from '../locales/mr.json';
-import ta from '../locales/ta.json';
-
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    resources: {
-      en: { translation: en },
-      hi: { translation: hi },
-      mr: { translation: mr },
-      ta: { translation: ta },
-    },
-    fallbackLng: 'en',
-    lng: 'en',
-    interpolation: { escapeValue: false },
-    detection: {
-      order: ['localStorage'],
-      caches: ['localStorage'],
-      lookupLocalStorage: 'bharatmandir_lang',
-    },
-  });
-
-export default i18n;
-
 // ─── Temple translation helpers ───────────────────────────────────────────────
 const FIELDS_TO_TRANSLATE = [
   'name', 'name_hindi', 'primary_deity', 'history',

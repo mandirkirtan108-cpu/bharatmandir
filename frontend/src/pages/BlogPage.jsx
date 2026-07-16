@@ -7,8 +7,10 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Navbar  from '../components/Navbar';
 import Footer  from '../components/Footer';
+import { useLang } from '../LangContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -91,9 +93,14 @@ const CSS = `
   }
 `;
 
-function fmtDate(iso) {
+function fmtDate(iso, lang) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+  const locales = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN', ta: 'ta-IN' };
+  return new Date(iso).toLocaleDateString(locales[lang] || 'en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+function localizedField(item, field, lang) {
+  return item?.[`${field}_${lang}`] || item?.[field] || '';
 }
 
 function excerpt(text, len = 130) {
@@ -103,51 +110,51 @@ function excerpt(text, len = 130) {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function BlogCard({ blog, onClick }) {
+function BlogCard({ blog, onClick, t, lang }) {
   const initial = (blog.submitted_by || 'A')[0].toUpperCase();
   return (
     <div className="blog-card" onClick={onClick} role="button" tabIndex={0}
       onKeyDown={e => e.key === 'Enter' && onClick()}>
       <div className="blog-card-accent" />
       <div className="blog-card-body">
-        <div className="blog-card-tag">✍️ &nbsp;BLOG</div>
-        <div className="blog-card-title">{blog.title}</div>
-        <div className="blog-card-excerpt">{excerpt(blog.description)}</div>
+        <div className="blog-card-tag">✍️ &nbsp;{t('blog.card_tag')}</div>
+        <div className="blog-card-title">{localizedField(blog, 'title', lang)}</div>
+        <div className="blog-card-excerpt">{excerpt(localizedField(blog, 'description', lang))}</div>
         <div className="blog-card-meta">
           <div className="blog-card-author">
             <div className="blog-card-avatar">{initial}</div>
             <div>
               <div className="blog-card-author-name">{blog.submitted_by}</div>
-              <div className="blog-card-date">{fmtDate(blog.created_at)}</div>
+              <div className="blog-card-date">{fmtDate(blog.created_at, lang)}</div>
             </div>
           </div>
-          <span className="blog-card-read">Read →</span>
+          <span className="blog-card-read">{t('blog.read')} →</span>
         </div>
       </div>
     </div>
   );
 }
 
-function BlogDetail({ blog, onBack }) {
+function BlogDetail({ blog, onBack, t, lang }) {
   const initial = (blog.submitted_by || 'A')[0].toUpperCase();
   return (
     <div className="blog-detail-wrap">
-      <button className="blog-back-btn" onClick={onBack}>← Back to Blogs</button>
+      <button className="blog-back-btn" onClick={onBack}>← {t('blog.back')}</button>
       <div className="blog-detail-card">
         <div className="blog-detail-top" />
         <div className="blog-detail-body">
-          <div className="blog-detail-tag">✍️ &nbsp;BLOG POST</div>
-          <h1 className="blog-detail-title">{blog.title}</h1>
+          <div className="blog-detail-tag">✍️ &nbsp;{t('blog.post_tag')}</div>
+          <h1 className="blog-detail-title">{localizedField(blog, 'title', lang)}</h1>
           <div className="blog-detail-meta">
             <div className="blog-detail-avatar">{initial}</div>
             <div>
               <div className="blog-detail-author">{blog.submitted_by}</div>
               {blog.created_at && (
-                <div className="blog-detail-date">{fmtDate(blog.created_at)}</div>
+                <div className="blog-detail-date">{fmtDate(blog.created_at, lang)}</div>
               )}
             </div>
           </div>
-          <div className="blog-detail-content">{blog.description}</div>
+          <div className="blog-detail-content">{localizedField(blog, 'description', lang)}</div>
         </div>
       </div>
     </div>
@@ -156,6 +163,8 @@ function BlogDetail({ blog, onBack }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function BlogPage() {
+  const { t } = useTranslation();
+  const { lang } = useLang();
   const [blogs, setBlogs]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState(null);
@@ -189,9 +198,9 @@ export default function BlogPage() {
   const filtered = blogs.filter(b => {
     const q = search.toLowerCase();
     return (
-      b.title?.toLowerCase().includes(q) ||
+      localizedField(b, 'title', lang).toLowerCase().includes(q) ||
       b.submitted_by?.toLowerCase().includes(q) ||
-      b.description?.toLowerCase().includes(q)
+      localizedField(b, 'description', lang).toLowerCase().includes(q)
     );
   });
 
@@ -234,7 +243,7 @@ export default function BlogPage() {
             textTransform: 'uppercase', fontWeight: 500,
             backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
           }}>
-            📖 Spiritual Blog
+            📖 {t('blog.badge')}
           </div>
 
           {/* Title */}
@@ -245,9 +254,7 @@ export default function BlogPage() {
             textShadow: '0 4px 40px rgba(0,0,0,0.3)',
             color: '#ffffff', width: '100%',
           }}>
-            Divine{' '}
-            <span style={{ color: '#FFD580' }}>Wisdom</span>
-            {' '}& Stories
+            {t('blog.title')}
           </h1>
 
           {/* Subtitle */}
@@ -258,14 +265,14 @@ export default function BlogPage() {
             fontWeight: 300, lineHeight: 1.7,
             textAlign: 'center',
           }}>
-            Explore spiritual insights, temple stories, and sacred knowledge curated by our team.
+            {t('blog.subtitle')}
           </p>
         </div>
       </section>
 
       {/* ── Content ── */}
       {selected ? (
-        <BlogDetail blog={selected} onBack={closeBlog} />
+        <BlogDetail blog={selected} onBack={closeBlog} t={t} lang={lang} />
       ) : (
         <div className="blog-main">
           {/* Search */}
@@ -273,7 +280,7 @@ export default function BlogPage() {
             <span className="blog-search-icon">🔍</span>
             <input
               className="blog-search-inp"
-              placeholder="Search blogs by title, author…"
+              placeholder={t('blog.search_placeholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -283,24 +290,24 @@ export default function BlogPage() {
           {loading ? (
             <div className="blog-spinner">
               <span className="spin" />
-              Loading divine content…
+              {t('blog.loading')}
             </div>
           ) : filtered.length === 0 ? (
             <div className="blog-empty">
               <div className="blog-empty-icon">📭</div>
               <div className="blog-empty-title">
-                {search ? 'No blogs match your search' : 'No Blog Posts Yet'}
+                {search ? t('blog.no_match') : t('blog.empty_title')}
               </div>
               <div className="blog-empty-sub">
                 {search
-                  ? 'Try different keywords.'
-                  : 'Divine wisdom is on its way — check back soon!'}
+                  ? t('blog.try_keywords')
+                  : t('blog.empty_subtitle')}
               </div>
             </div>
           ) : (
             <div className="blog-grid">
               {filtered.map(blog => (
-                <BlogCard key={blog.id} blog={blog} onClick={() => openBlog(blog)} />
+                <BlogCard key={blog.id} blog={blog} onClick={() => openBlog(blog)} t={t} lang={lang} />
               ))}
             </div>
           )}
