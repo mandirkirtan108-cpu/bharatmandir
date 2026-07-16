@@ -1,6 +1,12 @@
 {
   "nav": {
     "home": "Home",
+    "temples": "Temples",
+    "blog": "Blog",
+    "library": "Library",
+    "sign_in": "Sign In",
+    "sign_out": "Sign Out",
+    "my_profile": "My Profile",
     "search": "🔍 Search",
     "map": "🗺️ Map View",
     "route": "🛣️ Route Planner",

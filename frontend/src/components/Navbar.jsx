@@ -56,11 +56,11 @@ export default function Navbar() {
   };
 
   const NAV_LINKS = [
-    { to: '/search',          label: '🛕 ' + 'Temples',              icon: <Search size={16} /> },
+    { to: '/search',          label: '🛕 ' + t('nav.temples'),       icon: <Search size={16} /> },
     { to: '/route-planner',   label: t('nav.route'),                 icon: <Navigation size={16} /> },
     { to: '/panchang',        label: t('nav.panchang'),              icon: <CalendarDays size={16} /> },
-    { to: '/blog',            label: '📖 Blog',                      icon: <PenLine size={16} /> },
-    { to: '/sacred-books',    label: '📚 Library',                   icon: <BookOpen size={16} /> },
+    { to: '/blog',            label: '📖 ' + t('nav.blog'),          icon: <PenLine size={16} /> },
+    { to: '/sacred-books',    label: '📚 ' + t('nav.library'),       icon: <BookOpen size={16} /> },
     { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'),     icon: null },
   ];
 
@@ -166,7 +166,7 @@ export default function Navbar() {
                     {(user?.name || 'U')[0].toUpperCase()}
                   </span>
                   <span style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user?.name?.split(' ')[0] || 'Profile'}
+                    {user?.name?.split(' ')[0] || t('nav.my_profile')}
                   </span>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                     style={{ opacity: 0.6, transition: 'transform 0.2s', transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
@@ -201,7 +201,7 @@ export default function Navbar() {
                       onMouseLeave={e => e.currentTarget.style.background = isActive('/profile') ? '#FAF6EE' : 'transparent'}
                     >
                       <User size={15} style={{ color: '#C8520A' }} />
-                      My Profile
+                      {t('nav.my_profile')}
                     </Link>
                     <button
                       onClick={handleUserLogout}
@@ -217,7 +217,7 @@ export default function Navbar() {
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <LogOut size={15} />
-                      Sign Out
+                      {t('nav.sign_out')}
                     </button>
                   </div>
                 )}
@@ -235,7 +235,7 @@ export default function Navbar() {
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                Sign In
+                {t('nav.sign_in')}
               </Link>
             )}
           </div>
@@ -298,7 +298,7 @@ export default function Navbar() {
                 style={{ color: '#ffb050', fontWeight: 600 }}
               >
                 <span className="sidebar-link-icon"><User size={16} /></span>
-                My Profile
+                {t('nav.my_profile')}
               </Link>
               <button
                 onClick={handleUserLogout}
@@ -311,7 +311,7 @@ export default function Navbar() {
                 }}
               >
                 <span className="sidebar-link-icon"><LogOut size={16} /></span>
-                Sign Out
+                {t('nav.sign_out')}
               </button>
             </>
           )}
@@ -324,7 +324,7 @@ export default function Navbar() {
               style={{ color: '#ffb050', fontWeight: 600 }}
             >
               <span className="sidebar-link-icon"><User size={16} /></span>
-              Sign In
+              {t('nav.sign_in')}
             </Link>
           )}
         </nav>
