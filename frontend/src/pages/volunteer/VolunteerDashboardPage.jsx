@@ -128,7 +128,7 @@ export default function VolunteerDashboardPage() {
 
           <div style={styles.heroActions}>
             <Link
-              to="/pages/AdminAddTemplePage"
+              to="/volunteer/add-temple"
               style={styles.primaryButton}
             >
               <Plus size={17} />
@@ -901,3 +901,4 @@ const styles = {
     borderRadius: 10,
   },
 };
+
