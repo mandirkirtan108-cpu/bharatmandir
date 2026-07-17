@@ -32,7 +32,6 @@ import UserProfilePage from './pages/UserProfilePage';
 // Admin pages
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminPanelPage from './pages/AdminPanelPage';
-import AdminAddTemplePage from './pages/AdminAddTemplePage';
 import AdminAddFestivalPage from './pages/AdminAddFestivalPage';
 import AdminAddBlogPage from './pages/AdminAddBlogPage';
 
@@ -161,15 +160,6 @@ export default function App() {
           />
 
           <Route
-            path="/admin/add"
-            element={
-              <ProtectedRoute>
-                <AdminAddTemplePage />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
             path="/admin/add-festival"
             element={
               <ProtectedRoute>
@@ -224,6 +214,15 @@ export default function App() {
             element={
               <VolunteerProtectedRoute>
                 <VolunteerSubmissionsPage />
+              </VolunteerProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/volunteer/submissions/:submissionId/edit"
+            element={
+              <VolunteerProtectedRoute>
+                <VolunteerAddTemplePage />
               </VolunteerProtectedRoute>
             }
           />

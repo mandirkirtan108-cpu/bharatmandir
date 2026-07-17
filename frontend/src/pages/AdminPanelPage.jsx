@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import AdminApprovalWorkflow from '../components/admin/AdminApprovalWorkflow';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -1562,6 +1563,7 @@ export default function AdminPanelPage() {
           }}>
             {[
               { id: 'temples', label: 'Temples' },
+              { id: 'approvals', label: 'Verification Center' },
               { id: 'blogs', label: 'Blog Posts' },
             ].map(v => (
               <button
@@ -1605,23 +1607,6 @@ export default function AdminPanelPage() {
                     onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
                   />
                 </div>
-
-                {/* Add Temple — saffron */}
-                <Link to="/admin/add" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '10px 18px',
-                  background: 'linear-gradient(135deg, var(--saffron), var(--saffron-dark))',
-                  border: '2px solid transparent', borderRadius: 50,
-                  fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
-                  color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-                  boxShadow: '0 2px 12px rgba(200,100,0,.25)', transition: 'all .2s',
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-                >
-                  <PlusCircle size={15} />
-                  <span className="btn-label-temple">Add Temple</span>
-                </Link>
 
                 {/* Add Festival — brown */}
                 <Link to="/admin/add-festival" style={{
@@ -1786,6 +1771,7 @@ export default function AdminPanelPage() {
 
           {/* ── BLOGS VIEW ── */}
           {mainView === 'blogs' && <BlogManagement />}
+          {mainView === 'approvals' && <AdminApprovalWorkflow />}
 
         </div>
       </div>

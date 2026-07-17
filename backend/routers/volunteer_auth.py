@@ -1,8 +1,9 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 import bcrypt
+from pydantic import BaseModel, Field
 from fastapi import (
     APIRouter,
     Depends,
@@ -22,6 +23,12 @@ from models.volunteer import (
     VolunteerProfileUpdate,
     VolunteerSignup,
 )
+from routers.admin_auth import get_current_admin
+
+
+class VolunteerApprovalRequest(BaseModel):
+    action: Literal["approved", "rejected"]
+    rejection_reason: str | None = Field(default=None, max_length=2000)
 
 router = APIRouter(
     prefix="/api/volunteer/auth",
@@ -145,6 +152,11 @@ def public_volunteer(
         "is_active",
         "created_at",
         "updated_at",
+        "approval_status",
+        "approved_by",
+        "approved_at",
+        "rejection_reason",
+        "registered_at",
     )
 
     return {
@@ -241,6 +253,12 @@ async def get_current_volunteer(
             detail="Volunteer account is deactivated",
         )
 
+    if volunteer.get("approval_status") != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Volunteer account is not approved",
+        )
+
     return volunteer
 
 
@@ -273,7 +291,8 @@ def signup_volunteer(
                     password_hash,
                     phone,
                     city,
-                    state
+                    state,
+                    approval_status
                 )
                 VALUES (
                     %s,
@@ -281,7 +300,8 @@ def signup_volunteer(
                     %s,
                     %s,
                     %s,
-                    %s
+                    %s,
+                    'pending'
                 )
                 RETURNING *
                 """,
@@ -327,7 +347,7 @@ def signup_volunteer(
 
     return {
         "message": (
-            "Volunteer account created successfully"
+            "Registration submitted successfully. Your account is currently under review by the administrator. You'll be notified once it has been approved."
         ),
         "volunteer": public_volunteer(
             volunteer
@@ -382,6 +402,19 @@ def login_volunteer(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Volunteer account is deactivated",
         )
+
+    approval_status = volunteer.get("approval_status") or "pending"
+    if approval_status == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your volunteer account is currently under review by the administrator. You will be able to access your dashboard once your account has been approved.",
+        )
+    if approval_status == "rejected":
+        reason = volunteer.get("rejection_reason")
+        message = "Your volunteer registration was rejected."
+        if reason:
+            message += f" Admin remarks: {reason}"
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=message)
 
     access_token = create_volunteer_token(
         volunteer_id=volunteer["id"],
@@ -443,7 +476,7 @@ def refresh_volunteer_token(
     with get_db_cursor() as cursor:
         cursor.execute(
             """
-            SELECT id, is_active
+            SELECT id, is_active, approval_status
             FROM volunteers
             WHERE id = %s
             """,
@@ -463,6 +496,8 @@ def refresh_volunteer_token(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Volunteer account is deactivated",
         )
+    if volunteer.get("approval_status") != "approved":
+        raise HTTPException(status_code=403, detail="Volunteer account is not approved")
 
     access_token = create_volunteer_token(
         volunteer_id=volunteer_id,
@@ -580,3 +615,68 @@ def logout_volunteer():
             "Volunteer logged out successfully"
         )
     }
+
+
+@router.get("/admin/volunteers")
+def admin_list_volunteers(
+    approval_status: str | None = None,
+    admin: dict = Depends(get_current_admin),
+):
+    allowed = {"pending", "approved", "rejected"}
+    if approval_status and approval_status not in allowed:
+        raise HTTPException(status_code=422, detail="Invalid approval status")
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, uuid, name, email, phone, city, state, is_active,
+                   approval_status, approved_by, approved_at,
+                   rejection_reason, registered_at, created_at
+            FROM volunteers
+            WHERE (%s IS NULL OR approval_status = %s)
+            ORDER BY registered_at DESC, created_at DESC
+            """,
+            (approval_status, approval_status),
+        )
+        return cursor.fetchall()
+
+
+@router.get("/admin/volunteers/{volunteer_id}")
+def admin_get_volunteer(
+    volunteer_id: int,
+    admin: dict = Depends(get_current_admin),
+):
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT * FROM volunteers WHERE id = %s", (volunteer_id,))
+        volunteer = cursor.fetchone()
+    if not volunteer:
+        raise HTTPException(status_code=404, detail="Volunteer not found")
+    return public_volunteer(volunteer)
+
+
+@router.patch("/admin/volunteers/{volunteer_id}/approval")
+def admin_review_volunteer(
+    volunteer_id: int,
+    body: VolunteerApprovalRequest,
+    admin: dict = Depends(get_current_admin),
+):
+    if body.action == "rejected" and not (body.rejection_reason or "").strip():
+        raise HTTPException(status_code=422, detail="Rejection reason is required")
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE volunteers
+            SET approval_status = %s,
+                approved_by = CASE WHEN %s = 'approved' THEN %s ELSE NULL END,
+                approved_at = CASE WHEN %s = 'approved' THEN NOW() ELSE NULL END,
+                rejection_reason = CASE WHEN %s = 'rejected' THEN %s ELSE NULL END,
+                updated_at = NOW()
+            WHERE id = %s
+            RETURNING *
+            """,
+            (body.action, body.action, admin["id"], body.action,
+             body.action, body.rejection_reason, volunteer_id),
+        )
+        volunteer = cursor.fetchone()
+    if not volunteer:
+        raise HTTPException(status_code=404, detail="Volunteer not found")
+    return public_volunteer(volunteer)

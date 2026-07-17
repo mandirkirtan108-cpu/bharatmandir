@@ -56,12 +56,12 @@ export default function VolunteerSignupPage() {
     try {
       const { confirmPassword, ...signupData } = form;
 
-      await volunteerApi.signup(signupData);
+      const response = await volunteerApi.signup(signupData);
 
       navigate('/volunteer/login', {
         state: {
           message:
-            'Volunteer account successfully create ho gaya. Please sign in karein.',
+            response.data?.message || "Registration submitted successfully. Your account is currently under review by the administrator. You'll be notified once it has been approved.",
         },
       });
     } catch (requestError) {

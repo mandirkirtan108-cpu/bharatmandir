@@ -34,12 +34,12 @@ VOLUNTEER_EDITABLE_STATUSES = {
 
 VOLUNTEER_DELETABLE_STATUSES = {
     "draft",
-    "pending",
     "changes_requested",
 }
 
 ADMIN_REVIEW_ACTIONS = {
     "approved",
+    "published",
     "rejected",
     "changes_requested",
 }
@@ -111,8 +111,7 @@ def create_volunteer_submission(
     ),
 ):
     """
-    Volunteer ki new temple submission pending status
-    ke saath create karta hai.
+    New submissions always start as a private draft.
     """
 
     submission_data = body.model_dump()
@@ -126,7 +125,7 @@ def create_volunteer_submission(
     values = [
         volunteer["id"],
         *submission_data.values(),
-        "pending",
+        "draft",
     ]
 
     placeholders = ", ".join(
@@ -207,7 +206,7 @@ def update_volunteer_submission(
 ):
     """
     Draft ya changes-requested submission update karta hai.
-    Update ke baad status dobara pending ho jayega.
+    Editing preserves draft/changes-requested status.
     """
 
     updates = body.model_dump(
@@ -256,8 +255,6 @@ def update_volunteer_submission(
             UPDATE temple_submissions
             SET
                 {update_clause},
-                status = 'pending',
-                admin_note = NULL,
                 updated_at = NOW()
             WHERE
                 id = %s
@@ -278,6 +275,34 @@ def update_volunteer_submission(
         )
 
     return updated_submission
+
+
+@router.post("/volunteer/submissions/{submission_id}/submit")
+def submit_volunteer_submission(
+    submission_id: int,
+    volunteer: dict = Depends(get_current_volunteer),
+):
+    """Move an owned draft into the admin review queue."""
+    current = get_volunteer_submission(submission_id, volunteer["id"])
+    missing = [field for field in ("temple_name", "address", "city", "state") if not current.get(field)]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Complete required fields before submitting: {', '.join(missing)}")
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE temple_submissions
+            SET status = 'pending_review', submitted_at = NOW(),
+                admin_note = NULL, rejection_reason = NULL, updated_at = NOW()
+            WHERE id = %s AND volunteer_id = %s
+              AND status IN ('draft', 'changes_requested')
+            RETURNING *
+            """,
+            (submission_id, volunteer["id"]),
+        )
+        submission = cursor.fetchone()
+    if not submission:
+        raise HTTPException(status_code=409, detail="Only drafts or change requests can be submitted")
+    return submission
 
 
 @router.delete(
@@ -362,10 +387,9 @@ def list_submissions_for_admin(
 
     valid_statuses = {
         "draft",
-        "pending",
-        "under_review",
+        "pending_review",
         "changes_requested",
-        "approved",
+        "published",
         "rejected",
     }
 
@@ -519,8 +543,10 @@ def review_volunteer_submission(
             )
         )
 
+        review_action = "published" if body.action == "approved" else body.action
+
         if (
-            body.action == "approved"
+            review_action == "published"
             and not published_temple_id
         ):
             base_slug = create_temple_slug(
@@ -609,17 +635,22 @@ def review_volunteer_submission(
             SET
                 status = %s,
                 admin_note = %s,
+                rejection_reason = CASE WHEN %s = 'rejected' THEN %s ELSE NULL END,
                 reviewed_by = %s,
                 reviewed_at = NOW(),
+                published_at = CASE WHEN %s = 'published' THEN NOW() ELSE published_at END,
                 published_temple_id = %s,
                 updated_at = NOW()
             WHERE id = %s
             RETURNING *
             """,
             (
-                body.action,
+                review_action,
+                body.admin_note,
+                review_action,
                 body.admin_note,
                 admin["id"],
+                review_action,
                 published_temple_id,
                 submission_id,
             ),

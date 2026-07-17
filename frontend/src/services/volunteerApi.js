@@ -330,6 +330,17 @@ export const volunteerApi = {
       `/api/volunteer/submissions/${submissionId}`
     );
   },
+
+  submitSubmission(submissionId) {
+    return volunteerClient.post(
+      `/api/volunteer/submissions/${submissionId}/submit`
+    );
+  },
+
+  listAdminVolunteers(status) {
+    const query = status ? `?approval_status=${status}` : '';
+    return volunteerClient.get(`/api/volunteer/auth/admin/volunteers${query}`);
+  },
 };
 
 export default volunteerClient;

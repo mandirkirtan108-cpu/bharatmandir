@@ -358,6 +358,10 @@ async def create_temple(
     custom_designation:    Optional[str]  = Form(None),   # ← NEW
     custom_facility:       Optional[str]  = Form(None),   # ← NEW
 ):
+    raise HTTPException(
+        status_code=403,
+        detail="Direct admin temple creation is disabled. Approved volunteers must submit temples through the verification workflow.",
+    )
     ensure_media_table()
     validate_coordinates(latitude, longitude)
 

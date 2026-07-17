@@ -31,6 +31,8 @@ const emptyForm = {
 export default function VolunteerTempleForm({
   initialValue,
   onSubmit,
+  onSaveDraft,
+  onCancel,
   submitting = false,
 }) {
   const [form, setForm] = useState({
@@ -40,6 +42,19 @@ export default function VolunteerTempleForm({
 
   const [validationError, setValidationError] =
     useState('');
+  const [step, setStep] = useState(0);
+  const stepNames = ['Basic Details', 'Location', 'Contact & Media'];
+
+  const completed = ['temple_name', 'address', 'city', 'state', 'deity', 'description', 'timings', 'image_url']
+    .filter((key) => String(form[key] ?? '').trim()).length;
+  const completion = Math.round((completed / 8) * 100);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      localStorage.setItem('bm_volunteer_temple_autosave', JSON.stringify(form));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [form]);
 
   useEffect(() => {
     if (initialValue) {
@@ -99,7 +114,23 @@ export default function VolunteerTempleForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <FormSection
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 7, marginBottom: 18 }}>
+          {stepNames.map((name, index) => (
+            <button key={name} type="button" onClick={() => setStep(index)} style={{ padding: '9px 5px', border: `1px solid ${index <= step ? '#D65B08' : '#E5D8C6'}`, borderRadius: 8, background: index === step ? '#D65B08' : index < step ? '#FFF0E5' : '#fff', color: index === step ? '#fff' : '#6A3C20', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+              {index + 1}. {name}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#7A5538', marginBottom: 7 }}>
+          <strong>Form completion</strong><span>{completion}%</span>
+        </div>
+        <div style={{ height: 7, background: '#F1E5D5', borderRadius: 20, overflow: 'hidden' }}>
+          <div style={{ width: `${completion}%`, height: '100%', background: 'linear-gradient(90deg,#D65B08,#FF9900)', transition: 'width .25s' }} />
+        </div>
+        <p style={{ margin: '6px 0 0', color: '#9A7559', fontSize: 10 }}>Changes are preserved locally while you edit.</p>
+      </div>
+      {step === 0 && <FormSection
         icon={<Landmark size={19} />}
         title="Basic Temple Information"
         description="Mandir ki primary details enter karein."
@@ -142,9 +173,9 @@ export default function VolunteerTempleForm({
             placeholder="Temple contact number"
           />
         </div>
-      </FormSection>
+      </FormSection>}
 
-      <FormSection
+      {step === 1 && <FormSection
         icon={<MapPin size={19} />}
         title="Temple Location"
         description="Accurate address devotees ko temple find karne mein help karega."
@@ -218,9 +249,9 @@ export default function VolunteerTempleForm({
             step="any"
           />
         </div>
-      </FormSection>
+      </FormSection>}
 
-      <FormSection
+      {step === 2 && <FormSection
         icon={<Image size={19} />}
         title="Description and Media"
         description="Original aur verified information provide karein."
@@ -264,7 +295,7 @@ export default function VolunteerTempleForm({
             placeholder="https://example.com/temple.jpg"
           />
         </div>
-      </FormSection>
+      </FormSection>}
 
       {validationError && (
         <div
@@ -281,7 +312,14 @@ export default function VolunteerTempleForm({
           verification mein jayengi.
         </p>
 
-        <button
+        <button type="button" onClick={onCancel} style={{ ...styles.submitButton, background: '#F5EBDD', color: '#6A3C20', boxShadow: 'none' }}>
+          Cancel
+        </button>
+        {step > 0 && <button type="button" onClick={() => setStep((value) => value - 1)} style={{ ...styles.submitButton, background: '#FFF0E5', color: '#9A3C05', boxShadow: 'none' }}>Previous</button>}
+        <button type="button" disabled={submitting} onClick={() => onSaveDraft?.(form)} style={{ ...styles.submitButton, background: '#7A5538' }}>
+          <Save size={17} /> Save Draft
+        </button>
+        {step < 2 ? <button type="button" onClick={() => setStep((value) => value + 1)} style={styles.submitButton}>Next</button> : <button
           type="submit"
           disabled={submitting}
           style={{
@@ -296,7 +334,7 @@ export default function VolunteerTempleForm({
           {submitting
             ? 'Submitting...'
             : 'Submit Temple for Review'}
-        </button>
+        </button>}
       </div>
 
       <style>

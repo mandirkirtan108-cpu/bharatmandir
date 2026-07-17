@@ -45,6 +45,16 @@ CREATE TABLE IF NOT EXISTS volunteers (
         NOT NULL
         DEFAULT TRUE,
 
+    approval_status VARCHAR(20)
+        NOT NULL
+        DEFAULT 'pending'
+        CHECK (approval_status IN ('pending', 'approved', 'rejected')),
+
+    approved_by BIGINT REFERENCES admin_users(id) ON DELETE SET NULL,
+    approved_at TIMESTAMPTZ,
+    rejection_reason TEXT,
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
     created_at TIMESTAMPTZ
         NOT NULL
         DEFAULT NOW(),
@@ -77,16 +87,13 @@ CREATE TABLE IF NOT EXISTS temple_submissions (
 
     temple_type VARCHAR(120),
 
-    address TEXT
-        NOT NULL,
+    address TEXT,
 
-    city VARCHAR(120)
-        NOT NULL,
+    city VARCHAR(120),
 
     district VARCHAR(120),
 
-    state VARCHAR(120)
-        NOT NULL,
+    state VARCHAR(120),
 
     pincode VARCHAR(10),
 
@@ -106,14 +113,13 @@ CREATE TABLE IF NOT EXISTS temple_submissions (
 
     status VARCHAR(30)
         NOT NULL
-        DEFAULT 'pending'
+        DEFAULT 'draft'
         CHECK (
             status IN (
                 'draft',
-                'pending',
-                'under_review',
+                'pending_review',
                 'changes_requested',
-                'approved',
+                'published',
                 'rejected'
             )
         ),
@@ -138,6 +144,10 @@ CREATE TABLE IF NOT EXISTS temple_submissions (
         NOT NULL
         DEFAULT NOW(),
 
+    submitted_at TIMESTAMPTZ,
+    published_at TIMESTAMPTZ,
+    rejection_reason TEXT,
+
     CONSTRAINT temple_submission_latitude_check
         CHECK (
             latitude IS NULL
@@ -156,6 +166,33 @@ CREATE TABLE IF NOT EXISTS temple_submissions (
             )
         )
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'volunteers' AND column_name = 'approval_status'
+    ) THEN
+        ALTER TABLE volunteers ADD COLUMN approval_status VARCHAR(20) NOT NULL DEFAULT 'pending';
+        UPDATE volunteers SET approval_status = 'approved';
+    END IF;
+END $$;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS approved_by BIGINT REFERENCES admin_users(id) ON DELETE SET NULL;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE temple_submissions ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+ALTER TABLE temple_submissions ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+ALTER TABLE temple_submissions ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE temple_submissions ALTER COLUMN address DROP NOT NULL;
+ALTER TABLE temple_submissions ALTER COLUMN city DROP NOT NULL;
+ALTER TABLE temple_submissions ALTER COLUMN state DROP NOT NULL;
+ALTER TABLE temple_submissions DROP CONSTRAINT IF EXISTS temple_submissions_status_check;
+UPDATE temple_submissions SET status = 'pending_review' WHERE status IN ('pending', 'under_review');
+UPDATE temple_submissions SET status = 'published' WHERE status = 'approved';
+ALTER TABLE temple_submissions ADD CONSTRAINT temple_submissions_status_check
+    CHECK (status IN ('draft', 'pending_review', 'changes_requested', 'published', 'rejected'));
 
 
 CREATE UNIQUE INDEX IF NOT EXISTS

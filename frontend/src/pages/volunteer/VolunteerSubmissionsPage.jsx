@@ -27,20 +27,16 @@ const statusOptions = [
     label: 'All Statuses',
   },
   {
-    value: 'pending',
-    label: 'Pending',
-  },
-  {
-    value: 'under_review',
-    label: 'Under Review',
+    value: 'pending_review',
+    label: 'Pending Review',
   },
   {
     value: 'changes_requested',
     label: 'Changes Requested',
   },
   {
-    value: 'approved',
-    label: 'Approved',
+    value: 'published',
+    label: 'Published',
   },
   {
     value: 'rejected',
@@ -331,7 +327,6 @@ function SubmissionRow({
 }) {
   const canDelete = [
     'draft',
-    'pending',
     'changes_requested',
   ].includes(submission.status);
 
@@ -387,6 +382,12 @@ function SubmissionRow({
         <SubmissionStatusBadge
           status={submission.status}
         />
+
+        {['draft', 'changes_requested'].includes(submission.status) && (
+          <Link to={`/volunteer/submissions/${submission.id}/edit`} style={{ color: '#C8520A', fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+            Continue Editing
+          </Link>
+        )}
 
         {canDelete && (
           <button

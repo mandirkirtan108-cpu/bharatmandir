@@ -20,7 +20,8 @@ class TempleSubmissionCreate(
     TempleSubmissionBase
 ):
     temple_name: str = Field(
-        min_length=2,
+        default="Untitled Temple Draft",
+        min_length=1,
         max_length=255,
     )
 
@@ -34,13 +35,13 @@ class TempleSubmissionCreate(
         max_length=120,
     )
 
-    address: str = Field(
-        min_length=5,
+    address: Optional[str] = Field(
+        default=None,
         max_length=1000,
     )
 
-    city: str = Field(
-        min_length=2,
+    city: Optional[str] = Field(
+        default=None,
         max_length=120,
     )
 
@@ -49,8 +50,8 @@ class TempleSubmissionCreate(
         max_length=120,
     )
 
-    state: str = Field(
-        min_length=2,
+    state: Optional[str] = Field(
+        default=None,
         max_length=120,
     )
 
@@ -106,6 +107,9 @@ class TempleSubmissionCreate(
         "timings",
         "contact_phone",
         "image_url",
+        "address",
+        "city",
+        "state",
         mode="before",
     )
     @classmethod

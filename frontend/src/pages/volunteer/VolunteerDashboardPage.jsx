@@ -69,17 +69,17 @@ export default function VolunteerDashboardPage() {
 
   const stats = useMemo(() => {
     return {
-      total: submissions.length,
+      drafts: submissions.filter((submission) => ['draft', 'changes_requested'].includes(submission.status)).length,
 
       pending: submissions.filter((submission) =>
-        ['pending', 'under_review'].includes(
+        ['pending_review'].includes(
           submission.status
         )
       ).length,
 
       approved: submissions.filter(
         (submission) =>
-          submission.status === 'approved'
+          submission.status === 'published'
       ).length,
 
       changes: submissions.filter(
@@ -151,16 +151,16 @@ export default function VolunteerDashboardPage() {
           style={styles.statsGrid}
         >
           <StatCard
-            icon={<Send size={20} />}
-            label="Total Submissions"
-            value={stats.total}
+            icon={<FileWarning size={20} />}
+            label="My Drafts"
+            value={stats.drafts}
             color="#C8520A"
             background="#FFF0E5"
           />
 
           <StatCard
             icon={<Clock3 size={20} />}
-            label="Under Review"
+            label="Pending Reviews"
             value={stats.pending}
             color="#A66B00"
             background="#FFF8D9"
@@ -168,16 +168,16 @@ export default function VolunteerDashboardPage() {
 
           <StatCard
             icon={<CheckCircle2 size={20} />}
-            label="Approved"
+            label="Published Temples"
             value={stats.approved}
             color="#1A6B3A"
             background="#EBF7F0"
           />
 
           <StatCard
-            icon={<FileWarning size={20} />}
-            label="Changes Needed"
-            value={stats.changes}
+            icon={<XCircle size={20} />}
+            label="Rejected Temples"
+            value={stats.rejected}
             color="#9A3C05"
             background="#FDEDDD"
           />

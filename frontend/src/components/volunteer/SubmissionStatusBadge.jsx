@@ -16,20 +16,12 @@ const statusConfigurations = {
     icon: FileText,
   },
 
-  pending: {
-    label: 'Pending',
+  pending_review: {
+    label: 'Pending Review',
     color: '#8A6100',
     background: '#FFF7D6',
     border: '#EEDB8D',
     icon: Clock3,
-  },
-
-  under_review: {
-    label: 'Under Review',
-    color: '#7A4A00',
-    background: '#FFF0D6',
-    border: '#EACB90',
-    icon: Search,
   },
 
   changes_requested: {
@@ -40,8 +32,8 @@ const statusConfigurations = {
     icon: FileEdit,
   },
 
-  approved: {
-    label: 'Approved',
+  published: {
+    label: 'Published',
     color: '#176B38',
     background: '#E7F7ED',
     border: '#B9DFC7',
@@ -58,14 +50,14 @@ const statusConfigurations = {
 };
 
 export default function SubmissionStatusBadge({
-  status = 'pending',
+  status = 'pending_review',
 }) {
   const normalizedStatus =
-    String(status || 'pending').toLowerCase();
+    String(status || 'pending_review').toLowerCase();
 
   const configuration =
     statusConfigurations[normalizedStatus] ||
-    statusConfigurations.pending;
+    statusConfigurations.pending_review;
 
   const StatusIcon = configuration.icon;
 
