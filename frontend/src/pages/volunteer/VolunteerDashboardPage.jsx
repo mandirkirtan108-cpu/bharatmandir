@@ -128,7 +128,7 @@ export default function VolunteerDashboardPage() {
 
           <div style={styles.heroActions}>
             <Link
-              to="/volunteer/add-temple"
+              to="/AdminAddTemplePage"
               style={styles.primaryButton}
             >
               <Plus size={17} />
@@ -260,7 +260,7 @@ export default function VolunteerDashboardPage() {
               </p>
 
               <Link
-                to="/volunteer/add-temple"
+                to="/AdminAddTemplePage"
                 style={styles.goldButton}
               >
                 Add Temple Information
@@ -426,7 +426,7 @@ function EmptySubmissions() {
       </p>
 
       <Link
-        to="/volunteer/add-temple"
+        to="/AdminAddTemplePage"
         style={styles.primaryButton}
       >
         <Plus size={16} />
@@ -901,4 +901,5 @@ const styles = {
     borderRadius: 10,
   },
 };
+
 

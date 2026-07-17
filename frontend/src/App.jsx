@@ -210,6 +210,15 @@ export default function App() {
           />
 
           <Route
+            path="/AdminAddTemplePage"
+            element={
+              <VolunteerProtectedRoute>
+                <VolunteerAddTemplePage />
+              </VolunteerProtectedRoute>
+            }
+          />
+
+          <Route
             path="/volunteer/submissions"
             element={
               <VolunteerProtectedRoute>
