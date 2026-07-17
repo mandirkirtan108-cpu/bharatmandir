@@ -111,6 +111,10 @@ CREATE TABLE IF NOT EXISTS temple_submissions (
 
     image_url TEXT,
 
+    form_payload JSONB
+        NOT NULL
+        DEFAULT '{}'::jsonb,
+
     status VARCHAR(30)
         NOT NULL
         DEFAULT 'draft'
@@ -185,6 +189,7 @@ ALTER TABLE volunteers ADD COLUMN IF NOT EXISTS registered_at TIMESTAMPTZ NOT NU
 ALTER TABLE temple_submissions ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
 ALTER TABLE temple_submissions ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
 ALTER TABLE temple_submissions ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE temple_submissions ADD COLUMN IF NOT EXISTS form_payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE temple_submissions ALTER COLUMN address DROP NOT NULL;
 ALTER TABLE temple_submissions ALTER COLUMN city DROP NOT NULL;
 ALTER TABLE temple_submissions ALTER COLUMN state DROP NOT NULL;

@@ -1,6 +1,8 @@
 import re
 from uuid import uuid4
 
+from psycopg2.extras import Json
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -116,6 +118,10 @@ def create_volunteer_submission(
 
     submission_data = body.model_dump()
 
+    submission_data["form_payload"] = Json(
+        submission_data.get("form_payload") or {}
+    )
+
     columns = [
         "volunteer_id",
         *submission_data.keys(),
@@ -210,8 +216,13 @@ def update_volunteer_submission(
     """
 
     updates = body.model_dump(
-        exclude_none=True
+        exclude_unset=True
     )
+
+    if "form_payload" in updates:
+        updates["form_payload"] = Json(
+            updates["form_payload"] or {}
+        )
 
     if not updates:
         raise HTTPException(

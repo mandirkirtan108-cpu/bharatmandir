@@ -1,7 +1,9 @@
-import { useState, useRef, Fragment } from 'react';
-import Navbar from '../components/Navbar';
-import Footer from '../components/Footer';
-import { adminAPI } from '../services/api';
+import { useEffect, useState, useRef, Fragment } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import VolunteerNavbar from '../components/volunteer/VolunteerNavbar';
+import { volunteerApi } from '../services/volunteerApi';
+
+const VOLUNTEER_DRAFT_KEY = 'bm_volunteer_full_temple_draft_v1';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SECTS = ['','Shaiva','Vaishnava','Shakta','Smartha','Jain','Buddhist','Sikh','Other'];
@@ -488,6 +490,8 @@ function CheckGrid({ items, form, toggle, className = 'puja-grid', itemClass = '
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function AdminAddTemplePage() {
+  const navigate = useNavigate();
+  const { submissionId } = useParams();
   const [form, setForm]       = useState(initialForm());
   const [step, setStep]       = useState(1);
   const [errors, setErrors]   = useState({});
@@ -506,6 +510,10 @@ export default function AdminAddTemplePage() {
   const [qrId, setQrId]       = useState('');
   const [btnShake, setBtnShake] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftId, setDraftId] = useState(submissionId || null);
+  const [draftNotice, setDraftNotice] = useState('');
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   const [showCustomDesignation, setShowCustomDesignation] = useState(false);
   const [customDesignationText, setCustomDesignationText] = useState('');
@@ -513,6 +521,81 @@ export default function AdminAddTemplePage() {
   const [customFacilityText, setCustomFacilityText] = useState('');
 
   const progressRef = useRef(null);
+
+  function getDraftSnapshot() {
+    return {
+      form,
+      step,
+      priests,
+      scheds,
+      pujaOfferings,
+      mantras,
+      festivals,
+      consents,
+      archStyles,
+      showCustomDesignation,
+      customDesignationText,
+      showCustomFacility,
+      customFacilityText,
+      savedAt: new Date().toISOString(),
+    };
+  }
+
+  function restoreDraft(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    if (snapshot.form) setForm({ ...initialForm(), ...snapshot.form });
+    if (Number(snapshot.step) >= 1 && Number(snapshot.step) <= 9) setStep(Number(snapshot.step));
+    if (Array.isArray(snapshot.priests) && snapshot.priests.length) setPriests(snapshot.priests);
+    if (Array.isArray(snapshot.scheds) && snapshot.scheds.length) setScheds(snapshot.scheds);
+    if (Array.isArray(snapshot.pujaOfferings)) setPujaOfferings(snapshot.pujaOfferings);
+    if (Array.isArray(snapshot.mantras) && snapshot.mantras.length) setMantras(snapshot.mantras);
+    if (Array.isArray(snapshot.festivals) && snapshot.festivals.length) setFestivs(snapshot.festivals);
+    if (Array.isArray(snapshot.consents)) setConsents(snapshot.consents);
+    if (Array.isArray(snapshot.archStyles)) setArchStyles(snapshot.archStyles);
+    setShowCustomDesignation(Boolean(snapshot.showCustomDesignation));
+    setCustomDesignationText(snapshot.customDesignationText || '');
+    setShowCustomFacility(Boolean(snapshot.showCustomFacility));
+    setCustomFacilityText(snapshot.customFacilityText || '');
+  }
+
+  useEffect(() => {
+    let active = true;
+
+    async function hydrateDraft() {
+      try {
+        if (submissionId) {
+          const response = await volunteerApi.getSubmission(submissionId);
+          if (!active) return;
+          const submission = response.data || {};
+          restoreDraft(submission.form_payload || {});
+          setDraftId(String(submission.id));
+          setDraftNotice('Saved draft restore ho gaya. Aap wahi se continue kar sakte hain.');
+        } else {
+          const localDraft = localStorage.getItem(VOLUNTEER_DRAFT_KEY);
+          if (localDraft) {
+            restoreDraft(JSON.parse(localDraft));
+            setDraftNotice('Aapka browser draft restore ho gaya. Save Draft karke account me bhi save karein.');
+          }
+        }
+      } catch (error) {
+        setDraftNotice(error.response?.data?.detail || 'Draft load nahi ho saka.');
+      } finally {
+        if (active) setDraftHydrated(true);
+      }
+    }
+
+    hydrateDraft();
+    return () => { active = false; };
+  }, [submissionId]);
+
+  useEffect(() => {
+    if (!draftHydrated || submitted) return undefined;
+    const timer = window.setTimeout(() => {
+      localStorage.setItem(VOLUNTEER_DRAFT_KEY, JSON.stringify(getDraftSnapshot()));
+      setDraftNotice('Changes browser me autosave ho gaye.');
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [draftHydrated, submitted, form, step, priests, scheds, pujaOfferings, mantras, festivals, consents, archStyles, showCustomDesignation, customDesignationText, showCustomFacility, customFacilityText]);
 
   const set    = (k, v) => { setForm(p => ({ ...p, [k]: v })); if (errors[k]) setErrors(p => ({ ...p, [k]: undefined })); };
   const toggle = k       => setForm(p => ({ ...p, [k]: !p[k] }));
@@ -709,6 +792,71 @@ export default function AdminAddTemplePage() {
   const allConsents = consents.every(Boolean);
   const toggleConsent = i => setConsents(c => { const a=[...c]; a[i]=!a[i]; return a; });
 
+  function submissionPayload() {
+    const latitude = Number.parseFloat(form.latitude);
+    const longitude = Number.parseFloat(form.longitude);
+    return {
+      temple_name: form.name?.trim() || 'Untitled Temple Draft',
+      deity: form.primary_deity?.trim() || null,
+      temple_type: form.temple_type?.trim() || null,
+      address: form.address?.trim() || null,
+      city: form.city?.trim() || null,
+      district: form.district?.trim() || null,
+      state: form.state?.trim() || null,
+      pincode: /^\d{5,6}$/.test(form.pincode || '') ? form.pincode : null,
+      latitude: Number.isFinite(latitude) ? latitude : null,
+      longitude: Number.isFinite(longitude) ? longitude : null,
+      description: form.significance?.trim() || null,
+      history: form.history?.trim() || null,
+      timings: [form.opening_time, form.closing_time].filter(Boolean).join(' - ') || null,
+      contact_phone: form.phone?.trim() || form.submitter_phone?.trim() || null,
+      image_url: form.hero_image_url?.trim() || null,
+      form_payload: getDraftSnapshot(),
+    };
+  }
+
+  async function saveDraft({ quiet = false } = {}) {
+    if (savingDraft) return draftId;
+    setSavingDraft(true);
+    if (!quiet) setDraftNotice('Draft account me save ho raha hai...');
+    try {
+      const payload = submissionPayload();
+      const response = draftId
+        ? await volunteerApi.updateSubmission(draftId, payload)
+        : await volunteerApi.createSubmission(payload);
+      const savedId = String(response.data?.id || draftId);
+      setDraftId(savedId);
+      localStorage.setItem(VOLUNTEER_DRAFT_KEY, JSON.stringify(payload.form_payload));
+      if (!quiet) setDraftNotice('Draft account me save ho gaya. Aap baad me continue kar sakte hain.');
+      return savedId;
+    } catch (error) {
+      setDraftNotice(error.response?.data?.detail || error.message || 'Draft save nahi ho saka.');
+      throw error;
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  async function submitVolunteerForm() {
+    if (submitting) return;
+    if (!validate(9)) { triggerErrorFeedback(); return; }
+    if (!allConsents) return;
+    setSubmitting(true);
+    try {
+      const savedId = await saveDraft({ quiet: true });
+      if (!savedId) throw new Error('Draft ID nahi mila.');
+      await volunteerApi.submitSubmission(savedId);
+      localStorage.removeItem(VOLUNTEER_DRAFT_KEY);
+      setQrId(`SUBMISSION-${savedId}`);
+      setSubmitted(true);
+      window.scrollTo({ top:0, behavior:'smooth' });
+    } catch (error) {
+      alert('Error submitting temple: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────────
   async function submitForm() {
     if (submitting) return;
@@ -808,16 +956,35 @@ export default function AdminAddTemplePage() {
   return (
     <>
       <style>{css}</style>
-      <Navbar hideAuth />
+      <VolunteerNavbar />
 
       <div className="hero">
         <div className="hero-bg">
           {['🛕','🪔','✨','🔱','🌸'].map((e,i) => <div key={i} className="hero-float">{e}</div>)}
         </div>
         <div className="hero-inner">
-          <div className="hero-chip">⚙️ ADMIN PANEL</div>
-          <h1>Add New <span>Temple</span></h1>
-          <p>मंदिर पंजीकरण — Register a sacred temple to BharatMandir</p>
+          <div className="hero-chip">VOLUNTEER TEMPLE SEVA</div>
+          <h1>Share a Sacred <span>Temple</span></h1>
+          <p>Mandir ki verified information jodiye aur Bharat ki digital temple directory banane mein seva dein.</p>
+        </div>
+      </div>
+
+      <div style={{ background:'#fff', borderBottom:'1px solid #ead8c5' }}>
+        <div style={{ maxWidth:900, margin:'0 auto', padding:'14px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+          <div>
+            <strong style={{ display:'block', color:'#542304', fontSize:13 }}>
+              {draftId ? `Draft #${draftId}` : 'New temple draft'}
+            </strong>
+            <span style={{ color:'#8a684f', fontSize:11 }}>{draftNotice || 'Aapke changes browser me automatically save hote rahenge.'}</span>
+          </div>
+          <div style={{ display:'flex', gap:9, flexWrap:'wrap' }}>
+            <button type="button" onClick={() => navigate('/volunteer/submissions')} style={{ padding:'9px 14px', borderRadius:8, border:'1px solid #dfc5aa', background:'#fffaf4', color:'#7a3508', fontWeight:700, cursor:'pointer' }}>
+              My Submissions
+            </button>
+            <button type="button" onClick={() => saveDraft()} disabled={savingDraft} style={{ padding:'9px 16px', borderRadius:8, border:'none', background:'#c8520a', color:'#fff', fontWeight:800, cursor:savingDraft?'wait':'pointer', opacity:savingDraft?.7:1 }}>
+              {savingDraft ? 'Saving Draft...' : 'Save Draft'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -845,8 +1012,8 @@ export default function AdminAddTemplePage() {
         {submitted ? (
           <div className="success-page">
             <div className="success-icon">🕉️</div>
-            <div className="success-title">Jai Shri Ram! Temple Added!</div>
-            <div className="success-sub">The temple has been saved and is pending review. The unique QR code will be generated after verification.</div>
+            <div className="success-title">Jai Shri Ram! Submission Sent!</div>
+            <div className="success-sub">Temple information admin review ke liye submit ho gayi hai. Approval ke baad temple profile publish hogi.</div>
             <div className="qr-preview">
               <div className="qr-box">▦</div>
               <div className="qr-id">{qrId}</div>
@@ -857,7 +1024,7 @@ export default function AdminAddTemplePage() {
                 <div key={n} className="ss-item"><div className="ss-num">{n}</div><div className="ss-text">{t}</div></div>
               ))}
             </div>
-            <button className="btn-home" onClick={() => { setSubmitted(false); setForm(initialForm()); setStep(1); setArchStyles([]); setPujaOfferings([]); }}>
+            <button className="btn-home" onClick={() => { localStorage.removeItem(VOLUNTEER_DRAFT_KEY); setDraftId(null); setDraftNotice(''); setSubmitted(false); setForm(initialForm()); setStep(1); setArchStyles([]); setPujaOfferings([]); }}>
               + Add Another Temple
             </button>
           </div>
@@ -1615,8 +1782,8 @@ export default function AdminAddTemplePage() {
                 <div className="form-nav">
                   <button className="btn-back" onClick={()=>prevStep(9)}>← Back</button>
                   <div className="step-indicator">Step 9 of 9</div>
-                  <button className={'btn-submit' + (btnShake ? ' shake' : '')} disabled={!allConsents || submitting} onClick={submitForm}>
-                    {submitting ? 'Saving Temple...' : 'Save Temple to BharatMandir'}
+                  <button className={'btn-submit' + (btnShake ? ' shake' : '')} disabled={!allConsents || submitting} onClick={submitVolunteerForm}>
+                    {submitting ? 'Submitting for Review...' : 'Submit Temple for Admin Review'}
                   </button>
                 </div>
               </div>
@@ -1624,7 +1791,6 @@ export default function AdminAddTemplePage() {
           </>
         )}
       </div>
-      <Footer />
     </>
   );
 }

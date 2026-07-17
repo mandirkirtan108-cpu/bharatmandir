@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from db.connection import (
     close_pool,
+    get_db_cursor,
     get_pool,
 )
 
@@ -92,6 +93,15 @@ async def lifespan(
 
     try:
         get_pool()
+
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                """
+                ALTER TABLE temple_submissions
+                ADD COLUMN IF NOT EXISTS form_payload JSONB
+                NOT NULL DEFAULT '{}'::jsonb
+                """
+            )
 
         print(
             "Database connection pool ready."

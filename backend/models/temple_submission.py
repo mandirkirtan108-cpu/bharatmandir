@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -95,6 +95,10 @@ class TempleSubmissionCreate(
     image_url: Optional[str] = Field(
         default=None,
         max_length=2000,
+    )
+
+    form_payload: Dict[str, Any] = Field(
+        default_factory=dict,
     )
 
     @field_validator(
@@ -270,6 +274,8 @@ class TempleSubmissionUpdate(
         default=None,
         max_length=2000,
     )
+
+    form_payload: Optional[Dict[str, Any]] = None
 
     @field_validator("pincode")
     @classmethod
