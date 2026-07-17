@@ -899,7 +899,7 @@ const styles = {
     background:
       'linear-gradient(90deg, #F4EBDD, #FFFFFF, #F4EBDD)',
     borderRadius: 10,
-  }, 
+  },
 };
 
 

@@ -42,7 +42,7 @@ import VolunteerProtectedRoute from './components/volunteer/VolunteerProtectedRo
 import VolunteerLoginPage from './pages/volunteer/VolunteerLoginPage';
 import VolunteerSignupPage from './pages/volunteer/VolunteerSignupPage';
 import VolunteerDashboardPage from './pages/volunteer/VolunteerDashboardPage';
-import VolunteerAddTemplePage from './pages/volunteer/VolunteerAddTemplePage';
+import AdminAddTemplePage from './pages/AdminAddTemplePage';
 import VolunteerSubmissionsPage from './pages/volunteer/VolunteerSubmissionsPage';
 import VolunteerProfilePage from './pages/volunteer/VolunteerProfilePage';
 
@@ -204,7 +204,7 @@ export default function App() {
             path="/volunteer/add-temple"
             element={
               <VolunteerProtectedRoute>
-                <VolunteerAddTemplePage />
+                <AdminAddTemplePage />
               </VolunteerProtectedRoute>
             }
           />
@@ -213,7 +213,7 @@ export default function App() {
             path="/AdminAddTemplePage"
             element={
               <VolunteerProtectedRoute>
-                <VolunteerAddTemplePage />
+                <AdminAddTemplePage />
               </VolunteerProtectedRoute>
             }
           />
@@ -231,7 +231,7 @@ export default function App() {
             path="/volunteer/submissions/:submissionId/edit"
             element={
               <VolunteerProtectedRoute>
-                <VolunteerAddTemplePage />
+                <AdminAddTemplePage />
               </VolunteerProtectedRoute>
             }
           />
