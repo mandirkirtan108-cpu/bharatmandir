@@ -373,6 +373,32 @@ function TimingCard({ title, value, note, tone }) {
   );
 }
 
+function DailyTimingsPanel({ sunrise, sunset, moonrise, moonset }) {
+  const tiles = [
+    { label: 'Sunrise', value: sunrise, icon: <Sun size={18} />, grad: 'linear-gradient(135deg,#fff6e6,#ffe0a8)', color: '#c47a14' },
+    { label: 'Sunset', value: sunset, icon: <Sun size={18} />, grad: 'linear-gradient(135deg,#fdece2,#ffbf94)', color: '#c2410c' },
+    { label: 'Moonrise', value: moonrise, icon: <Moon size={18} />, grad: 'linear-gradient(135deg,#eef1ff,#c7d2fe)', color: '#4338ca' },
+    { label: 'Moonset', value: moonset, icon: <Moon size={18} />, grad: 'linear-gradient(135deg,#eaf4ff,#bfdbfe)', color: '#1d4ed8' },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12 }}>
+      {tiles.map((tile) => (
+        <div key={tile.label} style={{ background: tile.grad, borderRadius: 14, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#fff', color: tile.color, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            {tile.icon}
+          </div>
+          <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, color: tile.color, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {tile.label}
+          </span>
+          <span style={{ fontFamily: UI_FONT, fontSize: 19, fontWeight: 900, color: '#1f1f1f' }}>
+            {detailTime(tile.value) || 'Not available'}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Premium building blocks for the "Full Panchang Details" panel      */
 /* ------------------------------------------------------------------ */
@@ -605,7 +631,7 @@ function AngaSection({ title, icon, accent, records }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {rows.map((row, index) => (
-            <div key={index} style={{ display: 'flex', gap: 14, padding: '13px 15px', background: index % 2 ? '#fafafa' : '#fff', border: '1px solid #f0f0f0', borderRadius: 12 }}>
+            <div key={index} style={{ display: 'flex', gap: 14, padding: '13px 15px 13px 13px', background: index % 2 ? '#fafafa' : '#fff', borderLeft: `4px solid ${accent}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}18`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 15 }}>
                 {icon}
               </div>
@@ -622,7 +648,7 @@ function AngaSection({ title, icon, accent, records }) {
                 {!!row.chips.length && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
                     {row.chips.map((chip) => (
-                      <span key={chip.key} style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, color: '#6b5638', background: '#f6efe4', borderRadius: 6, padding: '3px 9px' }}>
+                      <span key={chip.key} style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, color: accent, background: `${accent}14`, borderRadius: 20, padding: '3px 10px' }}>
                         {chip.label}: {chip.value}
                       </span>
                     ))}
@@ -704,8 +730,8 @@ function PanchangDetails({ dailyResult }) {
 
       {activeTab === 'overview' && (
         <div style={{ display: 'grid', gap: 14 }}>
-          <Panel icon={<Clock size={16} />} title="Daily Timings" accent="#c47a14">
-            <InfoRowList data={mainTimings} />
+         <Panel icon={<Clock size={16} />} title="Daily Timings" accent="#c47a14">
+            <DailyTimingsPanel sunrise={mainTimings.sunrise} sunset={mainTimings.sunset} moonrise={mainTimings.moonrise} moonset={mainTimings.moonset} />
           </Panel>
           {(hasSunExtra || hasMoonExtra) && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14 }}>
