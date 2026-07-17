@@ -128,7 +128,7 @@ export default function VolunteerDashboardPage() {
 
           <div style={styles.heroActions}>
             <Link
-              to="/AdminAddTemplePage"
+              to="/pages/AdminAddTemplePage"
               style={styles.primaryButton}
             >
               <Plus size={17} />
