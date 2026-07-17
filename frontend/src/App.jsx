@@ -22,6 +22,13 @@ import UserProfilePage           from './pages/UserProfilePage';
 import ForgotPasswordPage        from './pages/ForgotPasswordPage';
 import BlogPage                  from './pages/BlogPage';
 import AdminAddBlogPage          from './pages/AdminAddBlogPage';
+import VolunteerProtectedRoute   from './components/volunteer/VolunteerProtectedRoute';
+import VolunteerLoginPage        from './pages/volunteer/VolunteerLoginPage';
+import VolunteerSignupPage       from './pages/volunteer/VolunteerSignupPage';
+import VolunteerDashboardPage    from './pages/volunteer/VolunteerDashboardPage';
+import VolunteerAddTemplePage    from './pages/volunteer/VolunteerAddTemplePage';
+import VolunteerSubmissionsPage  from './pages/volunteer/VolunteerSubmissionsPage';
+import VolunteerProfilePage      from './pages/volunteer/VolunteerProfilePage';
 
 export default function App() {
   return (
@@ -61,6 +68,13 @@ export default function App() {
 
           {/* ── Blog (public) ───────────────────────────────── */}
           <Route path="/blog"            element={<BlogPage />} />
+
+          <Route path="/volunteer/login" element={<VolunteerLoginPage />} />
+          <Route path="/volunteer/signup" element={<VolunteerSignupPage />} />
+          <Route path="/volunteer" element={<VolunteerProtectedRoute><VolunteerDashboardPage /></VolunteerProtectedRoute>} />
+          <Route path="/volunteer/add-temple" element={<VolunteerProtectedRoute><VolunteerAddTemplePage /></VolunteerProtectedRoute>} />
+          <Route path="/volunteer/submissions" element={<VolunteerProtectedRoute><VolunteerSubmissionsPage /></VolunteerProtectedRoute>} />
+          <Route path="/volunteer/profile" element={<VolunteerProtectedRoute><VolunteerProfilePage /></VolunteerProtectedRoute>} />
 
           {/* ── Protected Admin Routes ──────────────────────── */}
           <Route path="/admin/add" element={

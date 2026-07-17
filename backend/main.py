@@ -1,111 +1,314 @@
 """
 BharatMandir FastAPI Application
-Entry point — run with: uvicorn main:app --reload
+
+Development command:
+    uvicorn main:app --reload
 """
 
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from routers import temples, route_planner, admin, festivals, spiritual_chat
-from routers.ai_festival_cache import router as ai_festival_cache_router
-from routers.sacred_books import router as sacred_books_router
-from db.connection import get_pool, close_pool
 import os
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
-from routers import proxy
-from routers.admin_auth import router as admin_auth_router
-from routers.panchang import router as panchang_router
-from routers.user_auth import router as user_auth_router
-from routers.blogs import router as blogs_router
-from services import cloudinary_service  # noqa: F401 — initializes Cloudinary config on import
+from fastapi import FastAPI
+from fastapi.middleware.cors import (
+    CORSMiddleware,
+)
+from fastapi.staticfiles import StaticFiles
+
+from db.connection import (
+    close_pool,
+    get_pool,
+)
+
+from routers import (
+    admin,
+    festivals,
+    proxy,
+    route_planner,
+    spiritual_chat,
+    temples,
+)
+
+from routers.admin_auth import (
+    router as admin_auth_router,
+)
+from routers.ai_festival_cache import (
+    router as ai_festival_cache_router,
+)
+from routers.blogs import (
+    router as blogs_router,
+)
+from routers.panchang import (
+    router as panchang_router,
+)
+from routers.sacred_books import (
+    router as sacred_books_router,
+)
+from routers.user_auth import (
+    router as user_auth_router,
+)
+
+# Volunteer portal routers
+from routers.volunteer_auth import (
+    router as volunteer_auth_router,
+)
+from routers.volunteer_submissions import (
+    router as volunteer_submissions_router,
+)
+
+# Import karte hi Cloudinary configuration initialize hoti hai.
+from services import cloudinary_service  # noqa: F401, E402
 
 
 load_dotenv()
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+BASE_DIRECTORY = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+UPLOAD_DIRECTORY = os.path.join(
+    BASE_DIRECTORY,
+    "uploads",
+)
+
+os.makedirs(
+    UPLOAD_DIRECTORY,
+    exist_ok=True,
+)
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("🚀 BharatMandir API starting...")
+async def lifespan(
+    app: FastAPI,
+):
+    """
+    Application startup aur shutdown lifecycle.
+    """
+
+    print(
+        "BharatMandir API starting..."
+    )
+
     try:
         get_pool()
-        print("✅ Database pool ready")
-    except Exception as e:
-        print(f"⚠️  Could not connect to DB on startup: {e}")
-        print("🔄  Will retry connection on first API request...")
+
+        print(
+            "Database connection pool ready."
+        )
+    except Exception as error:
+        print(
+            "Database startup connection failed:"
+            f" {error}"
+        )
+
+        print(
+            "Database connection will retry on "
+            "the first API request."
+        )
+
     yield
+
     close_pool()
-    print("🔒 Database pool closed")
+
+    print(
+        "Database connection pool closed."
+    )
+
 
 app = FastAPI(
     title="BharatMandir API",
-    description="Temple Discovery Platform — PostgreSQL + PostGIS Backend",
+    description=(
+        "Temple Discovery Platform - "
+        "PostgreSQL and PostGIS Backend"
+    ),
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     lifespan=lifespan,
 )
 
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-_origins = [
+app.mount(
+    "/uploads",
+    StaticFiles(
+        directory=UPLOAD_DIRECTORY
+    ),
+    name="uploads",
+)
+
+
+default_origins = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
     "https://bharatmandir.vercel.app",
 ]
-_prod_origin = os.getenv("CORS_ORIGIN")
-if _prod_origin and _prod_origin not in _origins:
-    _origins.append(_prod_origin)
+
+
+def get_allowed_origins() -> list[str]:
+    """
+    Default aur environment CORS origins combine karta hai.
+
+    Multiple production origins environment variable mein
+    comma-separated format mein add kiye ja sakte hain.
+    """
+
+    configured_origins = os.getenv(
+        "CORS_ORIGIN",
+        "",
+    )
+
+    origins = list(default_origins)
+
+    if configured_origins:
+        for origin in configured_origins.split(","):
+            clean_origin = origin.strip()
+
+            if (
+                clean_origin
+                and clean_origin not in origins
+            ):
+                origins.append(clean_origin)
+
+    return origins
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(admin_auth_router)
-app.include_router(user_auth_router)
-app.include_router(admin.router)
-app.include_router(temples.router)
-app.include_router(route_planner.router)
-app.include_router(ai_festival_cache_router)
-app.include_router(festivals.router)
-app.include_router(spiritual_chat.router)
-app.include_router(panchang_router)
-app.include_router(proxy.router)
-app.include_router(sacred_books_router)
-app.include_router(blogs_router)
+
+# Authentication routers
+app.include_router(
+    admin_auth_router
+)
+
+app.include_router(
+    user_auth_router
+)
+
+app.include_router(
+    volunteer_auth_router
+)
+
+
+# Admin and volunteer portal routers
+app.include_router(
+    admin.router
+)
+
+app.include_router(
+    volunteer_submissions_router
+)
+
+
+# BharatMandir public feature routers
+app.include_router(
+    temples.router
+)
+
+app.include_router(
+    route_planner.router
+)
+
+app.include_router(
+    ai_festival_cache_router
+)
+
+app.include_router(
+    festivals.router
+)
+
+app.include_router(
+    spiritual_chat.router
+)
+
+app.include_router(
+    panchang_router
+)
+
+app.include_router(
+    proxy.router
+)
+
+app.include_router(
+    sacred_books_router
+)
+
+app.include_router(
+    blogs_router
+)
+
 
 @app.get("/")
 def root():
     return {
         "project": "BharatMandir",
         "version": "1.0.0",
-        "status":  "running",
-        "docs":    "/api/docs",
+        "status": "running",
+        "docs": "/api/docs",
+        "portals": [
+            "user",
+            "admin",
+            "volunteer",
+        ],
     }
+
 
 @app.get("/api/health")
 def health_check():
+    """
+    API aur database connection health check.
+    """
+
     try:
-        from db.connection import get_db_cursor
-        with get_db_cursor() as cur:
-            cur.execute("SELECT COUNT(*) as count FROM temples")
-            result = cur.fetchone()
+        from db.connection import (
+            get_db_cursor,
+        )
+
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM temples
+                """
+            )
+
+            temple_result = (
+                cursor.fetchone()
+            )
+
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM volunteers
+                """
+            )
+
+            volunteer_result = (
+                cursor.fetchone()
+            )
+
         return {
-            "status":        "healthy",
-            "database":      "connected",
-            "total_temples": result["count"],
+            "status": "healthy",
+            "database": "connected",
+            "total_temples": (
+                temple_result["count"]
+            ),
+            "total_volunteers": (
+                volunteer_result["count"]
+            ),
         }
-    except Exception as e:
+
+    except Exception as error:
         return {
-            "status":   "unhealthy",
+            "status": "unhealthy",
             "database": "disconnected",
-            "error":    str(e),
+            "error": str(error),
         }

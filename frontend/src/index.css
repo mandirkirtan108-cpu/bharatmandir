@@ -1486,3 +1486,8 @@ p  { line-height: 1.75; color: var(--text-mid); }
   .panchang-angas { grid-template-columns: repeat(2,1fr) !important; }
   .muhurat-occasion-grid { grid-template-columns: repeat(2,1fr) !important; }
 }
+@keyframes volunteer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
