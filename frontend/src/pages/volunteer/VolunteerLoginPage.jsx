@@ -14,9 +14,21 @@ import {
   Eye,
   EyeOff,
   Landmark,
+  UserRound,
+  UsersRound,
 } from 'lucide-react';
 
 import { useVolunteerAuth } from '../../hooks/useVolunteerAuth';
+
+const SAFFRON = '#FF9900';
+const SAFFRON_BORDER =
+  'rgba(255, 153, 0, 0.20)';
+const SAFFRON_FOCUS =
+  'rgba(255, 153, 0, 0.50)';
+const WHITE_60 =
+  'rgba(255, 255, 255, 0.60)';
+const WHITE_90 =
+  'rgba(255, 255, 255, 0.90)';
 
 export default function VolunteerLoginPage() {
   const {
@@ -30,20 +42,20 @@ export default function VolunteerLoginPage() {
   const location = useLocation();
 
   const redirectPath =
-    location.state?.from?.pathname ||
-    '/volunteer';
+    location.state?.from?.pathname || '/volunteer';
 
-  const successMessage =
-    location.state?.message || '';
+  const [email, setEmail] =
+    useState('');
 
-  const [email, setEmail] = useState('');
   const [password, setPassword] =
     useState('');
+
   const [showPassword, setShowPassword] =
     useState(false);
 
   const [emailError, setEmailError] =
     useState('');
+
   const [passwordError, setPasswordError] =
     useState('');
 
@@ -83,32 +95,12 @@ export default function VolunteerLoginPage() {
     }
 
     if (value.length < 6) {
-      return 'Password must be at least 6 characters.';
+      return (
+        'Password must be at least 6 characters.'
+      );
     }
 
     return '';
-  };
-
-  const handleEmailChange = (event) => {
-    const value = event.target.value;
-
-    setEmail(value);
-
-    if (emailError) {
-      setEmailError(getEmailError(value));
-    }
-  };
-
-  const handlePasswordChange = (event) => {
-    const value = event.target.value;
-
-    setPassword(value);
-
-    if (passwordError) {
-      setPasswordError(
-        getPasswordError(value)
-      );
-    }
   };
 
   const handleSubmit = async (event) => {
@@ -157,36 +149,63 @@ export default function VolunteerLoginPage() {
 
       <section style={styles.card}>
         <header style={styles.header}>
-          <div style={styles.logoBox}>
-            <Landmark size={31} />
+          <div style={styles.logo}>
+            <Landmark size={30} />
           </div>
 
           <h1 style={styles.brandName}>
             BharatMandir
           </h1>
 
-          <p style={styles.portalLabel}>
-            VOLUNTEER PORTAL
-          </p>
-
-          <p style={styles.description}>
-            Sign in and help document sacred temples
+          <p style={styles.subtitle}>
+            Select your portal and sign in
           </p>
         </header>
 
-        {successMessage && (
-          <div
-            role="status"
-            style={styles.successBox}
+        {/* User / Volunteer portal switch */}
+
+        <div style={styles.portalSwitch}>
+          <Link
+            to="/login"
+            style={styles.portalOption}
           >
-            {successMessage}
-          </div>
-        )}
+            <UserRound size={16} />
+
+            <span>
+              User Login
+            </span>
+          </Link>
+
+          <Link
+            to="/volunteer/login"
+            aria-current="page"
+            style={{
+              ...styles.portalOption,
+              ...styles.activePortalOption,
+            }}
+          >
+            <UsersRound size={16} />
+
+            <span>
+              Volunteer Login
+            </span>
+          </Link>
+        </div>
+        <div style={styles.portalDescription}>
+          <strong style={styles.portalTitle}>
+            Volunteer Seva Account
+          </strong>
+
+          <span style={styles.portalText}>
+            Mandir information submit karein aur
+            apni submissions track karein.
+          </span>
+        </div>
 
         {error && (
           <div
             role="alert"
-            style={styles.errorBox}
+            style={styles.serverError}
           >
             {error}
           </div>
@@ -198,18 +217,29 @@ export default function VolunteerLoginPage() {
         >
           <div style={styles.fieldGroup}>
             <label
-              htmlFor="volunteer-email"
+              htmlFor="login-email"
               style={styles.label}
             >
               Email Address
             </label>
 
             <input
-              id="volunteer-email"
+              id="login-email"
               name="email"
               type="email"
               value={email}
-              onChange={handleEmailChange}
+              onChange={(event) => {
+                const value =
+                  event.target.value;
+
+                setEmail(value);
+
+                if (emailError) {
+                  setEmailError(
+                    getEmailError(value)
+                  );
+                }
+              }}
               onBlur={(event) =>
                 setEmailError(
                   getEmailError(
@@ -217,14 +247,20 @@ export default function VolunteerLoginPage() {
                   )
                 )
               }
-              placeholder="volunteer@example.com"
+              placeholder="you@example.com"
               autoComplete="email"
               aria-invalid={Boolean(emailError)}
               style={{
                 ...styles.input,
                 borderColor: emailError
-                  ? 'rgba(255, 80, 80, 0.65)'
-                  : 'rgba(255, 153, 0, 0.2)',
+                  ? 'rgba(255, 80, 80, 0.6)'
+                  : SAFFRON_BORDER,
+              }}
+              onFocus={(event) => {
+                event.target.style.borderColor =
+                  emailError
+                    ? 'rgba(255, 80, 80, 0.8)'
+                    : SAFFRON_FOCUS;
               }}
             />
 
@@ -236,16 +272,28 @@ export default function VolunteerLoginPage() {
           </div>
 
           <div style={styles.fieldGroup}>
-            <label
-              htmlFor="volunteer-password"
-              style={styles.label}
-            >
-              Password
-            </label>
+            <div style={styles.passwordHeader}>
+              <label
+                htmlFor="login-password"
+                style={{
+                  ...styles.label,
+                  marginBottom: 0,
+                }}
+              >
+                Password
+              </label>
+
+              <Link
+                to="/volunteer/signup"
+                style={styles.forgotLink}
+              >
+                Create account
+              </Link>
+            </div>
 
             <div style={styles.passwordWrapper}>
               <input
-                id="volunteer-password"
+                id="login-password"
                 name="password"
                 type={
                   showPassword
@@ -253,7 +301,18 @@ export default function VolunteerLoginPage() {
                     : 'password'
                 }
                 value={password}
-                onChange={handlePasswordChange}
+                onChange={(event) => {
+                  const value =
+                    event.target.value;
+
+                  setPassword(value);
+
+                  if (passwordError) {
+                    setPasswordError(
+                      getPasswordError(value)
+                    );
+                  }
+                }}
                 onBlur={(event) =>
                   setPasswordError(
                     getPasswordError(
@@ -261,17 +320,23 @@ export default function VolunteerLoginPage() {
                     )
                   )
                 }
-                placeholder="Enter your password"
+                placeholder="Your password"
                 autoComplete="current-password"
                 aria-invalid={Boolean(
                   passwordError
                 )}
                 style={{
                   ...styles.input,
-                  paddingRight: 50,
+                  paddingRight: 48,
                   borderColor: passwordError
-                    ? 'rgba(255, 80, 80, 0.65)'
-                    : 'rgba(255, 153, 0, 0.2)',
+                    ? 'rgba(255, 80, 80, 0.6)'
+                    : SAFFRON_BORDER,
+                }}
+                onFocus={(event) => {
+                  event.target.style.borderColor =
+                    passwordError
+                      ? 'rgba(255, 80, 80, 0.8)'
+                      : SAFFRON_FOCUS;
                 }}
               />
 
@@ -327,20 +392,32 @@ export default function VolunteerLoginPage() {
 
         <p style={styles.signupText}>
           New volunteer?{' '}
+
           <Link
             to="/volunteer/signup"
             style={styles.primaryLink}
           >
-            Create account
+            Create one
           </Link>
         </p>
 
-        <div style={styles.userPortalSection}>
+        <div style={styles.footerLinks}>
           <Link
             to="/login"
-            style={styles.userPortalLink}
+            style={styles.footerLink}
           >
-            Go to User Portal &rarr;
+            User Login
+          </Link>
+
+          <span style={styles.separator}>
+            |
+          </span>
+
+          <Link
+            to="/admin/login"
+            style={styles.footerLink}
+          >
+            Admin Portal
           </Link>
         </div>
       </section>
@@ -365,12 +442,12 @@ function BackgroundDecoration() {
   ];
 
   return (
-    <div style={styles.backgroundDecoration}>
+    <div style={styles.background}>
       {circles.map((circle, index) => (
         <div
           key={index}
           style={{
-            ...styles.backgroundCircle,
+            ...styles.circle,
             left: circle.left,
             top: circle.top,
           }}
@@ -398,7 +475,7 @@ const styles = {
 
   backWrapper: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 440,
     position: 'relative',
     zIndex: 1,
     marginBottom: 12,
@@ -406,14 +483,14 @@ const styles = {
 
   backLink: {
     display: 'inline-flex',
+    alignItems: 'center',
     padding: '7px 14px',
     background:
       'rgba(255, 255, 255, 0.07)',
     border:
-      '1px solid rgba(255, 153, 0, 0.2)',
+      `1px solid ${SAFFRON_BORDER}`,
     borderRadius: 50,
-    color:
-      'rgba(255, 255, 255, 0.65)',
+    color: WHITE_60,
     fontSize: 12,
     fontWeight: 600,
     textDecoration: 'none',
@@ -421,61 +498,110 @@ const styles = {
 
   card: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 440,
     boxSizing: 'border-box',
     position: 'relative',
     zIndex: 1,
-    padding: '40px 36px',
+    padding: '34px 36px',
     background:
       'rgba(255, 255, 255, 0.04)',
     backdropFilter: 'blur(20px)',
     border:
-      '1px solid rgba(255, 153, 0, 0.2)',
+      `1px solid ${SAFFRON_BORDER}`,
     borderRadius: 20,
     boxShadow:
       '0 20px 60px rgba(0, 0, 0, 0.5)',
   },
 
   header: {
-    marginBottom: 28,
+    marginBottom: 20,
     textAlign: 'center',
   },
 
-  logoBox: {
-    width: 58,
-    height: 58,
+  logo: {
+    width: 56,
+    height: 56,
     display: 'grid',
     placeItems: 'center',
-    margin: '0 auto',
+    margin: '0 auto 9px',
     background:
       'rgba(255, 153, 0, 0.12)',
     border:
       '1px solid rgba(255, 153, 0, 0.28)',
     borderRadius: '50%',
-    color: '#FF9900',
+    color: SAFFRON,
   },
 
   brandName: {
-    margin: '10px 0 0',
-    color:
-      'rgba(255, 255, 255, 0.92)',
+    margin: 0,
+    color: WHITE_90,
     fontFamily: 'Georgia, serif',
-    fontSize: 25,
+    fontSize: 24,
   },
 
-  portalLabel: {
+  subtitle: {
     margin: '6px 0 0',
-    color: '#FF9900',
+    color: SAFFRON,
     fontSize: 12,
-    fontWeight: 800,
-    letterSpacing: '0.1em',
+    letterSpacing: '0.05em',
   },
 
-  description: {
-    margin: '7px 0 0',
+  portalSwitch: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 5,
+    marginBottom: 13,
+    padding: 5,
+    background:
+      'rgba(0, 0, 0, 0.22)',
+    border:
+      `1px solid ${SAFFRON_BORDER}`,
+    borderRadius: 12,
+  },
+
+  portalOption: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    padding: '10px 8px',
+    borderRadius: 8,
     color:
-      'rgba(255, 255, 255, 0.6)',
+      'rgba(255, 255, 255, 0.55)',
     fontSize: 12,
+    fontWeight: 700,
+    textDecoration: 'none',
+  },
+
+  activePortalOption: {
+    background:
+      'linear-gradient(135deg, #FF9900, #E77700)',
+    color: '#1A0A00',
+    boxShadow:
+      '0 4px 12px rgba(255, 153, 0, 0.2)',
+  },
+
+  portalDescription: {
+    display: 'grid',
+    gap: 3,
+    marginBottom: 20,
+    padding: '10px 12px',
+    background:
+      'rgba(255, 153, 0, 0.06)',
+    borderLeft: '3px solid #FF9900',
+    borderRadius: 5,
+  },
+
+  portalTitle: {
+    color: '#FFB94E',
+    fontSize: 11,
+  },
+
+  portalText: {
+    color:
+      'rgba(255, 255, 255, 0.48)',
+    fontSize: 10,
+    lineHeight: 1.5,
   },
 
   fieldGroup: {
@@ -500,15 +626,29 @@ const styles = {
       'rgba(255, 255, 255, 0.06)',
     border: '1px solid',
     borderRadius: 10,
-    color:
-      'rgba(255, 255, 255, 0.92)',
-    caretColor: '#FF9900',
+    color: WHITE_90,
+    caretColor: SAFFRON,
     fontSize: 14,
-    outlineColor: '#FF9900',
+    outline: 'none',
+    transition: 'border-color 0.2s',
+  },
+
+  passwordHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
 
   passwordWrapper: {
     position: 'relative',
+  },
+
+  forgotLink: {
+    color: SAFFRON,
+    fontSize: 12,
+    fontWeight: 600,
+    textDecoration: 'none',
   },
 
   eyeButton: {
@@ -517,18 +657,32 @@ const styles = {
     right: 12,
     display: 'grid',
     placeItems: 'center',
-    padding: 2,
+    padding: 3,
     transform: 'translateY(-50%)',
     background: 'transparent',
     border: 0,
-    color: '#FFB84D',
+    color:
+      'rgba(255, 255, 255, 0.55)',
     cursor: 'pointer',
   },
 
   fieldError: {
-    margin: '6px 0 0',
-    color: '#FF9090',
+    margin: '5px 0 0',
+    color: '#FF8888',
     fontSize: 12,
+    lineHeight: 1.4,
+  },
+
+  serverError: {
+    marginBottom: 20,
+    padding: '12px 16px',
+    background:
+      'rgba(255, 80, 80, 0.12)',
+    border:
+      '1px solid rgba(255, 80, 80, 0.3)',
+    borderRadius: 10,
+    color: '#FFAAAA',
+    fontSize: 13,
   },
 
   submitButton: {
@@ -552,73 +706,55 @@ const styles = {
   },
 
   disabledButton: {
-    background:
-      'rgba(255, 153, 0, 0.45)',
+    background: '#C47700',
     boxShadow: 'none',
     cursor: 'not-allowed',
-  },
-
-  successBox: {
-    marginBottom: 20,
-    padding: '12px 16px',
-    background:
-      'rgba(85, 190, 110, 0.12)',
-    border:
-      '1px solid rgba(85, 190, 110, 0.3)',
-    borderRadius: 10,
-    color: '#AEF0BC',
-    fontSize: 13,
-  },
-
-  errorBox: {
-    marginBottom: 20,
-    padding: '12px 16px',
-    background:
-      'rgba(255, 80, 80, 0.12)',
-    border:
-      '1px solid rgba(255, 80, 80, 0.3)',
-    borderRadius: 10,
-    color: '#FFAAAA',
-    fontSize: 13,
+    opacity: 0.85,
   },
 
   signupText: {
     marginTop: 22,
-    color:
-      'rgba(255, 255, 255, 0.6)',
+    color: WHITE_60,
     textAlign: 'center',
     fontSize: 13,
   },
 
   primaryLink: {
-    color: '#FF9900',
+    color: SAFFRON,
     fontWeight: 700,
     textDecoration: 'none',
   },
 
-  userPortalSection: {
-    marginTop: 22,
-    paddingTop: 18,
+  footerLinks: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 20,
+    paddingTop: 17,
     borderTop:
       '1px solid rgba(255, 153, 0, 0.1)',
-    textAlign: 'center',
   },
 
-  userPortalLink: {
+  footerLink: {
     color:
-      'rgba(255, 255, 255, 0.38)',
+      'rgba(255, 255, 255, 0.4)',
     fontSize: 11,
     textDecoration: 'none',
   },
 
-  backgroundDecoration: {
+  separator: {
+    color:
+      'rgba(255, 255, 255, 0.15)',
+  },
+
+  background: {
     position: 'absolute',
     inset: 0,
     overflow: 'hidden',
     pointerEvents: 'none',
   },
 
-  backgroundCircle: {
+  circle: {
     width: 300,
     height: 300,
     position: 'absolute',
@@ -629,3 +765,5 @@ const styles = {
       'translate(-50%, -50%)',
   },
 };
+
+
