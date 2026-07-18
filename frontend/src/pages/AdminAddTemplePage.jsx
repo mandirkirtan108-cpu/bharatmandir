@@ -1,10 +1,32 @@
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import Sanscript from '@indic-transliteration/sanscript';
 import VolunteerNavbar from '../components/volunteer/VolunteerNavbar';
 import TempleAutomationPanel from '../components/volunteer/TempleAutomationPanel';
 import { volunteerApi } from '../services/volunteerApi';
 
 const VOLUNTEER_DRAFT_KEY = 'bm_volunteer_full_temple_draft_v1';
+
+const HINDI_NAME_WORDS = {
+  maa:'mA', mata:'mAtA', mandir:'mandira', temple:'mandira', devi:'devI',
+  dev:'deva', deva:'deva', shri:'shrI', sri:'shrI', mahadev:'mahAdeva',
+  shiva:'shiva', shiv:'shiva', ganesh:'gaNesha', hanuman:'hanumAna',
+  krishna:'kRRiShNa', ram:'rAma', rama:'rAma', balaji:'bAlAjI',
+  vishnu:'viShNu', lakshmi:'lakShmI', durga:'durgA', kali:'kAlI',
+  bhairav:'bhairava', nath:'nAtha', dham:'dhAma', ashram:'Ashrama',
+};
+
+function templeNameToHindi(value) {
+  if (!value?.trim()) return '';
+  if (/^[\u0900-\u097F\s\p{P}]+$/u.test(value.trim())) return value.trim();
+  const itrans = value.trim().split(/(\s+|[-&,()])/).map(part => {
+    if (!/[A-Za-z]/.test(part)) return part;
+    const lower = part.toLowerCase();
+    if (HINDI_NAME_WORDS[lower]) return HINDI_NAME_WORDS[lower];
+    return lower.replace(/aa/g, 'A').replace(/ee/g, 'I').replace(/oo/g, 'U');
+  }).join('');
+  return Sanscript.t(itrans, 'itrans', 'devanagari', { syncope: true });
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SECTS = ['','Shaiva','Vaishnava','Shakta','Smartha','Jain','Buddhist','Sikh','Other'];
@@ -515,6 +537,18 @@ export default function AdminAddTemplePage() {
   const [customFacilityText, setCustomFacilityText] = useState('');
 
   const progressRef = useRef(null);
+  const lastAutoHindiNameRef = useRef('');
+
+  useEffect(() => {
+    const hindiName = templeNameToHindi(form.name);
+    setForm(previous => {
+      const currentHindi = previous.name_hindi?.trim() || '';
+      const mayAutoFill = !currentHindi || currentHindi === lastAutoHindiNameRef.current;
+      if (!mayAutoFill || currentHindi === hindiName) return previous;
+      lastAutoHindiNameRef.current = hindiName;
+      return { ...previous, name_hindi: hindiName };
+    });
+  }, [form.name]);
 
   function getDraftSnapshot() {
     return {
