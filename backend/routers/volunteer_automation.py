@@ -138,6 +138,32 @@ def _maps_place_name(value: str) -> str | None:
     return None
 
 
+def _complete_address(location: dict[str, Any], place_name: str | None = None) -> str | None:
+    """Build a readable address from all non-duplicate geocoder fields."""
+    parts: list[str] = []
+
+    def add(value: Any) -> None:
+        text = re.sub(r"\s+", " ", str(value or "")).strip(" ,")
+        if not text:
+            return
+        normalized = text.casefold()
+        if any(normalized == existing.casefold() for existing in parts):
+            return
+        # Do not add a component already contained in a longer address part.
+        if any(normalized in existing.casefold() for existing in parts):
+            return
+        parts.append(text)
+
+    add(place_name)
+    add(location.get("address") or location.get("display_name"))
+    add(location.get("city"))
+    add(location.get("district"))
+    add(location.get("state"))
+    add(location.get("pincode"))
+    add(location.get("country") or "India")
+    return ", ".join(parts) or None
+
+
 def _distance_km(latitude: float, longitude: float, other_latitude: float, other_longitude: float) -> float:
     p1, p2 = math.radians(latitude), math.radians(other_latitude)
     dp = math.radians(other_latitude - latitude)
@@ -283,7 +309,9 @@ async def reverse_geocode(
     longitude: float = Query(ge=-180, le=180),
     _volunteer: dict = Depends(get_current_volunteer),
 ):
-    return await _reverse_location(latitude, longitude)
+    location = await _reverse_location(latitude, longitude)
+    location["address"] = _complete_address(location)
+    return location
 
 
 @router.get("/maps-link")
@@ -294,9 +322,11 @@ async def maps_link_autofill(
     expanded_url = await _expand_google_maps_url(url)
     latitude, longitude = _extract_maps_coordinates(expanded_url)
     location = await _reverse_location(latitude, longitude)
+    place_name = _maps_place_name(expanded_url)
+    location["address"] = _complete_address(location, place_name)
     return {
         **location,
-        "name": _maps_place_name(expanded_url),
+        "name": place_name,
         "latitude": latitude,
         "longitude": longitude,
         "google_maps_link": url.strip(),
