@@ -138,6 +138,7 @@ def _maps_place_name(value: str) -> str | None:
 
 
 async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]:
+    ors_location: dict[str, Any] | None = None
     ors_key = os.getenv("OPENROUTESERVICE_API_KEY")
     if ors_key:
         try:
@@ -151,19 +152,44 @@ async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]
                 feature = (response.json().get("features") or [None])[0]
                 if feature:
                     props = feature.get("properties") or {}
-                    return {
+                    label = props.get("label") or ""
+                    pincode = props.get("postalcode")
+                    if not pincode:
+                        pin_match = re.search(r"(?<!\d)[1-9]\d{5}(?!\d)", label)
+                        pincode = pin_match.group(0) if pin_match else None
+                    ors_location = {
                         "display_name": props.get("label"), "address": props.get("label"),
                         "latitude": latitude, "longitude": longitude,
                         "city": props.get("locality") or props.get("localadmin") or props.get("neighbourhood"),
                         "district": props.get("county") or props.get("macrocounty"),
                         "state": props.get("region") or props.get("macroregion"),
-                        "pincode": props.get("postalcode"), "country": props.get("country"),
+                        "pincode": pincode, "country": props.get("country"),
                         "source": "openrouteservice",
                     }
         except (httpx.HTTPError, ValueError, TypeError):
             pass
-    item = await _nominatim_get("/reverse", {"lat": latitude, "lon": longitude, "format": "jsonv2", "addressdetails": 1, "zoom": 18})
-    return _address_payload(item)
+
+    # ORS sometimes omits the Indian PIN code. Enrich only missing address
+    # fields with Nominatim while keeping ORS as the primary data source.
+    if ors_location and all(ors_location.get(key) for key in ("pincode", "city", "district", "state")):
+        return ors_location
+    try:
+        item = await _nominatim_get(
+            "/reverse",
+            {"lat": latitude, "lon": longitude, "format": "jsonv2", "addressdetails": 1, "zoom": 18},
+        )
+        osm_location = _address_payload(item)
+    except HTTPException:
+        if ors_location:
+            return ors_location
+        raise
+    if not ors_location:
+        return osm_location
+    for key in ("display_name", "address", "city", "district", "state", "pincode", "country", "osm_id"):
+        if not ors_location.get(key) and osm_location.get(key):
+            ors_location[key] = osm_location[key]
+    ors_location["source"] = "openrouteservice+openstreetmap"
+    return ors_location
 
 
 @router.get("/reverse-geocode")
