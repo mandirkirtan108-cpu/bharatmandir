@@ -137,6 +137,44 @@ def _maps_place_name(value: str) -> str | None:
     return None
 
 
+def _distance_km(latitude: float, longitude: float, other_latitude: float, other_longitude: float) -> float:
+    p1, p2 = math.radians(latitude), math.radians(other_latitude)
+    dp = math.radians(other_latitude - latitude)
+    dl = math.radians(other_longitude - longitude)
+    value = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 6371 * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
+async def _nearby_pincode(latitude: float, longitude: float, location: dict[str, Any]) -> str | None:
+    """Find a nearby postal code without guessing from an unrelated district."""
+    city, district, state = location.get("city"), location.get("district"), location.get("state")
+    queries = [
+        ", ".join(filter(None, (city, district, state, "India"))),
+        ", ".join(filter(None, (district, state, "India"))),
+    ]
+    candidates: list[tuple[float, str]] = []
+    for query in dict.fromkeys(item for item in queries if item and item != "India"):
+        try:
+            results = await _nominatim_get(
+                "/search",
+                {"q": query, "format": "jsonv2", "addressdetails": 1, "limit": 8, "countrycodes": "in"},
+            )
+        except HTTPException:
+            continue
+        for result in results or []:
+            postcode = (result.get("address") or {}).get("postcode")
+            try:
+                result_latitude, result_longitude = float(result["lat"]), float(result["lon"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if postcode and re.fullmatch(r"[1-9]\d{5}", str(postcode)):
+                candidates.append((_distance_km(latitude, longitude, result_latitude, result_longitude), str(postcode)))
+    if not candidates:
+        return None
+    distance, postcode = min(candidates, key=lambda item: item[0])
+    return postcode if distance <= 25 else None
+
+
 async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]:
     ors_location: dict[str, Any] | None = None
     ors_key = os.getenv("OPENROUTESERVICE_API_KEY")
@@ -184,11 +222,15 @@ async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]
             return ors_location
         raise
     if not ors_location:
+        if not osm_location.get("pincode"):
+            osm_location["pincode"] = await _nearby_pincode(latitude, longitude, osm_location)
         return osm_location
     for key in ("display_name", "address", "city", "district", "state", "pincode", "country", "osm_id"):
         if not ors_location.get(key) and osm_location.get(key):
             ors_location[key] = osm_location[key]
     ors_location["source"] = "openrouteservice+openstreetmap"
+    if not ors_location.get("pincode"):
+        ors_location["pincode"] = await _nearby_pincode(latitude, longitude, ors_location)
     return ors_location
 
 
