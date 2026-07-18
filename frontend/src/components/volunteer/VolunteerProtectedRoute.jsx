@@ -1,9 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useVolunteerAuth } from '../../hooks/useVolunteerAuth';
 
-export default function VolunteerProtectedRoute({
-  children,
-}) {
+export default function VolunteerProtectedRoute({ children }) {
   const location = useLocation();
 
   const {
@@ -17,7 +15,7 @@ export default function VolunteerProtectedRoute({
         <div style={styles.loader} />
 
         <p style={styles.loadingText}>
-          Volunteer portal load ho raha hai...
+          Loading the volunteer portal...
         </p>
       </main>
     );

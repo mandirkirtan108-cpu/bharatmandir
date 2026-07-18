@@ -35,7 +35,7 @@ export default function AdminApprovalWorkflow() {
   useEffect(() => { load(); }, [load]);
 
   const reviewVolunteer = async (id, action) => {
-    if (action === 'rejected' && !reason.trim()) return setError('Reject karne ke liye remarks enter karein.');
+    if (action === 'rejected' && !reason.trim()) return setError('Enter remarks before rejecting the volunteer.');
     await request(`/api/volunteer/auth/admin/volunteers/${id}/approval`, {
       method: 'PATCH', body: JSON.stringify({ action, rejection_reason: reason || null }),
     });
@@ -43,7 +43,7 @@ export default function AdminApprovalWorkflow() {
   };
 
   const reviewTemple = async (id, action) => {
-    if (action !== 'approved' && !reason.trim()) return setError('Reject/change request ke liye remarks enter karein.');
+    if (action !== 'approved' && !reason.trim()) return setError('Enter remarks before rejecting or requesting changes.');
     await request(`/api/admin/volunteer-submissions/${id}/review`, {
       method: 'POST', body: JSON.stringify({ action, admin_note: reason || null }),
     });

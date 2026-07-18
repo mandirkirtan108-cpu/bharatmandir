@@ -1,9 +1,9 @@
 import { Navigate, useLocation } from 'react-router-dom';
 
 /**
- * ProtectedRoute — Admin-only routes guard karta hai.
- * Token nahi → /admin/login pe redirect, current path save hota hai.
- * Login ke baad wapas same page pe aa sakte ho.
+ * Protects administrator-only routes.
+ * Redirects unauthenticated administrators to /admin/login while preserving
+ * the current location so they can return after signing in.
  */
 export default function ProtectedRoute({ children }) {
   const location = useLocation();

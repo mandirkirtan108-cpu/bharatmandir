@@ -81,7 +81,7 @@ export default function VolunteerNavbar() {
             </strong>
 
             <span style={styles.brandSubtitle}>
-              VOLUNTEER SEVA
+              VOLUNTEER PORTAL
             </span>
           </div>
         </Link>
