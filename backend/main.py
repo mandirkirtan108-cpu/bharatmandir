@@ -56,8 +56,11 @@ from routers.volunteer_auth import (
 from routers.volunteer_submissions import (
     router as volunteer_submissions_router,
 )
+from routers.volunteer_automation import (
+    router as volunteer_automation_router,
+)
 
-# Importing this module initializes the Cloudinary configuration.
+# Import karte hi Cloudinary configuration initialize hoti hai.
 from services import cloudinary_service  # noqa: F401, E402
 
 
@@ -84,7 +87,7 @@ async def lifespan(
     app: FastAPI,
 ):
     """
-    Application startup and shutdown lifecycle.
+    Application startup aur shutdown lifecycle.
     """
 
     print(
@@ -159,10 +162,10 @@ default_origins = [
 
 def get_allowed_origins() -> list[str]:
     """
-    Combine the default and environment-provided CORS origins.
+    Default aur environment CORS origins combine karta hai.
 
-    Multiple production origins can be supplied through the
-    environment variable as a comma-separated list.
+    Multiple production origins environment variable mein
+    comma-separated format mein add kiye ja sakte hain.
     """
 
     configured_origins = os.getenv(
@@ -215,6 +218,10 @@ app.include_router(
 
 app.include_router(
     volunteer_submissions_router
+)
+
+app.include_router(
+    volunteer_automation_router
 )
 
 
@@ -274,7 +281,7 @@ def root():
 @app.get("/api/health")
 def health_check():
     """
-    Check the health of the API and database connection.
+    API aur database connection health check.
     """
 
     try:
