@@ -32,6 +32,7 @@ REQUEST_HEADERS = {
 _GEOCODE_CACHE: dict[str, tuple[float, Any]] = {}
 GEOCODE_CACHE_TTL_SECONDS = 60 * 60 * 24
 ORS_REVERSE_URL = "https://api.openrouteservice.org/geocode/reverse"
+ORS_SEARCH_URL = "https://api.openrouteservice.org/geocode/search"
 GOOGLE_MAP_HOSTS = {
     "google.com", "www.google.com", "maps.google.com", "maps.app.goo.gl",
     "goo.gl", "www.goo.gl",
@@ -175,6 +176,48 @@ async def _nearby_pincode(latitude: float, longitude: float, location: dict[str,
     return postcode if distance <= 25 else None
 
 
+async def _postal_location_from_ors(pincode: str) -> dict[str, Any] | None:
+    """Resolve a PIN code so border-area state/district labels stay consistent."""
+    ors_key = os.getenv("OPENROUTESERVICE_API_KEY")
+    if not ors_key or not re.fullmatch(r"[1-9]\d{5}", pincode or ""):
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=12) as client:
+            response = await client.get(
+                ORS_SEARCH_URL,
+                params={"text": pincode, "boundary.country": "IN", "size": 5},
+                headers={"Authorization": ors_key},
+            )
+            response.raise_for_status()
+            for feature in response.json().get("features") or []:
+                props = feature.get("properties") or {}
+                if str(props.get("postalcode") or "") == pincode:
+                    return {
+                        "city": props.get("locality") or props.get("localadmin"),
+                        "district": props.get("county") or props.get("macrocounty"),
+                        "state": props.get("region") or props.get("macroregion"),
+                    }
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
+    return None
+
+
+async def _reconcile_postal_location(location: dict[str, Any]) -> dict[str, Any]:
+    pincode = str(location.get("pincode") or "")
+    postal = await _postal_location_from_ors(pincode)
+    if not postal:
+        return location
+    # A validated PIN is more reliable than a border-area reverse-geocoder
+    # label for state and district. Keep the detected locality when possible.
+    if postal.get("state"):
+        location["state"] = postal["state"]
+    if postal.get("district"):
+        location["district"] = postal["district"]
+    if not location.get("city") and postal.get("city"):
+        location["city"] = postal["city"]
+    return location
+
+
 async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]:
     ors_location: dict[str, Any] | None = None
     ors_key = os.getenv("OPENROUTESERVICE_API_KEY")
@@ -210,7 +253,7 @@ async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]
     # ORS sometimes omits the Indian PIN code. Enrich only missing address
     # fields with Nominatim while keeping ORS as the primary data source.
     if ors_location and all(ors_location.get(key) for key in ("pincode", "city", "district", "state")):
-        return ors_location
+        return await _reconcile_postal_location(ors_location)
     try:
         item = await _nominatim_get(
             "/reverse",
@@ -224,14 +267,14 @@ async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]
     if not ors_location:
         if not osm_location.get("pincode"):
             osm_location["pincode"] = await _nearby_pincode(latitude, longitude, osm_location)
-        return osm_location
+        return await _reconcile_postal_location(osm_location)
     for key in ("display_name", "address", "city", "district", "state", "pincode", "country", "osm_id"):
         if not ors_location.get(key) and osm_location.get(key):
             ors_location[key] = osm_location[key]
     ors_location["source"] = "openrouteservice+openstreetmap"
     if not ors_location.get("pincode"):
         ors_location["pincode"] = await _nearby_pincode(latitude, longitude, ors_location)
-    return ors_location
+    return await _reconcile_postal_location(ors_location)
 
 
 @router.get("/reverse-geocode")
