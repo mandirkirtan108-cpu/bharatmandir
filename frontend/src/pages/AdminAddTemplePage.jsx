@@ -170,7 +170,7 @@ function initialForm() {
     chairman_name:'', chairman_contact:'', committee_count:'', election_cycle:'',
     election_cycle_custom:'', accept_online_donations:false, upi_id:'', certificate_80g_no:'',
     bank_account_name:'', bank_name_branch:'', bank_account_number:'', bank_ifsc:'',
-    submitter_name:'', submitter_role:'admin', submitter_phone:'', submitter_email:'',
+    submitter_name:'', submitter_role:'volunteer', submitter_phone:'', submitter_email:'',
     custom_designation:'', custom_facility:'',
   };
   bools.forEach(k => base[k] = false);
@@ -202,20 +202,13 @@ const css = `
 html{scroll-behavior:smooth;}
 body{font-family:var(--ff-u);background:var(--cream);color:var(--ink);-webkit-font-smoothing:antialiased;}
 
-.hero{position:relative;background:linear-gradient(160deg,#1A0A00 0%,#3D1F00 35%,#6B3A10 65%,#B84D00 100%);padding:56px 24px 72px;text-align:center;overflow:hidden;}
-.hero-bg{position:absolute;inset:0;pointer-events:none;}
-.hero-float{position:absolute;font-size:clamp(20px,3.5vw,44px);opacity:.12;animation:floatUp 7s ease-in-out infinite;}
-.hero-float:nth-child(1){top:12%;left:6%;animation-delay:0s;}
-.hero-float:nth-child(2){top:55%;left:12%;animation-delay:1.4s;}
-.hero-float:nth-child(3){top:18%;right:8%;animation-delay:.7s;}
-.hero-float:nth-child(4){bottom:18%;right:5%;animation-delay:2.1s;}
-.hero-float:nth-child(5){top:70%;right:18%;animation-delay:1.8s;}
-@keyframes floatUp{0%,100%{transform:translateY(0) rotate(-4deg);opacity:.12;}50%{transform:translateY(-16px) rotate(4deg);opacity:.22;}}
-.hero-inner{position:relative;z-index:1;}
-.hero-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(200,150,12,.18);border:1px solid rgba(240,192,64,.35);backdrop-filter:blur(8px);color:#F0C040;padding:5px 18px;border-radius:50px;font-family:var(--ff-h);font-size:11px;letter-spacing:.14em;margin-bottom:16px;}
-.hero h1{font-family:var(--ff-h);font-weight:900;color:#fff;font-size:clamp(28px,5vw,52px);line-height:1.1;margin-bottom:10px;text-shadow:0 2px 20px rgba(0,0,0,.4);}
-.hero h1 span{color:#F0C040;}
-.hero p{font-family:var(--ff-hi);font-size:15px;color:rgba(255,255,255,.7);}
+.volunteer-add-hero{position:relative;overflow:hidden;padding:58px 20px;background:linear-gradient(135deg,#4B1D04 0%,#7A3208 55%,#A14A0B 100%);text-align:center;}
+.volunteer-add-hero-glow{width:520px;height:260px;position:absolute;top:-100px;left:50%;transform:translateX(-50%);background:radial-gradient(circle,rgba(255,191,73,.18),transparent 70%);pointer-events:none;}
+.volunteer-add-hero-inner{max-width:720px;margin:0 auto;position:relative;z-index:1;}
+.volunteer-add-hero-badge{display:inline-flex;align-items:center;gap:7px;padding:6px 15px;background:rgba(255,255,255,.07);border:1px solid rgba(255,213,128,.3);border-radius:50px;color:#FFD580;font-size:11px;font-weight:700;letter-spacing:.09em;}
+.volunteer-add-hero h1{margin:18px 0 8px;color:#fff;font-family:var(--font-display,Georgia,serif);font-size:clamp(32px,5vw,52px);font-weight:700;line-height:1.05;text-shadow:none;}
+.volunteer-add-hero h1 span{color:#FFD580;}
+.volunteer-add-hero p{max-width:590px;margin:0 auto;color:rgba(255,255,255,.72);font-family:inherit;font-size:14px;line-height:1.7;}
 
 .progress-wrap{background:var(--white);border-bottom:2px solid var(--bd2);position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(100,50,10,.07);}
 .progress{max-width:1000px;margin:0 auto;padding:0 24px;display:flex;align-items:center;overflow-x:auto;gap:0;}
@@ -569,16 +562,16 @@ export default function AdminAddTemplePage() {
           const submission = response.data || {};
           restoreDraft(submission.form_payload || {});
           setDraftId(String(submission.id));
-          setDraftNotice('Saved draft restore ho gaya. Aap wahi se continue kar sakte hain.');
+          setDraftNotice('Your saved draft has been restored. You can continue where you left off.');
         } else {
           const localDraft = localStorage.getItem(VOLUNTEER_DRAFT_KEY);
           if (localDraft) {
             restoreDraft(JSON.parse(localDraft));
-            setDraftNotice('Aapka browser draft restore ho gaya. Save Draft karke account me bhi save karein.');
+            setDraftNotice('Your browser draft has been restored. Select Save Draft to store it in your account.');
           }
         }
       } catch (error) {
-        setDraftNotice(error.response?.data?.detail || 'Draft load nahi ho saka.');
+        setDraftNotice(error.response?.data?.detail || 'The draft could not be loaded.');
       } finally {
         if (active) setDraftHydrated(true);
       }
@@ -592,7 +585,7 @@ export default function AdminAddTemplePage() {
     if (!draftHydrated || submitted) return undefined;
     const timer = window.setTimeout(() => {
       localStorage.setItem(VOLUNTEER_DRAFT_KEY, JSON.stringify(getDraftSnapshot()));
-      setDraftNotice('Changes browser me autosave ho gaye.');
+      setDraftNotice('Your changes have been automatically saved in this browser.');
     }, 900);
     return () => window.clearTimeout(timer);
   }, [draftHydrated, submitted, form, step, priests, scheds, pujaOfferings, mantras, festivals, consents, archStyles, showCustomDesignation, customDesignationText, showCustomFacility, customFacilityText]);
@@ -818,7 +811,7 @@ export default function AdminAddTemplePage() {
   async function saveDraft({ quiet = false } = {}) {
     if (savingDraft) return draftId;
     setSavingDraft(true);
-    if (!quiet) setDraftNotice('Draft account me save ho raha hai...');
+    if (!quiet) setDraftNotice('Saving the draft to your account...');
     try {
       const payload = submissionPayload();
       const response = draftId
@@ -827,10 +820,10 @@ export default function AdminAddTemplePage() {
       const savedId = String(response.data?.id || draftId);
       setDraftId(savedId);
       localStorage.setItem(VOLUNTEER_DRAFT_KEY, JSON.stringify(payload.form_payload));
-      if (!quiet) setDraftNotice('Draft account me save ho gaya. Aap baad me continue kar sakte hain.');
+      if (!quiet) setDraftNotice('The draft has been saved to your account. You can continue it later.');
       return savedId;
     } catch (error) {
-      setDraftNotice(error.response?.data?.detail || error.message || 'Draft save nahi ho saka.');
+      setDraftNotice(error.response?.data?.detail || error.message || 'The draft could not be saved.');
       throw error;
     } finally {
       setSavingDraft(false);
@@ -844,7 +837,7 @@ export default function AdminAddTemplePage() {
     setSubmitting(true);
     try {
       const savedId = await saveDraft({ quiet: true });
-      if (!savedId) throw new Error('Draft ID nahi mila.');
+      if (!savedId) throw new Error('The draft ID was not returned.');
       await volunteerApi.submitSubmission(savedId);
       localStorage.removeItem(VOLUNTEER_DRAFT_KEY);
       setQrId(`SUBMISSION-${savedId}`);
@@ -958,16 +951,14 @@ export default function AdminAddTemplePage() {
       <style>{css}</style>
       <VolunteerNavbar />
 
-      <div className="hero">
-        <div className="hero-bg">
-          {['🛕','🪔','✨','🔱','🌸'].map((e,i) => <div key={i} className="hero-float">{e}</div>)}
-        </div>
-        <div className="hero-inner">
-          <div className="hero-chip">VOLUNTEER TEMPLE SEVA</div>
+      <section className="volunteer-add-hero">
+        <div className="volunteer-add-hero-glow" />
+        <div className="volunteer-add-hero-inner">
+          <div className="volunteer-add-hero-badge">🏛 VOLUNTEER SEVA PORTAL</div>
           <h1>Share a Sacred <span>Temple</span></h1>
-          <p>Mandir ki verified information jodiye aur Bharat ki digital temple directory banane mein seva dein.</p>
+          <p>Add verified temple information and help preserve India&apos;s sacred heritage through BharatMandir.</p>
         </div>
-      </div>
+      </section>
 
       <div style={{ background:'#fff', borderBottom:'1px solid #ead8c5' }}>
         <div style={{ maxWidth:900, margin:'0 auto', padding:'14px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
@@ -975,7 +966,7 @@ export default function AdminAddTemplePage() {
             <strong style={{ display:'block', color:'#542304', fontSize:13 }}>
               {draftId ? `Draft #${draftId}` : 'New temple draft'}
             </strong>
-            <span style={{ color:'#8a684f', fontSize:11 }}>{draftNotice || 'Aapke changes browser me automatically save hote rahenge.'}</span>
+            <span style={{ color:'#8a684f', fontSize:11 }}>{draftNotice || 'Your changes will be automatically saved in this browser.'}</span>
           </div>
           <div style={{ display:'flex', gap:9, flexWrap:'wrap' }}>
             <button type="button" onClick={() => navigate('/volunteer/submissions')} style={{ padding:'9px 14px', borderRadius:8, border:'1px solid #dfc5aa', background:'#fffaf4', color:'#7a3508', fontWeight:700, cursor:'pointer' }}>
@@ -1013,7 +1004,7 @@ export default function AdminAddTemplePage() {
           <div className="success-page">
             <div className="success-icon">🕉️</div>
             <div className="success-title">Jai Shri Ram! Submission Sent!</div>
-            <div className="success-sub">Temple information admin review ke liye submit ho gayi hai. Approval ke baad temple profile publish hogi.</div>
+            <div className="success-sub">The temple information has been submitted for admin review. The temple profile will be published after approval.</div>
             <div className="qr-preview">
               <div className="qr-box">▦</div>
               <div className="qr-id">{qrId}</div>
@@ -1740,10 +1731,10 @@ export default function AdminAddTemplePage() {
                   </div>
                 </div>
 
-                <SectionCard icon="✍️" title="Admin Confirmation" sub="All fields are required to submit">
+                <SectionCard icon="✍️" title="Volunteer Confirmation" sub="All fields are required to submit">
                   <div className="fg-3">
                     <Field label="Submitted By" req err={errors.submitter_name}>
-                      <Inp type="text" value={form.submitter_name} onChange={v=>set('submitter_name',v)} placeholder="Admin name" />
+                      <Inp type="text" value={form.submitter_name} onChange={v=>set('submitter_name',v)} placeholder="Volunteer name" />
                     </Field>
                     <Field label="Role">
                       <Sel value={form.submitter_role} onChange={v=>set('submitter_role',v)}>
@@ -1755,7 +1746,7 @@ export default function AdminAddTemplePage() {
                     </Field>
                   </div>
                   <Field label="Contact Email" req err={errors.submitter_email}>
-                    <Inp type="email" value={form.submitter_email} onChange={v=>set('submitter_email',v)} placeholder="admin@example.com" />
+                    <Inp type="email" value={form.submitter_email} onChange={v=>set('submitter_email',v)} placeholder="volunteer@example.com" />
                   </Field>
                   <div style={{ marginTop:12 }}>
                     <div className="consent-title">Consent & Compliance</div>
