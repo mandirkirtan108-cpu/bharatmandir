@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-# backend directory ko Python import path mein add karta hai.
+# Add the backend directory to the Python import path.
 BACKEND_DIRECTORY = (
     Path(__file__).resolve().parents[1]
 )

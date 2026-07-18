@@ -32,15 +32,15 @@ router = APIRouter(
 
 
 # ─────────────────────────────────────────────
-# Helper — slug ya integer id dono resolve kare
+# Helper — resolve either a slug or an integer ID
 # ─────────────────────────────────────────────
 
 def resolve_temple_id(cur, temple_id: str) -> int:
     """
-    temple_id string ho sakti hai:
-      - "123"              → integer id se dhundo
-      - "jagannath-temple" → slug se dhundo
-    Dono cases mein published temple ka integer id return karta hai.
+    temple_id can be one of the following strings:
+    - "123"              → look up by integer ID
+    - "jagannath-temple" → look up by slug
+    In both cases, return the integer ID of the published temple.
     """
     if temple_id.isdigit():
         cur.execute(

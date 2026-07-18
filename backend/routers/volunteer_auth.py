@@ -67,7 +67,7 @@ def create_volunteer_token(
     expires_delta: timedelta,
 ) -> str:
     """
-    Volunteer access ya refresh JWT token create karta hai.
+    Create a volunteer access or refresh JWT token.
     """
 
     expires_at = (
@@ -95,7 +95,7 @@ def decode_volunteer_token(
     token: str,
 ) -> dict[str, Any]:
     """
-    Volunteer JWT token verify aur decode karta hai.
+    Verify and decode a volunteer JWT token.
     """
 
     try:
@@ -134,8 +134,8 @@ def public_volunteer(
     volunteer: dict | None,
 ) -> dict | None:
     """
-    Password hash ko response se remove karke safe
-    volunteer object return karta hai.
+    Remove the password hash from the response and return a
+    safe volunteer object.
     """
 
     if not volunteer:
@@ -198,8 +198,7 @@ async def get_current_volunteer(
     ) = Depends(security),
 ) -> dict:
     """
-    Protected volunteer routes ke liye current
-    volunteer return karta hai.
+    Return the current volunteer for protected volunteer routes.
     """
 
     if not credentials:
@@ -270,7 +269,7 @@ def signup_volunteer(
     body: VolunteerSignup,
 ):
     """
-    Naya volunteer account create karta hai.
+    Create a new volunteer account.
     """
 
     normalized_email = (
@@ -360,8 +359,8 @@ def login_volunteer(
     body: VolunteerLogin,
 ):
     """
-    Volunteer email/password verify karke access aur
-    refresh tokens return karta hai.
+    Verify the volunteer email and password, then return access
+    and refresh tokens.
     """
 
     normalized_email = (
@@ -452,7 +451,7 @@ def refresh_volunteer_token(
     body: RefreshRequest,
 ):
     """
-    Valid refresh token se naya access token banata hai.
+    Create a new access token from a valid refresh token.
     """
 
     payload = decode_volunteer_token(
@@ -535,7 +534,7 @@ def update_volunteer_profile(
     ),
 ):
     """
-    Volunteer name, phone, city aur state update karta hai.
+    Update the volunteer's name, phone number, city, and state.
     """
 
     updates = body.model_dump(
@@ -606,8 +605,8 @@ def update_volunteer_profile(
 @router.post("/logout")
 def logout_volunteer():
     """
-    JWT stateless hai, isliye frontend local tokens clear
-    karega. Endpoint consistent API response deta hai.
+    JWTs are stateless, so the frontend clears its local tokens.
+    This endpoint provides a consistent API response.
     """
 
     return {

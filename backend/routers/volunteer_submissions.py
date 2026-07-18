@@ -51,7 +51,7 @@ def create_temple_slug(
     temple_name: str,
 ) -> str:
     """
-    Temple name ko URL-safe slug mein convert karta hai.
+    Convert the temple name into a URL-safe slug.
     """
 
     normalized_name = (
@@ -166,7 +166,7 @@ def list_volunteer_submissions(
     ),
 ):
     """
-    Logged-in volunteer ki sabhi submissions return karta hai.
+    Return all submissions belonging to the logged-in volunteer.
     """
 
     with get_db_cursor() as cursor:
@@ -211,7 +211,7 @@ def update_volunteer_submission(
     ),
 ):
     """
-    Draft ya changes-requested submission update karta hai.
+    Update a draft or changes-requested submission.
     Editing preserves draft/changes-requested status.
     """
 
@@ -326,8 +326,8 @@ def delete_volunteer_submission(
     ),
 ):
     """
-    Draft, pending ya changes-requested submission delete
-    karne deta hai.
+    Allow deletion of a draft, pending, or changes-requested
+    submission.
     """
 
     status_placeholders = ", ".join(
@@ -392,8 +392,8 @@ def list_submissions_for_admin(
     ),
 ):
     """
-    Admin ke liye sabhi volunteer submissions return karta hai.
-    Optional status filter supported hai.
+    Return all volunteer submissions for administrators.
+    An optional status filter is supported.
     """
 
     valid_statuses = {
@@ -503,8 +503,9 @@ def review_volunteer_submission(
     ),
 ):
     """
-    Admin submission approve, reject ya changes request karta hai.
-    Approval par main temples table mein temple create hota hai.
+    Allow an administrator to approve, reject, or request changes
+    to a submission. Approval creates the temple in the main
+    temples table.
     """
 
     if body.action not in ADMIN_REVIEW_ACTIONS:

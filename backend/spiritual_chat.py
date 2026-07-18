@@ -41,10 +41,10 @@ TONE: Warm, structured, professional, non-prescriptive. Never give medical or fi
 # ──────────────────────────────────────────────
 TEST_INPUTS = [
     "I am under a lot of financial stress. My business is not doing well and I am worried about money.",
-    "Mere ghar mein bahut jhagda ho raha hai. Parivaar ke saath bahut conflict hai. Kya karun?",
+        "There is a great deal of conflict at home and within my family. What should I do?",
     "I am worried about my health. I have been sick for many months and doctors are not helping.",
     "I feel very restless and anxious. I want to find inner peace and calm in my life.",
-    "Mujhe apne career ke baare mein bahut confusion hai. Kya main sahi raste par hoon?",
+        "I am very confused about my career. Am I on the right path?",
 ]
 
 
