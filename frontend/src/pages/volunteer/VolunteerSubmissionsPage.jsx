@@ -71,7 +71,7 @@ export default function VolunteerSubmissionsPage() {
     } catch (requestError) {
       setError(
         requestError.response?.data?.detail ||
-          'Submissions load nahi ho paayi.'
+        'Unable to load submissions.'
       );
     } finally {
       setLoading(false);
@@ -115,7 +115,7 @@ export default function VolunteerSubmissionsPage() {
 
   const handleDelete = async (submission) => {
     const confirmed = window.confirm(
-      `Kya aap "${submission.temple_name}" submission delete karna chahte hain?`
+      `Are you sure you want to delete the "${submission.temple_name}" submission?`
     );
 
     if (!confirmed) {
@@ -138,7 +138,7 @@ export default function VolunteerSubmissionsPage() {
     } catch (requestError) {
       setError(
         requestError.response?.data?.detail ||
-          'Submission delete nahi ho paayi.'
+        'Unable to delete the submission.'
       );
     } finally {
       setDeletingId(null);
@@ -163,8 +163,8 @@ export default function VolunteerSubmissionsPage() {
         </h1>
 
         <p style={styles.heroText}>
-          Apni submitted temples ka review status aur
-          admin feedback track karein.
+          Track the review status of your submitted temples
+          and monitor administrator feedback.
         </p>
       </section>
 
@@ -426,13 +426,13 @@ function EmptyState({
       <h3 style={styles.emptyTitle}>
         {hasFilters
           ? 'No matching submissions found'
-          : 'Aapne abhi koi temple submit nahi kiya'}
+              : 'You have not submitted a temple yet'}
       </h3>
 
       <p style={styles.emptyText}>
         {hasFilters
-          ? 'Search ya status filter change karke dobara try karein.'
-          : 'Apni first temple entry add karke seva shuru karein.'}
+                ? 'Change the search or status filter and try again.'
+                : 'Add your first temple entry to begin contributing.'}
       </p>
 
       {hasFilters ? (

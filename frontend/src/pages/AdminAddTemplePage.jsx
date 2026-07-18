@@ -92,7 +92,7 @@ const DONATION_CATS = [
 
 const STEP_LABELS = [
   'Temple Identity','Location','History','Visit Info',
-  'Digital & Seva','Priests & Schedule','Media','Donations','Review & Submit',
+  'Digital Services','Priests & Schedule','Media','Donations','Review & Submit',
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -954,7 +954,7 @@ export default function AdminAddTemplePage() {
       <section className="volunteer-add-hero">
         <div className="volunteer-add-hero-glow" />
         <div className="volunteer-add-hero-inner">
-          <div className="volunteer-add-hero-badge">🏛 VOLUNTEER SEVA PORTAL</div>
+          <div className="volunteer-add-hero-badge">🏛 VOLUNTEER PORTAL</div>
           <h1>Share a Sacred <span>Temple</span></h1>
           <p>Add verified temple information and help preserve India&apos;s sacred heritage through BharatMandir.</p>
         </div>
@@ -1334,7 +1334,7 @@ export default function AdminAddTemplePage() {
                     </div>
                     {pujaOfferings.length > 0 ? (
                       <div className="offering-builder">
-                        <div className="offering-hdr"><span>Puja / Seva Name</span><span>Timing (e.g. 6:00 AM)</span><span></span></div>
+                        <div className="offering-hdr"><span>Puja / Service Name</span><span>Timing (e.g. 6:00 AM)</span><span></span></div>
                         {pujaOfferings.map(o => (
                           <div className="offering-row" key={o.id}>
                             <input type="text" value={o.name} onChange={e=>setOffering(o.id,'name',e.target.value)} placeholder="e.g. Rudrabhishek" />
@@ -1373,12 +1373,12 @@ export default function AdminAddTemplePage() {
                 <div className="form-nav">
                   <button className="btn-back" onClick={()=>prevStep(4)}>← Back</button>
                   <div className="step-indicator">Step 4 of 9</div>
-                  <button className={`btn-next${btnShake?' shake':''}`} onClick={()=>nextStep(4)}>Next: Digital & Seva →</button>
+                  <button className={`btn-next${btnShake?' shake':''}`} onClick={()=>nextStep(4)}>Next: Digital Services →</button>
                 </div>
               </div>
             )}
 
-            {/* ══ STEP 5 — DIGITAL & SEVA ══ */}
+            {/* ══ STEP 5 — DIGITAL SERVICES ══ */}
             {step === 5 && (
               <div className="form-section">
                 <SectionCard icon="📺" title="Digital & Live Services" sub="Online puja, live darshan and streaming">

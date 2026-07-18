@@ -31,7 +31,7 @@ export default function VolunteerAddTemplePage() {
       setError(
         requestError.response?.data?.detail ||
           requestError.message ||
-          'Temple submit nahi ho paya. Please dobara try karein.'
+        'Unable to submit the temple. Please try again.'
       );
     } finally {
       setBusy(false);
@@ -65,9 +65,8 @@ export default function VolunteerAddTemplePage() {
                 </h2>
 
                 <p style={styles.formDescription}>
-                  Required fields carefully fill karein. Submission
-                  complete hone ke baad aap uska status dashboard par
-                  track kar sakte hain.
+                  Complete the required fields carefully. After submitting,
+                  you can track its status from the dashboard.
                 </p>
               </div>
             </div>
@@ -92,10 +91,10 @@ export default function VolunteerAddTemplePage() {
               title="Before You Submit"
               icon={<ShieldCheck size={20} />}
               items={[
-                'Temple name aur address verify karein.',
-                'Description original aur accurate rakhein.',
-                'Recent aur clear temple image provide karein.',
-                'Contact details submit karne se pehle verify karein.',
+                    'Verify the temple name and address.',
+                    'Keep the description original and accurate.',
+                    'Provide a recent, clear image of the temple.',
+                    'Verify the contact details before submitting.',
               ]}
             />
 
@@ -103,10 +102,10 @@ export default function VolunteerAddTemplePage() {
               title="What Happens Next?"
               icon={<CheckCircle2 size={20} />}
               items={[
-                'Submission admin review mein jayega.',
-                'Admin changes request kar sakta hai.',
-                'Approval ke baad temple profile live hogi.',
-                'Status My Submissions page par dikhega.',
+                    'The submission will be sent for admin review.',
+                    'The administrator may request changes.',
+                    'The temple profile will be published after approval.',
+                    'Its status will appear on the My Submissions page.',
               ]}
             />
           </aside>
@@ -136,7 +135,7 @@ function TempleHero() {
   return (
     <section style={styles.hero}>
       <div style={styles.heroBadge}>
-        🛕 VOLUNTEER TEMPLE SEVA
+        🛕 VOLUNTEER TEMPLE SERVICE
       </div>
 
       <h1 style={styles.heroTitle}>
@@ -147,8 +146,7 @@ function TempleHero() {
       </h1>
 
       <p style={styles.heroDescription}>
-        Bharat ke mandiron ko digital map par lane mein apna
-        yogdan dein.
+        Help add India&apos;s temples to the digital map.
       </p>
     </section>
   );

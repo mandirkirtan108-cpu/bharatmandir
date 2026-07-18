@@ -50,7 +50,7 @@ export function useVolunteerAuth() {
       }
     } catch {
       // Backend logout fail hone par bhi local
-      // session clear honi chahiye.
+      // Clear the local session when the stored session is invalid.
     } finally {
       clearVolunteerSession();
       setVolunteer(null);
@@ -102,7 +102,7 @@ export function useVolunteerAuth() {
 
       setError(
         requestError.response?.data?.detail ||
-          'Volunteer session expire ho gayi. Please dobara sign in karein.'
+          'Your volunteer session has expired. Please sign in again.'
       );
 
       return null;
@@ -157,7 +157,7 @@ export function useVolunteerAuth() {
         setError(
           requestError.response?.data?.detail ||
             requestError.message ||
-            'Volunteer login nahi ho paya.'
+          'Unable to sign in to the volunteer account.'
         );
 
         return false;
@@ -188,7 +188,7 @@ export function useVolunteerAuth() {
         const signupError =
           requestError.response?.data?.detail ||
           requestError.message ||
-          'Volunteer account create nahi ho paya.';
+          'Unable to create the volunteer account.';
 
         setError(signupError);
 
@@ -235,7 +235,7 @@ export function useVolunteerAuth() {
         const profileError =
           requestError.response?.data?.detail ||
           requestError.message ||
-          'Volunteer profile update nahi ho paayi.';
+          'Unable to update the volunteer profile.';
 
         setError(profileError);
 
@@ -268,7 +268,7 @@ export function useVolunteerAuth() {
       setLoading(false);
 
       setError(
-        'Volunteer session expire ho gayi. Please dobara sign in karein.'
+          'Your volunteer session has expired. Please sign in again.'
       );
     };
 

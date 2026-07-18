@@ -50,7 +50,7 @@ export default function VolunteerDashboardPage() {
         if (active) {
           setError(
             requestError.response?.data?.detail ||
-              'Submissions load nahi ho paayi.'
+        'Unable to load submissions.'
           );
         }
       } finally {
@@ -110,7 +110,7 @@ export default function VolunteerDashboardPage() {
         <div style={styles.heroInner}>
           <div style={styles.heroBadge}>
             <Landmark size={13} />
-            VOLUNTEER SEVA PORTAL
+            VOLUNTEER PORTAL
           </div>
 
           <h1 style={styles.heroTitle}>
@@ -121,9 +121,8 @@ export default function VolunteerDashboardPage() {
           </h1>
 
           <p style={styles.heroText}>
-            Aapke dwara submit ki gayi temple information
-            Bharat ki sacred heritage ko preserve karne mein
-            madad karti hai.
+            The temple information you submit helps preserve
+            India&apos;s sacred heritage.
           </p>
 
           <div style={styles.heroActions}>
@@ -246,7 +245,7 @@ export default function VolunteerDashboardPage() {
                   color: '#FFD580',
                 }}
               >
-                YOUR SEVA
+                YOUR CONTRIBUTION
               </p>
 
               <h2 style={styles.sevaTitle}>
@@ -255,8 +254,8 @@ export default function VolunteerDashboardPage() {
 
               <p style={styles.sevaText}>
                 Temple ka naam, address, deity aur clear
-                description submit karein. Admin team
-                verification ke baad profile live karegi.
+                description. The admin team will publish the
+                profile after verification.
               </p>
 
               <Link
@@ -285,7 +284,7 @@ export default function VolunteerDashboardPage() {
                   </strong>
 
                   <p style={styles.rejectedText}>
-                    Admin feedback check karein.
+                Review the administrator&apos;s feedback.
                   </p>
                 </div>
               </section>
@@ -417,12 +416,11 @@ function EmptySubmissions() {
       </div>
 
       <h3 style={styles.emptyTitle}>
-        Aapne abhi koi temple submit nahi kiya
+          You have not submitted a temple yet
       </h3>
 
       <p style={styles.emptyText}>
-        Apni first temple entry add karke seva shuru
-        karein.
+          Add your first temple entry to begin contributing.
       </p>
 
       <Link
@@ -438,10 +436,10 @@ function EmptySubmissions() {
 
 function SubmissionGuide() {
   const guideItems = [
-    'Temple name aur location verify karein.',
-    'Clear aur recent image URL use karein.',
-    'Copied ya misleading information avoid karein.',
-    'Admin note aaye to details update karein.',
+    'Verify the temple name and location.',
+    'Use a clear and recent image URL.',
+    'Avoid copied or misleading information.',
+    'Update the details if an administrator leaves a note.',
   ];
 
   return (

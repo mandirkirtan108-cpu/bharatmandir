@@ -42,12 +42,12 @@ export default function VolunteerSignupPage() {
     setError('');
 
     if (form.password !== form.confirmPassword) {
-      setError('Password aur confirm password match nahi karte.');
+      setError('The password and confirmation password do not match.');
       return;
     }
 
     if (form.password.length < 6) {
-      setError('Password kam se kam 6 characters ka hona chahiye.');
+      setError('The password must contain at least 6 characters.');
       return;
     }
 
@@ -68,7 +68,7 @@ export default function VolunteerSignupPage() {
       setError(
         requestError.response?.data?.detail ||
           requestError.message ||
-          'Account create nahi ho paya. Please dobara try karein.'
+          'Unable to create the account. Please try again.'
       );
     } finally {
       setLoading(false);

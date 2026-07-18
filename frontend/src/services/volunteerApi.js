@@ -217,7 +217,7 @@ volunteerClient.interceptors.response.use(
 
             if (!newAccessToken) {
               throw new Error(
-                'New access token nahi mila.'
+                'A new access token was not returned.'
               );
             }
 

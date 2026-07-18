@@ -193,12 +193,12 @@ export default function VolunteerLoginPage() {
         </div>
         <div style={styles.portalDescription}>
           <strong style={styles.portalTitle}>
-            Volunteer Seva Account
+            Volunteer Account
           </strong>
 
           <span style={styles.portalText}>
-            Mandir information submit karein aur
-            apni submissions track karein.
+            Submit temple information and track
+            your submissions.
           </span>
         </div>
 

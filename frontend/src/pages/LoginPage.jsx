@@ -198,8 +198,8 @@ export default function LoginPage() {
           </strong>
 
           <span style={styles.portalText}>
-            Temples explore karein, bookmarks aur
-            profile manage karein.
+            Explore temples, manage bookmarks, and
+            update your profile.
           </span>
         </div>
 

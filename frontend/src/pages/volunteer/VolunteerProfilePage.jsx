@@ -15,7 +15,7 @@ export default function VolunteerProfilePage() {
     volunteerApi
       .me()
       .then((response) => setForm({ ...initialForm, ...response.data }))
-      .catch(() => setError('Profile load nahi ho paayi. Kripya dobara try karein.'))
+    .catch(() => setError('Unable to load the profile. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -37,9 +37,9 @@ export default function VolunteerProfilePage() {
         city: form.city,
         state: form.state,
       });
-      setMessage('Profile successfully update ho gayi.');
+      setMessage('Profile updated successfully.');
     } catch (requestError) {
-      setError(requestError.response?.data?.detail || 'Profile update nahi ho paayi.');
+      setError(requestError.response?.data?.detail || 'Unable to update the profile.');
     } finally {
       setSaving(false);
     }
@@ -52,9 +52,9 @@ export default function VolunteerProfilePage() {
       <section style={styles.hero}>
         <div style={styles.heroInner}>
           <span style={styles.eyebrow}>🙏 VOLUNTEER ACCOUNT</span>
-          <h1 style={styles.heroTitle}>Your Seva Profile</h1>
+      <h1 style={styles.heroTitle}>Your Volunteer Profile</h1>
           <p style={styles.heroText}>
-            Apni details updated rakhein, taaki BharatMandir team aapse aasani se sampark kar sake.
+        Keep your details updated so the BharatMandir team can contact you easily.
           </p>
         </div>
       </section>
@@ -71,7 +71,7 @@ export default function VolunteerProfilePage() {
           </div>
 
           {loading ? (
-            <p style={styles.loading}>Profile load ho rahi hai...</p>
+        <p style={styles.loading}>Loading profile...</p>
           ) : (
             <form onSubmit={handleSubmit} style={styles.form}>
               <div style={styles.formGrid}>
@@ -82,7 +82,7 @@ export default function VolunteerProfilePage() {
                     name="name"
                     value={form.name || ''}
                     onChange={updateField}
-                    placeholder="Apna poora naam"
+                    placeholder="Your full name"
                     required
                   />
                 </label>
@@ -116,7 +116,7 @@ export default function VolunteerProfilePage() {
                     name="city"
                     value={form.city || ''}
                     onChange={updateField}
-                    placeholder="Aapka shehar"
+                placeholder="Your city"
                   />
                 </label>
 
@@ -127,7 +127,7 @@ export default function VolunteerProfilePage() {
                     name="state"
                     value={form.state || ''}
                     onChange={updateField}
-                    placeholder="Aapka rajya"
+                placeholder="Your state"
                   />
                 </label>
               </div>
@@ -146,17 +146,16 @@ export default function VolunteerProfilePage() {
 
         <aside style={styles.sideCard}>
           <span style={styles.sideIcon}>🪔</span>
-          <h3 style={styles.sideTitle}>Your Seva Matters</h3>
+            <h3 style={styles.sideTitle}>Your Contribution Matters</h3>
           <p style={styles.sideText}>
-            Aapke dwara submit ki gayi verified temple information hazaaron devotees ko sahi mandir tak
-            pahunchne mein madad karegi.
+              The verified temple information you submit will help thousands of devotees find the correct temple.
           </p>
           <div style={styles.divider} />
           <p style={styles.sideLabel}>PROFILE TIPS</p>
           <ul style={styles.tips}>
-            <li>Apna real name use karein</li>
-            <li>Active phone number add karein</li>
-            <li>City aur state updated rakhein</li>
+              <li>Use your real name</li>
+              <li>Add an active phone number</li>
+              <li>Keep your city and state updated</li>
           </ul>
         </aside>
       </main>
