@@ -253,7 +253,7 @@ export default function VolunteerDashboardPage() {
               </h2>
 
               <p style={styles.sevaText}>
-                Temple ka naam, address, deity aur clear
+                Temple name, address, deity, and a clear 
                 description. The admin team will publish the
                 profile after verification.
               </p>
