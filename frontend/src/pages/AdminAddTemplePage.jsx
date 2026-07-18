@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, Fragment } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import VolunteerNavbar from '../components/volunteer/VolunteerNavbar';
+import TempleAutomationPanel from '../components/volunteer/TempleAutomationPanel';
 import { volunteerApi } from '../services/volunteerApi';
 
 const VOLUNTEER_DRAFT_KEY = 'bm_volunteer_full_temple_draft_v1';
@@ -748,6 +749,40 @@ export default function AdminAddTemplePage() {
     });
   }
 
+  function applyAutomationFields(values) {
+    setForm(previous => ({ ...previous, ...values }));
+    setErrors(previous => {
+      const next = { ...previous };
+      Object.keys(values).forEach(key => delete next[key]);
+      return next;
+    });
+  }
+
+  function applyAutomationSuggestions(values) {
+    applyAutomationFields({
+      primary_deity: values.primary_deity || form.primary_deity,
+      temple_type: values.temple_type || form.temple_type,
+      estimated_year_built: values.historical_period || form.estimated_year_built,
+    });
+    if (values.architecture_style) {
+      setArchStyles(previous => previous.includes(values.architecture_style)
+        ? previous : [...previous, values.architecture_style]);
+    }
+  }
+
+  function addAutomationPhoto(file) {
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    setPhotos(previous => {
+      const next = [...previous];
+      const emptyIndex = next.findIndex(slot => !slot);
+      const target = emptyIndex >= 0 ? emptyIndex : next.length - 1;
+      if (next[target]?.previewUrl) URL.revokeObjectURL(next[target].previewUrl);
+      next[target] = { file, previewUrl };
+      return next;
+    });
+  }
+
   // ── Priests ───────────────────────────────────────────────────────────────────
   const addPriest    = () => setPriests(p => [...p, initPriest()]);
   const removePriest = id => { setPriests(p => p.filter(x => x.id !== id)); setPriestErrors(e => { const n={...e}; delete n[id]; return n; }); };
@@ -1021,6 +1056,14 @@ export default function AdminAddTemplePage() {
           </div>
         ) : (
           <>
+            {step === 1 && (
+              <TempleAutomationPanel
+                form={form}
+                onApply={applyAutomationFields}
+                onSuggestion={applyAutomationSuggestions}
+                onPhoto={addAutomationPhoto}
+              />
+            )}
             {/* ══ STEP 1 — TEMPLE IDENTITY ══ */}
             {step === 1 && (
               <div className="form-section">

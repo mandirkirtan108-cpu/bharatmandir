@@ -337,6 +337,50 @@ export const volunteerApi = {
     );
   },
 
+  autofillFromMapsLink(url) {
+    return volunteerClient.get('/api/volunteer/automation/maps-link', {
+      params: { url },
+    });
+  },
+
+  reverseGeocode(latitude, longitude) {
+    return volunteerClient.get('/api/volunteer/automation/reverse-geocode', {
+      params: { latitude, longitude },
+    });
+  },
+
+  searchPlaces(q) {
+    return volunteerClient.get('/api/volunteer/automation/place-search', { params: { q } });
+  },
+
+  findDuplicates(params) {
+    return volunteerClient.get('/api/volunteer/automation/duplicates', { params });
+  },
+
+  getPlaceDetails(placeId) {
+    return volunteerClient.get('/api/volunteer/automation/place-details', {
+      params: { place_id: placeId },
+    });
+  },
+
+  getPlacePhoto(photoReference) {
+    return volunteerClient.get('/api/volunteer/automation/place-photo', {
+      params: { reference: photoReference }, responseType: 'blob',
+    });
+  },
+
+  extractSignboard(image) {
+    const body = new FormData();
+    body.append('image', image);
+    return volunteerClient.post('/api/volunteer/automation/ocr', body, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  getTempleSuggestions(data) {
+    return volunteerClient.post('/api/volunteer/automation/suggestions', data);
+  },
+
   listAdminVolunteers(status) {
     const query = status ? `?approval_status=${status}` : '';
     return volunteerClient.get(`/api/volunteer/auth/admin/volunteers${query}`);
