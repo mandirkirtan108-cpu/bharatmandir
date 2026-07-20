@@ -548,17 +548,10 @@ def review_volunteer_submission(
                 ),
             )
 
-        published_temple_id = (
-            submission.get(
-                "published_temple_id"
-            )
-        )
-
         review_action = "published" if body.action == "approved" else body.action
 
         if (
             review_action == "published"
-            and not published_temple_id
         ):
             base_slug = create_temple_slug(
                 submission["temple_name"]
@@ -624,7 +617,7 @@ def review_volunteer_submission(
                     %s,
                     %s,
                     'published',
-                    'volunteer',
+                    'manual',
                     TRUE
                 )
                 RETURNING id
@@ -655,10 +648,6 @@ def review_volunteer_submission(
                 cursor.fetchone()
             )
 
-            published_temple_id = (
-                published_temple["id"]
-            )
-
         cursor.execute(
             """
             UPDATE temple_submissions
@@ -669,7 +658,6 @@ def review_volunteer_submission(
                 reviewed_by = %s,
                 reviewed_at = NOW(),
                 published_at = CASE WHEN %s = 'published' THEN NOW() ELSE published_at END,
-                published_temple_id = %s,
                 updated_at = NOW()
             WHERE id = %s
             RETURNING *
@@ -681,7 +669,6 @@ def review_volunteer_submission(
                 body.admin_note,
                 admin["id"],
                 review_action,
-                published_temple_id,
                 submission_id,
             ),
         )
