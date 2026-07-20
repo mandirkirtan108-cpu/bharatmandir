@@ -110,16 +110,22 @@ async def _expand_google_maps_url(value: str) -> str:
 
 def _extract_maps_coordinates(value: str) -> tuple[float, float]:
     decoded = unquote(value)
-    patterns = (
-        r"@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)",
-        r"!3d(-?\d{1,2}(?:\.\d+)?)[^!]*!4d(-?\d{1,3}(?:\.\d+)?)",
+    # Google URLs may contain both a viewport centre (`@lat,lng`) and the
+    # actual selected place (`!3dlat!4dlng`). Always prefer the place pin.
+    direct_patterns = (
+        (r"!3d(-?\d{1,2}(?:\.\d+)?)[^!]*!4d(-?\d{1,3}(?:\.\d+)?)", False),
+        # Some Google data blocks encode longitude first as !2d, then latitude as !3d.
+        (r"!2d(-?\d{1,3}(?:\.\d+)?)[^!]*!3d(-?\d{1,2}(?:\.\d+)?)", True),
     )
-    for pattern in patterns:
+    for pattern, reverse_order in direct_patterns:
         match = re.search(pattern, decoded)
         if match:
-            latitude, longitude = map(float, match.groups())
+            first, second = map(float, match.groups())
+            latitude, longitude = (second, first) if reverse_order else (first, second)
             if -90 <= latitude <= 90 and -180 <= longitude <= 180:
                 return latitude, longitude
+
+    # Explicit coordinate query parameters are also exact user selections.
     query = parse_qs(urlparse(decoded).query)
     for key in ("q", "query", "ll", "center"):
         raw = (query.get(key) or [""])[0]
@@ -128,6 +134,16 @@ def _extract_maps_coordinates(value: str) -> tuple[float, float]:
             latitude, longitude = map(float, match.groups())
             if -90 <= latitude <= 90 and -180 <= longitude <= 180:
                 return latitude, longitude
+
+    # Last resort only: this is often the visible map centre, not the place pin.
+    viewport_match = re.search(
+        r"@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)",
+        decoded,
+    )
+    if viewport_match:
+        latitude, longitude = map(float, viewport_match.groups())
+        if -90 <= latitude <= 90 and -180 <= longitude <= 180:
+            return latitude, longitude
     raise HTTPException(status_code=422, detail="Coordinates were not found in this link. Open the exact place in Google Maps, tap Share, and paste that link.")
 
 
