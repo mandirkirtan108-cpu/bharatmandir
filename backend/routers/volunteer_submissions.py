@@ -595,7 +595,7 @@ def review_volunteer_submission(
                     latitude,
                     longitude,
                     location,
-                    description,
+                    significance,
                     history,
                     status,
                     source,
