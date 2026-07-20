@@ -51,7 +51,7 @@ def create_temple_slug(
     temple_name: str,
 ) -> str:
     """
-    Convert the temple name into a URL-safe slug.
+    Temple name ko URL-safe slug mein convert karta hai.
     """
 
     normalized_name = (
@@ -166,7 +166,7 @@ def list_volunteer_submissions(
     ),
 ):
     """
-    Return all submissions belonging to the logged-in volunteer.
+    Logged-in volunteer ki sabhi submissions return karta hai.
     """
 
     with get_db_cursor() as cursor:
@@ -211,7 +211,7 @@ def update_volunteer_submission(
     ),
 ):
     """
-    Update a draft or changes-requested submission.
+    Draft ya changes-requested submission update karta hai.
     Editing preserves draft/changes-requested status.
     """
 
@@ -326,8 +326,8 @@ def delete_volunteer_submission(
     ),
 ):
     """
-    Allow deletion of a draft, pending, or changes-requested
-    submission.
+    Draft, pending ya changes-requested submission delete
+    karne deta hai.
     """
 
     status_placeholders = ", ".join(
@@ -392,8 +392,8 @@ def list_submissions_for_admin(
     ),
 ):
     """
-    Return all volunteer submissions for administrators.
-    An optional status filter is supported.
+    Admin ke liye sabhi volunteer submissions return karta hai.
+    Optional status filter supported hai.
     """
 
     valid_statuses = {
@@ -503,9 +503,8 @@ def review_volunteer_submission(
     ),
 ):
     """
-    Allow an administrator to approve, reject, or request changes
-    to a submission. Approval creates the temple in the main
-    temples table.
+    Admin submission approve, reject ya changes request karta hai.
+    Approval par main temples table mein temple create hota hai.
     """
 
     if body.action not in ADMIN_REVIEW_ACTIONS:
@@ -570,12 +569,23 @@ def review_volunteer_submission(
                 f"{uuid4().hex[:6]}"
             )
 
+            state_code = re.sub(
+                r"[^A-Za-z]",
+                "",
+                submission.get("state") or "IN",
+            )[:2].upper() or "IN"
+            mkt_id = (
+                f"MKT-{state_code}-"
+                f"{uuid4().hex[:6].upper()}"
+            )
+
             cursor.execute(
                 """
                 INSERT INTO temples (
                     uuid,
                     name,
                     slug,
+                    mkt_id,
                     primary_deity,
                     address,
                     city,
@@ -584,11 +594,11 @@ def review_volunteer_submission(
                     pincode,
                     latitude,
                     longitude,
+                    location,
                     description,
                     history,
                     status,
                     source,
-                    submitted_by,
                     verified
                 )
                 VALUES (
@@ -604,11 +614,18 @@ def review_volunteer_submission(
                     %s,
                     %s,
                     %s,
+                    CASE
+                        WHEN %s IS NOT NULL AND %s IS NOT NULL
+                        THEN ST_GeogFromText(
+                            'POINT(' || %s || ' ' || %s || ')'
+                        )
+                        ELSE NULL
+                    END,
+                    %s,
                     %s,
                     'published',
                     'volunteer',
-                    %s,
-                    FALSE
+                    TRUE
                 )
                 RETURNING id
                 """,
@@ -616,6 +633,7 @@ def review_volunteer_submission(
                     str(uuid4()),
                     submission["temple_name"],
                     unique_slug,
+                    mkt_id,
                     submission.get("deity"),
                     submission["address"],
                     submission["city"],
@@ -624,12 +642,12 @@ def review_volunteer_submission(
                     submission.get("pincode"),
                     submission.get("latitude"),
                     submission.get("longitude"),
+                    submission.get("latitude"),
+                    submission.get("longitude"),
+                    submission.get("longitude"),
+                    submission.get("latitude"),
                     submission.get("description"),
                     submission.get("history"),
-                    (
-                        "volunteer:"
-                        f"{submission['volunteer_id']}"
-                    ),
                 ),
             )
 
