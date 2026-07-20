@@ -141,29 +141,21 @@ function to24h(val) {
   return `${String(h).padStart(2, '0')}:${m}`;
 }
 
-function TimeInput({ value, onChange, placeholder = '9:00 AM' }) {
-  const [raw, setRaw] = useState(value ? to12h(value) : '');
-  const handleChange = (e) => {
-    const v = e.target.value;
-    setRaw(v);
-    const match = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-    if (match) onChange(to24h(v));
-  };
-  const handleBlur = () => {
-    let v = raw.trim();
-    if (v && !/AM|PM/i.test(v)) {
-      const parts = v.split(':');
-      const h = parseInt(parts[0], 10);
-      const m = parts[1] ? parts[1].padStart(2,'0') : '00';
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = (h % 12) || 12;
-      v = `${h12}:${m} ${ampm}`;
-    }
-    setRaw(v);
-    const match = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-    if (match) onChange(to24h(v));
-  };
-  return <input type="text" value={raw} onChange={handleChange} onBlur={handleBlur} placeholder={placeholder} />;
+function TimeInput({ value, onChange, compact = false }) {
+  return (
+    <div className={`time-picker${compact ? ' compact' : ''}`}>
+      <input
+        type="time"
+        value={value || ''}
+        onChange={event => onChange(event.target.value)}
+        step="300"
+        aria-label="Select time"
+      />
+      <span className="time-picker-display">
+        {value ? to12h(value) : 'Select time'}
+      </span>
+    </div>
+  );
 }
 
 function initialForm() {
@@ -320,6 +312,12 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .sched-hdr{background:var(--parch);padding:10px 14px;font-size:10.5px;font-weight:500;color:var(--inkl);text-transform:uppercase;letter-spacing:.06em;display:grid;grid-template-columns:1fr 130px 100px 34px;gap:10px;}
 .sched-row{display:grid;grid-template-columns:1fr 130px 100px 34px;gap:10px;padding:8px 14px;border-top:1px solid var(--bd3);align-items:center;}
 .sched-row input,.sched-row select{padding:6px 10px;border-radius:7px;font-size:12px;}
+.time-picker{position:relative;display:flex;align-items:center;width:100%;min-height:42px}
+.time-picker input[type=time]{width:100%;min-height:42px;padding:9px 12px;border:1px solid var(--bd2);border-radius:8px;background:var(--parch);color:transparent;cursor:pointer;color-scheme:light}
+.time-picker input[type=time]::-webkit-datetime-edit{color:transparent}
+.time-picker input[type=time]::-webkit-calendar-picker-indicator{position:absolute;right:10px;width:22px;height:22px;cursor:pointer;opacity:.75;z-index:2}
+.time-picker-display{position:absolute;left:12px;right:42px;pointer-events:none;color:var(--inkm);font-size:13px}
+.time-picker.compact{min-height:32px}.time-picker.compact input[type=time]{min-height:32px;height:32px;padding:5px 8px}.time-picker.compact .time-picker-display{left:9px;right:32px;font-size:12px}.time-picker.compact input[type=time]::-webkit-calendar-picker-indicator{right:5px;width:18px;height:18px}
 .sched-del{width:28px;height:28px;border:1px solid var(--bd2);border-radius:7px;background:var(--white);color:var(--red);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
 .sched-del:hover{background:var(--redl);border-color:var(--red);}
 .add-sched-btn,.add-btn{padding:8px 16px;border:1px dashed var(--bd1);border-radius:8px;background:transparent;font-size:12px;color:var(--inkl);cursor:pointer;transition:all .15s;margin-top:8px;display:flex;align-items:center;gap:6px;}
@@ -1589,7 +1587,9 @@ export default function AdminAddTemplePage() {
                             {se.name && <span style={{ fontSize:10, color:'var(--red)' }}>⚠ Required</span>}
                           </div>
                           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                            <input type="text" value={s.time} onChange={e=>setSched(s.id,'time',e.target.value)} placeholder="5:30 AM" className={se.time ? 'sched-err-input' : ''} />
+                            <div className={se.time ? 'sched-err-input' : ''}>
+                              <TimeInput value={s.time} onChange={value=>setSched(s.id,'time',value)} compact />
+                            </div>
                             {se.time && <span style={{ fontSize:10, color:'var(--red)' }}>⚠ Required</span>}
                           </div>
                           <select value={s.type} onChange={e=>setSched(s.id,'type',e.target.value)}>
