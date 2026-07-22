@@ -381,6 +381,12 @@ export const volunteerApi = {
     return volunteerClient.post('/api/volunteer/automation/suggestions', data);
   },
 
+  translateToHindi(text) {
+    return volunteerClient.post('/api/volunteer/automation/translate-to-hindi', {
+      text,
+    });
+  },
+
   listAdminVolunteers(status) {
     const query = status ? `?approval_status=${status}` : '';
     return volunteerClient.get(`/api/volunteer/auth/admin/volunteers${query}`);

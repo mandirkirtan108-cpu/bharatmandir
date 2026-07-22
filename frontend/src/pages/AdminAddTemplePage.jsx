@@ -528,6 +528,7 @@ export default function AdminAddTemplePage() {
   const [draftId, setDraftId] = useState(submissionId || null);
   const [draftNotice, setDraftNotice] = useState('');
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [historyTranslationStatus, setHistoryTranslationStatus] = useState('');
 
   const [showCustomDesignation, setShowCustomDesignation] = useState(false);
   const [customDesignationText, setCustomDesignationText] = useState('');
@@ -536,6 +537,8 @@ export default function AdminAddTemplePage() {
 
   const progressRef = useRef(null);
   const lastAutoHindiNameRef = useRef('');
+  const lastAutoHindiHistoryRef = useRef('');
+  const historyTranslationRequestRef = useRef(0);
 
   useEffect(() => {
     const hindiName = templeNameToHindi(form.name);
@@ -547,6 +550,51 @@ export default function AdminAddTemplePage() {
       return { ...previous, name_hindi: hindiName };
     });
   }, [form.name]);
+
+  useEffect(() => {
+    const englishHistory = form.history.trim();
+    if (englishHistory.length < 10) {
+      setHistoryTranslationStatus('');
+      return undefined;
+    }
+
+    const currentHindi = form.history_hindi?.trim() || '';
+    const mayAutoFill = !currentHindi || currentHindi === lastAutoHindiHistoryRef.current;
+    if (!mayAutoFill) {
+      setHistoryTranslationStatus('Hindi text was edited manually; automatic updates are paused.');
+      return undefined;
+    }
+
+    const timer = window.setTimeout(async () => {
+      const requestId = ++historyTranslationRequestRef.current;
+      setHistoryTranslationStatus('Translating history into Hindi...');
+
+      try {
+        const response = await volunteerApi.translateToHindi(englishHistory);
+        if (requestId !== historyTranslationRequestRef.current) return;
+
+        const translatedText = response.data?.translation?.trim() || '';
+        if (!translatedText) throw new Error('Hindi translation was empty.');
+
+        setForm(previous => {
+          const latestHindi = previous.history_hindi?.trim() || '';
+          const canApply = !latestHindi || latestHindi === lastAutoHindiHistoryRef.current;
+          if (!canApply) return previous;
+          lastAutoHindiHistoryRef.current = translatedText;
+          return { ...previous, history_hindi: translatedText };
+        });
+        setErrors(previous => ({ ...previous, history_hindi: undefined }));
+        setHistoryTranslationStatus('Hindi history filled automatically. You can edit it if needed.');
+      } catch (error) {
+        if (requestId !== historyTranslationRequestRef.current) return;
+        setHistoryTranslationStatus(
+          error.response?.data?.detail || error.message || 'Automatic Hindi translation failed.',
+        );
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [form.history]);
 
   function getDraftSnapshot() {
     return {
@@ -1287,6 +1335,7 @@ export default function AdminAddTemplePage() {
                   </Field>
                   <Field label="History (Hindi)" req err={errors.history_hindi}>
                     <Txt value={form.history_hindi} onChange={v=>set('history_hindi',v)} rows={3} placeholder="इस मंदिर का इतिहास हिंदी में लिखें…" />
+                    {historyTranslationStatus && <div className="field-hint">{historyTranslationStatus}</div>}
                   </Field>
                   <SecLabel>Spiritual Context</SecLabel>
                   <Field label="Sthala Purana" req err={errors.sthala_purana}>

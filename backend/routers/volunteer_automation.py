@@ -46,6 +46,10 @@ class SuggestionRequest(BaseModel):
     signboard_text: str | None = Field(default=None, max_length=5000)
 
 
+class TranslationRequest(BaseModel):
+    text: str = Field(min_length=2, max_length=12000)
+
+
 def _address_payload(item: dict[str, Any]) -> dict[str, Any]:
     address = item.get("address") or {}
     return {
@@ -502,7 +506,7 @@ async def place_photo(
 
 
 def _openai_json(prompt: str, image_data_url: str | None = None) -> dict[str, Any]:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("VITE_OPENAI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=503, detail="AI automation is not configured")
     from openai import OpenAI
@@ -550,3 +554,24 @@ def ai_suggestions(
         f"{body.model_dump_json()}"
     )
     return _openai_json(prompt)
+
+
+@router.post("/translate-to-hindi")
+def translate_to_hindi(
+    body: TranslationRequest,
+    _volunteer: dict = Depends(get_current_volunteer),
+):
+    """Translate volunteer-entered English temple content into natural Hindi."""
+    source_text = body.text.strip()
+    prompt = (
+        "Translate the following Indian temple history from English into clear, "
+        "natural Hindi written in Devanagari. Preserve temple names, place names, "
+        "dates, numbers and factual meaning. Do not add, remove or invent facts. "
+        "Return JSON only with one key named translation. Text: "
+        f"{source_text}"
+    )
+    result = _openai_json(prompt)
+    translation = str(result.get("translation") or "").strip()
+    if not translation:
+        raise HTTPException(status_code=502, detail="Hindi translation was not returned")
+    return {"translation": translation}
