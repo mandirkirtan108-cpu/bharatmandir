@@ -41,6 +41,18 @@ const SETTINGS = ['','Riverbank / Ghats','Hilltop / Mountain','Forest / Jungle',
 const ARCH_STYLES = ['Nagara (North Indian)','Dravidian (South Indian)','Vesara (Mixed)','Kalinga (Odisha)','Hemadpanthi','Modern / Other'];
 const BUILDING_CONDITIONS = ['','Excellent — well maintained','Good — minor maintenance needed','Fair — needs renovation','Poor — urgent repair needed'];
 const WEEKDAYS = ['None / All days equal','Monday (Shiva)','Tuesday (Hanuman / Devi)','Wednesday (Ganesha)','Thursday (Vishnu / Guru)','Friday (Lakshmi / Devi)','Saturday (Saturn / Hanuman)','Sunday (Surya)'];
+const DRESS_CODES = [
+  '',
+  'No specific dress code',
+  'Modest clothing required',
+  'Traditional Indian attire preferred',
+  'Traditional Indian attire required',
+  'Dhoti for men and saree/salwar suit for women',
+  'Shoulders and knees must be covered',
+  'Shorts and sleeveless clothing are not allowed',
+  'Leather items are not allowed',
+  'Footwear must be removed before entering',
+];
 const SAMPRADAYAS = ['','Shaiva','Vaishnava','Shakta','Smarta','Ramanandi','Madhva','ISKCON / Vaishnava','Other'];
 const APPT_TYPES = ['','Hereditary family priest','Trust-appointed','Government / Endowment Board appointed','Community elected'];
 const STATUS_OPTS = ['draft','review','published','flagged','archived'];
@@ -193,7 +205,7 @@ function initialForm() {
 }
 
 const initPriest  = () => ({ name:'', title:'', phone:'', sampradaya:'', appt_type:'', years:'', is_head:false, id: Math.random().toString(36).slice(2) });
-const initSched   = () => ({ name:'', time:'', type:'Aarti', id: Math.random().toString(36).slice(2) });
+const initSched   = () => ({ name:'', time:'', type:'Aarti', custom_type:'', id: Math.random().toString(36).slice(2) });
 const initOffering= () => ({ name:'', timing:'', id: Math.random().toString(36).slice(2) });
 const initMantra  = () => ({ title:'', deity:'', sanskrit:'', transliteration:'', meaning:'', audio:'', id: Math.random().toString(36).slice(2) });
 const initFestival= () => ({ name:'', hmonth:'', month:'', desc:'', days:'', major:false, id: Math.random().toString(36).slice(2) });
@@ -746,6 +758,7 @@ export default function AdminAddTemplePage() {
         const se = {};
         if (!s2.name.trim()) se.name = true;
         if (!s2.time.trim()) se.time = true;
+        if (s2.type === 'Other' && !s2.custom_type?.trim()) se.custom_type = true;
         if (Object.keys(se).length) sErrs[s2.id] = se;
       });
       if (Object.keys(sErrs).length) {
@@ -1417,7 +1430,13 @@ export default function AdminAddTemplePage() {
                     </Field>
                   </div>
                   <Field label="Dress Code" req err={errors.dress_code}>
-                    <Inp type="text" value={form.dress_code} onChange={v=>set('dress_code',v)} placeholder="e.g. Traditional attire required, no leather" />
+                    <Sel value={form.dress_code} onChange={v=>set('dress_code',v)}>
+                      {DRESS_CODES.map(option => (
+                        <option key={option || 'select'} value={option}>
+                          {option || 'Select dress code'}
+                        </option>
+                      ))}
+                    </Sel>
                   </Field>
                   <Field label="Best Time to Visit" opt>
                     <Inp type="text" value={form.best_time_to_visit} onChange={v=>set('best_time_to_visit',v)} placeholder="e.g. October to March, during Mahashivratri" />
@@ -1636,9 +1655,23 @@ export default function AdminAddTemplePage() {
                             </div>
                             {se.time && <span style={{ fontSize:10, color:'var(--red)' }}>⚠ Required</span>}
                           </div>
-                          <select value={s.type} onChange={e=>setSched(s.id,'type',e.target.value)}>
-                            {['Aarti','Puja','Abhishek','Bhog','Other'].map(t=><option key={t}>{t}</option>)}
-                          </select>
+                          <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                            <select value={s.type} onChange={e=>setSched(s.id,'type',e.target.value)}>
+                              {['Aarti','Puja','Abhishek','Bhog','Other'].map(t=><option key={t}>{t}</option>)}
+                            </select>
+                            {s.type === 'Other' && (
+                              <>
+                                <input
+                                  type="text"
+                                  value={s.custom_type || ''}
+                                  onChange={e=>setSched(s.id,'custom_type',e.target.value)}
+                                  placeholder="Specify type"
+                                  className={se.custom_type ? 'sched-err-input' : ''}
+                                />
+                                {se.custom_type && <span style={{ fontSize:10, color:'var(--red)' }}>⚠ Required</span>}
+                              </>
+                            )}
+                          </div>
                           <button className="sched-del" onClick={()=>delSched(s.id)}>×</button>
                         </div>
                       );
