@@ -703,18 +703,13 @@ export default function AdminAddTemplePage() {
       if (!form.district.trim()) e.district = 'This field is required';
       if (!form.latitude.trim() || isNaN(parseFloat(form.latitude)))  e.latitude  = 'Valid GPS latitude is required';
       if (!form.longitude.trim() || isNaN(parseFloat(form.longitude))) e.longitude = 'Valid GPS longitude is required';
-      if (!form.nearest_railway.trim()) e.nearest_railway = 'This field is required';
-      if (!form.nearest_airport.trim()) e.nearest_airport = 'This field is required';
-      if (!form.nearest_bus_stand.trim()) e.nearest_bus_stand = 'This field is required';
     }
 
     if (s === 3) {
       // NEW required on step 3
       if (!form.history.trim())          e.history          = 'This field is required';
       if (!form.history_hindi.trim())    e.history_hindi    = 'This field is required';
-      if (!form.sthala_purana.trim())    e.sthala_purana    = 'This field is required';
       if (!form.significance.trim())     e.significance     = 'This field is required';
-      if (!form.puranic_stories.trim())  e.puranic_stories  = 'This field is required';
     }
 
     if (s === 4) {
@@ -1303,13 +1298,13 @@ export default function AdminAddTemplePage() {
                     <Inp type="url" value={form.google_maps_link} onChange={v=>set('google_maps_link',v)} placeholder="https://maps.google.com/..." />
                   </Field>
                   <div className="fg-3">
-                    <Field label="Nearest Railway Station" req err={errors.nearest_railway}>
+                    <Field label="Nearest Railway Station" opt>
                       <Inp type="text" value={form.nearest_railway} onChange={v=>set('nearest_railway',v)} placeholder="Name — distance e.g. 3 km" />
                     </Field>
-                    <Field label="Nearest Airport" req err={errors.nearest_airport}>
+                    <Field label="Nearest Airport" opt>
                       <Inp type="text" value={form.nearest_airport} onChange={v=>set('nearest_airport',v)} placeholder="Name — distance e.g. 55 km" />
                     </Field>
-                    <Field label="Nearest Bus Stand" req err={errors.nearest_bus_stand}>
+                    <Field label="Nearest Bus Stand" opt>
                       <Inp type="text" value={form.nearest_bus_stand} onChange={v=>set('nearest_bus_stand',v)} placeholder="Name — distance e.g. 1 km" />
                     </Field>
                   </div>
@@ -1338,13 +1333,13 @@ export default function AdminAddTemplePage() {
                     {historyTranslationStatus && <div className="field-hint">{historyTranslationStatus}</div>}
                   </Field>
                   <SecLabel>Spiritual Context</SecLabel>
-                  <Field label="Sthala Purana" req err={errors.sthala_purana}>
+                  <Field label="Sthala Purana" opt>
                     <Txt value={form.sthala_purana} onChange={v=>set('sthala_purana',v)} rows={3} placeholder="The divine legend or story associated with this sacred place…" />
                   </Field>
                   <Field label="Significance" req err={errors.significance}>
                     <Txt value={form.significance} onChange={v=>set('significance',v)} rows={3} placeholder="Why is this temple important?" />
                   </Field>
-                  <Field label="Puranic Stories" req err={errors.puranic_stories}>
+                  <Field label="Puranic Stories" opt>
                     <Txt value={form.puranic_stories} onChange={v=>set('puranic_stories',v)} rows={3} placeholder="Relevant stories from the Puranas or scriptures…" />
                   </Field>
                   <SecLabel>Architecture & Construction</SecLabel>
