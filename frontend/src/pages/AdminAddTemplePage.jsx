@@ -242,6 +242,7 @@ body{font-family:var(--ff-u);background:var(--cream);color:var(--ink);-webkit-fo
 .step{display:flex;align-items:center;flex-shrink:0;}
 .step-btn{display:flex;align-items:center;gap:8px;padding:15px 16px;border:none;background:transparent;cursor:pointer;border-bottom:3px solid transparent;transition:all .25s;font-family:var(--ff-u);font-size:12px;color:var(--inkll);white-space:nowrap;}
 .step-btn:hover{color:var(--s2);}
+.step-btn:disabled{cursor:not-allowed;opacity:.58;}
 .step-btn.active{color:var(--s2);border-bottom-color:var(--s2);background:rgba(232,101,10,.04);}
 .step-btn.done{color:var(--green);border-bottom-color:var(--green);}
 .step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;background:var(--bd2);color:var(--inkll);flex-shrink:0;transition:all .25s;}
@@ -813,7 +814,13 @@ export default function AdminAddTemplePage() {
     setTimeout(() => progressRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 50);
   }
   function prevStep(from) { setStep(from - 1); }
-  function goStep(n) { if (n <= step) setStep(n); }
+  function goStep(n) {
+    // A saved draft can be reviewed in any order. For a new unsaved form,
+    // forward navigation still uses the Next button and its validation.
+    if (n > step && !draftId) return;
+    setStep(n);
+    setTimeout(() => progressRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 50);
+  }
 
   // ── Photos ────────────────────────────────────────────────────────────────────
   // Each slot holds { file, previewUrl } so the real File can be uploaded on submit.
@@ -1111,7 +1118,13 @@ export default function AdminAddTemplePage() {
               <Fragment key={n}>
                 {i > 0 && <div className="step-div" />}
                 <div className="step">
-                  <button className={cls} onClick={() => goStep(n)}>
+                  <button
+                    className={cls}
+                    onClick={() => goStep(n)}
+                    disabled={!draftId && n > step}
+                    title={draftId ? `Open ${label}` : n > step ? 'Complete the current step first' : `Open ${label}`}
+                    aria-label={`Open step ${n}: ${label}`}
+                  >
                     <span className="step-num">{step>n ? '✓' : n}</span>
                     {label}
                   </button>
