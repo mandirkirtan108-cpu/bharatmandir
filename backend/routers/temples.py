@@ -6,7 +6,7 @@ Covers v1 core endpoints + v2 registration-form sub-resources.
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from typing import Optional, List
-import sys, os
+import sys, os, re
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -32,15 +32,15 @@ router = APIRouter(
 
 
 # ─────────────────────────────────────────────
-# Helper — resolve either a slug or an integer ID
+# Helper — slug ya integer id dono resolve kare
 # ─────────────────────────────────────────────
 
 def resolve_temple_id(cur, temple_id: str) -> int:
     """
-    temple_id can be one of the following strings:
-    - "123"              → look up by integer ID
-    - "jagannath-temple" → look up by slug
-    In both cases, return the integer ID of the published temple.
+    temple_id string ho sakti hai:
+      - "123"              → integer id se dhundo
+      - "jagannath-temple" → slug se dhundo
+    Dono cases mein published temple ka integer id return karta hai.
     """
     if temple_id.isdigit():
         cur.execute(
@@ -128,11 +128,31 @@ def list_temples(
 # GET /api/temples/search  (must be before /{slug})
 # ─────────────────────────────────────────────
 
+TEMPLE_SEARCH_ALIASES = {
+    "shiv": ["shiv", "shiva", "mahadev", "mahakal", "shankar", "bholenath"],
+    "shiva": ["shiv", "shiva", "mahadev", "mahakal", "shankar", "bholenath"],
+    "mahadev": ["shiv", "shiva", "mahadev", "mahakal", "shankar", "bholenath"],
+    "vishnu": ["vishnu", "narayan", "hari", "venkateswara", "balaji"],
+    "krishna": ["krishna", "kanha", "gopal", "govind", "shyam"],
+    "ram": ["ram", "rama", "ramchandra", "raghunath"],
+    "hanuman": ["hanuman", "bajrangbali", "anjaneya", "maruti"],
+    "ganesh": ["ganesh", "ganesha", "ganpati", "vinayak"],
+    "devi": ["devi", "durga", "mata", "shakti", "amba"],
+}
+
+
 @router.get("/search", response_model=List[TempleListItem])
 def search_temples(
-    q:     str = Query(..., min_length=2),
+    q:     str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=50)
 ):
+    clean_query = " ".join(q.split()).strip()
+    tokens = re.findall(r"[a-z0-9]+", clean_query.casefold())
+    search_words = {clean_query.casefold(), *tokens}
+    for token in tokens:
+        search_words.update(TEMPLE_SEARCH_ALIASES.get(token, []))
+    patterns = [f"%{word}%" for word in search_words if word]
+
     with get_db_cursor() as cur:
         cur.execute("""
             SELECT
@@ -154,15 +174,33 @@ def search_temples(
             FROM temples
             WHERE
                 status = 'published'
-                AND to_tsvector('english',
-                    COALESCE(name,'') || ' ' ||
-                    COALESCE(city,'') || ' ' ||
-                    COALESCE(primary_deity,'') || ' ' ||
-                    COALESCE(significance,'')
-                ) @@ plainto_tsquery('english', %s)
-            ORDER BY rank DESC
+                AND CONCAT_WS(' ',
+                    name, name_hindi, name_local, city, district, state,
+                    primary_deity, temple_type, sect, significance,
+                    array_to_string(category_tags, ' ')
+                ) ILIKE ANY(%s)
+            ORDER BY
+                CASE
+                    WHEN LOWER(name) = LOWER(%s) THEN 0
+                    WHEN name ILIKE %s THEN 1
+                    WHEN primary_deity ILIKE %s THEN 2
+                    WHEN city ILIKE %s OR district ILIKE %s OR state ILIKE %s THEN 3
+                    ELSE 4
+                END,
+                rank DESC,
+                name ASC
             LIMIT %s
-        """, (q, q, limit))
+        """, (
+            clean_query,
+            patterns,
+            clean_query,
+            f"{clean_query}%",
+            f"%{clean_query}%",
+            f"%{clean_query}%",
+            f"%{clean_query}%",
+            f"%{clean_query}%",
+            limit,
+        ))
         results = cur.fetchall()
 
     return [dict(r) for r in results]

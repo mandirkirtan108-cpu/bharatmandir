@@ -159,6 +159,15 @@ export default function SearchPage() {
 
   useEffect(() => { fetchResults(true); }, [selectedSects, selectedStates, jyotirlinga, shaktipeeth, freeEntry, sort]);
   useEffect(() => {
+    if (nearbyMode) return undefined;
+    const timer = window.setTimeout(() => {
+      const cleanQuery = query.trim();
+      setSearchParams(cleanQuery ? { q: cleanQuery } : {});
+      fetchResults(true);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  useEffect(() => {
     if (nearbyMode && userLocation) fetchResults(true);
   }, [nearbyMode, userLocation, radiusKm]);
 
@@ -270,7 +279,7 @@ export default function SearchPage() {
         name="search-query"
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder={t('search.input_placeholder') || 'Type temple name, deity, city…'}
+        placeholder={t('search.input_placeholder') || 'Type any part of a temple, deity, or place…'}
         autoFocus
         style={{
           flex: 1,
