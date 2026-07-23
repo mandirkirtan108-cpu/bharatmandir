@@ -36,19 +36,24 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
   }, [form.latitude, form.longitude]);
 
   async function getNearbyTransportFields(latitude, longitude) {
+    const emptyFields = {
+      nearest_railway: '',
+      nearest_airport: '',
+      nearest_bus_stand: '',
+    };
     if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
-      return {};
+      return emptyFields;
     }
     try {
       const { data } = await volunteerApi.findNearbyTransport(latitude, longitude);
       return {
-        ...(data.nearest_railway ? { nearest_railway: data.nearest_railway } : {}),
-        ...(data.nearest_airport ? { nearest_airport: data.nearest_airport } : {}),
-        ...(data.nearest_bus_stand ? { nearest_bus_stand: data.nearest_bus_stand } : {}),
+        nearest_railway: data.nearest_railway || '',
+        nearest_airport: data.nearest_airport || '',
+        nearest_bus_stand: data.nearest_bus_stand || '',
       };
     } catch {
       // Address auto-fill must still succeed when transport data is unavailable.
-      return {};
+      return emptyFields;
     }
   }
 
@@ -63,18 +68,18 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
       onApply({
         latitude: String(latitude.toFixed(7)),
         longitude: String(longitude.toFixed(7)),
-        address: data.address || form.address,
-        city: data.city || form.city,
-        district: data.district || form.district,
-        state: data.state || form.state,
-        pincode: data.pincode || form.pincode,
+        address: data.address || '',
+        city: data.city || '',
+        district: data.district || '',
+        state: data.state || '',
+        pincode: data.pincode || '',
         osm_id: data.osm_id || form.osm_id,
         google_maps_link: `https://www.google.com/maps?q=${latitude},${longitude}`,
         source: data.source || form.source,
         ...transportFields,
       });
       localStorage.setItem(PREFERENCE_KEY, JSON.stringify({ state: data.state, district: data.district }));
-      const transportCount = Object.keys(transportFields).length;
+      const transportCount = Object.values(transportFields).filter(Boolean).length;
       setMessage(
         `${prefix}, address${transportCount ? ` and ${transportCount} nearby transport locations` : ''} applied. Review the fields before continuing.`
       );
@@ -132,11 +137,11 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
       );
       onApply({
         name: data.name || form.name,
-        address: data.address || data.display_name || form.address,
-        city: data.city || form.city,
-        district: data.district || form.district,
-        state: data.state || form.state,
-        pincode: data.pincode || form.pincode,
+        address: data.address || data.display_name || '',
+        city: data.city || '',
+        district: data.district || '',
+        state: data.state || '',
+        pincode: data.pincode || '',
         latitude: String(data.latitude),
         longitude: String(data.longitude),
         google_maps_link: data.google_maps_link || mapsLink.trim(),
@@ -144,7 +149,7 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
         ...transportFields,
       });
       localStorage.setItem(PREFERENCE_KEY, JSON.stringify({ state: data.state, district: data.district }));
-      const transportCount = Object.keys(transportFields).length;
+      const transportCount = Object.values(transportFields).filter(Boolean).length;
       setMessage(
         `Location details${transportCount ? ` and ${transportCount} nearby transport locations` : ''} filled successfully. Please review them before continuing.`
       );
