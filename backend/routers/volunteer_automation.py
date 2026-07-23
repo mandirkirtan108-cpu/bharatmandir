@@ -34,7 +34,10 @@ GEOCODE_CACHE_TTL_SECONDS = 60 * 60 * 24
 ORS_REVERSE_URL = "https://api.openrouteservice.org/geocode/reverse"
 ORS_SEARCH_URL = "https://api.openrouteservice.org/geocode/search"
 ORS_MATRIX_URL = "https://api.openrouteservice.org/v2/matrix/driving-car"
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_URLS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+)
 GOOGLE_MAP_HOSTS = {
     "google.com", "www.google.com", "maps.google.com", "maps.app.goo.gl",
     "goo.gl", "www.goo.gl",
@@ -373,14 +376,29 @@ async def _ors_transport_candidates(
         );
         out center tags;
         """
-        overpass_response = await client.post(
-            OVERPASS_URL,
-            content=overpass_query,
-            headers={**REQUEST_HEADERS, "Content-Type": "text/plain"},
-        )
-        overpass_response.raise_for_status()
+        overpass_payload: dict[str, Any] | None = None
+        last_overpass_error: Exception | None = None
+        for overpass_url in OVERPASS_URLS:
+            try:
+                # Overpass expects the query in the form field named `data`.
+                overpass_response = await client.post(
+                    overpass_url,
+                    data={"data": overpass_query},
+                    headers=REQUEST_HEADERS,
+                )
+                overpass_response.raise_for_status()
+                overpass_payload = overpass_response.json()
+                break
+            except (httpx.HTTPError, ValueError) as error:
+                last_overpass_error = error
+        if overpass_payload is None:
+            raise HTTPException(
+                status_code=502,
+                detail="Nearby transport lookup is temporarily unavailable",
+            ) from last_overpass_error
+
         found: dict[tuple[str, float, float], dict[str, Any]] = {}
-        for element in overpass_response.json().get("elements") or []:
+        for element in overpass_payload.get("elements") or []:
             tags = element.get("tags") or {}
             center = element.get("center") or {}
             candidate_lat = element.get("lat", center.get("lat"))
@@ -435,32 +453,45 @@ async def _ors_transport_candidates(
         if not candidates:
             return []
 
-        matrix_response = await client.post(
-            ORS_MATRIX_URL,
-            json={
-                "locations": [
-                    [longitude, latitude],
-                    *[
-                        [candidate["longitude"], candidate["latitude"]]
-                        for candidate in candidates
+        distances: list[Any] = []
+        durations: list[Any] = []
+        try:
+            matrix_response = await client.post(
+                ORS_MATRIX_URL,
+                json={
+                    "locations": [
+                        [longitude, latitude],
+                        *[
+                            [candidate["longitude"], candidate["latitude"]]
+                            for candidate in candidates
+                        ],
                     ],
-                ],
-                "sources": [0],
-                "destinations": list(range(1, len(candidates) + 1)),
-                "metrics": ["distance", "duration"],
-                "units": "km",
-            },
-            headers={"Authorization": api_key, "Content-Type": "application/json"},
-        )
-        matrix_response.raise_for_status()
-        matrix = matrix_response.json()
-        distances = (matrix.get("distances") or [[]])[0]
-        durations = (matrix.get("durations") or [[]])[0]
+                    "sources": [0],
+                    "destinations": list(range(1, len(candidates) + 1)),
+                    "metrics": ["distance", "duration"],
+                    "units": "km",
+                },
+                headers={"Authorization": api_key, "Content-Type": "application/json"},
+            )
+            matrix_response.raise_for_status()
+            matrix = matrix_response.json()
+            distances = (matrix.get("distances") or [[]])[0]
+            durations = (matrix.get("durations") or [[]])[0]
+        except (httpx.HTTPError, ValueError, TypeError):
+            # Exact place names remain useful even when road routing is
+            # temporarily unavailable. Use clearly-marked approximate distance.
+            pass
         for index, candidate in enumerate(candidates):
+            has_road_distance = (
+                index < len(distances) and distances[index] is not None
+            )
             candidate["distance_km"] = (
                 float(distances[index])
-                if index < len(distances) and distances[index] is not None
+                if has_road_distance
                 else candidate["straight_distance_km"]
+            )
+            candidate["distance_source"] = (
+                "openrouteservice_road" if has_road_distance else "approximate"
             )
             candidate["duration_minutes"] = (
                 round(float(durations[index]) / 60)
@@ -507,7 +538,8 @@ async def nearby_transport(
             continue
         nearest = min(matching, key=lambda item: item["distance_km"])
         distance = round(nearest["distance_km"], 1)
-        result[field_name] = f"{nearest['name']} — {distance:g} km"
+        approx = "~" if nearest.get("distance_source") == "approximate" else ""
+        result[field_name] = f"{nearest['name']} — {approx}{distance:g} km"
         result[f"{field_name}_details"] = nearest
     return result
 
