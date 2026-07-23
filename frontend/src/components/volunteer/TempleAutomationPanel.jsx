@@ -35,7 +35,7 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
     return Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null;
   }, [form.latitude, form.longitude]);
 
-  async function getNearbyTransportFields(latitude, longitude) {
+  async function getNearbyTransportFields(latitude, longitude, location = form) {
     const emptyFields = {
       nearest_railway: '',
       nearest_airport: '',
@@ -45,7 +45,11 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
       return emptyFields;
     }
     try {
-      const { data } = await volunteerApi.findNearbyTransport(latitude, longitude);
+      const { data } = await volunteerApi.findNearbyTransport(latitude, longitude, {
+        city: location.city,
+        district: location.district,
+        state: location.state,
+      });
       return {
         nearest_railway: data.nearest_railway || '',
         nearest_airport: data.nearest_airport || '',
@@ -61,10 +65,12 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
     setBusy('location');
     setMessage('Detecting address and nearby transport...');
     try {
-      const [{ data }, transportFields] = await Promise.all([
-        volunteerApi.reverseGeocode(latitude, longitude),
-        getNearbyTransportFields(latitude, longitude),
-      ]);
+      const { data } = await volunteerApi.reverseGeocode(latitude, longitude);
+      const transportFields = await getNearbyTransportFields(
+        latitude,
+        longitude,
+        data,
+      );
       onApply({
         latitude: String(latitude.toFixed(7)),
         longitude: String(longitude.toFixed(7)),
@@ -134,6 +140,7 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
       const transportFields = await getNearbyTransportFields(
         Number(data.latitude),
         Number(data.longitude),
+        data,
       );
       onApply({
         name: data.name || form.name,
