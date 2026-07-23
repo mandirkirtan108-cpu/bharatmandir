@@ -47,7 +47,7 @@ export default function SacredBookCategoryPage() {
         <Navbar />
         <div style={{ maxWidth: 700, margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)' }}>{t('book_category.not_found')}</h2>
-          <button onClick={() => navigate('/sacred-books')} style={{
+          <button onClick={() => navigate('/library')} style={{
             marginTop: 16, padding: '10px 22px', borderRadius: 99, border: 'none',
             background: '#8b3a15', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer',
           }}>← {t('book_category.back_library')}</button>
@@ -75,7 +75,7 @@ export default function SacredBookCategoryPage() {
             display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
           }}>
             <button
-              onClick={() => navigate('/sacred-books')}
+              onClick={() => navigate('/library')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.08)',
                 border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 16px', marginBottom: 14,
@@ -134,7 +134,7 @@ export default function SacredBookCategoryPage() {
                 return (
                   <div
                     key={book.id}
-                    onClick={() => navigate(`/sacred-books/${cat.key}/${book.slug}`)}
+                    onClick={() => navigate(`/reader/${book.slug}`)}
                     style={{
                       background: '#fffdf9', border: '1px solid #e8ddd0', borderRadius: 14,
                       overflow: 'hidden', cursor: 'pointer',

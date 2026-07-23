@@ -107,7 +107,7 @@ export default function SacredBooksPage() {
                 return (
                   <div
                     key={cat.key}
-                    onClick={() => navigate(`/sacred-books/${cat.key}`)}
+                    onClick={() => navigate(`/library/${cat.key}`)}
                     style={{
                       background: '#fffdf9', border: '1px solid #e8ddd0', borderRadius: 14,
                       overflow: 'hidden', cursor: 'pointer',

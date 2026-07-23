@@ -70,6 +70,14 @@ export const CATEGORIES = [
     description: "Patanjali's foundational treatise on the theory and practice of yoga.",
     sources: ['yoga_sutras'],
   },
+  {
+    key: 'community',
+    label: 'New Publications',
+    sanskrit: 'नव प्रकाशन',
+    icon: '📚',
+    description: 'Recently published books and translations from the BharatMandir library.',
+    sources: [],
+  },
 ];
 
 export function getCategoryByKey(key) {
@@ -78,7 +86,14 @@ export function getCategoryByKey(key) {
 
 export function getCategoryForBook(book) {
   if (!book) return null;
-  return CATEGORIES.find(c => c.sources.includes(book.api_source)) || null;
+  const explicitCategory = book.category || book.category_key;
+  if (explicitCategory) {
+    const category = CATEGORIES.find(c => c.key === explicitCategory);
+    if (category) return category;
+  }
+
+  return CATEGORIES.find(c => c.sources.includes(book.api_source))
+    || CATEGORIES.find(c => c.key === 'community');
 }
 
 /** Builds { categoryKey: [books...] } from a flat book list. */
@@ -88,10 +103,6 @@ export function groupBooksByCategory(books) {
   for (const book of books) {
     const cat = getCategoryForBook(book);
     if (cat) grouped[cat.key].push(book);
-    else {
-      grouped._uncategorized = grouped._uncategorized || [];
-      grouped._uncategorized.push(book);
-    }
   }
   return grouped;
 }

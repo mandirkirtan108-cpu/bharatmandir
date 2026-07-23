@@ -163,7 +163,7 @@ export default function SacredBookReaderPage() {
     const targetBook = books.find(b => b.slug === bm.slug);
     if (!targetBook) return;
     const targetCat = getCategoryForBook(targetBook);
-    navigate(`/sacred-books/${targetCat?.key || category}/${bm.slug}`, {
+    navigate(`/reader/${bm.slug}`, {
       state: { jumpTo: { chapter: bm.chapter_number, verse: bm.verse_number } },
     });
   };
@@ -196,7 +196,7 @@ export default function SacredBookReaderPage() {
         <Navbar />
         <div style={{ maxWidth: 700, margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)' }}>Book not found</h2>
-          <button onClick={() => navigate('/sacred-books')} style={{
+          <button onClick={() => navigate('/library')} style={{
             marginTop: 16, padding: '10px 22px', borderRadius: 99, border: 'none',
             background: THEME_COLOR, color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer',
           }}>← Back to Library</button>
@@ -228,12 +228,12 @@ export default function SacredBookReaderPage() {
             display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
           }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button onClick={() => navigate('/sacred-books')} style={{
+              <button onClick={() => navigate('/library')} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.08)',
                 border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 14px',
                 color: 'rgba(255,213,128,0.85)', fontSize: 11, cursor: 'pointer', backdropFilter: 'blur(8px)',
               }}>‹ All Categories</button>
-              <button onClick={() => navigate(`/sacred-books/${cat.key}`)} style={{
+              <button onClick={() => navigate(`/library/${cat.key}`)} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.08)',
                 border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 14px',
                 color: 'rgba(255,213,128,0.85)', fontSize: 11, cursor: 'pointer', backdropFilter: 'blur(8px)',
@@ -296,7 +296,7 @@ export default function SacredBookReaderPage() {
                   background: `linear-gradient(135deg, ${THEME_COLOR_DARK} 0%, ${THEME_COLOR} 100%)`,
                   borderBottom: '1px solid rgba(0,0,0,0.1)',
                 }}>
-                  <button onClick={() => navigate(`/sacred-books/${cat.key}`)} style={{
+                  <button onClick={() => navigate(`/library/${cat.key}`)} style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px',
                     background: 'rgba(0,0,0,0.15)', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.12)',
                     color: THEME_GOLD, fontSize: 12, fontWeight: 700, cursor: 'pointer', textAlign: 'left',

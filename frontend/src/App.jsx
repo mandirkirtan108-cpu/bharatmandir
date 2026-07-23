@@ -1,7 +1,9 @@
 import {
   BrowserRouter,
+  Navigate,
   Route,
   Routes,
+  useParams,
 } from 'react-router-dom';
 
 import { LangProvider } from './LangContext';
@@ -45,6 +47,16 @@ import VolunteerDashboardPage from './pages/volunteer/VolunteerDashboardPage';
 import AdminAddTemplePage from './pages/AdminAddTemplePage';
 import VolunteerSubmissionsPage from './pages/volunteer/VolunteerSubmissionsPage';
 import VolunteerProfilePage from './pages/volunteer/VolunteerProfilePage';
+
+function LegacyLibraryCategoryRedirect() {
+  const { category } = useParams();
+  return <Navigate to={`/library/${category}`} replace />;
+}
+
+function LegacyReaderRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={`/reader/${slug}`} replace />;
+}
 
 export default function App() {
   return (
@@ -115,25 +127,41 @@ export default function App() {
             element={<UserProfilePage />}
           />
 
-          {/* Sacred Books routes */}
+          {/* Library routes */}
 
           <Route
-            path="/sacred-books"
+            path="/library"
             element={<SacredBooksPage />}
           />
 
           <Route
-            path="/sacred-books/:category"
+            path="/library/:category"
             element={
               <SacredBookCategoryPage />
             }
           />
 
           <Route
-            path="/sacred-books/:category/:slug"
+            path="/reader/:slug"
             element={
               <SacredBookReaderPage />
             }
+          />
+
+          {/* Backwards-compatible redirects for previously shared URLs */}
+          <Route
+            path="/sacred-books"
+            element={<Navigate to="/library" replace />}
+          />
+
+          <Route
+            path="/sacred-books/:category"
+            element={<LegacyLibraryCategoryRedirect />}
+          />
+
+          <Route
+            path="/sacred-books/:category/:slug"
+            element={<LegacyReaderRedirect />}
           />
 
           {/* Public blog route */}
