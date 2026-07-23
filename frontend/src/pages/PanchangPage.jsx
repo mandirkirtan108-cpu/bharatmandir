@@ -18,25 +18,21 @@ import Footer from '../components/Footer';
 import PanchangCalendar from '../components/PanchangCalendar';
 import CityAutocomplete from '../components/CityAutocomplete';
 
+// FIX: this list now only contains the 6 occasions DivineAPI's real
+// Muhurat Finder suite actually has a date-finder endpoint for
+// (https://developers.divineapi.com/indian-api/muhurat-finder). The ids
+// below match the backend's MUHURAT_OCCASIONS keys exactly — they're also
+// DivineAPI's own URL slugs (POST .../v1/muhurat/{id}). Occasions that
+// used to be here with no real backing endpoint (Naamkaran, Yatra,
+// Vidyarambh, Vahan Puja, Mundan, Nivesh, Chikitsa, Naukri) have been
+// removed rather than silently falling back to fake data.
 const MUHURAT_TYPES = [
-  { id: 'vivah', label: 'Vivah', hindi: 'Vivah', desc: 'Marriage ceremony' },
-  { id: 'griha', label: 'Griha Pravesh', hindi: 'Griha Pravesh', desc: 'New home entry' },
-  { id: 'naamkaran', label: 'Naamkaran', hindi: 'Naamkaran', desc: 'Baby naming' },
-  { id: 'vyapar', label: 'Vyapar Aarambh', hindi: 'Vyapar Aarambh', desc: 'Business launch' },
-  { id: 'yatra', label: 'Yatra', hindi: 'Yatra', desc: 'Journey or travel' },
-  { id: 'vastu', label: 'Vastu / Bhoomi', hindi: 'Vastu / Bhoomi', desc: 'Construction' },
-  { id: 'vidyarambh', label: 'Vidyarambh', hindi: 'Vidyarambh', desc: 'Starting education' },
-  { id: 'vahan', label: 'Vahan Puja', hindi: 'Vahan Puja', desc: 'New vehicle' },
-  { id: 'mundan', label: 'Mundan', hindi: 'Mundan', desc: 'First haircut' },
-  { id: 'investment', label: 'Nivesh', hindi: 'Nivesh', desc: 'Investment or gold' },
-  { id: 'chikitsa', label: 'Chikitsa', hindi: 'Chikitsa', desc: 'Medical procedure' },
-  { id: 'naukri', label: 'Naukri / Job', hindi: 'Naukri', desc: 'Job interview' },
-];
-
-const RASHI_LIST = [
-  'Mesha (Aries)', 'Vrishabha (Taurus)', 'Mithuna (Gemini)', 'Karka (Cancer)',
-  'Simha (Leo)', 'Kanya (Virgo)', 'Tula (Libra)', 'Vrischika (Scorpio)',
-  'Dhanu (Sagittarius)', 'Makara (Capricorn)', 'Kumbha (Aquarius)', 'Meena (Pisces)',
+  { id: 'marriage', label: 'Vivah', hindi: 'Vivah', desc: 'Marriage ceremony' },
+  { id: 'house-entering', label: 'Griha Pravesh', hindi: 'Griha Pravesh', desc: 'New home entry' },
+  { id: 'vehicle-purchase', label: 'Vahan Kharid', hindi: 'Vahan Kharid', desc: 'New vehicle purchase' },
+  { id: 'property-purchase', label: 'Sampatti Kharid', hindi: 'Sampatti Kharid', desc: 'Buying property or land' },
+  { id: 'business-start', label: 'Vyapar Aarambh', hindi: 'Vyapar Aarambh', desc: 'Business launch' },
+  { id: 'foundation-laying', label: 'Bhoomi Pujan', hindi: 'Bhoomi Pujan', desc: 'Foundation / construction start' },
 ];
 
 const TODAY = new Date().toISOString().split('T')[0];
@@ -186,6 +182,25 @@ function formatTimeRangeClean(value) {
     return `${formatTimeOnly(parts[0])} - ${formatTimeOnly(parts[1])}`;
   }
   return formatTimeOnly(value);
+}
+
+// Formats a single {muhurat_start, muhurat_end} window (or an equivalent
+// {muhurat_start, muhurat_end} pair reconstructed from a "start - end"
+// string) from DivineAPI's real Muhurat Finder response into a clean
+// "4:23 AM - 5:05 AM" range, date-prefix stripped.
+function formatMuhuratWindow(window) {
+  if (!window) return '';
+  return `${formatTimeOnly(window.muhurat_start)} - ${formatTimeOnly(window.muhurat_end)}`;
+}
+
+// Turns a DivineAPI muhurat window's duration_minutes into "Xh Ym".
+function formatDuration(totalMinutes) {
+  const minutes = Number(totalMinutes) || 0;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (hours && remainder) return `${hours}h ${remainder}m`;
+  if (hours) return `${hours}h`;
+  return `${remainder}m`;
 }
 
 function firstTimePart(value) {
@@ -932,8 +947,6 @@ export default function PanchangPage() {
   const { t } = useTranslation();
   const [selected, setSelected] = useState(null);
   const [date, setDate] = useState(TODAY);
-  const [rashi, setRashi] = useState('');
-  const [name, setName] = useState('');
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
   const [dailyLoading, setDailyLoading] = useState(false);
@@ -945,9 +958,9 @@ export default function PanchangPage() {
   // ── Location auto-fill (same navigator.geolocation logic as the
   // Temple Search page's "Search Nearby" feature). Coordinates are
   // captured directly and, where the backend supports it (the /daily
-  // Panchang endpoint accepts latitude/longitude), sent straight through
-  // — the city text is only used for display and for the Muhurat
-  // endpoint, which is city-text only.
+  // Panchang endpoint and the /muhurat endpoint both accept
+  // latitude/longitude), sent straight through — the city text is only
+  // used for display.
   const [locLoading, setLocLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [usingLocation, setUsingLocation] = useState(false);
@@ -1056,6 +1069,9 @@ export default function PanchangPage() {
     }
   };
 
+  // FIX: now calls the real DivineAPI-backed /api/panchang/muhurat
+  // endpoint. Body is just {muhurat_type, date, city/coordinates} — no
+  // more name/rashi, since the real API doesn't personalize by them.
   const findMuhurat = async () => {
     if (!selected) {
       setMuhuratError('Please select an occasion first.');
@@ -1071,12 +1087,9 @@ export default function PanchangPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           muhurat_type: selected,
-          muhurat_label: selectedType?.label || selected,
-          muhurat_hindi: selectedType?.hindi || '',
           date,
-          name: name || '',
-          rashi: rashi || '',
           city: city || 'India',
+          ...(usingLocation && userCoords ? { latitude: userCoords.lat, longitude: userCoords.lng } : {}),
         }),
       });
       const data = await res.json();
@@ -1304,7 +1317,7 @@ export default function PanchangPage() {
               Muhurat Finder
             </h2>
             <p style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-light)', marginBottom: 24 }}>
-              Find the most auspicious time for your important occasion.
+              Find the most auspicious time for your important occasion, powered by DivineAPI's Muhurat Finder.
             </p>
 
             <div style={{ marginBottom: 24 }}>
@@ -1341,21 +1354,10 @@ export default function PanchangPage() {
                 }
               }}
             >
-              <div className="muhurat-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}>
+              <div className="muhurat-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 22 }}>
                 <div>
                   <label style={labelStyle}>Date</label>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, background: 'var(--cream)' }} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Your Name (optional)</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rahul Sharma" style={inputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Rashi (Moon Sign)</label>
-                  <select value={rashi} onChange={(e) => setRashi(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-                    <option value="">Select your Rashi...</option>
-                    {RASHI_LIST.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
                 </div>
                 <div>
                   <label style={labelStyle}>City</label>
@@ -1436,7 +1438,6 @@ export default function PanchangPage() {
         }
         @media (max-width: 720px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(3,1fr) !important; }
-          .muhurat-form-grid { grid-template-columns: 1fr 1fr !important; }
         }
         @media (max-width: 480px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(2,1fr) !important; }
@@ -1449,10 +1450,21 @@ export default function PanchangPage() {
   );
 }
 
+// FIX: fully rebuilt for the real DivineAPI Muhurat Finder response shape
+// (see backend's get_muhurat()). The old version rendered an AI-generated
+// {pandit_message, rituals_recommended, mantras, tithi_today, ...} object
+// that no longer exists — this renders the real fields instead: the
+// verdict DivineAPI's data implies, the actual muhurat windows (with
+// nakshatra/tithi) on the requested date, DivineAPI's own month_notes
+// (e.g. "Guru Tara Asta" combustion windows), and other auspicious dates
+// in the same month as alternatives.
 function MuhuratResult({ result, selectedType }) {
-  const verdict = result.verdict || 'average';
-  const color = VERDICT_COLOR[verdict] || '#d97706';
-  const bg = VERDICT_BG[verdict] || '#fffbeb';
+  const verdict = result.verdict || 'avoid';
+  const color = VERDICT_COLOR[verdict] || VERDICT_COLOR.avoid;
+  const bg = VERDICT_BG[verdict] || VERDICT_BG.avoid;
+  const windows = result.muhurats || [];
+  const monthNotes = result.month_notes || [];
+  const alternatives = result.alternative_dates || [];
 
   return (
     <div style={{ animation: 'fadeDown .6s ease both' }}>
@@ -1464,14 +1476,16 @@ function MuhuratResult({ result, selectedType }) {
               {verdict}
             </span>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--brown)', fontWeight: 800 }}>
-              {selectedType?.label || 'Selected'} Muhurat
+              {result.muhurat_label || selectedType?.label || 'Selected'} Muhurat
             </span>
           </div>
-          <p style={{ fontFamily: UI_FONT, fontSize: 15, color, marginBottom: 10, fontWeight: 700 }}>
+          <p style={{ fontFamily: UI_FONT, fontSize: 15, color, marginBottom: 6, fontWeight: 700 }}>
             {result.verdict_reason}
           </p>
-          <p style={{ fontFamily: 'var(--font-body)', fontSize: 16, color: 'var(--text-mid)', lineHeight: 1.75, fontStyle: 'italic' }}>
-            "{result.pandit_message}"
+          <p style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-light)', fontWeight: 700 }}>
+            {[result.weekday, result.date, result.location?.name, result.sunrise ? `Sunrise ${formatTimeOnly(result.sunrise)}` : null]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
         </div>
       </div>
@@ -1479,95 +1493,84 @@ function MuhuratResult({ result, selectedType }) {
       <div className="muhurat-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}>
         <div>
           <Card style={{ borderColor: 'rgba(34,197,94,0.3)' }}>
-            <SectionTitle icon={<Clock size={14} />}>Shubh Muhurat Timings</SectionTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {(result.auspicious_timings || []).map((timing, i) => (
-                <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #86efac', overflow: 'hidden', background: '#f0fdf4' }}>
-                  <div style={{ display: 'flex', borderBottom: '1px solid #86efac' }}>
-                    <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid #86efac' }}>
-                      <p style={{ fontFamily: UI_FONT, fontSize: 15, fontWeight: 800, color: '#15803d', whiteSpace: 'nowrap', marginBottom: 2 }}>{formatTimeRangeClean(timing.time)}</p>
-                      <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a' }}>Shubh Timing</p>
+            <SectionTitle icon={<Clock size={14} />}>Muhurat Windows on This Date</SectionTitle>
+            {windows.length ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {windows.map((w, i) => (
+                  <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #86efac', overflow: 'hidden', background: '#f0fdf4' }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #86efac' }}>
+                      <p style={{ fontFamily: UI_FONT, fontSize: 15, fontWeight: 800, color: '#15803d', marginBottom: 2 }}>{formatMuhuratWindow(w)}</p>
+                      <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a' }}>
+                        {formatDuration(w.duration_minutes)}
+                        {w.continues_from_previous_day === 'true' ? ' · continues from previous day' : ''}
+                        {w.continues_next_day === 'true' ? ' · continues into next day' : ''}
+                      </p>
                     </div>
-                    <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#dcfce7' }}>
-                      <p style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, color: '#15803d', textAlign: 'center' }}>{timing.quality}</p>
-                    </div>
-                  </div>
-                  <div style={{ padding: '10px 16px' }}>
-                    <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#16a34a', lineHeight: 1.5 }}>{timing.reason}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {!!result.timings_to_avoid?.length && (
-            <Card style={{ borderColor: 'rgba(220,38,38,0.25)' }}>
-              <SectionTitle icon={<AlertCircle size={14} />}>Timings to Avoid</SectionTitle>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {result.timings_to_avoid.map((timing, i) => (
-                  <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #fca5a5', overflow: 'hidden', background: '#fef2f2' }}>
-                    <div style={{ display: 'flex' }}>
-                      <div style={{ padding: '10px 16px', borderRight: '1px solid #fca5a5' }}>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 800, color: '#b91c1c', whiteSpace: 'nowrap', marginBottom: 2 }}>{formatTimeRangeClean(timing.time)}</p>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#dc2626' }}>Avoid</p>
-                      </div>
-                      <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center' }}>
-                        <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#dc2626', lineHeight: 1.4 }}>{timing.reason}</p>
-                      </div>
+                    <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {!!(w.nakshatras || []).length && (
+                        <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#16a34a' }}>
+                          <strong>Nakshatra:</strong> {w.nakshatras.join(', ')}
+                        </p>
+                      )}
+                      {!!(w.tithis || []).length && (
+                        <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#16a34a' }}>
+                          <strong>Tithi:</strong> {w.tithis.join(', ')}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
-            </Card>
-          )}
+            ) : (
+              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-light)', fontStyle: 'italic' }}>
+                No auspicious Muhurat window was found for this date. Check the alternative dates on the right.
+              </p>
+            )}
+          </Card>
 
-          {!!result.rituals_recommended?.length && (
+          {!!monthNotes.length && (
             <Card>
-              <SectionTitle icon={<Star size={14} />}>Recommended Rituals</SectionTitle>
-              {result.rituals_recommended.map((ritual, i) => (
-                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
-                  <CheckCircle size={16} color="var(--saffron)" style={{ marginTop: 3, flexShrink: 0 }} />
-                  <span style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.6 }}>{ritual}</span>
-                </div>
-              ))}
+              <SectionTitle icon={<AlertCircle size={14} />}>Notes for This Month</SectionTitle>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {monthNotes.map((note, i) => (
+                  <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px' }}>
+                    <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#92400e', fontWeight: 700, marginBottom: 2 }}>{note.reason}</p>
+                    <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#b45309' }}>{note.from} → {note.to}</p>
+                  </div>
+                ))}
+              </div>
             </Card>
           )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--cream-dark)', padding: 20, boxShadow: '0 2px 12px var(--shadow)' }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>Planetary Check</h3>
-            {[
-              { label: 'Tithi', data: result.tithi_today },
-              { label: 'Nakshatra', data: result.nakshatra_today },
-            ].map((item) => item.data && (
-              <div key={item.label} style={{ background: item.data.is_auspicious_for_this_muhurat ? '#f0fdf4' : '#fef2f2', borderRadius: 10, padding: '12px 14px', marginBottom: 10, border: `1px solid ${item.data.is_auspicious_for_this_muhurat ? '#86efac' : '#fca5a5'}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
-                  <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, color: 'var(--text-light)', letterSpacing: '.06em', textTransform: 'uppercase' }}>{item.label}</span>
-                  <span style={{ fontFamily: UI_FONT, fontSize: 11, color: item.data.is_auspicious_for_this_muhurat ? '#16a34a' : '#dc2626' }}>
-                    {item.data.is_auspicious_for_this_muhurat ? 'Auspicious' : 'Caution'}
-                  </span>
-                </div>
-                <p style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 800 }}>{item.data.name}</p>
-                <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)', marginTop: 4, lineHeight: 1.5 }}>{item.data.reason}</p>
-              </div>
-            ))}
-          </div>
-
-          {!!result.alternative_dates?.length && (
-            <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--cream-dark)', padding: 20, boxShadow: '0 2px 12px var(--shadow)' }}>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>Alternative Dates</h3>
-              {result.alternative_dates.map((d, i) => (
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>Other Auspicious Dates This Month</h3>
+            {alternatives.length ? alternatives.map((d, i) => {
+              const [startRaw, endRaw] = (d.time || '').split(' - ');
+              return (
                 <div key={i} style={{ padding: '10px 12px', borderRadius: 10, marginBottom: 8, background: 'var(--cream)', border: '1px solid var(--cream-dark)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
                     <span style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--brown)', fontWeight: 800 }}>{d.date}</span>
-                    <span style={{ fontFamily: UI_FONT, fontSize: 10, background: 'var(--saffron)', color: 'white', borderRadius: 50, padding: '2px 8px', fontWeight: 800 }}>{d.quality}</span>
+                    <span style={{ fontFamily: UI_FONT, fontSize: 10, background: 'var(--saffron)', color: 'white', borderRadius: 50, padding: '2px 8px', fontWeight: 800 }}>{d.weekday}</span>
                   </div>
-                  <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)' }}>{d.reason}</p>
+                  {startRaw && endRaw && (
+                    <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)' }}>
+                      {formatMuhuratWindow({ muhurat_start: startRaw, muhurat_end: endRaw })}
+                      {d.window_count > 1 ? ` (+${d.window_count - 1} more)` : ''}
+                    </p>
+                  )}
+                  {!!(d.nakshatras || []).length && (
+                    <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: 'var(--text-light)', marginTop: 2 }}>{d.nakshatras.join(', ')}</p>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            }) : (
+              <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: 'var(--text-light)', fontStyle: 'italic' }}>
+                No other auspicious dates found in this month.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>

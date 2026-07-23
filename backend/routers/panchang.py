@@ -2,7 +2,10 @@
 routers/panchang.py - Panchang and Muhurat API.
 
 Daily Panchang uses Divine API.
-Muhurat Finder is intentionally kept on the existing Claude flow for now.
+Muhurat Finder now uses DivineAPI's own Muhurat Finder suite
+(https://developers.divineapi.com/indian-api/muhurat-finder) instead of an
+AI-generated response — see MUHURAT_OCCASIONS below for the exact set of
+occasions DivineAPI actually supports date-finding for.
 City resolution AND city autocomplete both use OpenRouteService's Geocoding
 API (restricted to India) — no hardcoded city list. See geocode_city() and
 get_city_suggestions() below.
@@ -14,12 +17,10 @@ import calendar as calendar_module
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from functools import lru_cache
-import json
 import os
 import re
 from typing import Any, Optional
 
-import anthropic
 import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -60,6 +61,64 @@ DIVINE_BASES = {
     "sun_and_moon": "https://astroapi-2.divineapi.com/indian-api/v2/find-sun-and-moon",
     "samvat": "https://astroapi-2.divineapi.com/indian-api/v1/find-samvat",
     "chandramasa": "https://astroapi-3.divineapi.com/indian-api/v2/chandramasa",
+}
+
+# ---------------------------------------------------------------------------
+# Muhurat Finder — real DivineAPI integration
+# (https://developers.divineapi.com/indian-api/muhurat-finder)
+#
+# DivineAPI's Muhurat Finder suite exposes 9 endpoints total, but only 6 of
+# them are "pick an occasion, get auspicious dates for the month" finders
+# with an identical request/response shape:
+#   POST https://astroapi-3.divineapi.com/indian-api/v1/muhurat/{slug}
+#   body: {api_key, month, year, place, lat, lon, tzone, lan}
+#   → {success, data:{muhurat_type, month, year, month_notes[], dates[...]}}
+#
+# The other 3 (Do Ghati Muhurat, Hora, Jain Pachakkhan) are a different kind
+# of tool entirely — daily time-slicing systems, not "auspicious date for an
+# occasion" finders — so they intentionally aren't wired up as occasions
+# here. Only the 6 below are real, available occasion endpoints; the
+# frontend's occasion picker is limited to exactly this list.
+# ---------------------------------------------------------------------------
+MUHURAT_API_BASE = "https://astroapi-3.divineapi.com/indian-api/v1/muhurat"
+
+MUHURAT_OCCASIONS: dict[str, dict[str, str]] = {
+    "marriage": {
+        "label": "Vivah",
+        "hindi": "Vivah",
+        "desc": "Marriage ceremony",
+        "endpoint": f"{MUHURAT_API_BASE}/marriage",
+    },
+    "house-entering": {
+        "label": "Griha Pravesh",
+        "hindi": "Griha Pravesh",
+        "desc": "New home entry",
+        "endpoint": f"{MUHURAT_API_BASE}/house-entering",
+    },
+    "vehicle-purchase": {
+        "label": "Vahan Kharid",
+        "hindi": "Vahan Kharid",
+        "desc": "New vehicle purchase",
+        "endpoint": f"{MUHURAT_API_BASE}/vehicle-purchase",
+    },
+    "property-purchase": {
+        "label": "Sampatti Kharid",
+        "hindi": "Sampatti Kharid",
+        "desc": "Buying property or land",
+        "endpoint": f"{MUHURAT_API_BASE}/property-purchase",
+    },
+    "business-start": {
+        "label": "Vyapar Aarambh",
+        "hindi": "Vyapar Aarambh",
+        "desc": "Business launch",
+        "endpoint": f"{MUHURAT_API_BASE}/business-start",
+    },
+    "foundation-laying": {
+        "label": "Bhoomi Pujan",
+        "hindi": "Bhoomi Pujan",
+        "desc": "Foundation / construction start",
+        "endpoint": f"{MUHURAT_API_BASE}/foundation-laying",
+    },
 }
 
 # FIX: the old hardcoded CITY_COORDINATES table (~22 cities) is gone. Any
@@ -148,14 +207,26 @@ class CalendarMonthSeedRequest(CalendarYearSeedRequest):
     month: int
 
 
-class MuhuratRequest(BaseModel):
+class MuhuratFinderRequest(BaseModel):
+    """Request for the real DivineAPI Muhurat Finder.
+
+    `muhurat_type` must be one of MUHURAT_OCCASIONS' keys (marriage,
+    house-entering, vehicle-purchase, property-purchase, business-start,
+    foundation-laying) — those are the only occasions DivineAPI actually
+    has a date-finder endpoint for. `date` is the specific date the user
+    wants checked; DivineAPI itself returns a whole month, so the backend
+    fetches that month and picks out this exact date (plus other auspicious
+    dates in the same month as alternatives).
+    """
+
     muhurat_type: str
-    muhurat_label: str
-    muhurat_hindi: str
     date: str
-    name: Optional[str] = ""
-    rashi: Optional[str] = ""
     city: Optional[str] = "India"
+    coordinates: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    timezone: Optional[float] = None
+    language: Optional[str] = "en"
 
 
 def pick(data: Any, *keys: str, default: Any = None) -> Any:
@@ -438,8 +509,11 @@ def geocode_city(city: str) -> tuple[float, float, str]:
     return float(lat), float(lon), formatted_place
 
 
-def normalize_city(req: DailyPanchangRequest) -> tuple[float, float, float, str]:
-    """Resolves the request's city/coordinates into (lat, lon, tz, place).
+def normalize_city(req: Any) -> tuple[float, float, float, str]:
+    """Resolves a request's city/coordinates into (lat, lon, tz, place).
+
+    Works for both DailyPanchangRequest and MuhuratFinderRequest since both
+    share the same coordinates/latitude/longitude/timezone/city fields.
 
     Explicit coordinates or lat+lon (e.g. from a map/autocomplete picker
     the frontend already trusts) are accepted directly — those are already
@@ -1479,69 +1553,147 @@ def get_daily_panchang(req: DailyPanchangRequest):
     )
 
 
-def get_client() -> anthropic.Anthropic:
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        raise HTTPException(500, "ANTHROPIC_API_KEY not configured on server")
-    return anthropic.Anthropic(api_key=key)
+# ---------------------------------------------------------------------------
+# Muhurat Finder endpoints
+# ---------------------------------------------------------------------------
 
 
-def ask_claude(prompt: str, max_tokens: int = 2500) -> dict[str, Any]:
-    client = get_client()
-    response = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = response.content[0].text.replace("```json", "").replace("```", "").strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(500, f"Failed to parse AI response: {exc}\nRaw: {raw[:200]}") from exc
+@router.get("/muhurat/occasions")
+def get_muhurat_occasions():
+    """Tells the frontend exactly which occasions DivineAPI actually
+    supports a Muhurat date-finder for, so the occasion picker never shows
+    an option with no real endpoint behind it.
+    """
+    return {
+        "occasions": [
+            {"id": occasion_id, "label": meta["label"], "hindi": meta["hindi"], "desc": meta["desc"]}
+            for occasion_id, meta in MUHURAT_OCCASIONS.items()
+        ]
+    }
+
+
+def muhurat_endpoint_for(muhurat_type: str) -> str:
+    occasion = MUHURAT_OCCASIONS.get(muhurat_type)
+    if not occasion:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"'{muhurat_type}' is not a supported Muhurat occasion. "
+                f"Supported: {', '.join(MUHURAT_OCCASIONS)}"
+            ),
+        )
+    return occasion["endpoint"]
+
+
+def is_muhurat_flag(value: Any) -> bool:
+    return str(value).strip().lower() == "true"
+
+
+def build_alternative_dates(
+    dates: list[dict[str, Any]],
+    skip_date: str,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    """Picks other auspicious dates in the same DivineAPI month response,
+    so the person has options if their originally-picked date isn't
+    auspicious (or to see nearby better windows even if it is).
+    """
+    alternatives: list[dict[str, Any]] = []
+    for entry in dates:
+        if entry.get("date") == skip_date:
+            continue
+        if not is_muhurat_flag(entry.get("is_muhurat")):
+            continue
+        windows = entry.get("muhurats") or []
+        best = windows[0] if windows else {}
+        time_text = ""
+        if best.get("muhurat_start") and best.get("muhurat_end"):
+            time_text = f"{best['muhurat_start']} - {best['muhurat_end']}"
+        alternatives.append(
+            {
+                "date": entry.get("date"),
+                "weekday": entry.get("weekday"),
+                "window_count": len(windows),
+                "time": time_text,
+                "nakshatras": best.get("nakshatras") or [],
+                "tithis": best.get("tithis") or [],
+            }
+        )
+        if len(alternatives) >= limit:
+            break
+    return alternatives
 
 
 @router.post("/muhurat")
-def get_muhurat(req: MuhuratRequest):
+def get_muhurat(req: MuhuratFinderRequest):
+    """Real DivineAPI Muhurat Finder lookup for one of the 6 supported
+    occasions (see MUHURAT_OCCASIONS). DivineAPI returns the whole month;
+    this picks out the person's requested date plus a handful of other
+    auspicious dates in that month as alternatives.
+    """
+    endpoint = muhurat_endpoint_for(req.muhurat_type)
+
     try:
-        dt = datetime.strptime(req.date, "%Y-%m-%d")
-        full = dt.strftime("%d %B %Y").lstrip("0")
-        day = dt.strftime("%A")
-    except Exception:
-        full = req.date
-        day = ""
+        parsed_date = datetime.strptime(req.date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="date must be in YYYY-MM-DD format") from exc
 
-    prompt = f"""You are a highly learned Vedic pandit - expert in Muhurat Shastra and Jyotish. A devotee seeks your guidance.
+    lat, lon, tz, place = normalize_city(req)
 
-QUERY:
-- Muhurat for: {req.muhurat_label} ({req.muhurat_hindi})
-- Date: {full} ({day})
-- Person's name: {req.name or 'Not provided'}
-- Rashi (Moon sign): {req.rashi or 'Not provided'}
-- City: {req.city or 'India (general)'}
+    payload = {
+        "api_key": divine_api_key(),
+        "month": parsed_date.month,
+        "year": parsed_date.year,
+        "place": place,
+        "lat": lat,
+        "lon": lon,
+        "tzone": tz,
+        "lan": req.language or "en",
+    }
 
-Analyse the tithi, nakshatra, yoga, var and planetary positions. Give a warm, authoritative pandit-style response.
+    raw = divine_post(endpoint, payload)
+    if not raw.get("success"):
+        raise HTTPException(status_code=502, detail="DivineAPI did not return a successful Muhurat response")
 
-Return ONLY valid JSON, no markdown, start directly with {{:
-{{
-  "verdict": "excellent/good/average/avoid",
-  "verdict_reason": "One clear sentence why",
-  "pandit_message": "Warm, wise 3-4 sentence message to the devotee as a real pandit would speak",
-  "auspicious_timings": [
-    {{ "time": "07:15 AM - 09:00 AM", "quality": "Shreshtha (Best)", "reason": "" }}
-  ],
-  "timings_to_avoid": [
-    {{ "time": "", "reason": "" }}
-  ],
-  "tithi_today": {{ "name": "", "is_auspicious_for_this_muhurat": true, "reason": "" }},
-  "nakshatra_today": {{ "name": "", "is_auspicious_for_this_muhurat": true, "reason": "" }},
-  "rituals_recommended": ["ritual 1", "ritual 2", "ritual 3"],
-  "mantras": [
-    {{ "deity": "", "mantra": "", "chant_times": 108, "purpose": "" }}
-  ],
-  "special_notes": ["note 1", "note 2"],
-  "alternative_dates": [
-    {{ "date": "", "quality": "Excellent/Good", "reason": "" }}
-  ]
-}}"""
+    data = raw.get("data") or {}
+    dates = data.get("dates") or []
+    day_entry = next((entry for entry in dates if entry.get("date") == req.date), None)
 
-    return ask_claude(prompt, max_tokens=2500)
+    if day_entry is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No Muhurat data was returned for {req.date}. Please pick a date within the same month you queried.",
+        )
+
+    windows = day_entry.get("muhurats") or []
+    day_is_muhurat = is_muhurat_flag(day_entry.get("is_muhurat"))
+    total_minutes = sum(int(window.get("duration_minutes") or 0) for window in windows)
+
+    if day_is_muhurat and windows:
+        verdict = "excellent" if (len(windows) > 1 or total_minutes >= 480) else "good"
+        verdict_reason = (
+            f"{len(windows)} auspicious window{'s' if len(windows) != 1 else ''} found on this date, "
+            f"totalling about {total_minutes} minutes."
+        )
+    else:
+        verdict = "avoid"
+        verdict_reason = "No auspicious Muhurat window was found on this date as per DivineAPI's calculation."
+
+    occasion = MUHURAT_OCCASIONS[req.muhurat_type]
+
+    return {
+        "source": "divineapi",
+        "muhurat_type": req.muhurat_type,
+        "muhurat_label": occasion["label"],
+        "muhurat_hindi": occasion["hindi"],
+        "date": req.date,
+        "weekday": day_entry.get("weekday"),
+        "sunrise": day_entry.get("sunrise"),
+        "location": {"name": place, "latitude": lat, "longitude": lon, "timezone": tz},
+        "verdict": verdict,
+        "verdict_reason": verdict_reason,
+        "is_muhurat": day_is_muhurat,
+        "muhurats": windows,
+        "month_notes": data.get("month_notes") or [],
+        "alternative_dates": build_alternative_dates(dates, req.date),
+    }
