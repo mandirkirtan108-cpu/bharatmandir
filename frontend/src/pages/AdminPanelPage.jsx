@@ -18,6 +18,7 @@ import {
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import AdminApprovalWorkflow from '../components/admin/AdminApprovalWorkflow';
+import AdminLibraryManagement from '../components/admin/AdminLibraryManagement'; // ← add this line
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -1562,9 +1563,11 @@ export default function AdminPanelPage() {
             borderRadius: 50, padding: 4, width: 'fit-content',
           }}>
             {[
+              
               { id: 'temples', label: 'Temples' },
               { id: 'approvals', label: 'Verification Center' },
               { id: 'blogs', label: 'Blog Posts' },
+              { id: 'library', label: 'Sacred Books' },
             ].map(v => (
               <button
                 key={v.id}
@@ -1772,6 +1775,7 @@ export default function AdminPanelPage() {
           {/* ── BLOGS VIEW ── */}
           {mainView === 'blogs' && <BlogManagement />}
           {mainView === 'approvals' && <AdminApprovalWorkflow />}
+          {mainView === 'library' && <AdminLibraryManagement />} 
 
         </div>
       </div>
