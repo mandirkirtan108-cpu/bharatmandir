@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
@@ -18,22 +18,23 @@ import Footer from '../components/Footer';
 import PanchangCalendar from '../components/PanchangCalendar';
 import CityAutocomplete from '../components/CityAutocomplete';
 
-// FIX: this list now only contains the 6 occasions DivineAPI's real
-// Muhurat Finder suite actually has a date-finder endpoint for
-// (https://developers.divineapi.com/indian-api/muhurat-finder). The ids
-// below match the backend's MUHURAT_OCCASIONS keys exactly — they're also
-// DivineAPI's own URL slugs (POST .../v1/muhurat/{id}). Occasions that
-// used to be here with no real backing endpoint (Naamkaran, Yatra,
-// Vidyarambh, Vahan Puja, Mundan, Nivesh, Chikitsa, Naukri) have been
-// removed rather than silently falling back to fake data.
-const MUHURAT_TYPES = [
-  { id: 'marriage', label: 'Vivah', hindi: 'Vivah', desc: 'Marriage ceremony' },
-  { id: 'house-entering', label: 'Griha Pravesh', hindi: 'Griha Pravesh', desc: 'New home entry' },
-  { id: 'vehicle-purchase', label: 'Vahan Kharid', hindi: 'Vahan Kharid', desc: 'New vehicle purchase' },
-  { id: 'property-purchase', label: 'Sampatti Kharid', hindi: 'Sampatti Kharid', desc: 'Buying property or land' },
-  { id: 'business-start', label: 'Vyapar Aarambh', hindi: 'Vyapar Aarambh', desc: 'Business launch' },
-  { id: 'foundation-laying', label: 'Bhoomi Pujan', hindi: 'Bhoomi Pujan', desc: 'Foundation / construction start' },
-];
+// FIX: the hardcoded MUHURAT_TYPES list (6 occasions duplicated from the
+// backend's MUHURAT_OCCASIONS dict) has been removed. It's now fetched at
+// runtime from GET /api/panchang/muhurat/occasions — the same source of
+// truth the backend itself validates `muhurat_type` against — so the
+// picker can never drift out of sync with what /api/panchang/muhurat
+// actually supports. See the `muhuratTypes` state + effect inside
+// PanchangPage() below.
+//
+// Note on what these occasions actually need as input: per DivineAPI's own
+// docs (developers.divineapi.com/indian-api/muhurat-finder/marriage and
+// .../vehicle-purchase, etc.), every one of the 6 supported occasion
+// endpoints takes an IDENTICAL request shape — api_key, month, year,
+// place, lat, lon, tzone, lan. There is no groom/bride, vehicle-type,
+// business-type, or any other person/occasion-specific field in the real
+// API — it's a generic "auspicious date-for-the-month" finder, not a
+// personalized matching tool. So date + city (already collected below) is
+// all that's ever required.
 
 const TODAY = new Date().toISOString().split('T')[0];
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -955,6 +956,36 @@ export default function PanchangPage() {
   const [dailyError, setDailyError] = useState(null);
   const [muhuratError, setMuhuratError] = useState(null);
 
+  // FIX: occasion list is now fetched from the backend's own
+  // GET /api/panchang/muhurat/occasions instead of being hardcoded here.
+  // That endpoint returns exactly MUHURAT_OCCASIONS' keys — the same set
+  // the backend validates `muhurat_type` against in POST /muhurat — so
+  // this picker can never show (or omit) an occasion the API doesn't
+  // actually support. Each item has {id, label, hindi, desc}, same shape
+  // the old hardcoded MUHURAT_TYPES array used.
+  const [muhuratTypes, setMuhuratTypes] = useState([]);
+  const [muhuratTypesLoading, setMuhuratTypesLoading] = useState(true);
+  const [muhuratTypesError, setMuhuratTypesError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setMuhuratTypesLoading(true);
+      setMuhuratTypesError(null);
+      try {
+        const res = await fetch(`${API_BASE}/api/panchang/muhurat/occasions`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to load Muhurat occasions');
+        if (!cancelled) setMuhuratTypes(data.occasions || []);
+      } catch (e) {
+        if (!cancelled) setMuhuratTypesError(e.message || 'Could not load Muhurat occasions');
+      } finally {
+        if (!cancelled) setMuhuratTypesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // ── Location auto-fill (same navigator.geolocation logic as the
   // Temple Search page's "Search Nearby" feature). Coordinates are
   // captured directly and, where the backend supports it (the /daily
@@ -966,7 +997,7 @@ export default function PanchangPage() {
   const [usingLocation, setUsingLocation] = useState(false);
   const [userCoords, setUserCoords] = useState(null);
 
-  const selectedType = MUHURAT_TYPES.find((m) => m.id === selected);
+  const selectedType = muhuratTypes.find((m) => m.id === selected);
 
   // Reverse-geocodes lat/lng into a human-readable "City, State" label
   // using OpenStreetMap's free Nominatim API (no key required), so the
@@ -1069,9 +1100,13 @@ export default function PanchangPage() {
     }
   };
 
-  // FIX: now calls the real DivineAPI-backed /api/panchang/muhurat
-  // endpoint. Body is just {muhurat_type, date, city/coordinates} — no
-  // more name/rashi, since the real API doesn't personalize by them.
+  // Calls the real DivineAPI-backed /api/panchang/muhurat endpoint. Body
+  // is just {muhurat_type, date, city/coordinates} — DivineAPI's Muhurat
+  // Finder suite is a generic "auspicious date-for-the-month" lookup, not
+  // a personalized matching tool, so there's no groom/bride, vehicle type,
+  // or other person/occasion-specific data to collect here — confirmed
+  // directly against DivineAPI's docs for every one of the 6 supported
+  // occasion endpoints (they all share this exact same request shape).
   const findMuhurat = async () => {
     if (!selected) {
       setMuhuratError('Please select an occasion first.');
@@ -1322,8 +1357,18 @@ export default function PanchangPage() {
 
             <div style={{ marginBottom: 24 }}>
               <label style={labelStyle}>Select Occasion</label>
+              {muhuratTypesError && (
+                <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#c0392b', margin: '0 0 10px' }}>
+                  ⚠️ {muhuratTypesError}
+                </p>
+              )}
               <div className="muhurat-occasion-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
-                {MUHURAT_TYPES.map((m) => (
+                {muhuratTypesLoading && !muhuratTypesError && (
+                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-light)', gridColumn: '1 / -1', margin: 0 }}>
+                    Loading occasions…
+                  </p>
+                )}
+                {muhuratTypes.map((m) => (
                   <button key={m.id} onClick={() => setSelected(m.id)} style={{
                     padding: '14px 8px',
                     borderRadius: 'var(--radius)',
@@ -1391,7 +1436,7 @@ export default function PanchangPage() {
                 </div>
               </div>
 
-              <button className="btn-primary" onClick={findMuhurat} disabled={loading} style={{ width: '100%', justifyContent: 'center', padding: '15px', fontSize: 15, borderRadius: 50, gap: 10 }}>
+              <button className="btn-primary" onClick={findMuhurat} disabled={loading || !muhuratTypes.length} style={{ width: '100%', justifyContent: 'center', padding: '15px', fontSize: 15, borderRadius: 50, gap: 10 }}>
                 {loading ? (
                   <>
                     <Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Muhurat...
