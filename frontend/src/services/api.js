@@ -180,3 +180,19 @@ export const libraryAPI = {
   updatePreferences: (data) => userApi.patch('/api/library/preferences', data),
   addBookmark: (data) => userApi.post('/api/library/bookmarks', data),
 };
+
+export const libraryAdminAPI = {
+  listBooks: () => adminApi.get('/api/admin/library/books'),
+  createBook: (formData) =>
+    adminApi.post('/api/admin/library/books', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  updateBook: (bookId, data) =>
+    adminApi.patch(`/api/admin/library/books/${bookId}`, data),
+  deleteBook: (bookId) =>
+    adminApi.delete(`/api/admin/library/books/${bookId}`),
+  triggerTranslation: (bookId, languages) =>
+    adminApi.post(`/api/admin/library/books/${bookId}/translate`, { languages }),
+  getTranslationStatus: (bookId) =>
+    adminApi.get(`/api/admin/library/books/${bookId}/translation-status`),
+};
