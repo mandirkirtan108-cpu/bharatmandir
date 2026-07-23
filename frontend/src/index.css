@@ -1491,47 +1491,120 @@ p  { line-height: 1.75; color: var(--text-mid); }
     transform: rotate(360deg);
   }
 }
-/* Paste into frontend/src/index.css, or import as a separate stylesheet
-   from LibraryPage.jsx / ReaderPage.jsx — whichever matches how your
-   other page-specific styles are organized. */
+.library-page {
+  min-height: 70vh;
+  padding: 0 0 72px;
+  background: #fffaf2;
+  color: #3f2416;
+}
 
-/* ── 3D Book Card ─────────────────────────────────────────────────── */
+.library-hero {
+  padding: 64px 24px 52px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245, 167, 67, 0.25), transparent 58%),
+    linear-gradient(150deg, #541e0b, #8c3814);
+  color: white;
+}
+
+.library-hero h1 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 3.7rem);
+}
+
+.library-hero p {
+  margin: 0 auto 26px;
+  color: #ffe3ba;
+  font-size: 1.05rem;
+}
+
+.library-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(620px, 100%);
+  margin: auto;
+  padding: 0 18px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: white;
+  color: #78421f;
+  box-shadow: 0 16px 40px rgba(35, 10, 0, 0.25);
+}
+
+.library-search input {
+  width: 100%;
+  padding: 14px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #3f2416;
+  font: inherit;
+}
+
+.library-row {
+  max-width: 1240px;
+  margin: 42px auto 0;
+  padding: 0 24px;
+}
+
+.library-row h2 {
+  margin: 0 0 18px;
+  font-family: var(--font-display);
+  color: #64260e;
+}
+
+.library-row__scroll {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 22px;
+}
+
+.library-loading,
+.library-empty {
+  max-width: 760px;
+  margin: 54px auto;
+  padding: 24px;
+  text-align: center;
+  color: #815c45;
+}
 
 .book-card-3d {
-  display: block;
-  width: 160px;
-  flex: 0 0 auto;
-  text-decoration: none;
+  display: flex;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: inherit;
-  perspective: 800px;
+  text-align: left;
+  cursor: pointer;
+  perspective: 900px;
+}
+
+.book-card-3d:disabled {
+  cursor: default;
+  opacity: 0.65;
 }
 
 .book-card-3d__cover {
   position: relative;
+  display: grid;
+  place-items: center;
   width: 100%;
   aspect-ratio: 2 / 3;
-  border-radius: 4px 8px 8px 4px;
   overflow: hidden;
-  box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.25);
-  transform-style: preserve-3d;
-  transform: rotateY(0deg);
-  transition: transform 0.35s ease, box-shadow 0.35s ease;
-}
-
-.book-card-3d__spine {
-  position: absolute;
-  left: 0;
-  top: 2%;
-  width: 6px;
-  height: 96%;
-  border-radius: 2px 0 0 2px;
-  opacity: 0.9;
-  z-index: 1;
+  border-radius: 7px 14px 14px 7px;
+  background: linear-gradient(145deg, #8d3413, #4b1708);
+  color: #ffd99d;
+  box-shadow: -7px 8px 0 #d6b28d, 0 18px 30px rgba(66, 31, 12, 0.22);
+  transform: rotateY(-4deg);
+  transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
 .book-card-3d:hover .book-card-3d__cover {
-  transform: rotateY(-18deg) translateX(-2px);
-  box-shadow: 10px 12px 24px rgba(0, 0, 0, 0.35);
+  transform: translateY(-5px) rotateY(0);
+  box-shadow: -4px 6px 0 #d6b28d, 0 24px 36px rgba(66, 31, 12, 0.28);
 }
 
 .book-card-3d__cover img {
@@ -1540,221 +1613,197 @@ p  { line-height: 1.75; color: var(--text-mid); }
   object-fit: cover;
 }
 
-.book-card-3d__placeholder {
-  width: 100%;
-  height: 100%;
+.book-card-3d__details {
+  display: none;
+}
+
+.book-card-3d {
+  flex-direction: column;
+  gap: 15px;
+}
+
+.book-card-3d__details {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px;
-  text-align: center;
-  background: linear-gradient(160deg, #8b5a2b, #5c3a1e);
-  color: #f5e9d8;
-  font-weight: 600;
-  font-size: 0.85rem;
+  gap: 5px;
+  width: 100%;
+}
+
+.book-card-3d__details strong {
+  overflow: hidden;
+  color: #4e200e;
+  font-size: 1rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.book-card-3d__details small {
+  color: #85634f;
+}
+
+.book-card-3d__translation {
+  color: #a34b1e !important;
+  font-weight: 700;
 }
 
 .book-card-3d__progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 4px;
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.book-card-3d__progress-fill {
-  height: 100%;
-  background: #e8a33d;
-}
-
-.book-card-3d__label {
-  margin-top: 8px;
-}
-
-.book-card-3d__title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin: 0;
+  height: 5px;
+  margin-top: 5px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border-radius: 99px;
+  background: #ead9c7;
 }
 
-.book-card-3d__author {
-  font-size: 0.78rem;
-  opacity: 0.65;
-  margin: 2px 0 0;
+.book-card-3d__progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #d36a25;
 }
-
-/* ── Bookshelf rows ───────────────────────────────────────────────── */
-
-.library-hero {
-  padding: 48px 24px 24px;
-  text-align: center;
-}
-
-.library-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 420px;
-  margin: 20px auto 0;
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-}
-
-.library-search input {
-  border: none;
-  outline: none;
-  flex: 1;
-  font-size: 0.95rem;
-  background: transparent;
-}
-
-.library-row {
-  padding: 12px 24px 28px;
-}
-
-.library-row h2 {
-  font-size: 1.1rem;
-  margin-bottom: 14px;
-}
-
-.library-row__scroll {
-  display: flex;
-  gap: 18px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  scroll-snap-type: x proximity;
-}
-
-.library-row__scroll > * {
-  scroll-snap-align: start;
-}
-
-.library-empty,
-.library-loading {
-  opacity: 0.6;
-  padding: 12px 0;
-}
-
-/* ── Reader ───────────────────────────────────────────────────────── */
 
 .reader {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  transition: background 0.25s ease, color 0.25s ease;
+  padding: 84px 20px 38px;
+  transition: background 160ms ease, color 160ms ease;
 }
 
-.reader--light { background: #ffffff; color: #1a1a1a; }
-.reader--sepia { background: #f4ecd8; color: #3b2f21; }
-.reader--dark  { background: #14151a; color: #e8e6e1; }
+.reader--light { background: #fffdfa; color: #2e251f; }
+.reader--sepia { background: #f4ead8; color: #493827; }
+.reader--dark { background: #181716; color: #e9e1d6; }
 
 .reader__toolbar {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
   align-items: center;
   justify-content: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-  position: sticky;
-  top: 0;
-  backdrop-filter: blur(6px);
-  z-index: 5;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 28px;
+  padding: 9px;
+  border: 1px solid rgba(128, 87, 53, 0.2);
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  backdrop-filter: blur(14px);
 }
 
 .reader__toolbar-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(128, 87, 53, 0.2);
 }
 
-.reader__toolbar-group button {
-  background: none;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 6px;
-  padding: 6px 8px;
+.reader__toolbar button,
+.reader__toolbar select,
+.reader__nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid rgba(128, 87, 53, 0.25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #5f3119;
   cursor: pointer;
-  color: inherit;
 }
 
-.reader__toolbar-group button.active {
-  background: rgba(232, 163, 61, 0.25);
-  border-color: #e8a33d;
+.reader--dark .reader__toolbar button,
+.reader--dark .reader__toolbar select,
+.reader--dark .reader__nav button {
+  background: #2c2926;
+  color: #f2dfc8;
+}
+
+.reader__toolbar button.active {
+  border-color: #d2702e;
+  background: #d2702e;
+  color: white;
+}
+
+.reader__back {
+  margin-right: 2px;
 }
 
 .reader__page {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  padding: 40px 20px 80px;
+  width: min(760px, 100%);
+  min-height: 62vh;
+  margin: auto;
+  padding: clamp(28px, 6vw, 72px);
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 4%, transparent);
+  box-shadow: 0 12px 45px rgba(50, 30, 17, 0.12);
 }
 
 .reader__content {
-  max-width: 640px;
-  width: 100%;
-  font-size: var(--reader-font-size, 18px);
-  line-height: var(--reader-line-height, 1.6);
+  font-family: Georgia, 'Noto Serif Devanagari', serif;
+  font-size: var(--reader-font-size);
+  line-height: var(--reader-line-height);
+}
+
+.reader__content p {
+  margin: 0 0 1.25em;
 }
 
 .reader__content h2 {
-  margin: 28px 0 14px;
-  font-size: 1.3em;
+  margin: 0 0 1.1em;
+  color: #b05220;
+  font-family: var(--font-display);
+  text-align: center;
 }
 
 .reader__verse {
-  font-style: italic;
-  margin: 18px 0;
+  padding: 14px 18px;
+  border-left: 3px solid #d2702e;
 }
 
 .reader__verse-number {
-  font-weight: 700;
-  font-style: normal;
-  opacity: 0.6;
-  margin-right: 8px;
+  margin-right: 9px;
+  color: #c55b20;
+  font-weight: 800;
 }
 
 .reader__status {
-  opacity: 0.6;
   text-align: center;
-  padding: 60px 0;
+  color: #98725b;
 }
 
 .reader__nav {
-  position: sticky;
-  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
-  border-top: 1px solid rgba(128, 128, 128, 0.2);
-  backdrop-filter: blur(6px);
-}
-
-.reader__nav button {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 6px;
-  padding: 8px 14px;
-  cursor: pointer;
-  color: inherit;
+  width: min(760px, 100%);
+  margin: 22px auto 0;
 }
 
 .reader__nav button:disabled {
-  opacity: 0.3;
   cursor: not-allowed;
+  opacity: 0.4;
 }
 
 @media (max-width: 640px) {
-  .book-card-3d { width: 120px; }
-  .reader__toolbar { gap: 12px; }
+  .library-hero { padding: 42px 16px 38px; }
+  .library-row { padding: 0 16px; }
+  .library-row__scroll {
+    display: flex;
+    gap: 18px;
+    overflow-x: auto;
+    padding: 4px 8px 24px;
+    scroll-snap-type: x mandatory;
+  }
+  .book-card-3d {
+    width: 170px;
+    min-width: 170px;
+    scroll-snap-align: start;
+  }
+  .reader { padding: 18px 10px 26px; }
+  .reader__toolbar { position: static; }
+  .reader__page { padding: 28px 20px; }
+  .reader__nav span { font-size: 12px; }
 }

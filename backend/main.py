@@ -24,6 +24,7 @@ from db.connection import (
 from routers import (
     admin,
     festivals,
+    library,
     proxy,
     route_planner,
     spiritual_chat,
@@ -62,8 +63,7 @@ from routers.volunteer_automation import (
 
 # Import karte hi Cloudinary configuration initialize hoti hai.
 from services import cloudinary_service  # noqa: F401, E402
-from routers.library import router as library_router
-from routers.library_admin import router as library_admin_router
+
 
 load_dotenv()
 
@@ -259,13 +259,13 @@ app.include_router(
     sacred_books_router
 )
 
-app.include_router(library_router)
-app.include_router(library_admin_router)
+app.include_router(
+    library.router
+)
 
 app.include_router(
     blogs_router
 )
-
 
 
 @app.get("/")

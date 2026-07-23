@@ -3,7 +3,6 @@ import {
   Navigate,
   Route,
   Routes,
-  useParams,
 } from 'react-router-dom';
 
 import { LangProvider } from './LangContext';
@@ -20,9 +19,8 @@ import RoutePlannerPage from './pages/RoutePlannerPage';
 import PanchangPage from './pages/PanchangPage';
 import SpiritualGuidePage from './pages/SpiritualGuidePage';
 import FestivalCalendarPage from './pages/FestivalCalendarPage';
-import SacredBooksPage from './pages/SacredBooksPage';
-import SacredBookCategoryPage from './pages/SacredBookCategoryPage';
-import SacredBookReaderPage from './pages/SacredBookReaderPage';
+import LibraryPage from './library/pages/LibraryPage';
+import ReaderPage from './library/pages/ReaderPage';
 import BlogPage from './pages/BlogPage';
 
 // User authentication pages
@@ -47,16 +45,6 @@ import VolunteerDashboardPage from './pages/volunteer/VolunteerDashboardPage';
 import AdminAddTemplePage from './pages/AdminAddTemplePage';
 import VolunteerSubmissionsPage from './pages/volunteer/VolunteerSubmissionsPage';
 import VolunteerProfilePage from './pages/volunteer/VolunteerProfilePage';
-
-function LegacyLibraryCategoryRedirect() {
-  const { category } = useParams();
-  return <Navigate to={`/library/${category}`} replace />;
-}
-
-function LegacyReaderRedirect() {
-  const { slug } = useParams();
-  return <Navigate to={`/reader/${slug}`} replace />;
-}
 
 export default function App() {
   return (
@@ -131,21 +119,12 @@ export default function App() {
 
           <Route
             path="/library"
-            element={<SacredBooksPage />}
+            element={<LibraryPage />}
           />
 
           <Route
-            path="/library/:category"
-            element={
-              <SacredBookCategoryPage />
-            }
-          />
-
-          <Route
-            path="/reader/:slug"
-            element={
-              <SacredBookReaderPage />
-            }
+            path="/library/:bookId/read/:pageNumber?"
+            element={<ReaderPage />}
           />
 
           {/* Backwards-compatible redirects for previously shared URLs */}
@@ -156,12 +135,12 @@ export default function App() {
 
           <Route
             path="/sacred-books/:category"
-            element={<LegacyLibraryCategoryRedirect />}
+            element={<Navigate to="/library" replace />}
           />
 
           <Route
             path="/sacred-books/:category/:slug"
-            element={<LegacyReaderRedirect />}
+            element={<Navigate to="/library" replace />}
           />
 
           {/* Public blog route */}

@@ -1,338 +1,185 @@
-"""
-Public + authenticated-user endpoints for the Sacred Books Library.
+"""Public API used by the new LibraryPage and ReaderPage.
+
+This adapter presents the existing sacred-books catalogue as the page-based
+library contract. It can be removed once the native library tables/API are
+deployed, without changing the frontend pages.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
-from db.connection import get_db_cursor
-from models.library import (
-    BookmarkCreate,
-    HighlightCreate,
-    PreferencesUpdate,
-    ReadingProgressUpdate,
+from routers.sacred_books import (
+    _STATIC_BOOKS,
+    _dispatch_chapter_verses,
+    _dispatch_chapters,
 )
-from routers.user_auth import get_current_user
+from db.connection import get_db_cursor
+
 
 router = APIRouter(prefix="/api/library", tags=["Library"])
 
+SOURCE_CATEGORIES = {
+    "bhagavad_gita_api": ("gita", "Bhagavad Gita"),
+    "valmiki_ramayana": ("itihasa", "Itihasa"),
+    "mahabharata": ("itihasa", "Itihasa"),
+    "ramcharitmanas": ("itihasa", "Itihasa"),
+    "shiva_purana": ("purana", "Puranas"),
+    "devi_mahatmya": ("purana", "Puranas"),
+    "vishnu_purana": ("purana", "Puranas"),
+    "bhagavata_purana": ("purana", "Puranas"),
+    "hanuman_chalisa": ("chalisa", "Chalisa"),
+    "rigveda": ("veda", "Vedas"),
+    "yajurveda": ("veda", "Vedas"),
+    "atharvaveda": ("veda", "Vedas"),
+    "upanishads": ("upanishad", "Upanishads"),
+    "manusmriti": ("dharmashastra", "Dharmashastra"),
+    "yoga_sutras": ("yoga", "Yoga"),
+}
+NEW_PUBLICATIONS = ("new-publications", "New Publications")
 
-# ── Browse ───────────────────────────────────────────────────────────────
+
+def _category_for(book):
+    return SOURCE_CATEGORIES.get(book.get("api_source"), NEW_PUBLICATIONS)
+
+
+def _available_languages(book):
+    language = (book.get("language") or "").lower()
+    available = ["sa"] if "sanskrit" in language else []
+    if "english" in language or "translation" in language or "notes" in language:
+        available.append("en")
+    return available or ["en"]
+
+
+def _serialize_book(book):
+    category_slug, category_name = _category_for(book)
+    return {
+        **book,
+        "category": category_slug,
+        "category_name": category_name,
+        "author": book.get("author") or book.get("tradition"),
+        "cover_image_url": book.get("cover_image_url"),
+        "available_languages": _available_languages(book),
+    }
+
+
+def _all_books():
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, slug, title, sanskrit_title, deity, tradition,
+                   language, total_chapters, total_verses, description,
+                   icon_emoji, accent_color, api_source
+            FROM sacred_books
+            WHERE is_active = TRUE
+            ORDER BY id
+            """
+        )
+        books = [dict(row) for row in cur.fetchall()]
+
+    known_slugs = {book["slug"] for book in books}
+    books.extend(
+        dict(book)
+        for slug, book in _STATIC_BOOKS.items()
+        if slug not in known_slugs
+    )
+    return [_serialize_book(book) for book in books]
+
+
+def _book_by_id(book_id: int):
+    return next((book for book in _all_books() if int(book["id"]) == book_id), None)
+
 
 @router.get("/categories")
-async def list_categories():
-    with get_db_cursor() as cur:
-        cur.execute("SELECT id, name, slug, icon FROM book_categories ORDER BY sort_order")
-        return cur.fetchall()
+def list_categories():
+    categories = {}
+    for book in _all_books():
+        slug = book["category"]
+        categories.setdefault(
+            slug,
+            {
+                "id": slug,
+                "slug": slug,
+                "name": book["category_name"],
+            },
+        )
+    return list(categories.values())
 
 
 @router.get("/books")
-async def list_books(
-    category: str | None = Query(None, description="category slug"),
-    search: str | None = Query(None),
-    limit: int = Query(40, le=100),
-    offset: int = Query(0),
+def list_library_books(
+    category: str | None = None,
+    search: str | None = None,
+    limit: int = Query(24, ge=1, le=100),
+    offset: int = Query(0, ge=0),
 ):
-    conditions = ["b.is_published = TRUE"]
-    params: list = []
-
+    books = _all_books()
     if category:
-        conditions.append("c.slug = %s")
-        params.append(category)
-
+        books = [book for book in books if book["category"] == category]
     if search:
-        conditions.append(
-            "to_tsvector('english', b.title || ' ' || COALESCE(b.author, '') || ' ' || COALESCE(b.description, '')) "
-            "@@ plainto_tsquery('english', %s)"
-        )
-        params.append(search)
+        term = search.casefold()
+        books = [
+            book
+            for book in books
+            if term in (book.get("title") or "").casefold()
+            or term in (book.get("sanskrit_title") or "").casefold()
+            or term in (book.get("author") or "").casefold()
+            or term in (book.get("description") or "").casefold()
+        ]
+    return books[offset: offset + limit]
 
-    where_clause = " AND ".join(conditions)
-    params.extend([limit, offset])
-
-    with get_db_cursor() as cur:
-        cur.execute(
-            f"""
-            SELECT b.id, b.uuid, b.slug, b.title, b.subtitle, b.author,
-                   b.original_language, b.cover_image_url, b.page_count,
-                   b.created_at, c.name AS category_name, c.slug AS category_slug
-            FROM books b
-            LEFT JOIN book_categories c ON c.id = b.category_id
-            WHERE {where_clause}
-            ORDER BY b.created_at DESC
-            LIMIT %s OFFSET %s
-            """,
-            params,
-        )
-        return cur.fetchall()
-
-
-@router.get("/books/{slug}")
-async def get_book(slug: str):
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
-            SELECT b.*, c.name AS category_name, c.slug AS category_slug
-            FROM books b
-            LEFT JOIN book_categories c ON c.id = b.category_id
-            WHERE b.slug = %s AND b.is_published = TRUE
-            """,
-            (slug,),
-        )
-        book = cur.fetchone()
-        if not book:
-            raise HTTPException(404, "Book not found")
-
-        cur.execute(
-            "SELECT language, status, progress_pct FROM book_translations WHERE book_id = %s",
-            (book["id"],),
-        )
-        book["translations"] = cur.fetchall()
-
-    return book
-
-
-# ── Reading ──────────────────────────────────────────────────────────────
 
 @router.get("/books/{book_id}/pages/{page_number}")
-async def get_page(book_id: int, page_number: int, lang: str = Query("en")):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT original_language, page_count, is_published FROM books WHERE id = %s",
-            (book_id,),
-        )
-        book = cur.fetchone()
-        if not book or not book["is_published"]:
-            raise HTTPException(404, "Book not found")
+def get_library_page(
+    book_id: int,
+    page_number: int,
+    language: str = Query("en", pattern="^(en|hi|sa)$"),
+):
+    book = _book_by_id(book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
 
-        if lang == book["original_language"]:
-            cur.execute(
-                "SELECT page_number, formatted_text FROM book_pages WHERE book_id = %s AND page_number = %s",
-                (book_id, page_number),
+    chapters = _dispatch_chapters(book["slug"], book["api_source"], book["id"])
+    chapter_list = chapters.get("chapters", [])
+    if page_number < 1 or page_number > len(chapter_list):
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    chapter = _dispatch_chapter_verses(
+        book["slug"],
+        book["api_source"],
+        book["id"],
+        page_number,
+    )
+    blocks = [{
+        "type": "heading",
+        "text": chapter.get("title") or f"Chapter {page_number}",
+    }]
+
+    for verse in chapter.get("verses", []):
+        if language == "sa":
+            text = verse.get("sanskrit") or verse.get("text")
+        elif language == "hi":
+            text = (
+                verse.get("translation_hi")
+                or verse.get("hindi")
+                or verse.get("translation")
+                or verse.get("text")
             )
-            page = cur.fetchone()
-            if not page:
-                raise HTTPException(404, "Page not found")
-            return {
-                "page_number": page["page_number"],
-                "total_pages": book["page_count"],
-                "language": lang,
-                "blocks": page["formatted_text"],
-            }
+        else:
+            text = verse.get("translation") or verse.get("text") or verse.get("sanskrit")
+        if text:
+            blocks.append({
+                "type": "verse",
+                "number": verse.get("verse_number") or verse.get("number"),
+                "text": text,
+            })
 
-        cur.execute(
-            "SELECT id, status FROM book_translations WHERE book_id = %s AND language = %s",
-            (book_id, lang),
-        )
-        translation = cur.fetchone()
-        if not translation:
-            raise HTTPException(404, f"No translation requested for language '{lang}'")
-        if translation["status"] != "completed":
-            # 202 tells the frontend "not an error, just not ready yet" so
-            # the reader can show a translating-in-progress state instead
-            # of a blank/broken page.
-            raise HTTPException(202, f"Translation to '{lang}' is {translation['status']}")
+    if len(blocks) == 1 and chapter.get("note"):
+        blocks.append({"type": "paragraph", "text": chapter["note"]})
 
-        cur.execute(
-            "SELECT page_number, translated_text FROM book_translation_pages "
-            "WHERE translation_id = %s AND page_number = %s",
-            (translation["id"], page_number),
-        )
-        page = cur.fetchone()
-        if not page:
-            raise HTTPException(404, "Page not found")
-
-        return {
-            "page_number": page["page_number"],
-            "total_pages": book["page_count"],
-            "language": lang,
-            "blocks": page["translated_text"],
-        }
-
-
-# ── Reading progress ───────────────────────────────────────────────────
-
-@router.put("/progress")
-async def update_progress(body: ReadingProgressUpdate, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO user_reading_progress (user_id, book_id, language, current_page, total_pages, last_read_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
-            ON CONFLICT (user_id, book_id)
-            DO UPDATE SET language = EXCLUDED.language,
-                          current_page = EXCLUDED.current_page,
-                          total_pages = COALESCE(EXCLUDED.total_pages, user_reading_progress.total_pages),
-                          last_read_at = NOW()
-            """,
-            (user["id"], body.book_id, body.language, body.current_page, body.total_pages),
-        )
-    return {"status": "saved"}
-
-
-@router.get("/continue-reading")
-async def continue_reading(user: dict = Depends(get_current_user), limit: int = 10):
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
-            SELECT p.book_id, p.language, p.current_page, p.total_pages, p.last_read_at,
-                   b.title, b.slug, b.cover_image_url
-            FROM user_reading_progress p
-            JOIN books b ON b.id = p.book_id
-            WHERE p.user_id = %s
-            ORDER BY p.last_read_at DESC
-            LIMIT %s
-            """,
-            (user["id"], limit),
-        )
-        return cur.fetchall()
-
-
-# ── Bookmarks ────────────────────────────────────────────────────────────
-
-@router.post("/bookmarks", status_code=201)
-async def create_bookmark(body: BookmarkCreate, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO user_bookmarks (user_id, book_id, page_number, label)
-            VALUES (%s, %s, %s, %s) RETURNING id
-            """,
-            (user["id"], body.book_id, body.page_number, body.label),
-        )
-        return cur.fetchone()
-
-
-@router.get("/bookmarks/{book_id}")
-async def list_bookmarks(book_id: int, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT id, page_number, label, created_at FROM user_bookmarks "
-            "WHERE user_id = %s AND book_id = %s ORDER BY page_number",
-            (user["id"], book_id),
-        )
-        return cur.fetchall()
-
-
-@router.delete("/bookmarks/{bookmark_id}")
-async def delete_bookmark(bookmark_id: int, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "DELETE FROM user_bookmarks WHERE id = %s AND user_id = %s RETURNING id",
-            (bookmark_id, user["id"]),
-        )
-        if not cur.fetchone():
-            raise HTTPException(404, "Bookmark not found")
-    return {"status": "deleted"}
-
-
-# ── Highlights ───────────────────────────────────────────────────────────
-
-@router.post("/highlights", status_code=201)
-async def create_highlight(body: HighlightCreate, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO user_highlights (user_id, book_id, page_number, text_snippet, color, note)
-            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-            """,
-            (user["id"], body.book_id, body.page_number, body.text_snippet, body.color, body.note),
-        )
-        return cur.fetchone()
-
-
-@router.get("/highlights/{book_id}")
-async def list_highlights(book_id: int, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT id, page_number, text_snippet, color, note, created_at FROM user_highlights "
-            "WHERE user_id = %s AND book_id = %s ORDER BY page_number",
-            (user["id"], book_id),
-        )
-        return cur.fetchall()
-
-
-@router.delete("/highlights/{highlight_id}")
-async def delete_highlight(highlight_id: int, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "DELETE FROM user_highlights WHERE id = %s AND user_id = %s RETURNING id",
-            (highlight_id, user["id"]),
-        )
-        if not cur.fetchone():
-            raise HTTPException(404, "Highlight not found")
-    return {"status": "deleted"}
-
-
-# ── Favorites ────────────────────────────────────────────────────────────
-
-@router.post("/favorites/{book_id}", status_code=201)
-async def add_favorite(book_id: int, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "INSERT INTO user_favorites (user_id, book_id) VALUES (%s, %s) "
-            "ON CONFLICT DO NOTHING",
-            (user["id"], book_id),
-        )
-    return {"status": "favorited"}
-
-
-@router.delete("/favorites/{book_id}")
-async def remove_favorite(book_id: int, user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            "DELETE FROM user_favorites WHERE user_id = %s AND book_id = %s",
-            (user["id"], book_id),
-        )
-    return {"status": "removed"}
-
-
-@router.get("/favorites")
-async def list_favorites(user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
-            SELECT b.id, b.slug, b.title, b.cover_image_url, f.created_at AS favorited_at
-            FROM user_favorites f
-            JOIN books b ON b.id = f.book_id
-            WHERE f.user_id = %s
-            ORDER BY f.created_at DESC
-            """,
-            (user["id"],),
-        )
-        return cur.fetchall()
-
-
-# ── Preferences ──────────────────────────────────────────────────────────
-
-@router.get("/preferences")
-async def get_preferences(user: dict = Depends(get_current_user)):
-    with get_db_cursor() as cur:
-        cur.execute("SELECT * FROM user_library_preferences WHERE user_id = %s", (user["id"],))
-        prefs = cur.fetchone()
-        if not prefs:
-            cur.execute(
-                "INSERT INTO user_library_preferences (user_id) VALUES (%s) RETURNING *",
-                (user["id"],),
-            )
-            prefs = cur.fetchone()
-    return prefs
-
-
-@router.put("/preferences")
-async def update_preferences(body: PreferencesUpdate, user: dict = Depends(get_current_user)):
-    fields = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
-    if not fields:
-        raise HTTPException(400, "No fields to update")
-
-    with get_db_cursor() as cur:
-        cur.execute("SELECT 1 FROM user_library_preferences WHERE user_id = %s", (user["id"],))
-        if not cur.fetchone():
-            cur.execute("INSERT INTO user_library_preferences (user_id) VALUES (%s)", (user["id"],))
-
-        set_clause = ", ".join(f"{key} = %s" for key in fields)
-        values = list(fields.values()) + [user["id"]]
-        cur.execute(
-            f"UPDATE user_library_preferences SET {set_clause} WHERE user_id = %s RETURNING *",
-            values,
-        )
-        return cur.fetchone()
+    return {
+        "book_id": book_id,
+        "page_number": page_number,
+        "total_pages": len(chapter_list),
+        "language": language,
+        "title": chapter.get("title"),
+        "blocks": blocks,
+    }

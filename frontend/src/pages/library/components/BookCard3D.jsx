@@ -1,39 +1,36 @@
-import { Link } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-/**
- * Book cover rendered with a tilt-on-hover 3D effect and a visible
- * "spine" strip, so it reads as an object with physical presence
- * rather than a file-list row. Pure CSS 3D transform — no library.
- */
-export default function BookCard3D({ book, progressPct = null }) {
-  if (!book || !book.slug) return null;
-
-  const spineColor = book.category_slug ? `var(--spine-${book.category_slug}, #7c4a2d)` : '#7c4a2d';
+export default function BookCard3D({ book, progressPct = null, pageNumber = 1 }) {
+  const navigate = useNavigate();
+  const bookId = book.id ?? book.book_id;
+  const languages = book.available_languages || book.translation_languages || [];
+  const languageLabel = Array.isArray(languages) ? languages.join(' · ') : languages;
 
   return (
-    <Link to={`/library/${book.slug}`} className="book-card-3d">
-      <div className="book-card-3d__spine" style={{ background: spineColor }} />
-      <div className="book-card-3d__cover">
+    <button
+      type="button"
+      className="book-card-3d"
+      onClick={() => navigate(`/library/${bookId}/read/${pageNumber || 1}`)}
+      disabled={bookId == null}
+    >
+      <span className="book-card-3d__cover">
         {book.cover_image_url ? (
-          <img src={book.cover_image_url} alt={book.title} />
+          <img src={book.cover_image_url} alt="" loading="lazy" />
         ) : (
-          <div className="book-card-3d__placeholder">
-            <BookOpen size={28} />
-            <span>{book.title}</span>
-          </div>
+          <BookOpen size={48} aria-hidden="true" />
         )}
-
-        {progressPct !== null && (
-          <div className="book-card-3d__progress">
-            <div className="book-card-3d__progress-fill" style={{ width: `${progressPct}%` }} />
-          </div>
+      </span>
+      <span className="book-card-3d__details">
+        <strong>{book.title}</strong>
+        {(book.author || book.author_name) && <small>{book.author || book.author_name}</small>}
+        {languageLabel && <small className="book-card-3d__translation">{languageLabel}</small>}
+        {progressPct != null && (
+          <span className="book-card-3d__progress">
+            <span style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }} />
+          </span>
         )}
-      </div>
-      <div className="book-card-3d__label">
-        <p className="book-card-3d__title">{book.title}</p>
-        {book.author && <p className="book-card-3d__author">{book.author}</p>}
-      </div>
-    </Link>
+      </span>
+    </button>
   );
 }
