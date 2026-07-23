@@ -581,6 +581,102 @@ async def _ors_transport_candidates(
                         "source": "openrouteservice_geocoder",
                     }
 
+        # Nominatim is already used successfully by the address auto-fill.
+        # Use bounded, typed searches for any transport type still missing.
+        found_types = {item["type"] for item in found.values()}
+        osm_searches = {
+            "railway": {
+                "q": f"railway station, {locality}, {region}",
+                "radius_degrees": 1.2,
+                "valid": lambda category, place_type: (
+                    category == "railway" and place_type in {"station", "halt"}
+                ),
+            },
+            "airport": {
+                "q": f"airport, {region}",
+                "radius_degrees": 3.2,
+                "valid": lambda category, place_type: (
+                    category == "aeroway"
+                    and place_type in {"aerodrome", "airport", "airstrip"}
+                ),
+            },
+            "bus": {
+                "q": f"bus station, {locality}, {region}",
+                "radius_degrees": 0.8,
+                "valid": lambda category, place_type: (
+                    category in {"amenity", "public_transport", "highway"}
+                    and place_type in {"bus_station", "station", "bus_stop"}
+                ),
+            },
+        }
+        for transport_type, config in osm_searches.items():
+            if transport_type in found_types:
+                continue
+            radius = float(config["radius_degrees"])
+            viewbox = ",".join(
+                map(
+                    str,
+                    (
+                        longitude - radius,
+                        latitude + radius,
+                        longitude + radius,
+                        latitude - radius,
+                    ),
+                )
+            )
+            try:
+                osm_results = await _nominatim_get(
+                    "/search",
+                    {
+                        "q": config["q"],
+                        "format": "jsonv2",
+                        "addressdetails": 1,
+                        "namedetails": 1,
+                        "countrycodes": "in",
+                        "viewbox": viewbox,
+                        "bounded": 1,
+                        "limit": 25,
+                    },
+                )
+            except HTTPException:
+                continue
+            for result in osm_results or []:
+                category = str(
+                    result.get("category") or result.get("class") or ""
+                ).casefold()
+                place_type = str(result.get("type") or "").casefold()
+                if not config["valid"](category, place_type):
+                    continue
+                try:
+                    candidate_lat = float(result["lat"])
+                    candidate_lon = float(result["lon"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                name = (
+                    (result.get("namedetails") or {}).get("name:en")
+                    or result.get("name")
+                    or str(result.get("display_name") or "").split(",")[0]
+                )
+                if not str(name).strip():
+                    continue
+                key = (
+                    transport_type,
+                    round(candidate_lat, 6),
+                    round(candidate_lon, 6),
+                )
+                found[key] = {
+                    "type": transport_type,
+                    "name": str(name).strip(),
+                    "latitude": candidate_lat,
+                    "longitude": candidate_lon,
+                    "straight_distance_km": _distance_km(
+                        latitude, longitude, candidate_lat, candidate_lon
+                    ),
+                    "osm_type": result.get("osm_type"),
+                    "osm_id": result.get("osm_id"),
+                    "source": "nominatim_typed_search",
+                }
+
         for transport_type in ("railway", "airport", "bus"):
             matching = [
                 item for item in found.values()
