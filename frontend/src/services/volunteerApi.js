@@ -349,6 +349,12 @@ export const volunteerApi = {
     });
   },
 
+  findNearbyTransport(latitude, longitude) {
+    return volunteerClient.get('/api/volunteer/automation/nearby-transport', {
+      params: { latitude, longitude },
+    });
+  },
+
   searchPlaces(q) {
     return volunteerClient.get('/api/volunteer/automation/place-search', { params: { q } });
   },

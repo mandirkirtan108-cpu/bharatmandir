@@ -33,6 +33,7 @@ _GEOCODE_CACHE: dict[str, tuple[float, Any]] = {}
 GEOCODE_CACHE_TTL_SECONDS = 60 * 60 * 24
 ORS_REVERSE_URL = "https://api.openrouteservice.org/geocode/reverse"
 ORS_SEARCH_URL = "https://api.openrouteservice.org/geocode/search"
+ORS_MATRIX_URL = "https://api.openrouteservice.org/v2/matrix/driving-car"
 GOOGLE_MAP_HOSTS = {
     "google.com", "www.google.com", "maps.google.com", "maps.app.goo.gl",
     "goo.gl", "www.goo.gl",
@@ -321,6 +322,143 @@ async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]
     if not ors_location.get("pincode"):
         ors_location["pincode"] = await _nearby_pincode(latitude, longitude, ors_location)
     return await _reconcile_postal_location(ors_location)
+
+
+async def _ors_transport_candidates(
+    api_key: str,
+    latitude: float,
+    longitude: float,
+) -> list[dict[str, Any]]:
+    """Find nearby transport places with ORS geocoding and add road distances."""
+    searches = {
+        "railway": ("railway station", "train station"),
+        "airport": ("airport",),
+        "bus": ("bus station", "bus stand"),
+    }
+    candidates: list[dict[str, Any]] = []
+
+    async with httpx.AsyncClient(timeout=18) as client:
+        for transport_type, queries in searches.items():
+            found: dict[tuple[float, float], dict[str, Any]] = {}
+            for search_text in queries:
+                response = await client.get(
+                    ORS_SEARCH_URL,
+                    params={
+                        "text": search_text,
+                        "focus.point.lat": latitude,
+                        "focus.point.lon": longitude,
+                        "boundary.country": "IN",
+                        "layers": "venue",
+                        "size": 8,
+                    },
+                    headers={"Authorization": api_key},
+                )
+                response.raise_for_status()
+                for feature in response.json().get("features") or []:
+                    coordinates = (feature.get("geometry") or {}).get("coordinates") or []
+                    if len(coordinates) < 2:
+                        continue
+                    candidate_lon, candidate_lat = map(float, coordinates[:2])
+                    props = feature.get("properties") or {}
+                    name = (
+                        props.get("name")
+                        or props.get("label")
+                        or props.get("locality")
+                        or search_text.title()
+                    )
+                    key = (round(candidate_lat, 6), round(candidate_lon, 6))
+                    found[key] = {
+                        "type": transport_type,
+                        "name": str(name).split(",")[0].strip(),
+                        "latitude": candidate_lat,
+                        "longitude": candidate_lon,
+                        "straight_distance_km": _distance_km(
+                            latitude, longitude, candidate_lat, candidate_lon
+                        ),
+                    }
+            # Limit matrix usage while retaining the closest geocoding results.
+            candidates.extend(
+                sorted(found.values(), key=lambda item: item["straight_distance_km"])[:6]
+            )
+
+        if not candidates:
+            return []
+
+        matrix_response = await client.post(
+            ORS_MATRIX_URL,
+            json={
+                "locations": [
+                    [longitude, latitude],
+                    *[
+                        [candidate["longitude"], candidate["latitude"]]
+                        for candidate in candidates
+                    ],
+                ],
+                "sources": [0],
+                "destinations": list(range(1, len(candidates) + 1)),
+                "metrics": ["distance", "duration"],
+                "units": "km",
+            },
+            headers={"Authorization": api_key, "Content-Type": "application/json"},
+        )
+        matrix_response.raise_for_status()
+        matrix = matrix_response.json()
+        distances = (matrix.get("distances") or [[]])[0]
+        durations = (matrix.get("durations") or [[]])[0]
+        for index, candidate in enumerate(candidates):
+            candidate["distance_km"] = (
+                float(distances[index])
+                if index < len(distances) and distances[index] is not None
+                else candidate["straight_distance_km"]
+            )
+            candidate["duration_minutes"] = (
+                round(float(durations[index]) / 60)
+                if index < len(durations) and durations[index] is not None
+                else None
+            )
+    return candidates
+
+
+@router.get("/nearby-transport")
+async def nearby_transport(
+    latitude: float = Query(ge=-90, le=90),
+    longitude: float = Query(ge=-180, le=180),
+    _volunteer: dict = Depends(get_current_volunteer),
+):
+    """Return the nearest railway station, airport and bus stand by road."""
+    api_key = os.getenv("OPENROUTESERVICE_API_KEY") or os.getenv("ORS_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="OPENROUTESERVICE_API_KEY is not configured on the backend",
+        )
+    try:
+        candidates = await _ors_transport_candidates(api_key, latitude, longitude)
+    except (httpx.HTTPError, ValueError, TypeError) as error:
+        raise HTTPException(
+            status_code=502,
+            detail="The nearby transport service is temporarily unavailable",
+        ) from error
+
+    result: dict[str, Any] = {}
+    field_names = {
+        "railway": "nearest_railway",
+        "airport": "nearest_airport",
+        "bus": "nearest_bus_stand",
+    }
+    for transport_type, field_name in field_names.items():
+        matching = [
+            candidate for candidate in candidates
+            if candidate["type"] == transport_type
+        ]
+        if not matching:
+            result[field_name] = None
+            continue
+        nearest = min(matching, key=lambda item: item["distance_km"])
+        distance = round(nearest["distance_km"], 1)
+        result[field_name] = f"{nearest['name']} — {distance:g} km"
+        result[f"{field_name}_details"] = nearest
+    return result
 
 
 @router.get("/reverse-geocode")
