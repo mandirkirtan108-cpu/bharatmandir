@@ -19,7 +19,7 @@ import {
 import VolunteerNavbar from '../../components/volunteer/VolunteerNavbar';
 import SubmissionStatusBadge from '../../components/volunteer/SubmissionStatusBadge';
 import { volunteerApi } from '../../services/volunteerApi';
-import { useVolunteerAuth } from '../../hooks/useVolunteerAuth';
+import useVolunteerAuth from '../../hooks/useVolunteerAuth';
 
 export default function VolunteerDashboardPage() {
   const { volunteer } = useVolunteerAuth();

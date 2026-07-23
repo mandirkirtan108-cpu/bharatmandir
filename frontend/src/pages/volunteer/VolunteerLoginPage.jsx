@@ -18,7 +18,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 
-import { useVolunteerAuth } from '../../hooks/useVolunteerAuth';
+import useVolunteerAuth from '../../hooks/useVolunteerAuth';
 
 const SAFFRON = '#FF9900';
 const SAFFRON_BORDER =

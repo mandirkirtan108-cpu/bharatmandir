@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { useVolunteerAuth } from '../../hooks/useVolunteerAuth';
+import useVolunteerAuth from '../../hooks/useVolunteerAuth';
 
 const navigationItems = [
   {

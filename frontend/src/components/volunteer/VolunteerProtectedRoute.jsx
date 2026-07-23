@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useVolunteerAuth } from '../../hooks/useVolunteerAuth';
+import useVolunteerAuth from '../../hooks/useVolunteerAuth';
 
 export default function VolunteerProtectedRoute({ children }) {
   const location = useLocation();
