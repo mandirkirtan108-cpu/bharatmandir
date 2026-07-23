@@ -34,6 +34,7 @@ GEOCODE_CACHE_TTL_SECONDS = 60 * 60 * 24
 ORS_REVERSE_URL = "https://api.openrouteservice.org/geocode/reverse"
 ORS_SEARCH_URL = "https://api.openrouteservice.org/geocode/search"
 ORS_MATRIX_URL = "https://api.openrouteservice.org/v2/matrix/driving-car"
+ORS_POIS_URL = "https://api.openrouteservice.org/pois"
 OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
@@ -361,11 +362,74 @@ async def _ors_transport_candidates(
     api_key: str,
     latitude: float,
     longitude: float,
+    city: str | None = None,
+    district: str | None = None,
+    state: str | None = None,
 ) -> list[dict[str, Any]]:
     """Find exact OSM transport features and add ORS road distances."""
     candidates: list[dict[str, Any]] = []
 
     async with httpx.AsyncClient(timeout=35) as client:
+        found: dict[tuple[str, float, float], dict[str, Any]] = {}
+        poi_searches = {
+            "railway": ([604, 597], 2000),
+            "airport": ([581, 582], 2000),
+            "bus": ([587, 588], 2000),
+        }
+        # Prefer the ORS POI service because Railway already has reliable
+        # access to api.openrouteservice.org and no additional key is needed.
+        for transport_type, (category_ids, buffer_metres) in poi_searches.items():
+            try:
+                poi_response = await client.post(
+                    ORS_POIS_URL,
+                    json={
+                        "request": "pois",
+                        "geometry": {
+                            "geojson": {
+                                "type": "Point",
+                                "coordinates": [longitude, latitude],
+                            },
+                            "buffer": buffer_metres,
+                        },
+                        "filters": {"category_ids": category_ids},
+                        "limit": 50,
+                        "sortby": "distance",
+                    },
+                    headers={
+                        "Authorization": api_key,
+                        "Content-Type": "application/json",
+                    },
+                )
+                poi_response.raise_for_status()
+                for feature in poi_response.json().get("features") or []:
+                    coordinates = (feature.get("geometry") or {}).get("coordinates") or []
+                    properties = feature.get("properties") or {}
+                    tags = properties.get("osm_tags") or {}
+                    name = tags.get("name:en") or tags.get("name")
+                    if len(coordinates) < 2 or not name:
+                        continue
+                    candidate_lon, candidate_lat = map(float, coordinates[:2])
+                    key = (
+                        transport_type,
+                        round(candidate_lat, 6),
+                        round(candidate_lon, 6),
+                    )
+                    found[key] = {
+                        "type": transport_type,
+                        "name": str(name).strip(),
+                        "latitude": candidate_lat,
+                        "longitude": candidate_lon,
+                        "straight_distance_km": _distance_km(
+                            latitude, longitude, candidate_lat, candidate_lon
+                        ),
+                        "osm_type": properties.get("osm_type"),
+                        "osm_id": properties.get("osm_id"),
+                    }
+            except (httpx.HTTPError, ValueError, TypeError):
+                # Fall back to public Overpass below when ORS POIs are
+                # unavailable for this key, category or search radius.
+                continue
+
         overpass_query = f"""
         [out:json][timeout:25];
         (
@@ -376,9 +440,11 @@ async def _ors_transport_candidates(
         );
         out center tags;
         """
-        overpass_payload: dict[str, Any] | None = None
+        found_types = {item["type"] for item in found.values()}
+        needs_overpass = len(found_types) < len(poi_searches)
+        overpass_payload: dict[str, Any] | None = None if needs_overpass else {"elements": []}
         last_overpass_error: Exception | None = None
-        for overpass_url in OVERPASS_URLS:
+        for overpass_url in (OVERPASS_URLS if needs_overpass else ()):
             try:
                 # Overpass expects the query in the form field named `data`.
                 overpass_response = await client.post(
@@ -392,12 +458,8 @@ async def _ors_transport_candidates(
             except (httpx.HTTPError, ValueError) as error:
                 last_overpass_error = error
         if overpass_payload is None:
-            raise HTTPException(
-                status_code=502,
-                detail="Nearby transport lookup is temporarily unavailable",
-            ) from last_overpass_error
+            overpass_payload = {"elements": []}
 
-        found: dict[tuple[str, float, float], dict[str, Any]] = {}
         for element in overpass_payload.get("elements") or []:
             tags = element.get("tags") or {}
             center = element.get("center") or {}
@@ -437,6 +499,183 @@ async def _ors_transport_candidates(
                 "osm_type": element.get("type"),
                 "osm_id": element.get("id"),
             }
+
+        # Railway hosting providers may block or throttle public Overpass
+        # servers. Use locality-aware ORS geocoding as a strict fallback.
+        found_types = {item["type"] for item in found.values()}
+        locality = city or district or ""
+        region = state or ""
+        named_searches = {
+            "railway": [
+                f"{locality} railway station {region}",
+                f"{district or locality} railway station {region}",
+            ],
+            "airport": [
+                f"airport near {locality} {region}",
+                f"{region} airport",
+            ],
+            "bus": [
+                f"{locality} bus stand {region}",
+                f"{locality} bus station {region}",
+            ],
+        }
+
+        def valid_transport_name(transport_type: str, value: str) -> bool:
+            normalized = re.sub(r"\s+", " ", value.casefold())
+            if transport_type == "railway":
+                return (
+                    any(word in normalized for word in ("railway", "railroad", "junction", "station"))
+                    and "substation" not in normalized
+                )
+            if transport_type == "airport":
+                return any(word in normalized for word in ("airport", "aerodrome", "airstrip"))
+            return (
+                "bus" in normalized
+                and any(word in normalized for word in ("stand", "station", "terminal", "depot"))
+                and "police" not in normalized
+            )
+
+        for transport_type, queries in named_searches.items():
+            if transport_type in found_types:
+                continue
+            for search_text in dict.fromkeys(q.strip() for q in queries if q.strip()):
+                try:
+                    search_response = await client.get(
+                        ORS_SEARCH_URL,
+                        params={
+                            "text": search_text,
+                            "focus.point.lat": latitude,
+                            "focus.point.lon": longitude,
+                            "boundary.country": "IN",
+                            "layers": "venue",
+                            "size": 10,
+                        },
+                        headers={"Authorization": api_key},
+                    )
+                    search_response.raise_for_status()
+                except httpx.HTTPError:
+                    continue
+                for feature in search_response.json().get("features") or []:
+                    coordinates = (feature.get("geometry") or {}).get("coordinates") or []
+                    props = feature.get("properties") or {}
+                    label = str(props.get("label") or props.get("name") or "").strip()
+                    if len(coordinates) < 2 or not valid_transport_name(transport_type, label):
+                        continue
+                    candidate_lon, candidate_lat = map(float, coordinates[:2])
+                    name = str(props.get("name") or label.split(",")[0]).strip()
+                    if not valid_transport_name(transport_type, name):
+                        name = label.split(",")[0].strip()
+                    key = (
+                        transport_type,
+                        round(candidate_lat, 6),
+                        round(candidate_lon, 6),
+                    )
+                    found[key] = {
+                        "type": transport_type,
+                        "name": name,
+                        "latitude": candidate_lat,
+                        "longitude": candidate_lon,
+                        "straight_distance_km": _distance_km(
+                            latitude, longitude, candidate_lat, candidate_lon
+                        ),
+                        "source": "openrouteservice_geocoder",
+                    }
+
+        # Nominatim is already used successfully by the address auto-fill.
+        # Use bounded, typed searches for any transport type still missing.
+        found_types = {item["type"] for item in found.values()}
+        osm_searches = {
+            "railway": {
+                "q": f"railway station, {locality}, {region}",
+                "radius_degrees": 1.2,
+                "valid": lambda category, place_type: (
+                    category == "railway" and place_type in {"station", "halt"}
+                ),
+            },
+            "airport": {
+                "q": f"airport, {region}",
+                "radius_degrees": 3.2,
+                "valid": lambda category, place_type: (
+                    category == "aeroway"
+                    and place_type in {"aerodrome", "airport", "airstrip"}
+                ),
+            },
+            "bus": {
+                "q": f"bus station, {locality}, {region}",
+                "radius_degrees": 0.8,
+                "valid": lambda category, place_type: (
+                    category in {"amenity", "public_transport", "highway"}
+                    and place_type in {"bus_station", "station", "bus_stop"}
+                ),
+            },
+        }
+        for transport_type, config in osm_searches.items():
+            if transport_type in found_types:
+                continue
+            radius = float(config["radius_degrees"])
+            viewbox = ",".join(
+                map(
+                    str,
+                    (
+                        longitude - radius,
+                        latitude + radius,
+                        longitude + radius,
+                        latitude - radius,
+                    ),
+                )
+            )
+            try:
+                osm_results = await _nominatim_get(
+                    "/search",
+                    {
+                        "q": config["q"],
+                        "format": "jsonv2",
+                        "addressdetails": 1,
+                        "namedetails": 1,
+                        "countrycodes": "in",
+                        "viewbox": viewbox,
+                        "bounded": 1,
+                        "limit": 25,
+                    },
+                )
+            except HTTPException:
+                continue
+            for result in osm_results or []:
+                category = str(
+                    result.get("category") or result.get("class") or ""
+                ).casefold()
+                place_type = str(result.get("type") or "").casefold()
+                if not config["valid"](category, place_type):
+                    continue
+                try:
+                    candidate_lat = float(result["lat"])
+                    candidate_lon = float(result["lon"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                name = (
+                    (result.get("namedetails") or {}).get("name:en")
+                    or result.get("name")
+                    or str(result.get("display_name") or "").split(",")[0]
+                )
+                if not str(name).strip():
+                    continue
+                key = (
+                    transport_type,
+                    round(candidate_lat, 6),
+                    round(candidate_lon, 6),
+                )
+                found[key] = {
+                    "type": transport_type,
+                    "name": str(name).strip(),
+                    "latitude": candidate_lat,
+                    "longitude": candidate_lon,
+                    "straight_distance_km": _distance_km(
+                        latitude, longitude, candidate_lat, candidate_lon
+                    ),
+                    "osm_type": result.get("osm_type"),
+                    "osm_id": result.get("osm_id"),
+                    "source": "nominatim_typed_search",
+                }
 
         for transport_type in ("railway", "airport", "bus"):
             matching = [
@@ -505,6 +744,9 @@ async def _ors_transport_candidates(
 async def nearby_transport(
     latitude: float = Query(ge=-90, le=90),
     longitude: float = Query(ge=-180, le=180),
+    city: str | None = Query(default=None, max_length=120),
+    district: str | None = Query(default=None, max_length=120),
+    state: str | None = Query(default=None, max_length=120),
     _volunteer: dict = Depends(get_current_volunteer),
 ):
     """Return the nearest railway station, airport and bus stand by road."""
@@ -515,7 +757,14 @@ async def nearby_transport(
             detail="OPENROUTESERVICE_API_KEY is not configured on the backend",
         )
     try:
-        candidates = await _ors_transport_candidates(api_key, latitude, longitude)
+        candidates = await _ors_transport_candidates(
+            api_key,
+            latitude,
+            longitude,
+            city=city,
+            district=district,
+            state=state,
+        )
     except (httpx.HTTPError, ValueError, TypeError) as error:
         raise HTTPException(
             status_code=502,
