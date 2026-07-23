@@ -164,3 +164,53 @@ export const userAuthAPI = {
     catch { return null; }
   },
 };
+/*
+  Paste this block into frontend/src/services/api.js — after the existing
+  `userAuthAPI` export is a good spot. It reuses the same `api`, `adminApi`,
+  and `userApi` axios instances already defined in that file (with their
+  token-attach interceptors), so no new auth wiring is needed.
+*/
+
+// ── Library API (public/user) ───────────────────────────────────────
+export const libraryAPI = {
+  getCategories: () => api.get('/api/library/categories'),
+  getBooks:      (params = {}) => api.get('/api/library/books', { params }),
+  getBook:       (slug) => api.get(`/api/library/books/${slug}`),
+  getPage:       (bookId, pageNumber, lang = 'en') =>
+                   api.get(`/api/library/books/${bookId}/pages/${pageNumber}`, { params: { lang } }),
+
+  // requires user auth — uses userApi (token auto-attached)
+  updateProgress:   (data) => userApi.put('/api/library/progress', data),
+  getContinueReading: () => userApi.get('/api/library/continue-reading'),
+
+  addBookmark:    (data) => userApi.post('/api/library/bookmarks', data),
+  getBookmarks:   (bookId) => userApi.get(`/api/library/bookmarks/${bookId}`),
+  deleteBookmark: (id) => userApi.delete(`/api/library/bookmarks/${id}`),
+
+  addHighlight:    (data) => userApi.post('/api/library/highlights', data),
+  getHighlights:   (bookId) => userApi.get(`/api/library/highlights/${bookId}`),
+  deleteHighlight: (id) => userApi.delete(`/api/library/highlights/${id}`),
+
+  addFavorite:    (bookId) => userApi.post(`/api/library/favorites/${bookId}`),
+  removeFavorite: (bookId) => userApi.delete(`/api/library/favorites/${bookId}`),
+  getFavorites:   () => userApi.get('/api/library/favorites'),
+
+  getPreferences:    () => userApi.get('/api/library/preferences'),
+  updatePreferences: (data) => userApi.put('/api/library/preferences', data),
+};
+
+// ── Library Admin API ────────────────────────────────────────────────
+export const libraryAdminAPI = {
+  createBook: (formData) =>
+    adminApi.post('/api/admin/library/books', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  listBooks:  () => adminApi.get('/api/admin/library/books'),
+  updateBook: (id, data) => adminApi.patch(`/api/admin/library/books/${id}`, data),
+  deleteBook: (id) => adminApi.delete(`/api/admin/library/books/${id}`),
+
+  triggerTranslation: (bookId, languages) =>
+    adminApi.post(`/api/admin/library/books/${bookId}/translate`, { languages }),
+  getTranslationStatus: (bookId) =>
+    adminApi.get(`/api/admin/library/books/${bookId}/translation-status`),
+};
