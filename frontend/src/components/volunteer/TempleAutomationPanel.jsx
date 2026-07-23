@@ -35,25 +35,54 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
     return Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null;
   }, [form.latitude, form.longitude]);
 
+  async function getNearbyTransportFields(latitude, longitude) {
+    const emptyFields = {
+      nearest_railway: '',
+      nearest_airport: '',
+      nearest_bus_stand: '',
+    };
+    if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) {
+      return emptyFields;
+    }
+    try {
+      const { data } = await volunteerApi.findNearbyTransport(latitude, longitude);
+      return {
+        nearest_railway: data.nearest_railway || '',
+        nearest_airport: data.nearest_airport || '',
+        nearest_bus_stand: data.nearest_bus_stand || '',
+      };
+    } catch {
+      // Address auto-fill must still succeed when transport data is unavailable.
+      return emptyFields;
+    }
+  }
+
   async function reverseAndApply(latitude, longitude, prefix = 'Location') {
     setBusy('location');
-    setMessage('Detecting address...');
+    setMessage('Detecting address and nearby transport...');
     try {
-      const { data } = await volunteerApi.reverseGeocode(latitude, longitude);
+      const [{ data }, transportFields] = await Promise.all([
+        volunteerApi.reverseGeocode(latitude, longitude),
+        getNearbyTransportFields(latitude, longitude),
+      ]);
       onApply({
         latitude: String(latitude.toFixed(7)),
         longitude: String(longitude.toFixed(7)),
-        address: data.address || form.address,
-        city: data.city || form.city,
-        district: data.district || form.district,
-        state: data.state || form.state,
-        pincode: data.pincode || form.pincode,
+        address: data.address || '',
+        city: data.city || '',
+        district: data.district || '',
+        state: data.state || '',
+        pincode: data.pincode || '',
         osm_id: data.osm_id || form.osm_id,
         google_maps_link: `https://www.google.com/maps?q=${latitude},${longitude}`,
         source: data.source || form.source,
+        ...transportFields,
       });
       localStorage.setItem(PREFERENCE_KEY, JSON.stringify({ state: data.state, district: data.district }));
-      setMessage(`${prefix} and address applied. Review the highlighted fields before continuing.`);
+      const transportCount = Object.values(transportFields).filter(Boolean).length;
+      setMessage(
+        `${prefix}, address${transportCount ? ` and ${transportCount} nearby transport locations` : ''} applied. Review the fields before continuing.`
+      );
     } catch (error) {
       setMessage(error.response?.data?.detail || 'Address detection failed. Coordinates were still applied.');
       onApply({ latitude: String(latitude), longitude: String(longitude) });
@@ -99,23 +128,31 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
     event?.preventDefault();
     if (!mapsLink.trim()) return;
     setBusy('maps-link');
-    setMessage('Reading the Google Maps link and detecting the address...');
+    setMessage('Reading the Google Maps link, address and nearby transport...');
     try {
       const { data } = await volunteerApi.autofillFromMapsLink(mapsLink.trim());
+      const transportFields = await getNearbyTransportFields(
+        Number(data.latitude),
+        Number(data.longitude),
+      );
       onApply({
         name: data.name || form.name,
-        address: data.address || data.display_name || form.address,
-        city: data.city || form.city,
-        district: data.district || form.district,
-        state: data.state || form.state,
-        pincode: data.pincode || form.pincode,
+        address: data.address || data.display_name || '',
+        city: data.city || '',
+        district: data.district || '',
+        state: data.state || '',
+        pincode: data.pincode || '',
         latitude: String(data.latitude),
         longitude: String(data.longitude),
         google_maps_link: data.google_maps_link || mapsLink.trim(),
         source: data.source || form.source,
+        ...transportFields,
       });
       localStorage.setItem(PREFERENCE_KEY, JSON.stringify({ state: data.state, district: data.district }));
-      setMessage('Location details filled successfully. Please review them before continuing.');
+      const transportCount = Object.values(transportFields).filter(Boolean).length;
+      setMessage(
+        `Location details${transportCount ? ` and ${transportCount} nearby transport locations` : ''} filled successfully. Please review them before continuing.`
+      );
     } catch (error) {
       setMessage(error.response?.data?.detail || 'This Google Maps link could not be read. Copy the link using Google Maps Share.');
     } finally {

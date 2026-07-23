@@ -33,6 +33,11 @@ _GEOCODE_CACHE: dict[str, tuple[float, Any]] = {}
 GEOCODE_CACHE_TTL_SECONDS = 60 * 60 * 24
 ORS_REVERSE_URL = "https://api.openrouteservice.org/geocode/reverse"
 ORS_SEARCH_URL = "https://api.openrouteservice.org/geocode/search"
+ORS_MATRIX_URL = "https://api.openrouteservice.org/v2/matrix/driving-car"
+OVERPASS_URLS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+)
 GOOGLE_MAP_HOSTS = {
     "google.com", "www.google.com", "maps.google.com", "maps.app.goo.gl",
     "goo.gl", "www.goo.gl",
@@ -209,7 +214,17 @@ async def _nearby_pincode(latitude: float, longitude: float, location: dict[str,
         except HTTPException:
             continue
         for result in results or []:
-            postcode = (result.get("address") or {}).get("postcode")
+            result_address = result.get("address") or {}
+            postcode = result_address.get("postcode")
+            # Never borrow a PIN from the other side of a state border.
+            result_state = re.sub(
+                r"[^a-z]", "", str(result_address.get("state") or "").casefold()
+            )
+            expected_state = re.sub(
+                r"[^a-z]", "", str(state or "").casefold()
+            )
+            if expected_state and result_state and result_state != expected_state:
+                continue
             try:
                 result_latitude, result_longitude = float(result["lat"]), float(result["lon"])
             except (KeyError, TypeError, ValueError):
@@ -252,6 +267,16 @@ async def _reconcile_postal_location(location: dict[str, Any]) -> dict[str, Any]
     pincode = str(location.get("pincode") or "")
     postal = await _postal_location_from_ors(pincode)
     if not postal:
+        return location
+    detected_state = re.sub(
+        r"[^a-z]", "", str(location.get("state") or "").casefold()
+    )
+    postal_state = re.sub(
+        r"[^a-z]", "", str(postal.get("state") or "").casefold()
+    )
+    if detected_state and postal_state and detected_state != postal_state:
+        # A nearby PIN across a state border is worse than leaving the field blank.
+        location["pincode"] = None
         return location
     # A validated PIN is more reliable than a border-area reverse-geocoder
     # label for state and district. Keep the detected locality when possible.
@@ -298,8 +323,6 @@ async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]
 
     # ORS sometimes omits the Indian PIN code. Enrich only missing address
     # fields with Nominatim while keeping ORS as the primary data source.
-    if ors_location and all(ors_location.get(key) for key in ("pincode", "city", "district", "state")):
-        return await _reconcile_postal_location(ors_location)
     try:
         item = await _nominatim_get(
             "/reverse",
@@ -317,10 +340,208 @@ async def _reverse_location(latitude: float, longitude: float) -> dict[str, Any]
     for key in ("display_name", "address", "city", "district", "state", "pincode", "country", "osm_id"):
         if not ors_location.get(key) and osm_location.get(key):
             ors_location[key] = osm_location[key]
+    osm_state = re.sub(
+        r"[^a-z]", "", str(osm_location.get("state") or "").casefold()
+    )
+    ors_state = re.sub(
+        r"[^a-z]", "", str(ors_location.get("state") or "").casefold()
+    )
+    if osm_location.get("pincode") and (not ors_state or osm_state == ors_state):
+        ors_location["pincode"] = osm_location["pincode"]
+    if len(str(osm_location.get("address") or "")) > len(str(ors_location.get("address") or "")):
+        ors_location["address"] = osm_location["address"]
+        ors_location["display_name"] = osm_location["display_name"]
     ors_location["source"] = "openrouteservice+openstreetmap"
     if not ors_location.get("pincode"):
         ors_location["pincode"] = await _nearby_pincode(latitude, longitude, ors_location)
     return await _reconcile_postal_location(ors_location)
+
+
+async def _ors_transport_candidates(
+    api_key: str,
+    latitude: float,
+    longitude: float,
+) -> list[dict[str, Any]]:
+    """Find exact OSM transport features and add ORS road distances."""
+    candidates: list[dict[str, Any]] = []
+
+    async with httpx.AsyncClient(timeout=35) as client:
+        overpass_query = f"""
+        [out:json][timeout:25];
+        (
+          nwr(around:100000,{latitude},{longitude})["railway"~"^(station|halt)$"]["name"];
+          nwr(around:300000,{latitude},{longitude})["aeroway"="aerodrome"]["name"];
+          nwr(around:60000,{latitude},{longitude})["amenity"="bus_station"]["name"];
+          nwr(around:60000,{latitude},{longitude})["public_transport"="station"]["bus"="yes"]["name"];
+        );
+        out center tags;
+        """
+        overpass_payload: dict[str, Any] | None = None
+        last_overpass_error: Exception | None = None
+        for overpass_url in OVERPASS_URLS:
+            try:
+                # Overpass expects the query in the form field named `data`.
+                overpass_response = await client.post(
+                    overpass_url,
+                    data={"data": overpass_query},
+                    headers=REQUEST_HEADERS,
+                )
+                overpass_response.raise_for_status()
+                overpass_payload = overpass_response.json()
+                break
+            except (httpx.HTTPError, ValueError) as error:
+                last_overpass_error = error
+        if overpass_payload is None:
+            raise HTTPException(
+                status_code=502,
+                detail="Nearby transport lookup is temporarily unavailable",
+            ) from last_overpass_error
+
+        found: dict[tuple[str, float, float], dict[str, Any]] = {}
+        for element in overpass_payload.get("elements") or []:
+            tags = element.get("tags") or {}
+            center = element.get("center") or {}
+            candidate_lat = element.get("lat", center.get("lat"))
+            candidate_lon = element.get("lon", center.get("lon"))
+            name = tags.get("name:en") or tags.get("name")
+            if candidate_lat is None or candidate_lon is None or not name:
+                continue
+            if tags.get("railway") in {"station", "halt"}:
+                transport_type = "railway"
+            elif tags.get("aeroway") == "aerodrome":
+                transport_type = "airport"
+            elif (
+                tags.get("amenity") == "bus_station"
+                or (
+                    tags.get("public_transport") == "station"
+                    and tags.get("bus") == "yes"
+                )
+            ):
+                transport_type = "bus"
+            else:
+                continue
+            candidate_lat, candidate_lon = float(candidate_lat), float(candidate_lon)
+            key = (
+                transport_type,
+                round(candidate_lat, 6),
+                round(candidate_lon, 6),
+            )
+            found[key] = {
+                "type": transport_type,
+                "name": str(name).strip(),
+                "latitude": candidate_lat,
+                "longitude": candidate_lon,
+                "straight_distance_km": _distance_km(
+                    latitude, longitude, candidate_lat, candidate_lon
+                ),
+                "osm_type": element.get("type"),
+                "osm_id": element.get("id"),
+            }
+
+        for transport_type in ("railway", "airport", "bus"):
+            matching = [
+                item for item in found.values()
+                if item["type"] == transport_type
+            ]
+            candidates.extend(
+                sorted(
+                    matching,
+                    key=lambda item: item["straight_distance_km"],
+                )[:6]
+            )
+
+        if not candidates:
+            return []
+
+        distances: list[Any] = []
+        durations: list[Any] = []
+        try:
+            matrix_response = await client.post(
+                ORS_MATRIX_URL,
+                json={
+                    "locations": [
+                        [longitude, latitude],
+                        *[
+                            [candidate["longitude"], candidate["latitude"]]
+                            for candidate in candidates
+                        ],
+                    ],
+                    "sources": [0],
+                    "destinations": list(range(1, len(candidates) + 1)),
+                    "metrics": ["distance", "duration"],
+                    "units": "km",
+                },
+                headers={"Authorization": api_key, "Content-Type": "application/json"},
+            )
+            matrix_response.raise_for_status()
+            matrix = matrix_response.json()
+            distances = (matrix.get("distances") or [[]])[0]
+            durations = (matrix.get("durations") or [[]])[0]
+        except (httpx.HTTPError, ValueError, TypeError):
+            # Exact place names remain useful even when road routing is
+            # temporarily unavailable. Use clearly-marked approximate distance.
+            pass
+        for index, candidate in enumerate(candidates):
+            has_road_distance = (
+                index < len(distances) and distances[index] is not None
+            )
+            candidate["distance_km"] = (
+                float(distances[index])
+                if has_road_distance
+                else candidate["straight_distance_km"]
+            )
+            candidate["distance_source"] = (
+                "openrouteservice_road" if has_road_distance else "approximate"
+            )
+            candidate["duration_minutes"] = (
+                round(float(durations[index]) / 60)
+                if index < len(durations) and durations[index] is not None
+                else None
+            )
+    return candidates
+
+
+@router.get("/nearby-transport")
+async def nearby_transport(
+    latitude: float = Query(ge=-90, le=90),
+    longitude: float = Query(ge=-180, le=180),
+    _volunteer: dict = Depends(get_current_volunteer),
+):
+    """Return the nearest railway station, airport and bus stand by road."""
+    api_key = os.getenv("OPENROUTESERVICE_API_KEY") or os.getenv("ORS_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="OPENROUTESERVICE_API_KEY is not configured on the backend",
+        )
+    try:
+        candidates = await _ors_transport_candidates(api_key, latitude, longitude)
+    except (httpx.HTTPError, ValueError, TypeError) as error:
+        raise HTTPException(
+            status_code=502,
+            detail="The nearby transport service is temporarily unavailable",
+        ) from error
+
+    result: dict[str, Any] = {}
+    field_names = {
+        "railway": "nearest_railway",
+        "airport": "nearest_airport",
+        "bus": "nearest_bus_stand",
+    }
+    for transport_type, field_name in field_names.items():
+        matching = [
+            candidate for candidate in candidates
+            if candidate["type"] == transport_type
+        ]
+        if not matching:
+            result[field_name] = None
+            continue
+        nearest = min(matching, key=lambda item: item["distance_km"])
+        distance = round(nearest["distance_km"], 1)
+        approx = "~" if nearest.get("distance_source") == "approximate" else ""
+        result[field_name] = f"{nearest['name']} — {approx}{distance:g} km"
+        result[f"{field_name}_details"] = nearest
+    return result
 
 
 @router.get("/reverse-geocode")
