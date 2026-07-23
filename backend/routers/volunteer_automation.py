@@ -1045,3 +1045,4 @@ def translate_to_hindi(
     if not translation:
         raise HTTPException(status_code=502, detail="Hindi translation was not returned")
     return {"translation": translation}
+ 
