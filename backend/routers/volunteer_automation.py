@@ -331,14 +331,14 @@ async def _ors_transport_candidates(
 ) -> list[dict[str, Any]]:
     """Find nearby transport places with ORS geocoding and add road distances."""
     searches = {
-        "railway": ("railway station", "train station"),
-        "airport": ("airport",),
-        "bus": ("bus station", "bus stand"),
+        "railway": (("railway station", "train station"), 100),
+        "airport": (("airport",), 300),
+        "bus": (("bus station", "bus stand"), 60),
     }
     candidates: list[dict[str, Any]] = []
 
     async with httpx.AsyncClient(timeout=18) as client:
-        for transport_type, queries in searches.items():
+        for transport_type, (queries, search_radius_km) in searches.items():
             found: dict[tuple[float, float], dict[str, Any]] = {}
             for search_text in queries:
                 response = await client.get(
@@ -347,6 +347,9 @@ async def _ors_transport_candidates(
                         "text": search_text,
                         "focus.point.lat": latitude,
                         "focus.point.lon": longitude,
+                        "boundary.circle.lat": latitude,
+                        "boundary.circle.lon": longitude,
+                        "boundary.circle.radius": search_radius_km,
                         "boundary.country": "IN",
                         "layers": "venue",
                         "size": 8,

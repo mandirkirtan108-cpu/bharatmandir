@@ -542,8 +542,6 @@ export default function AdminAddTemplePage() {
   const [draftNotice, setDraftNotice] = useState('');
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [historyTranslationStatus, setHistoryTranslationStatus] = useState('');
-  const [transportLoading, setTransportLoading] = useState(false);
-  const [transportNotice, setTransportNotice] = useState('');
 
   const [showCustomDesignation, setShowCustomDesignation] = useState(false);
   const [customDesignationText, setCustomDesignationText] = useState('');
@@ -864,39 +862,6 @@ export default function AdminAddTemplePage() {
     if (values.architecture_style) {
       setArchStyles(previous => previous.includes(values.architecture_style)
         ? previous : [...previous, values.architecture_style]);
-    }
-  }
-
-  async function autofillNearbyTransport() {
-    const latitude = Number(form.latitude);
-    const longitude = Number(form.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      setTransportNotice('Add valid temple latitude and longitude first.');
-      return;
-    }
-    setTransportLoading(true);
-    setTransportNotice('');
-    try {
-      const response = await volunteerApi.findNearbyTransport(latitude, longitude);
-      const values = response.data || {};
-      const fields = {};
-      if (values.nearest_railway) fields.nearest_railway = values.nearest_railway;
-      if (values.nearest_airport) fields.nearest_airport = values.nearest_airport;
-      if (values.nearest_bus_stand) fields.nearest_bus_stand = values.nearest_bus_stand;
-      applyAutomationFields(fields);
-      const count = Object.keys(fields).length;
-      setTransportNotice(
-        count
-          ? `${count} nearby transport locations filled. You can edit them if needed.`
-          : 'No nearby transport locations were found. Please enter them manually.'
-      );
-    } catch (error) {
-      setTransportNotice(
-        error.response?.data?.detail
-        || 'Could not find nearby transport locations. Please try again.'
-      );
-    } finally {
-      setTransportLoading(false);
     }
   }
 
@@ -1358,18 +1323,6 @@ export default function AdminAddTemplePage() {
                   <Field label="Google Maps Link" opt>
                     <Inp type="url" value={form.google_maps_link} onChange={v=>set('google_maps_link',v)} placeholder="https://maps.google.com/..." />
                   </Field>
-                  <div style={{ marginBottom:14 }}>
-                    <button
-                      type="button"
-                      className="btn-next"
-                      onClick={autofillNearbyTransport}
-                      disabled={transportLoading}
-                      style={{ opacity:transportLoading?.65:1 }}
-                    >
-                      {transportLoading ? 'Finding nearby transport...' : 'Auto-fill Nearby Transport'}
-                    </button>
-                    {transportNotice && <div className="field-hint" style={{ marginTop:7 }}>{transportNotice}</div>}
-                  </div>
                   <div className="fg-3">
                     <Field label="Nearest Railway Station" opt>
                       <Inp type="text" value={form.nearest_railway} onChange={v=>set('nearest_railway',v)} placeholder="Name — distance e.g. 3 km" />
