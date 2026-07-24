@@ -18,7 +18,7 @@ import {
   UsersRound,
 } from 'lucide-react';
 
-import useVolunteerAuth from '../../hooks/useVolunteerAuth';
+import { useVolunteerAuth } from '../../hooks/useVolunteerAuth';
 
 const SAFFRON = '#FF9900';
 const SAFFRON_BORDER =
@@ -57,6 +57,9 @@ export default function VolunteerLoginPage() {
     useState('');
 
   const [passwordError, setPasswordError] =
+    useState('');
+
+  const [submitError, setSubmitError] =
     useState('');
 
   useEffect(() => {
@@ -105,6 +108,7 @@ export default function VolunteerLoginPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setSubmitError('');
 
     const nextEmailError =
       getEmailError(email);
@@ -122,15 +126,29 @@ export default function VolunteerLoginPage() {
       return;
     }
 
-    const loggedIn = await login(
-      email.trim(),
-      password
-    );
+    if (typeof login !== 'function') {
+      setSubmitError(
+        'Volunteer authentication did not load correctly. Refresh the page or redeploy the matching authentication files.'
+      );
+      return;
+    }
 
-    if (loggedIn) {
-      navigate(redirectPath, {
-        replace: true,
-      });
+    try {
+      const loggedIn = await login(
+        email.trim(),
+        password
+      );
+
+      if (loggedIn) {
+        navigate(redirectPath, {
+          replace: true,
+        });
+      }
+    } catch (submitFailure) {
+      setSubmitError(
+        submitFailure?.message ||
+          'Unable to sign in. Please try again.'
+      );
     }
   };
 
@@ -202,12 +220,12 @@ export default function VolunteerLoginPage() {
           </span>
         </div>
 
-        {error && (
+        {(error || submitError) && (
           <div
             role="alert"
             style={styles.serverError}
           >
-            {error}
+            {error || submitError}
           </div>
         )}
 

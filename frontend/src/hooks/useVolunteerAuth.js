@@ -1,408 +1,330 @@
-import axios from 'axios';
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
 
-export const VOLUNTEER_STORAGE_KEYS = {
-  accessToken:
-    'bm_volunteer_access_token',
+import {
+  clearVolunteerSession,
+  getStoredVolunteer,
+  getVolunteerAccessToken,
+  saveVolunteerSession,
+  volunteerApi,
+} from '../services/volunteerApi';
 
-  refreshToken:
-    'bm_volunteer_refresh_token',
-
-  volunteer:
-    'bm_volunteer_user',
-};
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  'http://localhost:8000';
-
-const volunteerClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-
-  headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  },
-});
-
-const refreshClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-
-  headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  },
-});
-
-let refreshRequest = null;
-
-function isBrowser() {
-  return typeof window !== 'undefined';
-}
-
-export function getVolunteerAccessToken() {
-  if (!isBrowser()) {
-    return null;
-  }
-
-  return localStorage.getItem(
-    VOLUNTEER_STORAGE_KEYS.accessToken
+export function useVolunteerAuth() {
+  const [volunteer, setVolunteer] = useState(
+    () => getStoredVolunteer()
   );
-}
 
-export function getVolunteerRefreshToken() {
-  if (!isBrowser()) {
-    return null;
-  }
-
-  return localStorage.getItem(
-    VOLUNTEER_STORAGE_KEYS.refreshToken
+  const [loading, setLoading] = useState(
+    () =>
+      Boolean(getVolunteerAccessToken()) &&
+      !getStoredVolunteer()
   );
-}
 
-export function getStoredVolunteer() {
-  if (!isBrowser()) {
-    return null;
-  }
+  const [error, setError] = useState('');
 
-  const storedVolunteer =
-    localStorage.getItem(
-      VOLUNTEER_STORAGE_KEYS.volunteer
-    );
+  const updateVolunteerState = useCallback(
+    (volunteerData) => {
+      setVolunteer(volunteerData || null);
 
-  if (!storedVolunteer) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(storedVolunteer);
-  } catch {
-    localStorage.removeItem(
-      VOLUNTEER_STORAGE_KEYS.volunteer
-    );
-
-    return null;
-  }
-}
-
-export function saveVolunteerSession({
-  accessToken,
-  refreshToken,
-  volunteer,
-}) {
-  if (!isBrowser()) {
-    return;
-  }
-
-  if (accessToken) {
-    localStorage.setItem(
-      VOLUNTEER_STORAGE_KEYS.accessToken,
-      accessToken
-    );
-  }
-
-  if (refreshToken) {
-    localStorage.setItem(
-      VOLUNTEER_STORAGE_KEYS.refreshToken,
-      refreshToken
-    );
-  }
-
-  if (volunteer) {
-    localStorage.setItem(
-      VOLUNTEER_STORAGE_KEYS.volunteer,
-      JSON.stringify(volunteer)
-    );
-  }
-}
-
-export function clearVolunteerSession() {
-  if (!isBrowser()) {
-    return;
-  }
-
-  Object.values(
-    VOLUNTEER_STORAGE_KEYS
-  ).forEach((storageKey) => {
-    localStorage.removeItem(storageKey);
-  });
-}
-
-function notifySessionExpired() {
-  if (!isBrowser()) {
-    return;
-  }
-
-  window.dispatchEvent(
-    new CustomEvent(
-      'bharatmandir-volunteer-session-expired'
-    )
+      window.dispatchEvent(
+        new CustomEvent(
+          'bharatmandir-volunteer-auth-change',
+          {
+            detail: {
+              volunteer: volunteerData || null,
+            },
+          }
+        )
+      );
+    },
+    []
   );
-}
 
-volunteerClient.interceptors.request.use(
-  (config) => {
+  const logout = useCallback(async () => {
+    try {
+      if (getVolunteerAccessToken()) {
+        await volunteerApi.logout();
+      }
+    } catch {
+      // Backend logout fail hone par bhi local
+      // Clear the local session when the stored session is invalid.
+    } finally {
+      clearVolunteerSession();
+      setVolunteer(null);
+      setError('');
+
+      window.dispatchEvent(
+        new CustomEvent(
+          'bharatmandir-volunteer-auth-change',
+          {
+            detail: {
+              volunteer: null,
+            },
+          }
+        )
+      );
+    }
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
     const accessToken =
       getVolunteerAccessToken();
 
-    if (accessToken) {
-      config.headers.Authorization =
-        `Bearer ${accessToken}`;
-    }
-
-    return config;
-  },
-
-  (requestError) =>
-    Promise.reject(requestError)
-);
-
-volunteerClient.interceptors.response.use(
-  (response) => response,
-
-  async (requestError) => {
-    const originalRequest =
-      requestError.config;
-
-    const status =
-      requestError.response?.status;
-
-    const requestUrl =
-      originalRequest?.url || '';
-
-    const isAuthRequest =
-      requestUrl.includes(
-        '/api/volunteer/auth/login'
-      ) ||
-      requestUrl.includes(
-        '/api/volunteer/auth/signup'
-      ) ||
-      requestUrl.includes(
-        '/api/volunteer/auth/refresh'
-      );
-
-    if (
-      status !== 401 ||
-      originalRequest?._volunteerRetry ||
-      isAuthRequest
-    ) {
-      return Promise.reject(requestError);
-    }
-
-    const refreshToken =
-      getVolunteerRefreshToken();
-
-    if (!refreshToken) {
+    if (!accessToken) {
       clearVolunteerSession();
-      notifySessionExpired();
-
-      return Promise.reject(requestError);
+      setVolunteer(null);
+      setLoading(false);
+      return null;
     }
 
-    originalRequest._volunteerRetry = true;
+    setLoading(true);
+    setError('');
 
     try {
-      if (!refreshRequest) {
-        refreshRequest = refreshClient
-          .post(
-            '/api/volunteer/auth/refresh',
-            {
-              refresh_token: refreshToken,
-            }
-          )
-          .then((response) => {
-            const newAccessToken =
-              response.data?.access_token;
+      const response =
+        await volunteerApi.me();
 
-            if (!newAccessToken) {
-              throw new Error(
-                'A new access token was not returned.'
-              );
-            }
+      const volunteerData = response.data;
 
-            saveVolunteerSession({
-              accessToken: newAccessToken,
-            });
+      saveVolunteerSession({
+        volunteer: volunteerData,
+      });
 
-            return newAccessToken;
-          })
-          .finally(() => {
-            refreshRequest = null;
-          });
-      }
+      updateVolunteerState(volunteerData);
 
-      const newAccessToken =
-        await refreshRequest;
-
-      originalRequest.headers =
-        originalRequest.headers || {};
-
-      originalRequest.headers.Authorization =
-        `Bearer ${newAccessToken}`;
-
-      return volunteerClient(
-        originalRequest
-      );
-    } catch (refreshError) {
+      return volunteerData;
+    } catch (requestError) {
       clearVolunteerSession();
-      notifySessionExpired();
+      setVolunteer(null);
 
-      return Promise.reject(refreshError);
+      setError(
+        requestError.response?.data?.detail ||
+          'Your volunteer session has expired. Please sign in again.'
+      );
+
+      return null;
+    } finally {
+      setLoading(false);
     }
-  }
-);
+  }, [updateVolunteerState]);
 
-export const volunteerApi = {
-  signup(signupData) {
-    return volunteerClient.post(
-      '/api/volunteer/auth/signup',
-      signupData
-    );
-  },
+  const login = useCallback(
+    async (email, password) => {
+      setLoading(true);
+      setError('');
 
-  login(loginData) {
-    return volunteerClient.post(
-      '/api/volunteer/auth/login',
-      loginData
-    );
-  },
+      try {
+        const response =
+          await volunteerApi.login({
+            email: email.trim().toLowerCase(),
+            password,
+          });
 
-  logout() {
-    return volunteerClient.post(
-      '/api/volunteer/auth/logout'
-    );
-  },
+        const sessionData = response.data;
 
-  refresh(refreshToken) {
-    return refreshClient.post(
-      '/api/volunteer/auth/refresh',
-      {
-        refresh_token: refreshToken,
+        if (
+          !sessionData?.access_token ||
+          !sessionData?.volunteer
+        ) {
+          throw new Error(
+            'Login response incomplete hai.'
+          );
+        }
+
+        saveVolunteerSession({
+          accessToken:
+            sessionData.access_token,
+
+          refreshToken:
+            sessionData.refresh_token,
+
+          volunteer:
+            sessionData.volunteer,
+        });
+
+        updateVolunteerState(
+          sessionData.volunteer
+        );
+
+        return true;
+      } catch (requestError) {
+        clearVolunteerSession();
+        setVolunteer(null);
+
+        setError(
+          requestError.response?.data?.detail ||
+            requestError.message ||
+          'Unable to sign in to the volunteer account.'
+        );
+
+        return false;
+      } finally {
+        setLoading(false);
       }
+    },
+    [updateVolunteerState]
+  );
+
+  const signup = useCallback(
+    async (signupData) => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response =
+          await volunteerApi.signup(
+            signupData
+          );
+
+        return {
+          success: true,
+          data: response.data,
+          error: '',
+        };
+      } catch (requestError) {
+        const signupError =
+          requestError.response?.data?.detail ||
+          requestError.message ||
+          'Unable to create the volunteer account.';
+
+        setError(signupError);
+
+        return {
+          success: false,
+          data: null,
+          error: signupError,
+        };
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  const updateProfile = useCallback(
+    async (profileData) => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response =
+          await volunteerApi.updateProfile(
+            profileData
+          );
+
+        const updatedVolunteer =
+          response.data;
+
+        saveVolunteerSession({
+          volunteer: updatedVolunteer,
+        });
+
+        updateVolunteerState(
+          updatedVolunteer
+        );
+
+        return {
+          success: true,
+          data: updatedVolunteer,
+          error: '',
+        };
+      } catch (requestError) {
+        const profileError =
+          requestError.response?.data?.detail ||
+          requestError.message ||
+          'Unable to update the volunteer profile.';
+
+        setError(profileError);
+
+        return {
+          success: false,
+          data: null,
+          error: profileError,
+        };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [updateVolunteerState]
+  );
+
+  const clearError = useCallback(() => {
+    setError('');
+  }, []);
+
+  useEffect(() => {
+    const handleAuthChange = (event) => {
+      setVolunteer(
+        event.detail?.volunteer || null
+      );
+    };
+
+    const handleSessionExpired = () => {
+      clearVolunteerSession();
+      setVolunteer(null);
+      setLoading(false);
+
+      setError(
+          'Your volunteer session has expired. Please sign in again.'
+      );
+    };
+
+    window.addEventListener(
+      'bharatmandir-volunteer-auth-change',
+      handleAuthChange
     );
-  },
 
-  me() {
-    return volunteerClient.get(
-      '/api/volunteer/auth/me'
+    window.addEventListener(
+      'bharatmandir-volunteer-session-expired',
+      handleSessionExpired
     );
-  },
 
-  updateProfile(profileData) {
-    return volunteerClient.patch(
-      '/api/volunteer/auth/profile',
-      profileData
-    );
-  },
+    return () => {
+      window.removeEventListener(
+        'bharatmandir-volunteer-auth-change',
+        handleAuthChange
+      );
 
-  listSubmissions() {
-    return volunteerClient.get(
-      '/api/volunteer/submissions'
-    );
-  },
+      window.removeEventListener(
+        'bharatmandir-volunteer-session-expired',
+        handleSessionExpired
+      );
+    };
+  }, []);
 
-  getSubmission(submissionId) {
-    return volunteerClient.get(
-      `/api/volunteer/submissions/${submissionId}`
-    );
-  },
+  useEffect(() => {
+    const accessToken =
+      getVolunteerAccessToken();
 
-  createSubmission(submissionData) {
-    return volunteerClient.post(
-      '/api/volunteer/submissions',
-      submissionData
-    );
-  },
+    if (!accessToken) {
+      setLoading(false);
+      return;
+    }
 
-  updateSubmission(
-    submissionId,
-    submissionData
-  ) {
-    return volunteerClient.patch(
-      `/api/volunteer/submissions/${submissionId}`,
-      submissionData
-    );
-  },
+    refreshProfile();
+  }, [refreshProfile]);
 
-  deleteSubmission(submissionId) {
-    return volunteerClient.delete(
-      `/api/volunteer/submissions/${submissionId}`
-    );
-  },
+  return {
+    volunteer,
 
-  submitSubmission(submissionId) {
-    return volunteerClient.post(
-      `/api/volunteer/submissions/${submissionId}/submit`
-    );
-  },
+    isLoggedIn: Boolean(
+      volunteer &&
+        getVolunteerAccessToken()
+    ),
 
-  autofillFromMapsLink(url) {
-    return volunteerClient.get('/api/volunteer/automation/maps-link', {
-      params: { url },
-    });
-  },
+    loading,
+    error,
 
-  reverseGeocode(latitude, longitude) {
-    return volunteerClient.get('/api/volunteer/automation/reverse-geocode', {
-      params: { latitude, longitude },
-    });
-  },
+    login,
+    signup,
+    logout,
+    refresh: refreshProfile,
+    updateProfile,
+    clearError,
+  };
+}
 
-  findNearbyTransport(latitude, longitude, location = {}) {
-    return volunteerClient.get('/api/volunteer/automation/nearby-transport', {
-      params: {
-        latitude,
-        longitude,
-        city: location.city || undefined,
-        district: location.district || undefined,
-        state: location.state || undefined,
-      },
-    });
-  },
-
-  searchPlaces(q) {
-    return volunteerClient.get('/api/volunteer/automation/place-search', { params: { q } });
-  },
-
-  findDuplicates(params) {
-    return volunteerClient.get('/api/volunteer/automation/duplicates', { params });
-  },
-
-  getPlaceDetails(placeId) {
-    return volunteerClient.get('/api/volunteer/automation/place-details', {
-      params: { place_id: placeId },
-    });
-  },
-
-  getPlacePhoto(photoReference) {
-    return volunteerClient.get('/api/volunteer/automation/place-photo', {
-      params: { reference: photoReference }, responseType: 'blob',
-    });
-  },
-
-  extractSignboard(image) {
-    const body = new FormData();
-    body.append('image', image);
-    return volunteerClient.post('/api/volunteer/automation/ocr', body, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-  },
-
-  getTempleSuggestions(data) {
-    return volunteerClient.post('/api/volunteer/automation/suggestions', data);
-  },
-
-  translateToHindi(text) {
-    return volunteerClient.post('/api/volunteer/automation/translate-to-hindi', {
-      text,
-    });
-  },
-
-  listAdminVolunteers(status) {
-    const query = status ? `?approval_status=${status}` : '';
-    return volunteerClient.get(`/api/volunteer/auth/admin/volunteers${query}`);
-  },
-};
-
-export default volunteerClient;
+export default useVolunteerAuth;
