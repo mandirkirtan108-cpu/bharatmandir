@@ -761,7 +761,6 @@ function ChoghadiyaChips({ rows }) {
 
 function PanchangDetails({ dailyResult }) {
   const [activeTab, setActiveTab] = useState('overview');
-  const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
   // Brahma Muhurat / Abhijit Muhurat / Rahu Kaal are intentionally left out
   // here — they already have their own colored cards directly above this
   // panel, so repeating them in the list would just be the same fact twice.
@@ -856,11 +855,6 @@ function PanchangDetails({ dailyResult }) {
 
       {activeTab === 'full' && (
         <div className="panchang-tab-content" style={{ display: 'grid', gap: 14 }}>
-          {!!nightChoghadiya.length && (
-            <Panel icon={<Moon size={16} />} title="Night Choghadiya" accent="#4338ca">
-              <ChoghadiyaChips rows={nightChoghadiya} />
-            </Panel>
-          )}
           {angaGroups.map((group) => (
             <AngaSection key={group.key} title={group.title} icon={group.icon} accent={group.accent} records={group.records} />
           ))}
@@ -872,6 +866,7 @@ function PanchangDetails({ dailyResult }) {
 
 function PanchangDailyResult({ dailyResult }) {
   const dayChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period !== 'night');
+  const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
 
   return (
     <div style={{ animation: 'fadeDown .5s ease both' }}>
@@ -903,6 +898,15 @@ function PanchangDailyResult({ dailyResult }) {
           rows={dayChoghadiya}
           sunrise={dailyResult.sunrise}
           sunset={dailyResult.sunset}
+        />
+      )}
+
+      {!!nightChoghadiya.length && (
+        <ChoghadiyaTimeline
+          title="Night Choghadiya"
+          rows={nightChoghadiya}
+          sunrise={dailyResult.sunset}
+          sunset={dailyResult.sunrise}
         />
       )}
 
