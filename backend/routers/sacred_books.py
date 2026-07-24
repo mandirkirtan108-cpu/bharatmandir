@@ -159,7 +159,7 @@ SOURCE TEXT:
 def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
     try:
         pages = _extract_pages(pdf_bytes)
-        api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+        api_key = (os.getenv("VITE_OPENAI_API_KEY") or "").strip()
         if not api_key:
             raise RuntimeError(
                 "OPENAI_API_KEY is not available to the backend process. "
@@ -327,7 +327,7 @@ def archive_book(book_id: int, admin: dict = Depends(get_current_admin)):
 
 @router.post("/api/admin/books/{book_id}/retry", status_code=202)
 def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
-    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    api_key = (os.getenv("VITE_OPENAI_API_KEY") or "").strip()
     if not api_key:
         raise HTTPException(
             503,
