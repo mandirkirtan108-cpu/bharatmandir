@@ -957,22 +957,22 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
     : null;
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 12, padding: '18px 18px 16px', margin: '18px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 24 }}>
+    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 11, padding: '12px 14px 11px', margin: '10px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Clock size={17} color="#4b5563" />
-          <span style={{ fontFamily: UI_FONT, fontSize: 16, fontWeight: 800, color: '#1a1a1a' }}>{title}</span>
+          <Clock size={14} color="#4b5563" />
+          <span style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, color: '#1a1a1a' }}>{title}</span>
         </div>
-        <span style={{ fontFamily: UI_FONT, fontSize: 13, color: '#8b8b8b', fontWeight: 800 }}>{shortTime(sunrise)} → {shortTime(sunset)}</span>
+        <span style={{ fontFamily: UI_FONT, fontSize: 10.5, color: '#8b8b8b', fontWeight: 800 }}>{shortTime(sunrise)} → {shortTime(sunset)}</span>
       </div>
 
-      <div style={{ position: 'relative', paddingTop: 18 }}>
+      <div style={{ position: 'relative', paddingTop: 13 }}>
         {activePosition !== null && (
-          <div style={{ position: 'absolute', left: `${activePosition}%`, top: -18, transform: 'translateX(-50%)', zIndex: 3 }}>
-            <div style={{ background: '#0f355d', color: 'white', borderRadius: 12, padding: '4px 9px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 900, whiteSpace: 'nowrap', boxShadow: '0 4px 10px rgba(0,0,0,.16)' }}>
+          <div style={{ position: 'absolute', left: `${activePosition}%`, top: -13, transform: 'translateX(-50%)', zIndex: 3 }}>
+            <div style={{ background: '#0f355d', color: 'white', borderRadius: 10, padding: '3px 7px', fontFamily: UI_FONT, fontSize: 9, fontWeight: 900, whiteSpace: 'nowrap', boxShadow: '0 3px 8px rgba(0,0,0,.14)' }}>
               Now · {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </div>
-            <div style={{ width: 3, height: 58, background: '#0f355d', margin: '-1px auto 0' }} />
+            <div style={{ width: 2, height: 42, background: '#0f355d', margin: '-1px auto 0' }} />
           </div>
         )}
 
@@ -980,32 +980,32 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
           {segments.map((item, index) => {
             const colors = choghadiyaColor(item.name);
             return (
-              <div key={`${item.name}-${index}`} style={{ flex: '1 0 84px', background: colors.bg, borderRight: index < segments.length - 1 ? '1px solid rgba(255,255,255,.55)' : 'none', minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontFamily: UI_FONT, color: colors.text, fontSize: 13, fontWeight: 800 }}>{item.name || '—'}</span>
+              <div key={`${item.name}-${index}`} style={{ flex: '1 0 68px', background: colors.bg, borderRight: index < segments.length - 1 ? '1px solid rgba(255,255,255,.55)' : 'none', minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontFamily: UI_FONT, color: colors.text, fontSize: 10.5, fontWeight: 800 }}>{item.name || '—'}</span>
               </div>
             );
           })}
         </div>
 
-        <div style={{ display: 'flex', marginTop: 8 }}>
+        <div style={{ display: 'flex', marginTop: 5 }}>
           {segments.map((item, index) => (
-            <div key={`${item.name}-time-${index}`} style={{ flex: '1 0 84px', fontFamily: UI_FONT, color: '#8a8a8a', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'left' }}>
+            <div key={`${item.name}-time-${index}`} style={{ flex: '1 0 68px', fontFamily: UI_FONT, color: '#8a8a8a', fontSize: 8.5, fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'left' }}>
               {shortTime(periodStart(item))}
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, borderTop: '1px solid #eeeeee', marginTop: 18, paddingTop: 14 }}>
-        <div style={{ background: '#eef7e3', borderRadius: 7, padding: '10px 12px' }}>
-          <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#6b8d4d', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Currently In</p>
-          <p style={{ fontFamily: UI_FONT, fontSize: 15, color: '#285c1f', fontWeight: 900, margin: '4px 0 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, borderTop: '1px solid #eeeeee', marginTop: 10, paddingTop: 9 }}>
+        <div style={{ background: '#eef7e3', borderRadius: 7, padding: '7px 9px' }}>
+          <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#6b8d4d', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Currently In</p>
+          <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#285c1f', fontWeight: 900, margin: '2px 0 0' }}>
             {current?.name || 'Not available'} {current ? `· ${shortTime(periodStart(current))}-${shortTime(periodEnd(current))}` : ''}
           </p>
         </div>
-        <div style={{ background: '#fafafa', borderRadius: 7, padding: '10px 12px' }}>
-          <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Next</p>
-          <p style={{ fontFamily: UI_FONT, fontSize: 15, color: '#292929', fontWeight: 900, margin: '4px 0 0' }}>
+        <div style={{ background: '#fafafa', borderRadius: 7, padding: '7px 9px' }}>
+          <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Next</p>
+          <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#292929', fontWeight: 900, margin: '2px 0 0' }}>
             {next?.name || 'Not available'}{minutesToNext !== null ? ` · in ${minutesToNext} min` : ''}
           </p>
         </div>
