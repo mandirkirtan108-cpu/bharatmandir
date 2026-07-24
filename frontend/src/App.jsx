@@ -1,5 +1,6 @@
 import {
   BrowserRouter,
+  Navigate,
   Route,
   Routes,
 } from 'react-router-dom';
@@ -122,11 +123,27 @@ export default function App() {
             element={<SacredBooksPage />}
           />
 
+          {/* Legacy library links kept for existing navbar/bookmarks */}
+          <Route
+            path="/library"
+            element={<Navigate to="/sacred-books" replace />}
+          />
+
+          <Route
+            path="/library/:legacyCategory"
+            element={<Navigate to="/sacred-books" replace />}
+          />
+
           <Route
             path="/sacred-books/:category/:slug"
             element={
               <SacredBookReaderPage />
             }
+          />
+
+          <Route
+            path="/reader/:slug"
+            element={<SacredBookReaderPage />}
           />
 
           {/* Public blog route */}
