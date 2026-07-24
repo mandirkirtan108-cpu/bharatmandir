@@ -1,1 +1,1 @@
-from routers.sacred_books import route
+from routers.sacred_books import router
