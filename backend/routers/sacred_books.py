@@ -15,6 +15,8 @@ import re
 import threading
 
 import cloudinary.uploader
+import httpx
+from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from openai import OpenAI
 from pypdf import PdfReader
@@ -22,6 +24,9 @@ from pypdf import PdfReader
 from db.connection import get_db_cursor
 from routers.admin_auth import get_current_admin
 from services.cloudinary_service import _ensure_configured
+
+ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+load_dotenv(ENV_PATH, override=False)
 
 router = APIRouter(tags=["Library"])
 
@@ -154,7 +159,13 @@ SOURCE TEXT:
 def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
     try:
         pages = _extract_pages(pdf_bytes)
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+        if not api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is not available to the backend process. "
+                "Add it to the backend service environment and restart/redeploy the backend."
+            )
+        client = OpenAI(api_key=api_key)
         for page_number, source_text in enumerate(pages, 1):
             translations = {
                 code: _translate(client, source_text, source_language, code)
@@ -312,3 +323,48 @@ def archive_book(book_id: int, admin: dict = Depends(get_current_admin)):
         if not cur.fetchone():
             raise HTTPException(404, "Book not found")
     return {"status": "archived"}
+
+
+@router.post("/api/admin/books/{book_id}/retry", status_code=202)
+def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(
+            503,
+            "OPENAI_API_KEY is not available to the backend process. "
+            "Restart/redeploy the backend after adding it to the backend service environment.",
+        )
+
+    with get_db_cursor() as cur:
+        cur.execute("""
+            SELECT id, original_pdf_url, source_language
+            FROM library_books
+            WHERE id=%s AND status='failed'
+        """, (book_id,))
+        book = cur.fetchone()
+        if not book:
+            raise HTTPException(404, "Failed book not found")
+
+    try:
+        response = httpx.get(book["original_pdf_url"], timeout=60, follow_redirects=True)
+        response.raise_for_status()
+        pdf_bytes = response.content
+        _extract_pages(pdf_bytes)
+    except Exception as exc:
+        raise HTTPException(502, f"Could not retrieve the original PDF: {exc}") from exc
+
+    with get_db_cursor() as cur:
+        cur.execute("""
+            DELETE FROM library_book_pages WHERE book_id=%s;
+            UPDATE library_books
+            SET status='processing', processing_error=NULL, updated_at=NOW()
+            WHERE id=%s
+        """, (book_id, book_id))
+
+    threading.Thread(
+        target=_process_book,
+        args=(book_id, pdf_bytes, book["source_language"]),
+        daemon=True,
+        name=f"library-book-retry-{book_id}",
+    ).start()
+    return {"id": book_id, "status": "processing"}
