@@ -43,6 +43,7 @@ from routers.panchang import (
     router as panchang_router,
 )
 from routers.sacred_books import (
+    ensure_library_schema,
     router as sacred_books_router,
 )
 from routers.user_auth import (
@@ -105,6 +106,7 @@ async def lifespan(
                 NOT NULL DEFAULT '{}'::jsonb
                 """
             )
+        ensure_library_schema()
 
         print(
             "Database connection pool ready."
