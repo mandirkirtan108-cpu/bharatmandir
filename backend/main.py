@@ -24,7 +24,6 @@ from db.connection import (
 from routers import (
     admin,
     festivals,
-    library,
     proxy,
     route_planner,
     spiritual_chat,
@@ -36,9 +35,6 @@ from routers.admin_auth import (
 )
 from routers.ai_festival_cache import (
     router as ai_festival_cache_router,
-)
-from routers.library_admin import (
-    router as library_admin_router,
 )
 from routers.blogs import (
     router as blogs_router,
@@ -262,14 +258,6 @@ app.include_router(
 
 app.include_router(
     sacred_books_router
-)
-
-app.include_router(
-    library.router
-)
-
-app.include_router(
-    library_admin_router
 )
 
 app.include_router(

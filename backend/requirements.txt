@@ -17,4 +17,5 @@ resend
 pydantic[email]
 cloudinary
 beautifulsoup4
-pypdf 
+pypdf
+PyMuPDF
