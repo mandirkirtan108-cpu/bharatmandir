@@ -39,6 +39,9 @@ TARGET_LANGUAGES = {
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
 TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "gpt-4.1")
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
+TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
+TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
+_translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
 
 
 def ensure_library_schema() -> None:
@@ -140,7 +143,29 @@ def _extract_pages(content: bytes) -> list[str]:
     return pages
 
 
-def _translate(client: OpenAI, text: str, source_language: str, target_code: str) -> str:
+def _split_text(text: str) -> list[str]:
+    """Split oversized extracted pages without dropping or reordering text."""
+    if len(text) <= TRANSLATION_CHUNK_CHARS:
+        return [text]
+    chunks = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= TRANSLATION_CHUNK_CHARS:
+            chunks.append(remaining)
+            break
+        boundary = remaining.rfind("\n\n", 0, TRANSLATION_CHUNK_CHARS)
+        if boundary < TRANSLATION_CHUNK_CHARS // 2:
+            boundary = remaining.rfind("\n", 0, TRANSLATION_CHUNK_CHARS)
+        if boundary < TRANSLATION_CHUNK_CHARS // 2:
+            boundary = remaining.rfind(" ", 0, TRANSLATION_CHUNK_CHARS)
+        if boundary < 1:
+            boundary = TRANSLATION_CHUNK_CHARS
+        chunks.append(remaining[:boundary])
+        remaining = remaining[boundary:].lstrip("\n")
+    return chunks
+
+
+def _translate_chunk(client: OpenAI, text: str, source_language: str, target_code: str) -> str:
     if not text.strip():
         return ""
     target = TARGET_LANGUAGES[target_code]
@@ -155,19 +180,28 @@ NON-NEGOTIABLE RULES:
 
 SOURCE TEXT:
 {text}"""
-    response = client.responses.create(
-        model=TRANSLATION_MODEL,
-        input=prompt,
-        temperature=0,
-    )
+    with _translation_slots:
+        response = client.responses.create(
+            model=TRANSLATION_MODEL,
+            input=prompt,
+            temperature=0,
+            timeout=TRANSLATION_TIMEOUT,
+        )
     return response.output_text.strip()
+
+
+def _translate(client: OpenAI, text: str, source_language: str, target_code: str) -> str:
+    return "\n\n".join(
+        _translate_chunk(client, chunk, source_language, target_code)
+        for chunk in _split_text(text)
+    )
 
 
 def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
     try:
         pages = _extract_pages(pdf_bytes)
         api_key = (
-            os.getenv("VITE_OPENAI_API_KEY")
+            os.getenv("OPENAI_API_KEY")
             or os.getenv("VITE_OPENAI_API_KEY")
             or ""
         ).strip()
@@ -176,14 +210,21 @@ def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
                 "OPENAI_API_KEY is not available to the backend process. "
                 "Add it to the backend service environment and restart/redeploy the backend."
             )
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(
+            api_key=api_key,
+            timeout=TRANSLATION_TIMEOUT,
+            max_retries=2,
+        )
 
         def translate_page(page_number: int, source_text: str):
-            translations = {
-                code: _translate(client, source_text, source_language, code)
-                for code in TARGET_LANGUAGES
-            }
-            return page_number, source_text, translations
+            try:
+                translations = {
+                    code: _translate(client, source_text, source_language, code)
+                    for code in TARGET_LANGUAGES
+                }
+                return page_number, source_text, translations
+            except Exception as exc:
+                raise RuntimeError(f"Translation stopped on PDF page {page_number}: {exc}") from exc
 
         with get_db_cursor() as cur:
             cur.execute("""
@@ -362,7 +403,7 @@ def archive_book(book_id: int, admin: dict = Depends(get_current_admin)):
 @router.post("/api/admin/books/{book_id}/retry", status_code=202)
 def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
     api_key = (
-        os.getenv("VITE_OPENAI_API_KEY")
+        os.getenv("OPENAI_API_KEY")
         or os.getenv("VITE_OPENAI_API_KEY")
         or ""
     ).strip()
