@@ -19,7 +19,6 @@ import PanchangPage from './pages/PanchangPage';
 import SpiritualGuidePage from './pages/SpiritualGuidePage';
 import FestivalCalendarPage from './pages/FestivalCalendarPage';
 import SacredBooksPage from './pages/SacredBooksPage';
-import SacredBookCategoryPage from './pages/SacredBookCategoryPage';
 import SacredBookReaderPage from './pages/SacredBookReaderPage';
 import BlogPage from './pages/BlogPage';
 
@@ -34,6 +33,7 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminPanelPage from './pages/AdminPanelPage';
 import AdminAddFestivalPage from './pages/AdminAddFestivalPage';
 import AdminAddBlogPage from './pages/AdminAddBlogPage';
+import AdminLibraryPage from './pages/AdminLibraryPage';
 
 // Volunteer protection
 import VolunteerProtectedRoute from './components/volunteer/VolunteerProtectedRoute';
@@ -123,13 +123,6 @@ export default function App() {
           />
 
           <Route
-            path="/sacred-books/:category"
-            element={
-              <SacredBookCategoryPage />
-            }
-          />
-
-          <Route
             path="/sacred-books/:category/:slug"
             element={
               <SacredBookReaderPage />
@@ -173,6 +166,15 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <AdminAddBlogPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/library"
+            element={
+              <ProtectedRoute>
+                <AdminLibraryPage />
               </ProtectedRoute>
             }
           />

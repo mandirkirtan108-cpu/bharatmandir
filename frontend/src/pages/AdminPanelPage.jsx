@@ -13,7 +13,7 @@ import {
   Search, Shield, ShieldCheck, ExternalLink, Clock,
   MapPin, User, Star, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, LayoutDashboard, PlusCircle,
-  CalendarPlus, LogOut, Pencil, Trash2, Save, X, FileText,
+  CalendarPlus, LogOut, Pencil, Trash2, Save, X, FileText, BookOpen,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -1638,6 +1638,17 @@ export default function AdminPanelPage() {
                 >
                   <FileText size={15} />
                   <span>Add Blog</span>
+                </Link>
+
+                <Link to="/admin/library" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '10px 18px', background: 'linear-gradient(135deg, #63320f, #8c531d)',
+                  border: '2px solid transparent', borderRadius: 50,
+                  fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
+                  color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                  <BookOpen size={15} />
+                  <span>Library</span>
                 </Link>
 
                 <button onClick={() => { loadTemples(); loadCounts(); }} style={{
