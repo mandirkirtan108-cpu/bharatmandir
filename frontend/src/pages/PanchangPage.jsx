@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
@@ -18,23 +18,26 @@ import Footer from '../components/Footer';
 import PanchangCalendar from '../components/PanchangCalendar';
 import CityAutocomplete from '../components/CityAutocomplete';
 
-// FIX: the hardcoded MUHURAT_TYPES list (6 occasions duplicated from the
-// backend's MUHURAT_OCCASIONS dict) has been removed. It's now fetched at
-// runtime from GET /api/panchang/muhurat/occasions — the same source of
-// truth the backend itself validates `muhurat_type` against — so the
-// picker can never drift out of sync with what /api/panchang/muhurat
-// actually supports. See the `muhuratTypes` state + effect inside
-// PanchangPage() below.
-//
-// Note on what these occasions actually need as input: per DivineAPI's own
-// docs (developers.divineapi.com/indian-api/muhurat-finder/marriage and
-// .../vehicle-purchase, etc.), every one of the 6 supported occasion
-// endpoints takes an IDENTICAL request shape — api_key, month, year,
-// place, lat, lon, tzone, lan. There is no groom/bride, vehicle-type,
-// business-type, or any other person/occasion-specific field in the real
-// API — it's a generic "auspicious date-for-the-month" finder, not a
-// personalized matching tool. So date + city (already collected below) is
-// all that's ever required.
+const MUHURAT_TYPES = [
+  { id: 'vivah', label: 'Vivah', hindi: 'Vivah', desc: 'Marriage ceremony' },
+  { id: 'griha', label: 'Griha Pravesh', hindi: 'Griha Pravesh', desc: 'New home entry' },
+  { id: 'naamkaran', label: 'Naamkaran', hindi: 'Naamkaran', desc: 'Baby naming' },
+  { id: 'vyapar', label: 'Vyapar Aarambh', hindi: 'Vyapar Aarambh', desc: 'Business launch' },
+  { id: 'yatra', label: 'Yatra', hindi: 'Yatra', desc: 'Journey or travel' },
+  { id: 'vastu', label: 'Vastu / Bhoomi', hindi: 'Vastu / Bhoomi', desc: 'Construction' },
+  { id: 'vidyarambh', label: 'Vidyarambh', hindi: 'Vidyarambh', desc: 'Starting education' },
+  { id: 'vahan', label: 'Vahan Puja', hindi: 'Vahan Puja', desc: 'New vehicle' },
+  { id: 'mundan', label: 'Mundan', hindi: 'Mundan', desc: 'First haircut' },
+  { id: 'investment', label: 'Nivesh', hindi: 'Nivesh', desc: 'Investment or gold' },
+  { id: 'chikitsa', label: 'Chikitsa', hindi: 'Chikitsa', desc: 'Medical procedure' },
+  { id: 'naukri', label: 'Naukri / Job', hindi: 'Naukri', desc: 'Job interview' },
+];
+
+const RASHI_LIST = [
+  'Mesha (Aries)', 'Vrishabha (Taurus)', 'Mithuna (Gemini)', 'Karka (Cancer)',
+  'Simha (Leo)', 'Kanya (Virgo)', 'Tula (Libra)', 'Vrischika (Scorpio)',
+  'Dhanu (Sagittarius)', 'Makara (Capricorn)', 'Kumbha (Aquarius)', 'Meena (Pisces)',
+];
 
 const TODAY = new Date().toISOString().split('T')[0];
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -183,25 +186,6 @@ function formatTimeRangeClean(value) {
     return `${formatTimeOnly(parts[0])} - ${formatTimeOnly(parts[1])}`;
   }
   return formatTimeOnly(value);
-}
-
-// Formats a single {muhurat_start, muhurat_end} window (or an equivalent
-// {muhurat_start, muhurat_end} pair reconstructed from a "start - end"
-// string) from DivineAPI's real Muhurat Finder response into a clean
-// "4:23 AM - 5:05 AM" range, date-prefix stripped.
-function formatMuhuratWindow(window) {
-  if (!window) return '';
-  return `${formatTimeOnly(window.muhurat_start)} - ${formatTimeOnly(window.muhurat_end)}`;
-}
-
-// Turns a DivineAPI muhurat window's duration_minutes into "Xh Ym".
-function formatDuration(totalMinutes) {
-  const minutes = Number(totalMinutes) || 0;
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  if (hours && remainder) return `${hours}h ${remainder}m`;
-  if (hours) return `${hours}h`;
-  return `${remainder}m`;
 }
 
 function firstTimePart(value) {
@@ -465,23 +449,91 @@ const PANCHANG_TABS = [
 
 function Tabs({ tabs, active, onChange }) {
   return (
-    <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap', background: '#f4ede2', padding: 6, borderRadius: 14 }}>
+    <div className="panchang-tabs" role="tablist">
       {tabs.map((tab) => {
         const isActive = tab.id === active;
         return (
           <button
             key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            className={`panchang-tab ${isActive ? 'active' : ''}`}
             onClick={() => onChange(tab.id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
-              background: isActive ? '#EA580C' : 'transparent', color: isActive ? '#fff' : '#8a7350',
-              fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, transition: 'var(--transition)',
-            }}
           >
-            {tab.icon}{tab.label}
+            <span className="panchang-tab-icon">{tab.icon}</span>
+            <span>{tab.label}</span>
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function PanchangTable({ columns, rows, emptyText = 'No information available.' }) {
+  if (!rows?.length) return <EmptyState text={emptyText} />;
+
+  return (
+    <div className="panchang-table-shell">
+      <div className="panchang-table-scroll">
+        <table className="panchang-data-table">
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th key={column.key} style={{ width: column.width, textAlign: column.align || 'left' }}>
+                  {column.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={row.id ?? rowIndex} style={{ animationDelay: `${rowIndex * 55}ms` }}>
+                {columns.map((column) => (
+                  <td key={column.key} data-label={column.label} style={{ textAlign: column.align || 'left' }}>
+                    {column.render ? column.render(row, rowIndex) : row[column.key] || '—'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function TableName({ icon, name, badges = [], accent = '#d45508' }) {
+  return (
+    <div className="table-name-cell">
+      <span className="table-name-icon" style={{ color: accent, background: `${accent}14`, borderColor: `${accent}35` }}>
+        {icon}
+      </span>
+      <div>
+        <strong>{name || 'Not available'}</strong>
+        {!!badges.length && (
+          <div className="table-badge-row">
+            {badges.map((badge) => <Badge key={badge}>{badge}</Badge>)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TableChips({ chips = [], accent = '#d45508' }) {
+  if (!chips.length) return <span className="table-empty-value">No additional details</span>;
+  return (
+    <div className="table-chip-list">
+      {chips.map((chip) => (
+        <span
+          key={`${chip.key}-${chip.value}`}
+          className="table-detail-chip"
+          style={{ color: accent, background: `${accent}10`, borderColor: `${accent}28` }}
+        >
+          <strong>{chip.label}:</strong> {chip.value}
+        </span>
+      ))}
     </div>
   );
 }
@@ -561,44 +613,41 @@ function formatTimingValue(value) {
 // with an icon, a proper name, the (correctly formatted, even when
 // multi-window) time range, and a one-line explanation of what it means.
 function MuhuratRowList({ data, tone, meanings, emptyText }) {
-  const color = tone === 'red' ? '#dc2626' : '#16a34a';
-  const bg = tone === 'red' ? '#fef7f7' : '#f4fdf6';
-  const border = tone === 'red' ? '#f6c9c9' : '#c8ecd2';
-
-  const entries = Object.entries(data || {})
+  const isRed = tone === 'red';
+  const accent = isRed ? '#dc2626' : '#15803d';
+  const rows = Object.entries(data || {})
     .filter(([key]) => !key.toLowerCase().endsWith('_detailed'))
-    .map(([key, value]) => ({ key, text: formatTimingValue(value) }))
-    .filter((item) => item.text);
-
-  if (!entries.length) return <EmptyState text={emptyText} />;
+    .map(([key, value]) => {
+      const meta = meanings?.[key.toLowerCase()] || {
+          label: titleize(key), icon: isRed ? '⊘' : '✦', note: '',
+        };
+      return { id: key, name: meta.label, icon: meta.icon, time: formatTimingValue(value), note: meta.note };
+    })
+    .filter((item) => item.time);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {entries.map(({ key, text }) => {
-        const meta = (meanings && meanings[key.toLowerCase()]) || {
-          label: titleize(key), icon: tone === 'red' ? '⊘' : '✦', note: '',
-        };
-        return (
-          <div key={key} style={{ display: 'flex', gap: 14, padding: '13px 15px', background: bg, borderRadius: 12, border: `1px solid ${border}` }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10, background: '#fff', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: 16, flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-            }}>
-              {meta.icon}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: UI_FONT, fontWeight: 900, fontSize: 14, color: '#1f1f1f' }}>{meta.label}</span>
-                <span style={{ fontFamily: UI_FONT, fontWeight: 800, fontSize: 13, color, whiteSpace: 'nowrap' }}>{text}</span>
-              </div>
-              {!!meta.note && (
-                <p style={{ fontFamily: UI_FONT, margin: '4px 0 0', fontSize: 12, color: '#767676', lineHeight: 1.45 }}>{meta.note}</p>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <PanchangTable
+      rows={rows}
+      emptyText={emptyText}
+      columns={[
+        {
+          key: 'name', label: 'Period', width: '28%',
+          render: (row) => <TableName icon={row.icon} name={row.name} accent={accent} />,
+        },
+        {
+          key: 'time', label: 'Timing', width: '26%',
+          render: (row) => (
+            <span className="table-time-pill" style={{ color: accent, background: `${accent}10`, borderColor: `${accent}30` }}>
+              <Clock size={14} />{row.time}
+            </span>
+          ),
+        },
+        {
+          key: 'note', label: 'Guidance',
+          render: (row) => <span className="table-guidance">{row.note || 'No additional guidance available.'}</span>,
+        },
+      ]}
+    />
   );
 }
 
@@ -639,42 +688,41 @@ function buildAngaCard(record) {
 // Yoga/Karana: icon, name (+ Vriddhi/Kshaya badge if applicable), a
 // readable time range, and secondary attributes as small chips.
 function AngaSection({ title, icon, accent, records }) {
-  const rows = (Array.isArray(records) ? records : []).map(buildAngaCard).filter(Boolean);
+  const rows = (Array.isArray(records) ? records : [])
+    .map(buildAngaCard)
+    .filter(Boolean)
+    .map((row, index) => ({
+      ...row,
+      id: `${row.name}-${index}`,
+      time: row.startRaw || row.endRaw
+        ? `${formatTimeOnly(row.startRaw) || 'Start unavailable'}${row.startRaw && row.endRaw ? ' – ' : ''}${formatTimeOnly(row.endRaw)}`
+        : 'Not available',
+    }));
   return (
-    <Panel icon={icon} title={title} accent={accent}>
-      {!rows.length ? (
-        <EmptyState text="No records available for this date." />
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {rows.map((row, index) => (
-            <div key={index} style={{ display: 'flex', gap: 14, padding: '13px 15px 13px 13px', background: index % 2 ? '#fafafa' : '#fff', borderLeft: `4px solid ${accent}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${accent}18`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 15 }}>
-                {icon}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontFamily: UI_FONT, fontWeight: 900, fontSize: 14.5, color: '#1f1f1f' }}>{row.name}</span>
-                  {row.badges.map((badge) => <Badge key={badge}>{badge}</Badge>)}
-                </div>
-                {(row.startRaw || row.endRaw) && (
-                  <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#7a7a7a', fontWeight: 700, margin: '3px 0 0' }}>
-                    {formatTimeOnly(row.startRaw)}{row.startRaw && row.endRaw ? ' – ' : ''}{formatTimeOnly(row.endRaw)}
-                  </p>
-                )}
-                {!!row.chips.length && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
-                    {row.chips.map((chip) => (
-                      <span key={chip.key} style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 700, color: accent, background: `${accent}14`, borderRadius: 20, padding: '3px 10px' }}>
-                        {chip.label}: {chip.value}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+    <Panel
+      icon={icon}
+      title={title}
+      accent={accent}
+      right={<span className="record-count" style={{ color: accent, background: `${accent}12`, borderColor: `${accent}30` }}>{rows.length} {rows.length === 1 ? 'record' : 'records'}</span>}
+    >
+      <PanchangTable
+        rows={rows}
+        emptyText="No records available for this date."
+        columns={[
+          {
+            key: 'name', label: 'Name', width: '25%',
+            render: (row) => <TableName icon={icon} name={row.name} badges={row.badges} accent={accent} />,
+          },
+          {
+            key: 'time', label: 'Active Period', width: '25%',
+            render: (row) => <span className="table-time-pill" style={{ color: accent, background: `${accent}10`, borderColor: `${accent}30` }}><Clock size={14} />{row.time}</span>,
+          },
+          {
+            key: 'details', label: 'Panchang Details',
+            render: (row) => <TableChips chips={row.chips} accent={accent} />,
+          },
+        ]}
+      />
     </Panel>
   );
 }
@@ -682,24 +730,37 @@ function AngaSection({ title, icon, accent, records }) {
 // FIX: item.time subtitle used raw to12h() — switched to formatTimeOnly()
 // so a full datetime string doesn't leak the date into the chip.
 function ChoghadiyaChips({ rows }) {
+  const tableRows = rows.map((item, index) => ({
+    id: `${item.name}-${index}`,
+    name: item.name || 'Choghadiya',
+    nature: item.nature || 'neutral',
+    time: formatTimeRangeClean(item.time),
+    colors: choghadiyaColor(item.name),
+  }));
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8 }}>
-      {rows.map((item, index) => {
-        const color = item.nature === 'good' ? '#16a34a' : item.nature === 'bad' ? '#dc2626' : '#64748b';
-        return (
-          <div key={`${item.name}-${index}`} style={{ padding: '10px 12px', borderRadius: 10, background: '#fafafa', border: '1px solid #eee', borderLeft: `4px solid ${color}` }}>
-            <p style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, color, margin: 0 }}>{item.name || 'Choghadiya'}</p>
-            <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#8a8a8a', marginTop: 4 }}>{formatTimeRangeClean(item.time)}</p>
-          </div>
-        );
-      })}
-    </div>
+    <PanchangTable
+      rows={tableRows}
+      emptyText="No Choghadiya information available."
+      columns={[
+        {
+          key: 'name', label: 'Choghadiya', width: '35%',
+          render: (row) => <TableName icon={<Moon size={15} />} name={row.name} accent={row.colors.text} />,
+        },
+        {
+          key: 'nature', label: 'Nature', width: '25%',
+          render: (row) => <span className="nature-badge" style={{ color: row.colors.text, background: row.colors.bg }}>{titleize(row.nature)}</span>,
+        },
+        {
+          key: 'time', label: 'Timing',
+          render: (row) => <span className="table-time-pill"><Clock size={14} />{row.time || 'Not available'}</span>,
+        },
+      ]}
+    />
   );
 }
 
 function PanchangDetails({ dailyResult }) {
   const [activeTab, setActiveTab] = useState('overview');
-  const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
   // Brahma Muhurat / Abhijit Muhurat / Rahu Kaal are intentionally left out
   // here — they already have their own colored cards directly above this
   // panel, so repeating them in the list would just be the same fact twice.
@@ -745,7 +806,7 @@ function PanchangDetails({ dailyResult }) {
       <Tabs tabs={PANCHANG_TABS} active={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'overview' && (
-        <div style={{ display: 'grid', gap: 14 }}>
+        <div className="panchang-tab-content" style={{ display: 'grid', gap: 14 }}>
          <Panel icon={<Clock size={16} />} title="Daily Timings" accent="#c47a14">
             <DailyTimingsPanel sunrise={mainTimings.sunrise} sunset={mainTimings.sunset} moonrise={mainTimings.moonrise} moonset={mainTimings.moonset} />
           </Panel>
@@ -767,34 +828,33 @@ function PanchangDetails({ dailyResult }) {
       )}
 
       {activeTab === 'auspicious' && (
-        <Panel icon={<Sparkles size={16} />} title="Auspicious Timings" accent="#16a34a">
-          <MuhuratRowList
-            data={dailyResult.auspicious_timings}
-            tone="green"
-            meanings={AUSPICIOUS_MEANINGS}
-            emptyText="No auspicious timings available for this date."
-          />
-        </Panel>
+        <div className="panchang-tab-content">
+          <Panel icon={<Sparkles size={16} />} title="Auspicious Timings" accent="#16a34a">
+            <MuhuratRowList
+              data={dailyResult.auspicious_timings}
+              tone="green"
+              meanings={AUSPICIOUS_MEANINGS}
+              emptyText="No auspicious timings available for this date."
+            />
+          </Panel>
+        </div>
       )}
 
       {activeTab === 'inauspicious' && (
-        <Panel icon={<AlertCircle size={16} />} title="Inauspicious Timings" accent="#dc2626">
-          <MuhuratRowList
-            data={dailyResult.inauspicious_timings}
-            tone="red"
-            meanings={INAUSPICIOUS_MEANINGS}
-            emptyText="No inauspicious timings available for this date."
-          />
-        </Panel>
+        <div className="panchang-tab-content">
+          <Panel icon={<AlertCircle size={16} />} title="Inauspicious Timings" accent="#dc2626">
+            <MuhuratRowList
+              data={dailyResult.inauspicious_timings}
+              tone="red"
+              meanings={INAUSPICIOUS_MEANINGS}
+              emptyText="No inauspicious timings available for this date."
+            />
+          </Panel>
+        </div>
       )}
 
       {activeTab === 'full' && (
-        <div style={{ display: 'grid', gap: 14 }}>
-          {!!nightChoghadiya.length && (
-            <Panel icon={<Moon size={16} />} title="Night Choghadiya" accent="#4338ca">
-              <ChoghadiyaChips rows={nightChoghadiya} />
-            </Panel>
-          )}
+        <div className="panchang-tab-content" style={{ display: 'grid', gap: 14 }}>
           {angaGroups.map((group) => (
             <AngaSection key={group.key} title={group.title} icon={group.icon} accent={group.accent} records={group.records} />
           ))}
@@ -806,6 +866,7 @@ function PanchangDetails({ dailyResult }) {
 
 function PanchangDailyResult({ dailyResult }) {
   const dayChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period !== 'night');
+  const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
 
   return (
     <div style={{ animation: 'fadeDown .5s ease both' }}>
@@ -837,6 +898,15 @@ function PanchangDailyResult({ dailyResult }) {
           rows={dayChoghadiya}
           sunrise={dailyResult.sunrise}
           sunset={dailyResult.sunset}
+        />
+      )}
+
+      {!!nightChoghadiya.length && (
+        <ChoghadiyaTimeline
+          title="Night Choghadiya"
+          rows={nightChoghadiya}
+          sunrise={dailyResult.sunset}
+          sunset={dailyResult.sunrise}
         />
       )}
 
@@ -887,22 +957,22 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
     : null;
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 12, padding: '18px 18px 16px', margin: '18px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 24 }}>
+    <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 11, padding: '12px 14px 11px', margin: '10px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Clock size={17} color="#4b5563" />
-          <span style={{ fontFamily: UI_FONT, fontSize: 16, fontWeight: 800, color: '#1a1a1a' }}>{title}</span>
+          <Clock size={14} color="#4b5563" />
+          <span style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, color: '#1a1a1a' }}>{title}</span>
         </div>
-        <span style={{ fontFamily: UI_FONT, fontSize: 13, color: '#8b8b8b', fontWeight: 800 }}>{shortTime(sunrise)} → {shortTime(sunset)}</span>
+        <span style={{ fontFamily: UI_FONT, fontSize: 10.5, color: '#8b8b8b', fontWeight: 800 }}>{shortTime(sunrise)} → {shortTime(sunset)}</span>
       </div>
 
-      <div style={{ position: 'relative', paddingTop: 18 }}>
+      <div style={{ position: 'relative', paddingTop: 13 }}>
         {activePosition !== null && (
-          <div style={{ position: 'absolute', left: `${activePosition}%`, top: -18, transform: 'translateX(-50%)', zIndex: 3 }}>
-            <div style={{ background: '#0f355d', color: 'white', borderRadius: 12, padding: '4px 9px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 900, whiteSpace: 'nowrap', boxShadow: '0 4px 10px rgba(0,0,0,.16)' }}>
+          <div style={{ position: 'absolute', left: `${activePosition}%`, top: -13, transform: 'translateX(-50%)', zIndex: 3 }}>
+            <div style={{ background: '#0f355d', color: 'white', borderRadius: 10, padding: '3px 7px', fontFamily: UI_FONT, fontSize: 9, fontWeight: 900, whiteSpace: 'nowrap', boxShadow: '0 3px 8px rgba(0,0,0,.14)' }}>
               Now · {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             </div>
-            <div style={{ width: 3, height: 58, background: '#0f355d', margin: '-1px auto 0' }} />
+            <div style={{ width: 2, height: 42, background: '#0f355d', margin: '-1px auto 0' }} />
           </div>
         )}
 
@@ -910,32 +980,32 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
           {segments.map((item, index) => {
             const colors = choghadiyaColor(item.name);
             return (
-              <div key={`${item.name}-${index}`} style={{ flex: '1 0 84px', background: colors.bg, borderRight: index < segments.length - 1 ? '1px solid rgba(255,255,255,.55)' : 'none', minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontFamily: UI_FONT, color: colors.text, fontSize: 13, fontWeight: 800 }}>{item.name || '—'}</span>
+              <div key={`${item.name}-${index}`} style={{ flex: '1 0 68px', background: colors.bg, borderRight: index < segments.length - 1 ? '1px solid rgba(255,255,255,.55)' : 'none', minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontFamily: UI_FONT, color: colors.text, fontSize: 10.5, fontWeight: 800 }}>{item.name || '—'}</span>
               </div>
             );
           })}
         </div>
 
-        <div style={{ display: 'flex', marginTop: 8 }}>
+        <div style={{ display: 'flex', marginTop: 5 }}>
           {segments.map((item, index) => (
-            <div key={`${item.name}-time-${index}`} style={{ flex: '1 0 84px', fontFamily: UI_FONT, color: '#8a8a8a', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'left' }}>
+            <div key={`${item.name}-time-${index}`} style={{ flex: '1 0 68px', fontFamily: UI_FONT, color: '#8a8a8a', fontSize: 8.5, fontWeight: 700, whiteSpace: 'nowrap', textAlign: 'left' }}>
               {shortTime(periodStart(item))}
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, borderTop: '1px solid #eeeeee', marginTop: 18, paddingTop: 14 }}>
-        <div style={{ background: '#eef7e3', borderRadius: 7, padding: '10px 12px' }}>
-          <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#6b8d4d', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Currently In</p>
-          <p style={{ fontFamily: UI_FONT, fontSize: 15, color: '#285c1f', fontWeight: 900, margin: '4px 0 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, borderTop: '1px solid #eeeeee', marginTop: 10, paddingTop: 9 }}>
+        <div style={{ background: '#eef7e3', borderRadius: 7, padding: '7px 9px' }}>
+          <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#6b8d4d', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Currently In</p>
+          <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#285c1f', fontWeight: 900, margin: '2px 0 0' }}>
             {current?.name || 'Not available'} {current ? `· ${shortTime(periodStart(current))}-${shortTime(periodEnd(current))}` : ''}
           </p>
         </div>
-        <div style={{ background: '#fafafa', borderRadius: 7, padding: '10px 12px' }}>
-          <p style={{ fontFamily: UI_FONT, fontSize: 11, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Next</p>
-          <p style={{ fontFamily: UI_FONT, fontSize: 15, color: '#292929', fontWeight: 900, margin: '4px 0 0' }}>
+        <div style={{ background: '#fafafa', borderRadius: 7, padding: '7px 9px' }}>
+          <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Next</p>
+          <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#292929', fontWeight: 900, margin: '2px 0 0' }}>
             {next?.name || 'Not available'}{minutesToNext !== null ? ` · in ${minutesToNext} min` : ''}
           </p>
         </div>
@@ -948,6 +1018,8 @@ export default function PanchangPage() {
   const { t } = useTranslation();
   const [selected, setSelected] = useState(null);
   const [date, setDate] = useState(TODAY);
+  const [rashi, setRashi] = useState('');
+  const [name, setName] = useState('');
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
   const [dailyLoading, setDailyLoading] = useState(false);
@@ -956,48 +1028,18 @@ export default function PanchangPage() {
   const [dailyError, setDailyError] = useState(null);
   const [muhuratError, setMuhuratError] = useState(null);
 
-  // FIX: occasion list is now fetched from the backend's own
-  // GET /api/panchang/muhurat/occasions instead of being hardcoded here.
-  // That endpoint returns exactly MUHURAT_OCCASIONS' keys — the same set
-  // the backend validates `muhurat_type` against in POST /muhurat — so
-  // this picker can never show (or omit) an occasion the API doesn't
-  // actually support. Each item has {id, label, hindi, desc}, same shape
-  // the old hardcoded MUHURAT_TYPES array used.
-  const [muhuratTypes, setMuhuratTypes] = useState([]);
-  const [muhuratTypesLoading, setMuhuratTypesLoading] = useState(true);
-  const [muhuratTypesError, setMuhuratTypesError] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setMuhuratTypesLoading(true);
-      setMuhuratTypesError(null);
-      try {
-        const res = await fetch(`${API_BASE}/api/panchang/muhurat/occasions`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Failed to load Muhurat occasions');
-        if (!cancelled) setMuhuratTypes(data.occasions || []);
-      } catch (e) {
-        if (!cancelled) setMuhuratTypesError(e.message || 'Could not load Muhurat occasions');
-      } finally {
-        if (!cancelled) setMuhuratTypesLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
   // ── Location auto-fill (same navigator.geolocation logic as the
   // Temple Search page's "Search Nearby" feature). Coordinates are
   // captured directly and, where the backend supports it (the /daily
-  // Panchang endpoint and the /muhurat endpoint both accept
-  // latitude/longitude), sent straight through — the city text is only
-  // used for display.
+  // Panchang endpoint accepts latitude/longitude), sent straight through
+  // — the city text is only used for display and for the Muhurat
+  // endpoint, which is city-text only.
   const [locLoading, setLocLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [usingLocation, setUsingLocation] = useState(false);
   const [userCoords, setUserCoords] = useState(null);
 
-  const selectedType = muhuratTypes.find((m) => m.id === selected);
+  const selectedType = MUHURAT_TYPES.find((m) => m.id === selected);
 
   // Reverse-geocodes lat/lng into a human-readable "City, State" label
   // using OpenStreetMap's free Nominatim API (no key required), so the
@@ -1100,13 +1142,6 @@ export default function PanchangPage() {
     }
   };
 
-  // Calls the real DivineAPI-backed /api/panchang/muhurat endpoint. Body
-  // is just {muhurat_type, date, city/coordinates} — DivineAPI's Muhurat
-  // Finder suite is a generic "auspicious date-for-the-month" lookup, not
-  // a personalized matching tool, so there's no groom/bride, vehicle type,
-  // or other person/occasion-specific data to collect here — confirmed
-  // directly against DivineAPI's docs for every one of the 6 supported
-  // occasion endpoints (they all share this exact same request shape).
   const findMuhurat = async () => {
     if (!selected) {
       setMuhuratError('Please select an occasion first.');
@@ -1122,9 +1157,12 @@ export default function PanchangPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           muhurat_type: selected,
+          muhurat_label: selectedType?.label || selected,
+          muhurat_hindi: selectedType?.hindi || '',
           date,
+          name: name || '',
+          rashi: rashi || '',
           city: city || 'India',
-          ...(usingLocation && userCoords ? { latitude: userCoords.lat, longitude: userCoords.lng } : {}),
         }),
       });
       const data = await res.json();
@@ -1352,23 +1390,13 @@ export default function PanchangPage() {
               Muhurat Finder
             </h2>
             <p style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-light)', marginBottom: 24 }}>
-              Find the most auspicious time for your important occasion, powered by DivineAPI's Muhurat Finder.
+              Find the most auspicious time for your important occasion.
             </p>
 
             <div style={{ marginBottom: 24 }}>
               <label style={labelStyle}>Select Occasion</label>
-              {muhuratTypesError && (
-                <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#c0392b', margin: '0 0 10px' }}>
-                  ⚠️ {muhuratTypesError}
-                </p>
-              )}
               <div className="muhurat-occasion-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
-                {muhuratTypesLoading && !muhuratTypesError && (
-                  <p style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-light)', gridColumn: '1 / -1', margin: 0 }}>
-                    Loading occasions…
-                  </p>
-                )}
-                {muhuratTypes.map((m) => (
+                {MUHURAT_TYPES.map((m) => (
                   <button key={m.id} onClick={() => setSelected(m.id)} style={{
                     padding: '14px 8px',
                     borderRadius: 'var(--radius)',
@@ -1399,10 +1427,21 @@ export default function PanchangPage() {
                 }
               }}
             >
-              <div className="muhurat-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 22 }}>
+              <div className="muhurat-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 22 }}>
                 <div>
                   <label style={labelStyle}>Date</label>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, background: 'var(--cream)' }} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Your Name (optional)</label>
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Rahul Sharma" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Rashi (Moon Sign)</label>
+                  <select value={rashi} onChange={(e) => setRashi(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                    <option value="">Select your Rashi...</option>
+                    {RASHI_LIST.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label style={labelStyle}>City</label>
@@ -1436,7 +1475,7 @@ export default function PanchangPage() {
                 </div>
               </div>
 
-              <button className="btn-primary" onClick={findMuhurat} disabled={loading || !muhuratTypes.length} style={{ width: '100%', justifyContent: 'center', padding: '15px', fontSize: 15, borderRadius: 50, gap: 10 }}>
+              <button className="btn-primary" onClick={findMuhurat} disabled={loading} style={{ width: '100%', justifyContent: 'center', padding: '15px', fontSize: 15, borderRadius: 50, gap: 10 }}>
                 {loading ? (
                   <>
                     <Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /> Finding Muhurat...
@@ -1476,6 +1515,84 @@ export default function PanchangPage() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeDown { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes panchangTabEnter {
+          from { opacity:0; transform:translateY(18px) scale(.985); filter:blur(5px); }
+          to { opacity:1; transform:translateY(0) scale(1); filter:blur(0); }
+        }
+        @keyframes tableRowEnter {
+          from { opacity:0; transform:translateX(-14px); }
+          to { opacity:1; transform:translateX(0); }
+        }
+        @keyframes tabGlow {
+          0%,100% { box-shadow:0 8px 24px rgba(234,88,12,.2); }
+          50% { box-shadow:0 10px 34px rgba(234,88,12,.38); }
+        }
+
+        .panchang-tab-content {
+          animation:panchangTabEnter .48s cubic-bezier(.2,.8,.2,1) both;
+        }
+        .panchang-tabs {
+          display:flex; gap:7px; margin-bottom:18px; padding:7px; overflow-x:auto;
+          border:1px solid #eadbc8; border-radius:16px;
+          background:radial-gradient(circle at top left,rgba(255,255,255,.9),transparent 45%),linear-gradient(135deg,#f8f1e7,#f2e5d4);
+          scrollbar-width:none;
+        }
+        .panchang-tabs::-webkit-scrollbar { display:none; }
+        .panchang-tab {
+          display:inline-flex; flex:0 0 auto; align-items:center; justify-content:center; gap:7px;
+          min-height:42px; padding:9px 17px; border:1px solid transparent; border-radius:11px;
+          background:transparent; color:#806a4d; cursor:pointer; font-family:${UI_FONT};
+          font-size:13px; font-weight:800; transition:transform .25s ease,color .25s ease,background .25s ease,box-shadow .25s ease;
+        }
+        .panchang-tab:hover { color:#c2410c; background:rgba(255,255,255,.72); transform:translateY(-2px); }
+        .panchang-tab.active {
+          color:white; background:linear-gradient(135deg,#f97316,#c2410c);
+          animation:tabGlow 2.8s ease-in-out infinite;
+        }
+        .panchang-tab-icon { display:inline-flex; transition:transform .25s ease; }
+        .panchang-tab:hover .panchang-tab-icon,.panchang-tab.active .panchang-tab-icon { transform:rotate(-8deg) scale(1.12); }
+
+        .panchang-table-shell { overflow:hidden; border:1px solid #eee2d2; border-radius:14px; background:white; }
+        .panchang-table-scroll { width:100%; overflow-x:auto; }
+        .panchang-data-table { width:100%; min-width:720px; border-collapse:separate; border-spacing:0; }
+        .panchang-data-table thead { background:linear-gradient(135deg,rgba(255,248,237,.98),rgba(247,237,222,.98)); }
+        .panchang-data-table th {
+          padding:13px 16px; border-bottom:1px solid #eadcc8; color:#7c4a22; font-family:${UI_FONT};
+          font-size:10px; font-weight:900; letter-spacing:.09em; text-transform:uppercase;
+        }
+        .panchang-data-table tbody tr {
+          animation:tableRowEnter .42s ease both;
+          transition:background .2s ease,transform .2s ease,box-shadow .2s ease;
+        }
+        .panchang-data-table tbody tr:nth-child(even) { background:#fdfbf8; }
+        .panchang-data-table tbody tr:hover {
+          position:relative; z-index:2; background:#fff8ef; transform:translateY(-2px);
+          box-shadow:0 8px 24px rgba(94,49,13,.09);
+        }
+        .panchang-data-table td {
+          padding:14px 16px; border-bottom:1px solid #f1ebe3; color:#322416;
+          font-family:${UI_FONT}; font-size:13px; vertical-align:middle;
+        }
+        .panchang-data-table tbody tr:last-child td { border-bottom:none; }
+        .table-name-cell { display:flex; align-items:center; gap:11px; }
+        .table-name-cell strong { display:block; color:#27170a; font-size:13.5px; }
+        .table-name-icon {
+          display:inline-flex; width:38px; height:38px; flex:0 0 38px; align-items:center; justify-content:center;
+          border:1px solid; border-radius:11px; transition:transform .25s ease;
+        }
+        .panchang-data-table tr:hover .table-name-icon { transform:rotate(-7deg) scale(1.08); }
+        .table-badge-row,.table-chip-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+        .table-detail-chip { display:inline-flex; gap:4px; padding:4px 9px; border:1px solid; border-radius:999px; font-size:10.5px; line-height:1.3; }
+        .table-time-pill {
+          display:inline-flex; align-items:center; gap:7px; padding:7px 10px; border:1px solid #eadcc8;
+          border-radius:10px; background:#fffaf3; color:#8a4b16; font-weight:800; white-space:nowrap;
+        }
+        .table-guidance { display:block; max-width:540px; color:#786858; line-height:1.55; }
+        .table-empty-value { color:#aaa097; font-style:italic; }
+        .nature-badge,.record-count {
+          display:inline-flex; align-items:center; padding:5px 10px; border:1px solid; border-radius:999px;
+          font-family:${UI_FONT}; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.05em;
+        }
 
         @media (max-width: 900px) {
           .muhurat-results-grid { grid-template-columns: 1fr !important; }
@@ -1483,10 +1600,31 @@ export default function PanchangPage() {
         }
         @media (max-width: 720px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(3,1fr) !important; }
+          .muhurat-form-grid { grid-template-columns: 1fr 1fr !important; }
         }
         @media (max-width: 480px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(2,1fr) !important; }
           .muhurat-form-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (max-width:700px) {
+          .panchang-tabs { flex-wrap:nowrap; }
+          .panchang-tab { padding:9px 13px; }
+          .panchang-data-table { min-width:0; }
+          .panchang-data-table thead { display:none; }
+          .panchang-data-table,.panchang-data-table tbody,.panchang-data-table tr,.panchang-data-table td { display:block; width:100%; }
+          .panchang-data-table tbody { display:grid; gap:12px; padding:12px; }
+          .panchang-data-table tbody tr { overflow:hidden; border:1px solid #eadcc8; border-radius:13px; background:white; }
+          .panchang-data-table td { display:grid; grid-template-columns:minmax(100px,.4fr) 1fr; gap:12px; padding:11px 13px; text-align:left !important; }
+          .panchang-data-table td::before {
+            content:attr(data-label); color:#9a6738; font-size:9px; font-weight:900;
+            letter-spacing:.08em; text-transform:uppercase;
+          }
+          .table-name-cell { align-items:flex-start; }
+          .table-time-pill { width:fit-content; white-space:normal; }
+        }
+        @media (prefers-reduced-motion:reduce) {
+          .panchang-tab-content,.panchang-data-table tbody tr,.panchang-tab.active { animation:none; }
+          .panchang-tab,.panchang-data-table tbody tr,.table-name-icon { transition:none; }
         }
       `}</style>
 
@@ -1495,21 +1633,10 @@ export default function PanchangPage() {
   );
 }
 
-// FIX: fully rebuilt for the real DivineAPI Muhurat Finder response shape
-// (see backend's get_muhurat()). The old version rendered an AI-generated
-// {pandit_message, rituals_recommended, mantras, tithi_today, ...} object
-// that no longer exists — this renders the real fields instead: the
-// verdict DivineAPI's data implies, the actual muhurat windows (with
-// nakshatra/tithi) on the requested date, DivineAPI's own month_notes
-// (e.g. "Guru Tara Asta" combustion windows), and other auspicious dates
-// in the same month as alternatives.
 function MuhuratResult({ result, selectedType }) {
-  const verdict = result.verdict || 'avoid';
-  const color = VERDICT_COLOR[verdict] || VERDICT_COLOR.avoid;
-  const bg = VERDICT_BG[verdict] || VERDICT_BG.avoid;
-  const windows = result.muhurats || [];
-  const monthNotes = result.month_notes || [];
-  const alternatives = result.alternative_dates || [];
+  const verdict = result.verdict || 'average';
+  const color = VERDICT_COLOR[verdict] || '#d97706';
+  const bg = VERDICT_BG[verdict] || '#fffbeb';
 
   return (
     <div style={{ animation: 'fadeDown .6s ease both' }}>
@@ -1521,16 +1648,14 @@ function MuhuratResult({ result, selectedType }) {
               {verdict}
             </span>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--brown)', fontWeight: 800 }}>
-              {result.muhurat_label || selectedType?.label || 'Selected'} Muhurat
+              {selectedType?.label || 'Selected'} Muhurat
             </span>
           </div>
-          <p style={{ fontFamily: UI_FONT, fontSize: 15, color, marginBottom: 6, fontWeight: 700 }}>
+          <p style={{ fontFamily: UI_FONT, fontSize: 15, color, marginBottom: 10, fontWeight: 700 }}>
             {result.verdict_reason}
           </p>
-          <p style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-light)', fontWeight: 700 }}>
-            {[result.weekday, result.date, result.location?.name, result.sunrise ? `Sunrise ${formatTimeOnly(result.sunrise)}` : null]
-              .filter(Boolean)
-              .join(' · ')}
+          <p style={{ fontFamily: 'var(--font-body)', fontSize: 16, color: 'var(--text-mid)', lineHeight: 1.75, fontStyle: 'italic' }}>
+            "{result.pandit_message}"
           </p>
         </div>
       </div>
@@ -1538,84 +1663,95 @@ function MuhuratResult({ result, selectedType }) {
       <div className="muhurat-results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 22, alignItems: 'start' }}>
         <div>
           <Card style={{ borderColor: 'rgba(34,197,94,0.3)' }}>
-            <SectionTitle icon={<Clock size={14} />}>Muhurat Windows on This Date</SectionTitle>
-            {windows.length ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {windows.map((w, i) => (
-                  <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #86efac', overflow: 'hidden', background: '#f0fdf4' }}>
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #86efac' }}>
-                      <p style={{ fontFamily: UI_FONT, fontSize: 15, fontWeight: 800, color: '#15803d', marginBottom: 2 }}>{formatMuhuratWindow(w)}</p>
-                      <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a' }}>
-                        {formatDuration(w.duration_minutes)}
-                        {w.continues_from_previous_day === 'true' ? ' · continues from previous day' : ''}
-                        {w.continues_next_day === 'true' ? ' · continues into next day' : ''}
-                      </p>
+            <SectionTitle icon={<Clock size={14} />}>Shubh Muhurat Timings</SectionTitle>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {(result.auspicious_timings || []).map((timing, i) => (
+                <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #86efac', overflow: 'hidden', background: '#f0fdf4' }}>
+                  <div style={{ display: 'flex', borderBottom: '1px solid #86efac' }}>
+                    <div style={{ flex: 1, padding: '12px 16px', borderRight: '1px solid #86efac' }}>
+                      <p style={{ fontFamily: UI_FONT, fontSize: 15, fontWeight: 800, color: '#15803d', whiteSpace: 'nowrap', marginBottom: 2 }}>{formatTimeRangeClean(timing.time)}</p>
+                      <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#16a34a' }}>Shubh Timing</p>
                     </div>
-                    <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {!!(w.nakshatras || []).length && (
-                        <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#16a34a' }}>
-                          <strong>Nakshatra:</strong> {w.nakshatras.join(', ')}
-                        </p>
-                      )}
-                      {!!(w.tithis || []).length && (
-                        <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: '#16a34a' }}>
-                          <strong>Tithi:</strong> {w.tithis.join(', ')}
-                        </p>
-                      )}
+                    <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#dcfce7' }}>
+                      <p style={{ fontFamily: UI_FONT, fontSize: 13, fontWeight: 800, color: '#15803d', textAlign: 'center' }}>{timing.quality}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-light)', fontStyle: 'italic' }}>
-                No auspicious Muhurat window was found for this date. Check the alternative dates on the right.
-              </p>
-            )}
+                  <div style={{ padding: '10px 16px' }}>
+                    <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#16a34a', lineHeight: 1.5 }}>{timing.reason}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </Card>
 
-          {!!monthNotes.length && (
-            <Card>
-              <SectionTitle icon={<AlertCircle size={14} />}>Notes for This Month</SectionTitle>
+          {!!result.timings_to_avoid?.length && (
+            <Card style={{ borderColor: 'rgba(220,38,38,0.25)' }}>
+              <SectionTitle icon={<AlertCircle size={14} />}>Timings to Avoid</SectionTitle>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {monthNotes.map((note, i) => (
-                  <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px' }}>
-                    <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#92400e', fontWeight: 700, marginBottom: 2 }}>{note.reason}</p>
-                    <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#b45309' }}>{note.from} → {note.to}</p>
+                {result.timings_to_avoid.map((timing, i) => (
+                  <div key={i} style={{ borderRadius: 'var(--radius)', border: '1px solid #fca5a5', overflow: 'hidden', background: '#fef2f2' }}>
+                    <div style={{ display: 'flex' }}>
+                      <div style={{ padding: '10px 16px', borderRight: '1px solid #fca5a5' }}>
+                        <p style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 800, color: '#b91c1c', whiteSpace: 'nowrap', marginBottom: 2 }}>{formatTimeRangeClean(timing.time)}</p>
+                        <p style={{ fontFamily: UI_FONT, fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: '#dc2626' }}>Avoid</p>
+                      </div>
+                      <div style={{ flex: 1, padding: '10px 16px', display: 'flex', alignItems: 'center' }}>
+                        <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#dc2626', lineHeight: 1.4 }}>{timing.reason}</p>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
+            </Card>
+          )}
+
+          {!!result.rituals_recommended?.length && (
+            <Card>
+              <SectionTitle icon={<Star size={14} />}>Recommended Rituals</SectionTitle>
+              {result.rituals_recommended.map((ritual, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
+                  <CheckCircle size={16} color="var(--saffron)" style={{ marginTop: 3, flexShrink: 0 }} />
+                  <span style={{ fontFamily: UI_FONT, fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.6 }}>{ritual}</span>
+                </div>
+              ))}
             </Card>
           )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--cream-dark)', padding: 20, boxShadow: '0 2px 12px var(--shadow)' }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>Other Auspicious Dates This Month</h3>
-            {alternatives.length ? alternatives.map((d, i) => {
-              const [startRaw, endRaw] = (d.time || '').split(' - ');
-              return (
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>Planetary Check</h3>
+            {[
+              { label: 'Tithi', data: result.tithi_today },
+              { label: 'Nakshatra', data: result.nakshatra_today },
+            ].map((item) => item.data && (
+              <div key={item.label} style={{ background: item.data.is_auspicious_for_this_muhurat ? '#f0fdf4' : '#fef2f2', borderRadius: 10, padding: '12px 14px', marginBottom: 10, border: `1px solid ${item.data.is_auspicious_for_this_muhurat ? '#86efac' : '#fca5a5'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
+                  <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, color: 'var(--text-light)', letterSpacing: '.06em', textTransform: 'uppercase' }}>{item.label}</span>
+                  <span style={{ fontFamily: UI_FONT, fontSize: 11, color: item.data.is_auspicious_for_this_muhurat ? '#16a34a' : '#dc2626' }}>
+                    {item.data.is_auspicious_for_this_muhurat ? 'Auspicious' : 'Caution'}
+                  </span>
+                </div>
+                <p style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 800 }}>{item.data.name}</p>
+                <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)', marginTop: 4, lineHeight: 1.5 }}>{item.data.reason}</p>
+              </div>
+            ))}
+          </div>
+
+          {!!result.alternative_dates?.length && (
+            <div style={{ background: 'white', borderRadius: 'var(--radius-lg)', border: '1px solid var(--cream-dark)', padding: 20, boxShadow: '0 2px 12px var(--shadow)' }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', marginBottom: 14 }}>Alternative Dates</h3>
+              {result.alternative_dates.map((d, i) => (
                 <div key={i} style={{ padding: '10px 12px', borderRadius: 10, marginBottom: 8, background: 'var(--cream)', border: '1px solid var(--cream-dark)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
                     <span style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--brown)', fontWeight: 800 }}>{d.date}</span>
-                    <span style={{ fontFamily: UI_FONT, fontSize: 10, background: 'var(--saffron)', color: 'white', borderRadius: 50, padding: '2px 8px', fontWeight: 800 }}>{d.weekday}</span>
+                    <span style={{ fontFamily: UI_FONT, fontSize: 10, background: 'var(--saffron)', color: 'white', borderRadius: 50, padding: '2px 8px', fontWeight: 800 }}>{d.quality}</span>
                   </div>
-                  {startRaw && endRaw && (
-                    <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)' }}>
-                      {formatMuhuratWindow({ muhurat_start: startRaw, muhurat_end: endRaw })}
-                      {d.window_count > 1 ? ` (+${d.window_count - 1} more)` : ''}
-                    </p>
-                  )}
-                  {!!(d.nakshatras || []).length && (
-                    <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: 'var(--text-light)', marginTop: 2 }}>{d.nakshatras.join(', ')}</p>
-                  )}
+                  <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)' }}>{d.reason}</p>
                 </div>
-              );
-            }) : (
-              <p style={{ fontFamily: UI_FONT, fontSize: 12.5, color: 'var(--text-light)', fontStyle: 'italic' }}>
-                No other auspicious dates found in this month.
-              </p>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

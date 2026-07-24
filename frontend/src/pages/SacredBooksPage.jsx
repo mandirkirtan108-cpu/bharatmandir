@@ -1,85 +1,51 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { BookOpen, FileText, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { fetchBooks } from '../services/sacredBooksApi';
-import { CATEGORIES, groupBooksByCategory } from '../data/bookCategories';
-import {
-  BookIcon, FolderIcon, Spinner, SacredBooksGlobalStyle,
-} from '../components/sacredBooksShared';
 
 export default function SacredBooksPage() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
   const [books, setBooks] = useState([]);
+  const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchBooks()
-      .then(res => setBooks(res.books || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    fetchBooks().then(r => setBooks(r.books || [])).catch(e => setError(e.message)).finally(() => setLoading(false));
   }, []);
 
-  const grouped = groupBooksByCategory(books);
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? books.filter(b => `${b.title} ${b.author || ''} ${b.description || ''}`.toLowerCase().includes(q)) : books;
+  }, [books, query]);
 
-  const visibleCategories = CATEGORIES.filter(cat => {
-    if (!filter) return true;
-    const q = filter.toLowerCase();
-    return (
-      cat.label.toLowerCase().includes(q) ||
-      cat.sanskrit.includes(filter) ||
-      grouped[cat.key].some(b => b.title.toLowerCase().includes(q))
-    );
-  });
-
-  return (
-    <>
-      <Navbar />
-      <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
-
-        {/* ── Hero Banner ── */}
-        <div style={{
-          position: 'relative', overflow: 'hidden',
-          background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '50px 12px', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', width: '100%', boxSizing: 'border-box',
-        }}>
-          <div style={{
-            position: 'relative', zIndex: 1, width: '100%', maxWidth: 700,
-            padding: '0 24px', boxSizing: 'border-box',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
-          }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
-              borderRadius: 50, padding: '5px 16px', marginBottom: 14,
-              color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
-              textTransform: 'uppercase', fontWeight: 500, backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
-            }}>
-              <BookIcon size={16} color="rgba(255,213,128,0.9)" />
-              {t('books.badge')}
+  return <>
+    <Navbar />
+    <main className="library">
+      <section className="library-hero">
+        <div className="library-badge"><BookOpen size={16} /> Digital scripture library</div>
+        <h1>Read sacred texts in your language</h1>
+        <p>Faithful, page-preserving editions in Sanskrit, Hindi, English, and the original text.</p>
+      </section>
+      <section className="library-content">
+        <label className="library-search"><Search size={18} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search books, authors, or subjects" /></label>
+        {loading && <div className="library-state">Loading the library…</div>}
+        {error && <div className="library-state error">{error}</div>}
+        {!loading && !error && visible.length === 0 && <div className="library-state">No books have been published yet.</div>}
+        <div className="book-grid">
+          {visible.map(book => <article className="book-card" key={book.id} onClick={() => navigate(`/sacred-books/library/${book.slug}`)}>
+            <div className="book-cover"><FileText size={38} /><span>{book.page_count} pages</span></div>
+            <div className="book-info">
+              <h2>{book.title}</h2>
+              <p className="book-author">{book.author || 'Traditional text'}</p>
+              <p>{book.description || 'Available in three complete translations and the original edition.'}</p>
+              <button>Open book <span>→</span></button>
             </div>
-
-            <h1 style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900,
-              fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
-              marginBottom: 10, marginTop: 0, textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-              color: '#ffffff', width: '100%',
-            }}>
-              {t('books.title')}
-            </h1>
-
-            <p style={{
-              color: 'rgba(255,255,255,0.7)', fontSize: 14, width: '100%', maxWidth: 520,
-              margin: '0 0 22px 0', fontWeight: 300, lineHeight: 1.7, textAlign: 'center',
-            }}>
-              {t('books.subtitle')}
-            </p>
-          </div>
+          </article>)}
         </div>
+<<<<<<< HEAD
 
         {/* ── Folder Grid ── */}
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px' }}>
@@ -176,3 +142,13 @@ export default function SacredBooksPage() {
     </>
   );
 }
+=======
+      </section>
+    </main>
+    <Footer />
+    <style>{`
+      .library{min-height:100vh;background:#fbf7ef;color:#432516}.library-hero{text-align:center;padding:68px 20px;background:radial-gradient(circle at top,#9a4d1d,#542008);color:white}.library-hero h1{font-family:var(--font-display);font-size:clamp(34px,5vw,58px);margin:14px 0 10px}.library-hero p{opacity:.82;font-size:16px}.library-badge{display:inline-flex;gap:8px;align-items:center;padding:7px 14px;border:1px solid #e9b979;border-radius:99px;color:#ffd79e}.library-content{max-width:1120px;margin:auto;padding:36px 20px 70px}.library-search{max-width:540px;margin:0 auto 32px;background:white;border:1px solid #dcc7b4;border-radius:14px;padding:13px 16px;display:flex;gap:10px;align-items:center}.library-search input{border:0;outline:0;width:100%;font-size:15px;background:transparent}.book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:22px}.book-card{background:white;border:1px solid #eaded1;border-radius:18px;overflow:hidden;cursor:pointer;box-shadow:0 4px 18px #5c270b0d;transition:.2s}.book-card:hover{transform:translateY(-4px);box-shadow:0 14px 30px #5c270b20}.book-cover{height:145px;background:linear-gradient(145deg,#642509,#a34e18);color:#ffe1b5;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center}.book-cover span{font-size:12px;letter-spacing:.08em;text-transform:uppercase}.book-info{padding:20px}.book-info h2{margin:0 0 5px;font-family:var(--font-display);font-size:22px}.book-info p{color:#775e4c;line-height:1.6;font-size:13px}.book-author{color:#a14a0b!important;font-weight:700}.book-info button{border:0;background:none;color:#8b3a15;font-weight:800;padding:8px 0;cursor:pointer}.library-state{text-align:center;padding:50px;color:#806957}.library-state.error{color:#a11}
+    `}</style>
+  </>;
+}
+>>>>>>> a345d8b6159ba7de186164d610ec1652749449eb

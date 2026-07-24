@@ -1,6 +1,5 @@
 import {
   BrowserRouter,
-  Navigate,
   Route,
   Routes,
 } from 'react-router-dom';
@@ -19,8 +18,8 @@ import RoutePlannerPage from './pages/RoutePlannerPage';
 import PanchangPage from './pages/PanchangPage';
 import SpiritualGuidePage from './pages/SpiritualGuidePage';
 import FestivalCalendarPage from './pages/FestivalCalendarPage';
-import LibraryPage from './library/pages/LibraryPage';
-import ReaderPage from './library/pages/ReaderPage';
+import SacredBooksPage from './pages/SacredBooksPage';
+import SacredBookReaderPage from './pages/SacredBookReaderPage';
 import BlogPage from './pages/BlogPage';
 
 // User authentication pages
@@ -34,6 +33,7 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminPanelPage from './pages/AdminPanelPage';
 import AdminAddFestivalPage from './pages/AdminAddFestivalPage';
 import AdminAddBlogPage from './pages/AdminAddBlogPage';
+import AdminLibraryPage from './pages/AdminLibraryPage';
 
 // Volunteer protection
 import VolunteerProtectedRoute from './components/volunteer/VolunteerProtectedRoute';
@@ -115,32 +115,18 @@ export default function App() {
             element={<UserProfilePage />}
           />
 
-          {/* Library routes */}
+          {/* Sacred Books routes */}
 
-          <Route
-            path="/library"
-            element={<LibraryPage />}
-          />
-
-          <Route
-            path="/library/:bookId/read/:pageNumber?"
-            element={<ReaderPage />}
-          />
-
-          {/* Backwards-compatible redirects for previously shared URLs */}
           <Route
             path="/sacred-books"
-            element={<Navigate to="/library" replace />}
-          />
-
-          <Route
-            path="/sacred-books/:category"
-            element={<Navigate to="/library" replace />}
+            element={<SacredBooksPage />}
           />
 
           <Route
             path="/sacred-books/:category/:slug"
-            element={<Navigate to="/library" replace />}
+            element={
+              <SacredBookReaderPage />
+            }
           />
 
           {/* Public blog route */}
@@ -180,6 +166,15 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <AdminAddBlogPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/library"
+            element={
+              <ProtectedRoute>
+                <AdminLibraryPage />
               </ProtectedRoute>
             }
           />
