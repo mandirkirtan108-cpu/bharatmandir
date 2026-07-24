@@ -13,6 +13,7 @@ import io
 import os
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import cloudinary.uploader
 import httpx
@@ -37,6 +38,7 @@ TARGET_LANGUAGES = {
 }
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
 TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "gpt-4.1")
+TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
 
 
 def ensure_library_schema() -> None:
@@ -55,6 +57,7 @@ def ensure_library_schema() -> None:
                 storage_public_id TEXT,
                 file_sha256 TEXT NOT NULL,
                 page_count INTEGER NOT NULL DEFAULT 0,
+                processed_pages INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL DEFAULT 'processing'
                     CHECK (status IN ('processing','ready','failed','archived')),
                 processing_error TEXT,
@@ -78,6 +81,10 @@ def ensure_library_schema() -> None:
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_library_pages_book
             ON library_book_pages(book_id, page_number)
+        """)
+        cur.execute("""
+            ALTER TABLE library_books
+            ADD COLUMN IF NOT EXISTS processed_pages INTEGER NOT NULL DEFAULT 0
         """)
 
 
@@ -159,36 +166,63 @@ SOURCE TEXT:
 def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
     try:
         pages = _extract_pages(pdf_bytes)
-        api_key = (os.getenv("VITE_OPENAI_API_KEY") or "").strip()
+        api_key = (
+            os.getenv("VITE_OPENAI_API_KEY")
+            or os.getenv("VITE_OPENAI_API_KEY")
+            or ""
+        ).strip()
         if not api_key:
             raise RuntimeError(
                 "OPENAI_API_KEY is not available to the backend process. "
                 "Add it to the backend service environment and restart/redeploy the backend."
             )
         client = OpenAI(api_key=api_key)
-        for page_number, source_text in enumerate(pages, 1):
+
+        def translate_page(page_number: int, source_text: str):
             translations = {
                 code: _translate(client, source_text, source_language, code)
                 for code in TARGET_LANGUAGES
             }
-            with get_db_cursor() as cur:
-                cur.execute("""
-                    INSERT INTO library_book_pages
-                        (book_id, page_number, source_text, text_en, text_hi, text_sa)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (book_id, page_number) DO UPDATE SET
-                        source_text=EXCLUDED.source_text, text_en=EXCLUDED.text_en,
-                        text_hi=EXCLUDED.text_hi, text_sa=EXCLUDED.text_sa
-                """, (
-                    book_id, page_number, source_text,
-                    translations["en"], translations["hi"], translations["sa"],
-                ))
+            return page_number, source_text, translations
+
         with get_db_cursor() as cur:
             cur.execute("""
                 UPDATE library_books
-                SET status='ready', page_count=%s, processing_error=NULL, updated_at=NOW()
+                SET page_count=%s, processed_pages=0, updated_at=NOW()
                 WHERE id=%s
             """, (len(pages), book_id))
+
+        with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
+            futures = [
+                executor.submit(translate_page, page_number, source_text)
+                for page_number, source_text in enumerate(pages, 1)
+            ]
+            for future in as_completed(futures):
+                page_number, source_text, translations = future.result()
+                with get_db_cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO library_book_pages
+                            (book_id, page_number, source_text, text_en, text_hi, text_sa)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (book_id, page_number) DO UPDATE SET
+                            source_text=EXCLUDED.source_text, text_en=EXCLUDED.text_en,
+                            text_hi=EXCLUDED.text_hi, text_sa=EXCLUDED.text_sa
+                    """, (
+                        book_id, page_number, source_text,
+                        translations["en"], translations["hi"], translations["sa"],
+                    ))
+                    cur.execute("""
+                        UPDATE library_books
+                        SET processed_pages=processed_pages + 1, updated_at=NOW()
+                        WHERE id=%s
+                    """, (book_id,))
+        with get_db_cursor() as cur:
+            cur.execute("""
+                UPDATE library_books
+                SET status='ready', page_count=%s, processed_pages=%s,
+                    processing_error=NULL, updated_at=NOW()
+                WHERE id=%s
+            """, (len(pages), len(pages), book_id))
     except Exception as exc:
         with get_db_cursor() as cur:
             cur.execute("""
@@ -201,7 +235,7 @@ def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
 BOOK_SELECT = """
     SELECT id, slug, title, author, description, source_language,
            original_filename, original_pdf_url, page_count, status,
-           processing_error, created_at, updated_at
+           processed_pages, processing_error, created_at, updated_at
     FROM library_books
 """
 
@@ -327,7 +361,11 @@ def archive_book(book_id: int, admin: dict = Depends(get_current_admin)):
 
 @router.post("/api/admin/books/{book_id}/retry", status_code=202)
 def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
-    api_key = (os.getenv("VITE_OPENAI_API_KEY") or "").strip()
+    api_key = (
+        os.getenv("VITE_OPENAI_API_KEY")
+        or os.getenv("VITE_OPENAI_API_KEY")
+        or ""
+    ).strip()
     if not api_key:
         raise HTTPException(
             503,
