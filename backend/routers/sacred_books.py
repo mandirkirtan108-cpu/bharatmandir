@@ -160,14 +160,23 @@ def _unique_slug(title: str) -> str:
 
 
 def _upload_pdf(content: bytes, slug: str) -> dict:
+    """Upload the raw PDF to Cloudinary.
+
+    Cloudinary's plain upload() call is capped at a 10MB single-request
+    limit on most plans, which rejects larger books outright with a
+    "File size too large" error — that's unrelated to our own
+    MAX_PDF_BYTES setting. upload_large() streams the file in chunks
+    instead, so it isn't bound by that single-request cap.
+    """
     _ensure_configured()
-    result = cloudinary.uploader.upload(
-        content,
+    result = cloudinary.uploader.upload_large(
+        io.BytesIO(content),
         resource_type="raw",
         type="upload",
         folder="bharatmandir/library",
         public_id=f"{slug}-{hashlib.sha256(content).hexdigest()[:12]}.pdf",
         overwrite=False,
+        chunk_size=6_000_000,
     )
     return {"url": result["secure_url"], "public_id": result["public_id"]}
 
