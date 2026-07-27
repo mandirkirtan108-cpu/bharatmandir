@@ -1,12 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Languages, X } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { fetchBook, fetchBookPages } from '../services/sacredBooksApi';
 
 const LANGUAGES = [
   ['en', 'English'], ['hi', 'हिन्दी'], ['sa', 'संस्कृतम्'], ['original', 'Original'],
 ];
+
+const PAGE_BATCH_SIZE = 10;
+const progressKey = (slug) => `sacredbook-progress:${slug}`;
+
+// Where should this book open? An explicit ?page= in the URL (e.g. from a
+// chapter/index link) always wins; otherwise fall back to the reader's
+// last saved position for this book.
+function getResumeTarget(slug, urlPage) {
+  if (Number.isFinite(urlPage) && urlPage > 0) return { page: urlPage, language: null };
+  try {
+    const saved = JSON.parse(localStorage.getItem(progressKey(slug)) || 'null');
+    if (saved?.pageNumber) return { page: saved.pageNumber, language: saved.language || null };
+  } catch { /* localStorage unavailable or corrupt — ignore */ }
+  return null;
+}
+
+function saveProgress(slug, pageNumber, language, percent) {
+  try {
+    localStorage.setItem(progressKey(slug), JSON.stringify({ pageNumber, language, percent, updatedAt: Date.now() }));
+  } catch { /* ignore quota/availability errors */ }
+}
 
 function TempleArch() {
   return (
@@ -33,15 +54,25 @@ function PageWatermark() {
 export default function SacredBookReaderPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Resolve where to open this book, once, from the URL or saved progress —
+  // used to seed the initial language/batch so the very first fetch already
+  // requests the right page (no flash of page 1 before jumping).
+  const initialTarget = getResumeTarget(slug, parseInt(searchParams.get('page'), 10));
+
   const [book, setBook] = useState(null);
   const [pages, setPages] = useState([]);
-  const [language, setLanguage] = useState('en');
-  const [batch, setBatch] = useState(1);
+  const [language, setLanguage] = useState(initialTarget?.language || 'en');
+  const [batch, setBatch] = useState(initialTarget ? Math.max(1, Math.ceil(initialTarget.page / PAGE_BATCH_SIZE)) : 1);
   const [leaf, setLeaf] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [turnDir, setTurnDir] = useState('next');
   const jumpToEnd = useRef(false);
+  // Set whenever we need the *next* successful page fetch to land on a
+  // specific leaf instead of the default (leaf 0) — used by the resume jump.
+  const jumpLeafRef = useRef(initialTarget ? (initialTarget.page - 1) % PAGE_BATCH_SIZE : null);
 
   // Swipe + scroll-hint plumbing
   const touchStartX = useRef(null);
@@ -53,14 +84,40 @@ export default function SacredBookReaderPage() {
     fetchBook(slug).then(setBook).catch(e => setError(e.message));
   }, [slug]);
 
+  // Re-resolve the resume target if the reader is reused for a different
+  // book without a full remount (e.g. navigating between books via a link).
+  // On the very first mount this just re-confirms what the lazy state
+  // initializers above already set, so it doesn't cause an extra fetch.
+  useEffect(() => {
+    const target = getResumeTarget(slug, parseInt(searchParams.get('page'), 10));
+    if (target) {
+      const targetBatch = Math.max(1, Math.ceil(target.page / PAGE_BATCH_SIZE));
+      jumpLeafRef.current = (target.page - 1) % PAGE_BATCH_SIZE;
+      if (target.language) setLanguage(target.language);
+      setBatch(targetBatch);
+    } else {
+      jumpLeafRef.current = null;
+      setBatch(1);
+    }
+    setLeaf(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
   useEffect(() => {
     setLoading(true);
     fetchBookPages(slug, language, batch, 10)
       .then(r => {
         const p = r.pages || [];
         setPages(p);
-        setLeaf(jumpToEnd.current ? Math.max(0, p.length - 1) : 0);
+        if (jumpToEnd.current) {
+          setLeaf(Math.max(0, p.length - 1));
+        } else if (jumpLeafRef.current !== null) {
+          setLeaf(Math.min(Math.max(jumpLeafRef.current, 0), Math.max(0, p.length - 1)));
+        } else {
+          setLeaf(0);
+        }
         jumpToEnd.current = false;
+        jumpLeafRef.current = null;
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -143,6 +200,13 @@ export default function SacredBookReaderPage() {
   }, [current, language, showingScan, loading]);
 
   const percent = book?.page_count && current ? Math.min(100, Math.round((current.page_number / book.page_count) * 100)) : 0;
+
+  // Bookmark progress — saved every time the visible page settles, so
+  // reopening this book (or the library card) can resume from here.
+  useEffect(() => {
+    if (!current || loading) return;
+    saveProgress(slug, current.page_number, language, percent);
+  }, [slug, current, language, percent, loading]);
 
   return <>
     <Navbar />
