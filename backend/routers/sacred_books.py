@@ -718,4 +718,4 @@ def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
         daemon=True,
         name=f"library-book-retry-{book_id}",
     ).start()
-    return {"id": book_id, "status": "processing"}
+    return {"id": book_id, "status": "processing"} 
