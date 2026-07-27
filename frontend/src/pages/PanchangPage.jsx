@@ -234,21 +234,6 @@ function normalizeEndMinutes(startMinutes, endMinutes) {
   return endMinutes <= startMinutes ? endMinutes + 24 * 60 : endMinutes;
 }
 
-// True if "now" falls between sunrise and sunset (daytime), false if it's
-// currently night. Used so only one of the Day/Night Choghadiya timelines
-// shows the "Currently In / Next" footer instead of both showing it.
-function isDaytimeNow(sunrise, sunset) {
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const sunriseMinutes = parseTimeToMinutes(firstTimePart(sunrise));
-  const sunsetMinutes = parseTimeToMinutes(firstTimePart(sunset));
-  if (sunriseMinutes === null || sunsetMinutes === null) return true;
-  if (sunriseMinutes <= sunsetMinutes) {
-    return nowMinutes >= sunriseMinutes && nowMinutes <= sunsetMinutes;
-  }
-  return nowMinutes >= sunriseMinutes || nowMinutes <= sunsetMinutes;
-}
-
 function periodStart(item) {
   return item?.start || item?.start_time || firstTimePart(item?.time);
 }
@@ -896,13 +881,17 @@ function PanchangDailyResult({ dailyResult }) {
         )}
       </div>
 
+      {/* Day Choghadiya, then Night Choghadiya, then ONE combined
+          "Currently In / Next" panel computed across both timelines
+          together — this is what keeps "Next" walking strictly forward
+          in time instead of re-matching an earlier occurrence of a
+          repeated Choghadiya name (e.g. "Amrit" appears twice a day). */}
       {!!dayChoghadiya.length && (
         <ChoghadiyaTimeline
           title="Day Choghadiya"
           rows={dayChoghadiya}
           sunrise={dailyResult.sunrise}
           sunset={dailyResult.sunset}
-          showCurrentPanel={isDaytimeNow(dailyResult.sunrise, dailyResult.sunset)}
         />
       )}
 
@@ -912,8 +901,11 @@ function PanchangDailyResult({ dailyResult }) {
           rows={nightChoghadiya}
           sunrise={dailyResult.sunset}
           sunset={dailyResult.sunrise}
-          showCurrentPanel={!isDaytimeNow(dailyResult.sunrise, dailyResult.sunset)}
         />
+      )}
+
+      {!!(dayChoghadiya.length || nightChoghadiya.length) && (
+        <ChoghadiyaCurrentPanel rows={[...dayChoghadiya, ...nightChoghadiya]} />
       )}
 
       <div className="panchang-timings" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
@@ -955,7 +947,7 @@ function PanchangDailyResult({ dailyResult }) {
   );
 }
 
-function ChoghadiyaTimeline({ title, rows, sunrise, sunset, showCurrentPanel = true }) {
+function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const segments = rows.map((item, index) => {
@@ -976,15 +968,6 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset, showCurrentPanel = t
     const fraction = Math.max(0, Math.min(1, (adjustedNow - active.start) / (active.end - active.start)));
     activePosition = ((active.index + fraction) / Math.max(segments.length, 1)) * 100;
   }
-  const next = segments.find((item) => {
-    if (item.start === null) return false;
-    const adjustedStart = item.start < nowMinutes ? item.start + 24 * 60 : item.start;
-    return adjustedStart > nowMinutes;
-  }) || segments[0];
-  const current = active || segments[0];
-  const minutesToNext = next?.start !== null && next?.start !== undefined
-    ? Math.max(0, Math.round(((next.start < nowMinutes ? next.start + 24 * 60 : next.start) - nowMinutes)))
-    : null;
 
   return (
     <div style={{ background: '#fff', border: '1px solid #e6e6e6', borderRadius: 11, padding: '12px 14px 11px', margin: '10px 0' }}>
@@ -1025,23 +1008,82 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset, showCurrentPanel = t
           ))}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {showCurrentPanel && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, borderTop: '1px solid #eeeeee', marginTop: 10, paddingTop: 9 }}>
-          <div style={{ background: '#eef7e3', borderRadius: 7, padding: '7px 9px' }}>
-            <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#6b8d4d', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Currently In</p>
-            <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#285c1f', fontWeight: 900, margin: '2px 0 0' }}>
-              {current?.name || 'Not available'} {current ? `· ${shortTime(periodStart(current))}-${shortTime(periodEnd(current))}` : ''}
-            </p>
-          </div>
-          <div style={{ background: '#fafafa', borderRadius: 7, padding: '7px 9px' }}>
-            <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Next</p>
-            <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#292929', fontWeight: 900, margin: '2px 0 0' }}>
-              {next?.name || 'Not available'}{minutesToNext !== null ? ` · in ${minutesToNext} min` : ''}
-            </p>
-          </div>
-        </div>
-      )}
+// Assigns strictly-increasing "absolute minute" values across the FULL
+// day+night Choghadiya sequence (each segment's start/end is nudged
+// forward by 24h chunks until it's past the previous segment). This is
+// what makes "Currently In" and "Next" walk strictly forward through
+// real time instead of matching an earlier occurrence of a repeated
+// name — Day Choghadiya alone contains "Amrit" twice (once near the
+// start, once near the end), so per-timeline matching on name/segment
+// order alone is not reliable once "now" crosses into the later half
+// of the cycle.
+function buildAbsoluteChoghadiyaTimeline(rows) {
+  let prevAbsStart = null;
+  return rows.map((item, index) => {
+    const rawStart = parseTimeToMinutes(periodStart(item));
+    const rawEnd = parseTimeToMinutes(periodEnd(item));
+    let absStart = rawStart;
+    if (absStart !== null && prevAbsStart !== null) {
+      while (absStart < prevAbsStart) absStart += 24 * 60;
+    }
+    let absEnd = rawEnd;
+    if (absStart !== null && absEnd !== null) {
+      while (absEnd <= absStart) absEnd += 24 * 60;
+    }
+    if (absStart !== null) prevAbsStart = absStart;
+    return { ...item, index, absStart, absEnd };
+  });
+}
+
+// Single, accurate "Currently In / Next" panel computed over the
+// combined Day + Night Choghadiya sequence, rendered once beneath both
+// timelines (replacing the old per-timeline panel that could point at
+// the wrong "Next" slot).
+function ChoghadiyaCurrentPanel({ rows }) {
+  const timeline = buildAbsoluteChoghadiyaTimeline(rows)
+    .filter((item) => item.absStart !== null && item.absEnd !== null);
+  if (!timeline.length) return null;
+
+  const now = new Date();
+  let nowAbs = now.getHours() * 60 + now.getMinutes();
+  if (nowAbs < timeline[0].absStart) nowAbs += 24 * 60;
+
+  let current = timeline.find((item) => nowAbs >= item.absStart && nowAbs <= item.absEnd);
+  if (!current) {
+    // "now" rolled past the last segment's end (e.g. just before the
+    // cycle restarts) — shift forward a day and re-check.
+    const shiftedNowAbs = nowAbs + 24 * 60;
+    current = timeline.find((item) => shiftedNowAbs >= item.absStart && shiftedNowAbs <= item.absEnd);
+    if (current) nowAbs = shiftedNowAbs;
+  }
+
+  let next = timeline.find((item) => item.absStart > nowAbs);
+  let minutesToNext = next ? next.absStart - nowAbs : null;
+  if (!next) {
+    next = timeline[0];
+    minutesToNext = next.absStart + 24 * 60 - nowAbs;
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '2px 0 20px' }}>
+      <div style={{ background: '#eef7e3', borderRadius: 10, padding: '11px 14px' }}>
+        <p style={{ fontFamily: UI_FONT, fontSize: 9.5, color: '#6b8d4d', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Currently In</p>
+        <p style={{ fontFamily: UI_FONT, fontSize: 13.5, color: '#285c1f', fontWeight: 900, margin: '3px 0 0' }}>
+          {current?.name || 'Not available'}
+          {current ? ` · ${shortTime(periodStart(current))}-${shortTime(periodEnd(current))}` : ''}
+        </p>
+      </div>
+      <div style={{ background: '#fafafa', borderRadius: 10, padding: '11px 14px' }}>
+        <p style={{ fontFamily: UI_FONT, fontSize: 9.5, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Next</p>
+        <p style={{ fontFamily: UI_FONT, fontSize: 13.5, color: '#292929', fontWeight: 900, margin: '3px 0 0' }}>
+          {next?.name || 'Not available'}
+          {minutesToNext !== null ? ` · in ${Math.max(0, Math.round(minutesToNext))} min` : ''}
+        </p>
+      </div>
     </div>
   );
 }
