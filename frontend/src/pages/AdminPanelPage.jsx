@@ -14,6 +14,7 @@ import {
   MapPin, User, Star, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, LayoutDashboard, PlusCircle,
   CalendarPlus, LogOut, Pencil, Trash2, Save, X, FileText, BookOpen,
+  ImagePlus, Images,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -110,6 +111,31 @@ async function patchTempleFields(id, fields) {
     method: 'PATCH',
     body: JSON.stringify(fields),
   });
+}
+
+async function uploadTemplePhoto(id, file, { isHero = false, sortOrder = 0 } = {}) {
+  const token = sessionStorage.getItem('bm_access_token');
+  const body = new FormData();
+  body.append('file', file);
+  body.append('is_hero', String(isHero));
+  body.append('sort_order', String(sortOrder));
+
+  const res = await fetch(`${API_BASE}/api/admin/temples/${id}/media`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof err.detail === 'string'
+        ? err.detail
+        : `Photo upload failed (HTTP ${res.status})`,
+    );
+  }
+
+  return res.json();
 }
 
 async function deleteTemple(id) {
@@ -597,6 +623,37 @@ function EditModal({ temple, onClose, onSaved }) {
 
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
+  const [heroFile, setHeroFile] = useState(null);
+  const [galleryFiles, setGalleryFiles] = useState([]);
+  const [heroPreview, setHeroPreview] = useState('');
+  const [galleryPreviews, setGalleryPreviews] = useState([]);
+
+  useEffect(() => {
+    if (!heroFile) {
+      setHeroPreview('');
+      return undefined;
+    }
+    const url = URL.createObjectURL(heroFile);
+    setHeroPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [heroFile]);
+
+  useEffect(() => {
+    const urls = galleryFiles.map(file => URL.createObjectURL(file));
+    setGalleryPreviews(urls);
+    return () => urls.forEach(url => URL.revokeObjectURL(url));
+  }, [galleryFiles]);
+
+  const validateImages = files => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const invalid = files.find(file => !allowed.includes(file.type));
+    if (invalid) {
+      setError(`${invalid.name} is not a supported image. Use JPG, PNG, WebP or GIF.`);
+      return false;
+    }
+    setError(null);
+    return true;
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -610,7 +667,28 @@ function EditModal({ temple, onClose, onSaved }) {
         }
       });
       await patchTempleFields(temple.id, payload);
-      onSaved({ ...temple, ...payload });
+
+      let uploadedHeroUrl = '';
+      if (heroFile) {
+        const uploadedHero = await uploadTemplePhoto(temple.id, heroFile, {
+          isHero: true,
+          sortOrder: 0,
+        });
+        uploadedHeroUrl = uploadedHero.file_url || '';
+      }
+
+      for (let index = 0; index < galleryFiles.length; index += 1) {
+        await uploadTemplePhoto(temple.id, galleryFiles[index], {
+          isHero: false,
+          sortOrder: index + 1,
+        });
+      }
+
+      onSaved({
+        ...temple,
+        ...payload,
+        ...(uploadedHeroUrl ? { hero_image_url: uploadedHeroUrl } : {}),
+      });
       onClose();
     } catch (e) {
       setError(e.message);
@@ -685,6 +763,147 @@ function EditModal({ temple, onClose, onSaved }) {
             </div>
           ) : (
             <div>
+              <div style={{ marginBottom: 28 }}>
+                <div style={{
+                  fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 700,
+                  letterSpacing: '.08em', color: 'var(--saffron)',
+                  textTransform: 'uppercase', marginBottom: 12,
+                  paddingBottom: 8, borderBottom: '2px solid var(--cream-dark)',
+                }}>
+                  Photos
+                </div>
+
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 1fr',
+                  gap: 16,
+                }}>
+                  <div>
+                    <label style={{
+                      display: 'block', marginBottom: 7,
+                      fontFamily: 'var(--font-display)', fontSize: 11,
+                      letterSpacing: '.06em', color: 'var(--text-light)',
+                      textTransform: 'uppercase',
+                    }}>
+                      Cover / Hero Photo
+                    </label>
+                    <label style={{
+                      minHeight: 145, border: '2px dashed #d8b98d', borderRadius: 12,
+                      background: '#fffaf2', cursor: 'pointer', overflow: 'hidden',
+                      display: 'grid', placeItems: 'center', position: 'relative',
+                    }}>
+                      {(heroPreview || fullTemple?.hero_image_url) ? (
+                        <img
+                          src={heroPreview || fullTemple.hero_image_url}
+                          alt="Temple cover preview"
+                          style={{ width: '100%', height: 145, objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <span style={{
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          gap: 7, color: '#92400e', fontFamily: 'var(--font-display)',
+                          fontSize: 12,
+                        }}>
+                          <ImagePlus size={25} />
+                          Select cover photo
+                        </span>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        hidden
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file && validateImages([file])) setHeroFile(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    {heroFile && (
+                      <button
+                        type="button"
+                        onClick={() => setHeroFile(null)}
+                        style={{
+                          marginTop: 7, border: 0, background: 'transparent',
+                          color: '#b91c1c', cursor: 'pointer', fontSize: 11,
+                        }}
+                      >
+                        Remove selected cover
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <label style={{
+                      display: 'block', marginBottom: 7,
+                      fontFamily: 'var(--font-display)', fontSize: 11,
+                      letterSpacing: '.06em', color: 'var(--text-light)',
+                      textTransform: 'uppercase',
+                    }}>
+                      Gallery Photos
+                    </label>
+                    <label style={{
+                      minHeight: 145, border: '2px dashed #d8b98d', borderRadius: 12,
+                      background: '#fffaf2', cursor: 'pointer', padding: 10,
+                      display: 'grid', placeItems: 'center', boxSizing: 'border-box',
+                    }}>
+                      {galleryPreviews.length ? (
+                        <span style={{
+                          display: 'grid', width: '100%',
+                          gridTemplateColumns: 'repeat(3, 1fr)', gap: 6,
+                        }}>
+                          {galleryPreviews.map((url, index) => (
+                            <img
+                              key={url}
+                              src={url}
+                              alt={`Gallery preview ${index + 1}`}
+                              style={{ width: '100%', height: 58, objectFit: 'cover', borderRadius: 7 }}
+                            />
+                          ))}
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          gap: 7, color: '#92400e', fontFamily: 'var(--font-display)',
+                          fontSize: 12,
+                        }}>
+                          <Images size={25} />
+                          Select multiple gallery photos
+                        </span>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        multiple
+                        hidden
+                        onChange={e => {
+                          const files = Array.from(e.target.files || []);
+                          if (files.length && validateImages(files)) setGalleryFiles(files);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    {galleryFiles.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setGalleryFiles([])}
+                        style={{
+                          marginTop: 7, border: 0, background: 'transparent',
+                          color: '#b91c1c', cursor: 'pointer', fontSize: 11,
+                        }}
+                      >
+                        Clear {galleryFiles.length} selected photo{galleryFiles.length === 1 ? '' : 's'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p style={{
+                  margin: '10px 0 0', color: 'var(--text-light)', fontSize: 11,
+                  fontFamily: 'var(--font-display)',
+                }}>
+                  Cover photo will be replaced. Gallery photos will be added to the existing gallery.
+                </p>
+              </div>
+
               {SECTIONS.map(section => (
                 <div key={section.title} style={{ marginBottom: 28 }}>
                   <div style={{
