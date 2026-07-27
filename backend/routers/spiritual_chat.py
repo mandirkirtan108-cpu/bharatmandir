@@ -6,13 +6,14 @@ Add to main.py: from routers import spiritual_chat; app.include_router(spiritual
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-import anthropic
+from openai import OpenAI, OpenAIError
 import os
 import time
 from datetime import datetime
 import pytz
 
 router = APIRouter(prefix="/api/spiritual", tags=["Spiritual Chat"])
+OPENAI_MODEL = os.getenv("OPENAI_AI_GUIDE_MODEL", "gpt-4.1-mini")
 
 # ──────────────────────────────────────────────
 # System Prompt — Language-aware, structured
@@ -112,11 +113,11 @@ def spiritual_chat(req: ChatRequest):
     Responds in the same language as the user's message.
     Maintains conversation history for multi-turn context.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client = OpenAI(api_key=api_key)
 
     # Build messages list from history + current message
     messages = [{"role": m.role, "content": m.content} for m in (req.history or [])]
@@ -124,24 +125,32 @@ def spiritual_chat(req: ChatRequest):
 
     start = time.time()
     try:
-        response = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=1024,
-            system=get_system_prompt(),
-            messages=messages
+        response = client.responses.create(
+            model=OPENAI_MODEL,
+            instructions=get_system_prompt(),
+            input=messages,
+            max_output_tokens=1024,
         )
-    except anthropic.APIError as e:
-        raise HTTPException(status_code=502, detail=f"Claude API error: {str(e)}")
+    except OpenAIError as e:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {str(e)}")
 
     elapsed_ms = int((time.time() - start) * 1000)
+    reply = (response.output_text or "").strip()
+    if not reply:
+        raise HTTPException(status_code=502, detail="OpenAI returned an empty response")
 
     return ChatResponse(
-        reply=response.content[0].text,
+        reply=reply,
         response_time_ms=elapsed_ms,
-        model=response.model,
+        model=getattr(response, "model", OPENAI_MODEL),
     )
 
 
 @router.get("/health")
 def spiritual_health():
-    return {"status": "ok", "model": "claude-haiku-4-5"}
+    return {
+        "status": "ok",
+        "provider": "OpenAI",
+        "model": OPENAI_MODEL,
+        "configured": bool(os.getenv("OPENAI_API_KEY")),
+    }
