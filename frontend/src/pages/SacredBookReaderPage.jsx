@@ -143,7 +143,7 @@ export default function SacredBookReaderPage() {
                     <img src={current.page_image_url} alt={`Page ${current.page_number} — original scan`} />
                   </div>
                 ) : (
-                  <div className="page-text">{current.text}</div>
+                  <div className="page-text-wrap"><div className="page-text">{current.text}</div></div>
                 )}
 
                 <div className="rule rule-bottom" />
@@ -185,6 +185,7 @@ export default function SacredBookReaderPage() {
 
       .reader-shell{
         --content-width:900px;
+        --page-height:660px;
         position:relative;min-height:100vh;padding-bottom:56px;overflow:hidden;
         background:
           radial-gradient(ellipse at 50% -10%, #6a2c0c66, transparent 55%),
@@ -223,20 +224,26 @@ export default function SacredBookReaderPage() {
       .book-stage{position:relative;margin-top:14px}
       .book-frame{position:relative;display:flex;justify-content:center}
 
+      /* Stacked leaves behind the current page give consistent thickness —
+         sized off the same fixed --page-height so it never shifts between pages. */
       .stack-leaf{
-        position:absolute;top:10px;bottom:-4px;width:100%;max-width:760px;border-radius:2px 10px 10px 2px;
+        position:absolute;top:10px;height:var(--page-height);width:100%;max-width:760px;border-radius:2px 10px 10px 2px;
         background:linear-gradient(#f4e6c4,#e2cd9c);box-shadow:0 14px 30px #00000050;
       }
       .stack-leaf.stack-1{transform:translate(6px,6px) rotate(.6deg);opacity:.9;z-index:0}
       .stack-leaf.stack-2{transform:translate(11px,11px) rotate(1.1deg);opacity:.55;z-index:-1}
 
+      /* Fixed height so every page — long or short — reads as the same
+         physical size, like real leaves of one book. Overflow text scrolls
+         inside the page rather than growing the page itself. */
       .page-leaf{
-        position:relative;z-index:1;width:100%;max-width:760px;min-height:560px;
+        position:relative;z-index:1;width:100%;max-width:760px;height:var(--page-height);
+        display:flex;flex-direction:column;
         background:
           repeating-linear-gradient(0deg, #00000006 0 1px, transparent 1px 3px),
           radial-gradient(ellipse at top left, #fffaf0, #f4e6c4 60%, #ecd9ac);
         border-radius:2px 10px 10px 2px;
-        padding:56px clamp(26px,6vw,68px) 40px;
+        padding:52px clamp(26px,6vw,68px) 32px;
         box-shadow:0 24px 60px #00000070, 0 2px 0 #ffffffaa inset, -10px 0 18px -12px #00000055 inset;
         overflow:hidden;
       }
@@ -252,23 +259,29 @@ export default function SacredBookReaderPage() {
         box-shadow:0 4px 8px #00000040;
       }
       .page-watermark{position:absolute;top:50%;left:50%;width:260px;height:260px;transform:translate(-50%,-50%);color:#7a3b12;opacity:.05;pointer-events:none}
-      .rule{height:1px;margin:0 auto 22px;max-width:180px;background:linear-gradient(90deg,transparent,#a9752f,transparent)}
-      .rule-top{margin-bottom:26px}
-      .rule-bottom{margin-top:26px;margin-bottom:0}
+      .rule{height:1px;flex-shrink:0;margin:0 auto;max-width:180px;width:100%;background:linear-gradient(90deg,transparent,#a9752f,transparent)}
+      .rule-top{margin-bottom:22px}
+      .rule-bottom{margin-top:16px}
+
+      .page-text-wrap{flex:1;min-height:0;overflow-y:auto;padding-right:6px;margin-right:-6px}
+      .page-text-wrap::-webkit-scrollbar{width:5px}
+      .page-text-wrap::-webkit-scrollbar-thumb{background:#c9932f66;border-radius:99px}
+      .page-text-wrap::-webkit-scrollbar-track{background:transparent}
+
       .page-text{position:relative;white-space:pre-wrap;font-family:'Crimson Pro',Georgia,serif;font-size:19px;line-height:1.95;color:#2c1c0e;text-align:left}
       .page-text::first-letter{font-family:'Cormorant Garamond',Georgia,serif;font-size:3.4em;float:left;line-height:.82;padding:.04em .08em 0 0;color:#8b3a15;font-weight:700}
       .page-leaf.devanagari .page-text{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:19px;line-height:2.1}
       .page-leaf.devanagari .page-text::first-letter{font-size:1em;float:none;padding:0;color:inherit;font-weight:inherit;font-family:inherit}
 
-      .page-scan{position:relative;text-align:center}
-      .page-scan img{max-width:100%;height:auto;border-radius:4px;box-shadow:0 6px 20px #00000030;border:1px solid #d9c49a}
+      .page-scan{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;text-align:center}
+      .page-scan img{max-width:100%;max-height:100%;height:auto;width:auto;object-fit:contain;border-radius:4px;box-shadow:0 6px 20px #00000030;border:1px solid #d9c49a}
 
-      .folio{position:relative;display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:24px;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a07a4a}
+      .folio{position:relative;flex-shrink:0;display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a07a4a}
       .folio-scan{display:flex;align-items:center;gap:5px;color:#8b3a15;text-decoration:none;letter-spacing:.05em;text-transform:none;font-size:12px}
       .folio-scan:hover{text-decoration:underline}
       .folio-num{font-variant-numeric:tabular-nums;white-space:nowrap}
 
-      .page-leaf.loading{display:flex;align-items:center;justify-content:center;min-height:560px}
+      .page-leaf.loading{align-items:center;justify-content:center}
 
       @keyframes turnNextIn{from{opacity:0;transform:perspective(1200px) rotateY(-6deg) translateX(18px)}to{opacity:1;transform:none}}
       @keyframes turnPrevIn{from{opacity:0;transform:perspective(1200px) rotateY(6deg) translateX(-18px)}to{opacity:1;transform:none}}
@@ -295,10 +308,11 @@ export default function SacredBookReaderPage() {
       .reader-status.error{color:#e08a6a}
 
       @media(max-width:650px){
+        .reader-shell{--page-height:72vh}
         .reader-toolbar{grid-template-columns:1fr;text-align:center;gap:8px}
         .back{justify-self:center}
         .seal{justify-self:center}
-        .page-leaf{padding:40px 22px 32px;min-height:420px;border-radius:8px}
+        .page-leaf{padding:36px 22px 26px;border-radius:8px}
         .stack-leaf{display:none}
         .tab-rail{overflow-x:auto;justify-content:flex-start;padding-bottom:2px}
         .ribbon{right:24px}
