@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Languages, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Image as ImageIcon, Languages, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { fetchBook, fetchBookPages } from '../services/sacredBooksApi';
@@ -8,7 +8,16 @@ const LANGUAGES = [
   ['en', 'English'], ['hi', 'हिन्दी'], ['sa', 'संस्कृतम्'], ['original', 'Original'],
 ];
 
-// Faint lotus watermark — sits behind the text on every leaf.
+function TempleArch() {
+  return (
+    <svg className="temple-arch" viewBox="0 0 900 500" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      <path d="M450 20c150 0 260 110 260 260v180H190V280C190 130 300 20 450 20Z" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M450 70c120 0 210 90 210 210v170H240V280C240 160 330 70 450 70Z" fill="none" stroke="currentColor" strokeWidth="1.2" opacity=".6" />
+      <circle cx="450" cy="60" r="8" fill="currentColor" opacity=".7" />
+    </svg>
+  );
+}
+
 function PageWatermark() {
   return (
     <svg className="page-watermark" viewBox="0 0 200 200" aria-hidden="true">
@@ -28,7 +37,7 @@ export default function SacredBookReaderPage() {
   const [pages, setPages] = useState([]);
   const [language, setLanguage] = useState('en');
   const [batch, setBatch] = useState(1);
-  const [leaf, setLeaf] = useState(0); // index of current page inside the fetched batch
+  const [leaf, setLeaf] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [turnDir, setTurnDir] = useState('next');
@@ -78,148 +87,157 @@ export default function SacredBookReaderPage() {
   });
 
   const percent = book?.page_count && current ? Math.min(100, Math.round((current.page_number / book.page_count) * 100)) : 0;
+  const showingScan = language === 'original' && !!current?.page_image_url;
 
   return <>
     <Navbar />
     <main className="reader-shell">
+      <TempleArch />
       <div className="reader-glow" aria-hidden="true" />
 
-      <header className="reader-toolbar">
-        <button className="back" onClick={() => navigate('/sacred-books')}><X size={17} /> Close book</button>
-        <div className="titleblock">
-          <h1>{book?.title || 'Loading…'}</h1>
-          {book?.author && <p>{book.author}</p>}
-        </div>
-        {book?.original_pdf_url
-          ? <a className="seal" href={book.original_pdf_url} target="_blank" rel="noreferrer" title="Download original"><Download size={16} /></a>
-          : <span />}
-      </header>
+      <div className="reader-inner">
+        <header className="reader-toolbar">
+          <button className="back" onClick={() => navigate('/sacred-books')}><X size={16} /> Close book</button>
+          <div className="titleblock">
+            <h1>{book?.title || 'Loading…'}</h1>
+            {book?.author && <p>{book.author}</p>}
+          </div>
+          {book?.original_pdf_url
+            ? <a className="seal" href={book.original_pdf_url} target="_blank" rel="noreferrer" title="Download original PDF"><Download size={16} /></a>
+            : <span />}
+        </header>
 
-      <nav className="tab-rail" aria-label="Choose translation">
-        <Languages size={16} className="tab-rail-icon" />
-        {LANGUAGES.map(([code, label]) => (
-          <button
-            key={code}
-            className={language === code ? 'tab active' : 'tab'}
-            onClick={() => { if (code !== language) { setLanguage(code); setBatch(1); setLeaf(0); } }}
-          >{label}</button>
-        ))}
-      </nav>
+        <nav className="tab-rail" aria-label="Choose translation">
+          <Languages size={15} className="tab-rail-icon" />
+          {LANGUAGES.map(([code, label]) => (
+            <button
+              key={code}
+              className={language === code ? 'tab active' : 'tab'}
+              onClick={() => { if (code !== language) { setLanguage(code); setBatch(1); setLeaf(0); } }}
+            >{label}</button>
+          ))}
+        </nav>
 
-      {error && <div className="reader-status error">{error}</div>}
+        {error && <div className="reader-status error">{error}</div>}
 
-      <div className="book-stage">
-        <div className="book-frame">
-          <div className="spine-shadow" aria-hidden="true" />
+        <div className="book-stage">
+          <div className="book-frame">
+            <div className="stack-leaf stack-2" aria-hidden="true" />
+            <div className="stack-leaf stack-1" aria-hidden="true" />
 
-          {loading || !current ? (
-            <div className="page-leaf loading">
-              <div className="reader-status">Turning the page…</div>
-            </div>
-          ) : (
-            <article
-              key={current.page_number}
-              className={`page-leaf ${language === 'hi' || language === 'sa' ? 'devanagari' : ''} turn-${turnDir}`}
-            >
-              <PageWatermark />
-              <div className="rule rule-top" />
-              <div className="page-text">{current.text}</div>
-              <div className="rule rule-bottom" />
-              <div className="folio">
-                <span>{book?.title}</span>
-                <span className="folio-num">{current.page_number} / {book?.page_count || '—'}</span>
+            {loading || !current ? (
+              <div className="page-leaf loading">
+                <div className="reader-status">Turning the page…</div>
               </div>
-            </article>
-          )}
+            ) : (
+              <article
+                key={`${current.page_number}-${language}`}
+                className={`page-leaf ${language === 'hi' || language === 'sa' ? 'devanagari' : ''} turn-${turnDir}`}
+              >
+                <div className="ribbon" aria-hidden="true" />
+                {!showingScan && <PageWatermark />}
+                <div className="rule rule-top" />
 
-          {!loading && current && (
-            <>
-              <button className="turn-zone turn-zone-left" aria-label="Previous page" disabled={atBookStart} onClick={goPrev} />
-              <button className="turn-zone turn-zone-right" aria-label="Next page" disabled={atBookEnd} onClick={goNext} />
-            </>
-          )}
+                {showingScan ? (
+                  <div className="page-scan">
+                    <img src={current.page_image_url} alt={`Page ${current.page_number} — original scan`} />
+                  </div>
+                ) : (
+                  <div className="page-text">{current.text}</div>
+                )}
+
+                <div className="rule rule-bottom" />
+                <div className="folio">
+                  <span>{book?.title}</span>
+                  {current.page_image_url && !showingScan && (
+                    <a className="folio-scan" href={current.page_image_url} target="_blank" rel="noreferrer">
+                      <ImageIcon size={11} /> View original scan
+                    </a>
+                  )}
+                  <span className="folio-num">{current.page_number} / {book?.page_count || '—'}</span>
+                </div>
+              </article>
+            )}
+
+            {!loading && current && (
+              <>
+                <button className="turn-zone turn-zone-left" aria-label="Previous page" disabled={atBookStart} onClick={goPrev} />
+                <button className="turn-zone turn-zone-right" aria-label="Next page" disabled={atBookEnd} onClick={goNext} />
+              </>
+            )}
+          </div>
+
+          <div className="progress-rail" aria-hidden="true">
+            <div className="progress-fill" style={{ width: `${percent}%` }} />
+          </div>
         </div>
 
-        <div className="progress-rail" aria-hidden="true">
-          <div className="progress-fill" style={{ width: `${percent}%` }} />
-        </div>
+        <footer className="reader-pager">
+          <button disabled={atBookStart} onClick={goPrev}><ChevronLeft size={18} /> Previous</button>
+          <span className="pager-percent">{percent}% read</span>
+          <button disabled={atBookEnd} onClick={goNext}>Next <ChevronRight size={18} /></button>
+        </footer>
       </div>
-
-      <footer className="reader-pager">
-        <button disabled={atBookStart} onClick={goPrev}><ChevronLeft size={18} /> Previous</button>
-        <span className="pager-percent">{percent}% read</span>
-        <button disabled={atBookEnd} onClick={goNext}>Next <ChevronRight size={18} /></button>
-      </footer>
     </main>
 
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:wght@500;600&display=swap');
 
       .reader-shell{
+        --content-width:900px;
         position:relative;min-height:100vh;padding-bottom:56px;overflow:hidden;
         background:
           radial-gradient(ellipse at 50% -10%, #6a2c0c66, transparent 55%),
           linear-gradient(#1c0d05, #150a05 40%, #100804);
       }
-      .reader-glow{
-        position:absolute;inset:0;pointer-events:none;
-        background:radial-gradient(ellipse 900px 500px at 50% 30%, #ffdca340, transparent 70%);
-      }
+      .reader-glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 900px 500px at 50% 30%, #ffdca340, transparent 70%)}
+      .temple-arch{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:min(900px,100%);height:520px;color:#c9932f;opacity:.09;pointer-events:none}
 
-      .reader-toolbar{
-        position:relative;z-index:2;color:#f1dcb8;padding:22px max(20px,calc((100% - 940px)/2)) 16px;
-        display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px;
-      }
-      .titleblock{text-align:center}
+      .reader-inner{position:relative;z-index:2;max-width:var(--content-width);margin:0 auto;padding:0 20px}
+
+      .reader-toolbar{padding:26px 0 16px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px;color:#f1dcb8}
+      .titleblock{text-align:center;min-width:0}
       .titleblock h1{
         margin:0;font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;
         font-size:clamp(20px,3vw,30px);letter-spacing:.01em;
         background:linear-gradient(180deg,#f7e2ae,#c9932f);-webkit-background-clip:text;background-clip:text;color:transparent;
       }
       .titleblock p{margin:3px 0 0;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.05em;color:#caa06c;text-transform:uppercase}
-      .back{justify-self:start;display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-size:13px}
+      .back{justify-self:start;display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-family:'EB Garamond',serif;font-size:13px;white-space:nowrap}
       .back:hover{border-color:#c9932f}
       .seal{
-        justify-self:end;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+        justify-self:end;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
         background:radial-gradient(circle at 35% 30%,#e3b45a,#8b5a1e 70%,#6b3f10);
         color:#2a1503;box-shadow:0 2px 6px #00000060,inset 0 1px 1px #ffffff55;text-decoration:none;
       }
 
-      .tab-rail{
-        position:relative;z-index:2;display:flex;justify-content:center;align-items:flex-end;gap:6px;
-        padding:0 20px;margin-bottom:8px;flex-wrap:wrap;
-      }
+      .tab-rail{display:flex;justify-content:center;align-items:flex-end;gap:6px;margin-bottom:14px;flex-wrap:wrap}
       .tab-rail-icon{color:#a97b45;margin-right:4px;margin-bottom:9px}
       .tab{
         font-family:'EB Garamond',serif;font-size:14px;letter-spacing:.03em;cursor:pointer;
         background:linear-gradient(#ece0c4,#d9c69a);color:#5a3c1e;border:1px solid #b8975f;border-bottom:none;
         border-radius:8px 8px 0 0;padding:8px 18px 9px;transform:translateY(4px);box-shadow:0 -2px 6px #00000020;
       }
-      .tab.active{
-        background:linear-gradient(#fff8e6,#f3e3bd);color:#7a3b12;transform:translateY(0);
-        box-shadow:0 -4px 10px #0000003a;border-color:#c9932f;font-weight:600;
-      }
+      .tab.active{background:linear-gradient(#fff8e6,#f3e3bd);color:#7a3b12;transform:translateY(0);box-shadow:0 -4px 10px #0000003a;border-color:#c9932f;font-weight:600}
 
-      .book-stage{position:relative;z-index:2;max-width:940px;margin:18px auto 0;padding:0 16px}
+      .book-stage{position:relative;margin-top:14px}
       .book-frame{position:relative;display:flex;justify-content:center}
-      .spine-shadow{
-        position:absolute;left:50%;top:2%;bottom:2%;width:44px;transform:translateX(-50%);
-        background:linear-gradient(90deg,transparent,#00000055 45%,#00000055 55%,transparent);
-        filter:blur(6px);pointer-events:none;display:none;
+
+      .stack-leaf{
+        position:absolute;top:10px;bottom:-4px;width:100%;max-width:760px;border-radius:2px 10px 10px 2px;
+        background:linear-gradient(#f4e6c4,#e2cd9c);box-shadow:0 14px 30px #00000050;
       }
-      @media(min-width:760px){.spine-shadow{display:block}}
+      .stack-leaf.stack-1{transform:translate(6px,6px) rotate(.6deg);opacity:.9;z-index:0}
+      .stack-leaf.stack-2{transform:translate(11px,11px) rotate(1.1deg);opacity:.55;z-index:-1}
 
       .page-leaf{
-        position:relative;width:100%;max-width:760px;min-height:560px;
+        position:relative;z-index:1;width:100%;max-width:760px;min-height:560px;
         background:
           repeating-linear-gradient(0deg, #00000006 0 1px, transparent 1px 3px),
           radial-gradient(ellipse at top left, #fffaf0, #f4e6c4 60%, #ecd9ac);
         border-radius:2px 10px 10px 2px;
-        padding:52px clamp(26px,6vw,68px) 40px;
-        box-shadow:
-          0 24px 60px #00000070,
-          0 2px 0 #ffffffaa inset,
-          -10px 0 18px -12px #00000055 inset;
+        padding:56px clamp(26px,6vw,68px) 40px;
+        box-shadow:0 24px 60px #00000070, 0 2px 0 #ffffffaa inset, -10px 0 18px -12px #00000055 inset;
         overflow:hidden;
       }
       .page-leaf::after{
@@ -227,28 +245,28 @@ export default function SacredBookReaderPage() {
         background:linear-gradient(135deg,transparent 50%,#00000018 51%,#00000008 70%,transparent 72%);
         pointer-events:none;
       }
-      .page-watermark{
-        position:absolute;top:50%;left:50%;width:260px;height:260px;transform:translate(-50%,-50%);
-        color:#7a3b12;opacity:.05;pointer-events:none;
+      .ribbon{
+        position:absolute;top:-2px;right:52px;width:26px;height:64px;
+        background:linear-gradient(180deg,#a63d0f,#7a2c0b);
+        clip-path:polygon(0 0,100% 0,100% 100%,50% 78%,0 100%);
+        box-shadow:0 4px 8px #00000040;
       }
+      .page-watermark{position:absolute;top:50%;left:50%;width:260px;height:260px;transform:translate(-50%,-50%);color:#7a3b12;opacity:.05;pointer-events:none}
       .rule{height:1px;margin:0 auto 22px;max-width:180px;background:linear-gradient(90deg,transparent,#a9752f,transparent)}
       .rule-top{margin-bottom:26px}
       .rule-bottom{margin-top:26px;margin-bottom:0}
-      .page-text{
-        position:relative;white-space:pre-wrap;font-family:'Crimson Pro',Georgia,serif;
-        font-size:19px;line-height:1.95;color:#2c1c0e;text-align:left;
-      }
-      .page-text::first-letter{
-        font-family:'Cormorant Garamond',Georgia,serif;font-size:3.4em;float:left;line-height:.82;
-        padding:.04em .08em 0 0;color:#8b3a15;font-weight:700;
-      }
+      .page-text{position:relative;white-space:pre-wrap;font-family:'Crimson Pro',Georgia,serif;font-size:19px;line-height:1.95;color:#2c1c0e;text-align:left}
+      .page-text::first-letter{font-family:'Cormorant Garamond',Georgia,serif;font-size:3.4em;float:left;line-height:.82;padding:.04em .08em 0 0;color:#8b3a15;font-weight:700}
       .page-leaf.devanagari .page-text{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:19px;line-height:2.1}
       .page-leaf.devanagari .page-text::first-letter{font-size:1em;float:none;padding:0;color:inherit;font-weight:inherit;font-family:inherit}
-      .folio{
-        position:relative;display:flex;justify-content:space-between;margin-top:24px;
-        font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a07a4a;
-      }
-      .folio-num{font-variant-numeric:tabular-nums}
+
+      .page-scan{position:relative;text-align:center}
+      .page-scan img{max-width:100%;height:auto;border-radius:4px;box-shadow:0 6px 20px #00000030;border:1px solid #d9c49a}
+
+      .folio{position:relative;display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:24px;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a07a4a}
+      .folio-scan{display:flex;align-items:center;gap:5px;color:#8b3a15;text-decoration:none;letter-spacing:.05em;text-transform:none;font-size:12px}
+      .folio-scan:hover{text-decoration:underline}
+      .folio-num{font-variant-numeric:tabular-nums;white-space:nowrap}
 
       .page-leaf.loading{display:flex;align-items:center;justify-content:center;min-height:560px}
 
@@ -258,23 +276,17 @@ export default function SacredBookReaderPage() {
       .page-leaf.turn-prev{animation:turnPrevIn .38s ease-out}
       @media (prefers-reduced-motion: reduce){.page-leaf.turn-next,.page-leaf.turn-prev{animation:none}}
 
-      .turn-zone{position:absolute;top:0;bottom:0;width:14%;background:none;border:0;cursor:pointer;opacity:0}
+      .turn-zone{position:absolute;top:0;bottom:0;z-index:2;width:14%;background:none;border:0;cursor:pointer;opacity:0}
       .turn-zone:hover{opacity:1;background:linear-gradient(90deg,#00000010,transparent)}
       .turn-zone-left{left:0;border-radius:2px 0 0 2px}
       .turn-zone-right{right:0;background:linear-gradient(270deg,#00000010,transparent);border-radius:0 10px 10px 0}
       .turn-zone:disabled{cursor:default;opacity:0!important}
 
-      .progress-rail{max-width:760px;margin:16px auto 0;height:3px;border-radius:99px;background:#ffffff14;overflow:hidden}
+      .progress-rail{max-width:760px;margin:18px auto 0;height:3px;border-radius:99px;background:#ffffff14;overflow:hidden}
       .progress-fill{height:100%;background:linear-gradient(90deg,#c9932f,#f2d795);transition:width .3s ease}
 
-      .reader-pager{
-        position:relative;z-index:2;display:flex;justify-content:center;align-items:center;gap:22px;margin-top:26px;
-      }
-      .reader-pager button{
-        display:flex;align-items:center;gap:6px;padding:10px 20px;border:1px solid #ad7f4880;
-        background:linear-gradient(#2a1608,#1c0d05);color:#e9c795;border-radius:99px;cursor:pointer;
-        font-family:'EB Garamond',serif;font-size:14px;letter-spacing:.03em;
-      }
+      .reader-pager{display:flex;justify-content:center;align-items:center;gap:22px;margin-top:26px}
+      .reader-pager button{display:flex;align-items:center;gap:6px;padding:10px 20px;border:1px solid #ad7f4880;background:linear-gradient(#2a1608,#1c0d05);color:#e9c795;border-radius:99px;cursor:pointer;font-family:'EB Garamond',serif;font-size:14px;letter-spacing:.03em}
       .reader-pager button:hover:not(:disabled){border-color:#c9932f}
       .reader-pager button:disabled{opacity:.35;cursor:default}
       .pager-percent{color:#a9825a;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.05em}
@@ -287,7 +299,9 @@ export default function SacredBookReaderPage() {
         .back{justify-self:center}
         .seal{justify-self:center}
         .page-leaf{padding:40px 22px 32px;min-height:420px;border-radius:8px}
+        .stack-leaf{display:none}
         .tab-rail{overflow-x:auto;justify-content:flex-start;padding-bottom:2px}
+        .ribbon{right:24px}
       }
     `}</style>
   </>;
