@@ -39,6 +39,97 @@ const RASHI_LIST = [
   'Dhanu (Sagittarius)', 'Makara (Capricorn)', 'Kumbha (Aquarius)', 'Meena (Pisces)',
 ];
 
+// ── Rashi (zodiac sign) name → index (1 = Mesha/Aries ... 12 = Meena/Pisces).
+// Accepts both the Sanskrit and English names since different Panchang
+// providers return either ("Mesha", "Aries", "Mesha (Aries)"...). Used by
+// the Lagna (birth) chart to work out which house each planet falls in.
+const RASHI_INDEX = {
+  mesha: 1, aries: 1,
+  vrishabha: 2, vrishab: 2, taurus: 2,
+  mithuna: 3, gemini: 3,
+  karka: 4, kark: 4, cancer: 4,
+  simha: 5, leo: 5,
+  kanya: 6, virgo: 6,
+  tula: 7, libra: 7,
+  vrischika: 8, vrishchik: 8, scorpio: 8,
+  dhanu: 9, sagittarius: 9,
+  makara: 10, makar: 10, capricorn: 10,
+  kumbha: 11, aquarius: 11,
+  meena: 12, meen: 12, pisces: 12,
+};
+
+function rashiIndexFromName(rawName) {
+  if (!rawName) return null;
+  const key = String(rawName).toLowerCase().trim().split(/[\s(]/)[0];
+  return RASHI_INDEX[key] || null;
+}
+
+// ── Planet name → short glyph shown inside the Lagna chart houses.
+const PLANET_ABBR = {
+  ascendant: 'As', asc: 'As', lagna: 'As', lagnam: 'As',
+  sun: 'Su', surya: 'Su',
+  moon: 'Mo', chandra: 'Mo',
+  mercury: 'Me', budh: 'Me', budha: 'Me',
+  venus: 'Ve', shukra: 'Ve',
+  mars: 'Ma', mangal: 'Ma', kuja: 'Ma',
+  jupiter: 'Ju', guru: 'Ju', brihaspati: 'Ju',
+  saturn: 'Sa', shani: 'Sa',
+  rahu: 'Ra',
+  ketu: 'Ke',
+};
+
+function planetAbbr(rawName) {
+  if (!rawName) return '?';
+  const key = String(rawName).toLowerCase().trim();
+  return PLANET_ABBR[key] || String(rawName).slice(0, 2);
+}
+
+// ── Fixed centroid positions (in a 400×400 viewBox) for each of the 12
+// houses of a classic North Indian ("diamond") Lagna chart. House 1 is
+// always the top point, and house numbers run clockwise from there —
+// only the rashi number shown inside each house changes with the day's
+// ascendant, exactly as it does in a real hand-drawn Kundli.
+const LAGNA_HOUSE_POS = [
+  { x: 200, y: 78 },   // 1 – top point
+  { x: 300, y: 48 },   // 2
+  { x: 353, y: 100 },  // 3
+  { x: 328, y: 200 },  // 4 – right point
+  { x: 353, y: 300 },  // 5
+  { x: 300, y: 352 },  // 6
+  { x: 200, y: 322 },  // 7 – bottom point
+  { x: 100, y: 352 },  // 8
+  { x: 47, y: 300 },   // 9
+  { x: 72, y: 200 },   // 10 – left point
+  { x: 47, y: 100 },   // 11
+  { x: 100, y: 48 },   // 12
+];
+
+// Builds the 12-house layout for the Lagna chart from a flat list of
+// { name, rashi } planet placements (as returned by the Panchang API).
+// Returns null when there isn't enough data (no recognisable ascendant)
+// so the caller can show an empty-state instead of a wrong chart.
+function buildLagnaHouses(planets) {
+  if (!Array.isArray(planets) || !planets.length) return null;
+  const ascendant = planets.find((p) => /asc|lagna/i.test(p?.name || ''));
+  const ascIndex = rashiIndexFromName(ascendant?.rashi || ascendant?.sign);
+  if (!ascIndex) return null;
+
+  const houses = Array.from({ length: 12 }, (_, i) => ({
+    house: i + 1,
+    rashi: ((ascIndex - 1 + i) % 12) + 1,
+    planets: [],
+  }));
+
+  planets.forEach((planet) => {
+    const rashiIdx = rashiIndexFromName(planet?.rashi || planet?.sign);
+    if (!rashiIdx) return;
+    const houseIdx = ((rashiIdx - ascIndex + 12) % 12);
+    houses[houseIdx].planets.push(planetAbbr(planet.name));
+  });
+
+  return houses;
+}
+
 const TODAY = new Date().toISOString().split('T')[0];
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
@@ -184,6 +275,19 @@ function formatTimeRangeClean(value) {
   const parts = String(value).split(' - ');
   if (parts.length === 2) {
     return `${formatTimeOnly(parts[0])} - ${formatTimeOnly(parts[1])}`;
+  }
+  return formatTimeOnly(value);
+}
+
+// Same idea as formatTimeRangeClean() but rendered the way Astrotalk's
+// reference layout writes it out: "From <start> To <end>" instead of
+// "<start> - <end>", used by the new Ashubha Muhurat (Inauspicious
+// Timings) list further down.
+function formatFromTo(value) {
+  if (!value) return '';
+  const parts = String(value).split(' - ');
+  if (parts.length === 2) {
+    return `From ${formatTimeOnly(parts[0])}  To ${formatTimeOnly(parts[1])}`;
   }
   return formatTimeOnly(value);
 }
@@ -395,6 +499,234 @@ function DailyTimingsPanel({ sunrise, sunset, moonrise, moonset }) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  New building blocks that mirror the Astrotalk "Today Panchang"      */
+/*  reference layout — restyled with this project's saffron/cream/     */
+/*  brown theme instead of the reference site's yellow/white palette.  */
+/* ------------------------------------------------------------------ */
+
+// The 4-across Sunrise / Sunset / Moonrise / Moonset summary row, styled
+// as individual white cards with a soft coloured icon roundel — the same
+// data as DailyTimingsPanel above, but laid out to match the reference
+// site's card row instead of the gradient-tile version used deeper in
+// the "Full Panchang Details" tabs.
+function SummaryTimingCard({ icon, iconBg, iconColor, label, value }) {
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid var(--cream-dark)', borderRadius: 14,
+      padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 13,
+      boxShadow: '0 1px 6px var(--shadow)',
+    }}>
+      <div style={{
+        width: 42, height: 42, borderRadius: 12, background: iconBg, color: iconColor,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        {icon}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: 'var(--text-light)', fontWeight: 700, margin: 0 }}>{label}</p>
+        <p style={{ fontFamily: UI_FONT, fontSize: 17, color: 'var(--brown)', fontWeight: 900, margin: '2px 0 0' }}>
+          {detailTime(value) || 'Not available'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SummaryTimingRow({ sunrise, sunset, moonrise, moonset }) {
+  const tiles = [
+    { label: 'Sunrise', value: sunrise, icon: <Sun size={19} />, iconBg: '#fff1d9', iconColor: '#c47a14' },
+    { label: 'Sunset', value: sunset, icon: <Sun size={19} />, iconBg: '#fde3d2', iconColor: '#c2410c' },
+    { label: 'Moonrise', value: moonrise, icon: <Moon size={19} />, iconBg: '#e7e6fb', iconColor: '#4338ca' },
+    { label: 'Moonset', value: moonset, icon: <Moon size={19} />, iconBg: '#e0eefd', iconColor: '#1d4ed8' },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12, marginBottom: 20 }}>
+      {tiles.map((tile) => <SummaryTimingCard key={tile.label} {...tile} />)}
+    </div>
+  );
+}
+
+// The reference site's two side-by-side "Tithi / Nakshatra / Yoga..." and
+// "Shaka Samvat / Vikram Samvat" tables — a plain label/value row list
+// with a coloured header bar, in this project's theme.
+function InfoTable({ title, rows }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid var(--cream-dark)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 6px var(--shadow)' }}>
+      {title && (
+        <div style={{
+          padding: '11px 18px', background: 'linear-gradient(135deg,var(--saffron),var(--saffron-dark))',
+          color: '#fff', fontFamily: UI_FONT, fontSize: 12.5, fontWeight: 800,
+          letterSpacing: '.05em', textTransform: 'uppercase',
+        }}>
+          {title}
+        </div>
+      )}
+      <div>
+        {rows.map((row, index) => (
+          <div
+            key={row.label}
+            style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14,
+              padding: '12px 18px', background: index % 2 ? 'var(--cream)' : '#fff',
+              borderTop: index ? '1px solid var(--cream-dark)' : 'none',
+            }}
+          >
+            <span style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-light)', fontWeight: 700 }}>{row.label}</span>
+            <span style={{ fontFamily: UI_FONT, fontSize: 13.5, color: 'var(--brown)', fontWeight: 800, textAlign: 'right' }}>
+              {row.value || 'Not available'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// "Inauspicious Timings (Ashubha Muhurat)" — reference site shows each
+// period as a name followed by "From <time> To <time>" on a coloured
+// card. Reuses the same dailyResult.inauspicious_timings data already
+// powering the Full Panchang Details tab further down the page.
+function AshubhaMuhuratList({ data }) {
+  const rows = Object.entries(data || {})
+    .filter(([key]) => !key.toLowerCase().endsWith('_detailed'))
+    .map(([key, value]) => {
+      const meta = INAUSPICIOUS_MEANINGS[key.toLowerCase()] || { label: titleize(key), icon: '⊘' };
+      const timeText = Array.isArray(value)
+        ? value.map(formatFromTo).filter(Boolean).join('  •  ')
+        : formatFromTo(value?.time ? value.time : value);
+      return { id: key, name: meta.label, icon: meta.icon, time: timeText };
+    })
+    .filter((row) => row.time);
+
+  if (!rows.length) {
+    return <EmptyState text="No inauspicious timings available for this date." />;
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          style={{
+            background: '#fef2f2', border: '1px solid #fca5a5', borderLeft: '4px solid #dc2626',
+            borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: 16 }}>{row.icon}</span>
+          <span style={{ fontFamily: UI_FONT, fontSize: 13.5, color: '#7f1d1d', fontWeight: 800, minWidth: 160 }}>{row.name}</span>
+          <span style={{ fontFamily: UI_FONT, fontSize: 13, color: '#b91c1c', fontWeight: 700 }}>{row.time}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// "Chandrabalam & Tarabalam" — two rows, each listing the favourable
+// Nakshatras for the day relative to the Moon. Only rendered once the
+// backend actually returns these lists (dailyResult.chandrabalam /
+// dailyResult.tarabalam, each an array of Nakshatra names).
+function ChandraTaraPanel({ chandrabalam, tarabalam }) {
+  const rows = [
+    { label: 'Tarabalam', list: tarabalam },
+    { label: 'Chandrabalam', list: chandrabalam },
+  ].filter((row) => Array.isArray(row.list) && row.list.length);
+
+  if (!rows.length) {
+    return <EmptyState text="Chandrabalam and Tarabalam details are not available for this date yet." />;
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {rows.map((row) => (
+        <div key={row.label} style={{ background: 'var(--cream)', border: '1px solid var(--cream-dark)', borderRadius: 10, padding: '12px 16px' }}>
+          <p style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 900, color: 'var(--saffron-dark)', textTransform: 'uppercase', letterSpacing: '.06em', margin: '0 0 6px' }}>
+            {row.label}
+          </p>
+          <p style={{ fontFamily: UI_FONT, fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, margin: 0 }}>
+            {row.list.join(', ')}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// "Planetary Positions" table — Planet / Rashi / Longitude / Nakshatra /
+// Pada, same shape the reference site shows. Rendered from
+// dailyResult.planets (array of { name, rashi, longitude, nakshatra,
+// pada }); the same array also feeds the Lagna chart below it.
+function PlanetaryPositionsPanel({ planets }) {
+  if (!Array.isArray(planets) || !planets.length) {
+    return <EmptyState text="Planetary position data is not available for this date yet." />;
+  }
+  return (
+    <PanchangTable
+      rows={planets.map((p, i) => ({ id: `${p.name}-${i}`, ...p }))}
+      emptyText="Planetary position data is not available for this date yet."
+      columns={[
+        {
+          key: 'name', label: 'Planet', width: '22%',
+          render: (row) => <span style={{ fontFamily: UI_FONT, fontWeight: 900, color: '#1f1f1f' }}>{titleize(row.name)}</span>,
+        },
+        { key: 'rashi', label: 'Rashi', render: (row) => row.rashi || row.sign || '—' },
+        { key: 'longitude', label: 'Longitude', render: (row) => row.longitude || '—' },
+        { key: 'nakshatra', label: 'Nakshatra', render: (row) => row.nakshatra || '—' },
+        { key: 'pada', label: 'Pada', align: 'center', render: (row) => row.pada ?? '—' },
+      ]}
+    />
+  );
+}
+
+// "Lagna Chart" — a classic North Indian (diamond) Kundli chart. The
+// outer square + two diagonals + inner diamond is a fixed drawing; only
+// the rashi numbers and planet glyphs placed inside change with the
+// day's data, exactly like a real hand-drawn chart.
+function LagnaChart({ planets }) {
+  const houses = buildLagnaHouses(planets);
+
+  if (!houses) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '20px 10px' }}>
+        <svg viewBox="0 0 400 400" style={{ width: '100%', maxWidth: 320 }}>
+          <rect x="4" y="4" width="392" height="392" rx="10" fill="var(--cream)" stroke="var(--cream-dark)" strokeWidth="2" />
+          <line x1="4" y1="4" x2="396" y2="396" stroke="var(--cream-dark)" strokeWidth="1.5" />
+          <line x1="396" y1="4" x2="4" y2="396" stroke="var(--cream-dark)" strokeWidth="1.5" />
+          <polygon points="200,4 396,200 200,396 4,200" fill="none" stroke="var(--cream-dark)" strokeWidth="1.5" />
+        </svg>
+        <EmptyState text="Add planetary positions (with an Ascendant entry) to render today's Lagna chart." />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <svg viewBox="0 0 400 400" style={{ width: '100%', maxWidth: 340 }}>
+        <rect x="4" y="4" width="392" height="392" rx="10" fill="#fffaf3" stroke="var(--saffron)" strokeWidth="2" />
+        <line x1="4" y1="4" x2="396" y2="396" stroke="var(--saffron)" strokeWidth="1.3" opacity="0.7" />
+        <line x1="396" y1="4" x2="4" y2="396" stroke="var(--saffron)" strokeWidth="1.3" opacity="0.7" />
+        <polygon points="200,4 396,200 200,396 4,200" fill="none" stroke="var(--saffron)" strokeWidth="1.3" opacity="0.7" />
+        {houses.map((house, i) => {
+          const pos = LAGNA_HOUSE_POS[i];
+          return (
+            <g key={house.house}>
+              <text x={pos.x} y={pos.y - 8} textAnchor="middle" fontFamily={UI_FONT} fontSize="13" fontWeight="900" fill="var(--saffron-dark)">
+                {house.rashi}
+              </text>
+              <text x={pos.x} y={pos.y + 12} textAnchor="middle" fontFamily={UI_FONT} fontSize="11.5" fontWeight="700" fill="var(--brown)">
+                {house.planets.join(' ') || ''}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <p style={{ fontFamily: UI_FONT, fontSize: 12, color: 'var(--text-light)', textAlign: 'center', maxWidth: 360, lineHeight: 1.5 }}>
+        House 1 (top) is today's Ascendant. Bold numbers are Rashi placements; letters below them are the planets seated in that house.
+      </p>
     </div>
   );
 }
@@ -868,6 +1200,30 @@ function PanchangDailyResult({ dailyResult }) {
   const dayChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period !== 'night');
   const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
 
+  // Rows for the reference site's two summary tables. Falls back to
+  // "Not available" (handled inside InfoTable) for anything the backend
+  // doesn't send yet, rather than hiding the row — these six/two fields
+  // are the core identity of the day, so they always get a line.
+  const panchangDetailRows = [
+    { label: 'Tithi', value: dailyResult.tithi?.name },
+    {
+      label: 'Nakshatra',
+      value: dailyResult.nakshatra?.name
+        ? joinTiny([dailyResult.nakshatra.name, dailyResult.nakshatra.end_time && `upto ${shortTime(dailyResult.nakshatra.end_time)}`])
+        : null,
+    },
+    { label: 'Yoga', value: dailyResult.yoga?.name },
+    { label: 'Karana', value: dailyResult.karana?.name },
+    { label: 'Paksha', value: dailyResult.tithi?.paksha },
+    { label: 'Weekday', value: dailyResult.var?.day },
+  ];
+  const samvatRows = [
+    { label: 'Shaka Samvat', value: dailyResult.samvat?.shaka || dailyResult.shaka_samvat },
+    { label: 'Vikram Samvat', value: dailyResult.samvat?.vikram || dailyResult.vikram_samvat },
+    { label: 'Ritu (Season)', value: dailyResult.samvat?.ritu || dailyResult.ritu },
+    { label: 'Ayana', value: dailyResult.samvat?.ayana || dailyResult.ayana },
+  ].filter((row, index) => row.value || index < 2); // always show the two Samvat rows, only show Ritu/Ayana if the API sends them
+
   return (
     <div style={{ animation: 'fadeDown .5s ease both' }}>
       <div style={{ background: '#fff1d9', border: '1px solid #f8dfb9', borderLeft: '4px solid #c47a14', borderRadius: 7, padding: '14px 17px', marginBottom: 20 }}>
@@ -881,6 +1237,46 @@ function PanchangDailyResult({ dailyResult }) {
           {dailyResult.today_at_glance || `${dailyResult.var?.day}: ${dailyResult.tithi?.name}, ${dailyResult.nakshatra?.name}. Sunrise ${dailyResult.sunrise}, sunset ${dailyResult.sunset}.`}
         </p>
       </div>
+
+      {/* Sunrise / Sunset / Moonrise / Moonset — matches the Astrotalk
+          reference's top summary row, in this project's card style. */}
+      <SummaryTimingRow
+        sunrise={dailyResult.sunrise}
+        sunset={dailyResult.sunset}
+        moonrise={dailyResult.moonrise}
+        moonset={dailyResult.moonset}
+      />
+
+      {/* "Tithi / Nakshatra / Yoga..." + "Shaka Samvat / Vikram Samvat"
+          side-by-side tables — the reference site's core summary. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14, marginBottom: 22 }}>
+        <InfoTable title="Panchang Details" rows={panchangDetailRows} />
+        <InfoTable title="Samvat Details" rows={samvatRows} />
+      </div>
+
+      {/* Inauspicious Timings (Ashubha Muhurat) */}
+      <div style={{ marginBottom: 22 }}>
+        <SectionTitle icon={<AlertCircle size={14} />}>Inauspicious Timings (Ashubha Muhurat)</SectionTitle>
+        <AshubhaMuhuratList data={dailyResult.inauspicious_timings} />
+      </div>
+
+      {/* Chandrabalam & Tarabalam */}
+      <div style={{ marginBottom: 22 }}>
+        <SectionTitle icon={<Star size={14} />}>Chandrabalam &amp; Tarabalam</SectionTitle>
+        <ChandraTaraPanel chandrabalam={dailyResult.chandrabalam} tarabalam={dailyResult.tarabalam} />
+      </div>
+
+      {/* Planetary Positions */}
+      <div style={{ marginBottom: 22 }}>
+        <SectionTitle icon={<Sun size={14} />}>Planetary Positions</SectionTitle>
+        <PlanetaryPositionsPanel planets={dailyResult.planets} />
+      </div>
+
+      {/* Lagna Chart */}
+      <Card style={{ marginBottom: 22 }}>
+        <SectionTitle icon={<Moon size={14} />} sub="North Indian style Kundli chart for today's Ascendant">Lagna Chart</SectionTitle>
+        <LagnaChart planets={dailyResult.planets} />
+      </Card>
 
       <div style={{ overflowX: 'auto', marginBottom: 18, WebkitOverflowScrolling: 'touch' }}>
         <div className="panchang-angas" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, minWidth: 760 }}>
