@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Languages, List, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Languages, List, Pause, Play, Square, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import {
@@ -59,6 +59,12 @@ export default function SacredBookReaderPage() {
   const [sections, setSections] = useState([]);
   const [showSections, setShowSections] = useState(false);
   const [jumpInput, setJumpInput] = useState('');
+
+  // Voice reading (Web Speech API — browser/OS voices, free, no backend needed)
+  const [speaking, setSpeaking] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [voicesLoaded, setVoicesLoaded] = useState(false);
+  const utteranceRef = useRef(null);
 
   // Swipe + scroll-hint plumbing
   const touchStartX = useRef(null);
@@ -213,6 +219,68 @@ export default function SacredBookReaderPage() {
     };
   }, [current, language, showingScan, loading]);
 
+  // ── Voice reading ────────────────────────────────────────────────────────
+  // Load available voices — some browsers (Chrome especially) populate the
+  // voice list asynchronously after the page loads.
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const load = () => setVoicesLoaded(true);
+    load();
+    window.speechSynthesis.addEventListener('voiceschanged', load);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
+  }, []);
+
+  // Sanskrit has no dedicated browser voice on any platform — best-effort
+  // fallback to a Hindi voice, which at least reads Devanagari correctly.
+  const pickVoice = (langCode) => {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    const wantLang = langCode === 'hi' || langCode === 'sa' ? 'hi' : 'en';
+    return (
+      voices.find(v => v.lang.toLowerCase().startsWith(wantLang)) ||
+      voices.find(v => v.lang.toLowerCase().startsWith('en')) ||
+      voices[0] ||
+      null
+    );
+  };
+
+  const stopSpeaking = () => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setSpeaking(false);
+    setPaused(false);
+  };
+
+  const speak = () => {
+    if (!('speechSynthesis' in window) || !current || showingScan || !displayText.trim()) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(displayText);
+    const voice = pickVoice(language);
+    if (voice) utter.voice = voice;
+    utter.lang = voice?.lang || (language === 'hi' || language === 'sa' ? 'hi-IN' : 'en-US');
+    utter.rate = 0.95;
+    utter.onend = () => { setSpeaking(false); setPaused(false); };
+    utter.onerror = () => { setSpeaking(false); setPaused(false); };
+    utteranceRef.current = utter;
+    window.speechSynthesis.speak(utter);
+    setSpeaking(true);
+    setPaused(false);
+  };
+
+  const togglePause = () => {
+    if (!('speechSynthesis' in window) || !speaking) return;
+    if (paused) { window.speechSynthesis.resume(); setPaused(false); }
+    else { window.speechSynthesis.pause(); setPaused(true); }
+  };
+
+  // Stop reading whenever the page or language changes, and on unmount —
+  // otherwise the old page's audio keeps playing over the new page's text.
+  useEffect(() => {
+    stopSpeaking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.page_number, language]);
+
+  useEffect(() => () => stopSpeaking(), []);
+
   const percent = book?.page_count && current ? Math.min(100, Math.round((current.page_number / book.page_count) * 100)) : 0;
 
   return <>
@@ -283,6 +351,30 @@ export default function SacredBookReaderPage() {
               onClick={() => { if (code !== language) { setLanguage(code); setBatch(1); setLeaf(0); } }}
             >{label}</button>
           ))}
+
+          {'speechSynthesis' in window && language !== 'original' && (
+            <div className="voice-controls">
+              {!speaking ? (
+                <button
+                  className="voice-btn"
+                  onClick={speak}
+                  disabled={!voicesLoaded || !current || !displayText.trim()}
+                  title="Read this page aloud"
+                >
+                  <Play size={14} /> Listen
+                </button>
+              ) : (
+                <>
+                  <button className="voice-btn" onClick={togglePause} title={paused ? 'Resume' : 'Pause'}>
+                    {paused ? <Play size={14} /> : <Pause size={14} />}
+                  </button>
+                  <button className="voice-btn" onClick={stopSpeaking} title="Stop reading">
+                    <Square size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </nav>
 
         {error && <div className="reader-status error">{error}</div>}
@@ -416,6 +508,16 @@ export default function SacredBookReaderPage() {
         border-radius:8px 8px 0 0;padding:8px 18px 9px;transform:translateY(4px);box-shadow:0 -2px 6px #00000020;
       }
       .tab.active{background:linear-gradient(#fff8e6,#f3e3bd);color:#7a3b12;transform:translateY(0);box-shadow:0 -4px 10px #0000003a;border-color:#c9932f;font-weight:600}
+
+      .voice-controls{display:flex;align-items:center;gap:6px;margin-left:8px;margin-bottom:9px}
+      .voice-btn{
+        display:flex;align-items:center;gap:6px;
+        font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.03em;cursor:pointer;
+        background:linear-gradient(#2a1608,#1c0d05);color:#e9c795;border:1px solid #ad7f4880;
+        border-radius:99px;padding:7px 14px;
+      }
+      .voice-btn:hover:not(:disabled){border-color:#c9932f}
+      .voice-btn:disabled{opacity:.35;cursor:default}
 
       .book-stage{position:relative;margin-top:14px}
       .book-frame{position:relative;display:flex;justify-content:center;touch-action:pan-y}
