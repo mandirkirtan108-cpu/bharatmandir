@@ -467,6 +467,36 @@ def _process_book(book_id: int, slug: str, pdf_bytes: bytes, source_language: st
             """, (str(exc)[:2000], book_id))
 
 
+def _upload_then_process(book_id: int, slug: str, content: bytes, source_language: str) -> None:
+    """Runs entirely in a background thread, off the request/response cycle.
+
+    Uploads the raw PDF to Cloudinary first (this is what used to run
+    synchronously inside the request and could take long enough on big
+    files for the reverse proxy to kill the connection — the same class of
+    "Failed to fetch" problem _quick_page_count was written to avoid for
+    text extraction). Once the PDF is safely stored and original_pdf_url is
+    recorded, translation/page-image/table-of-contents processing proceeds
+    exactly as before via _process_book.
+    """
+    try:
+        uploaded = _upload_pdf(content, slug)
+    except Exception as exc:
+        with get_db_cursor() as cur:
+            cur.execute("""
+                UPDATE library_books SET status='failed', processing_error=%s,
+                    updated_at=NOW() WHERE id=%s
+            """, (f"PDF storage failed: {exc}"[:2000], book_id))
+        return
+
+    with get_db_cursor() as cur:
+        cur.execute("""
+            UPDATE library_books SET original_pdf_url=%s, storage_public_id=%s,
+                updated_at=NOW() WHERE id=%s
+        """, (uploaded["url"], uploaded["public_id"], book_id))
+
+    _process_book(book_id, slug, content, source_language)
+
+
 BOOK_SELECT = """
 SELECT id,slug,title,author,description,source_language,original_filename,
        original_pdf_url,page_count,processed_pages,status,processing_error,
@@ -645,7 +675,16 @@ async def upload_book(
         raise HTTPException(422, str(exc)) from exc
 
     slug = _unique_slug(title)
-    uploaded = await asyncio.to_thread(_upload_pdf, content, slug)
+
+    # Insert a placeholder row right away (empty original_pdf_url) so the
+    # admin panel shows the book as "processing" immediately. The Cloudinary
+    # upload of the raw PDF used to happen synchronously here too — for a
+    # 40-50 page book that upload alone can take long enough that the
+    # reverse proxy drops the connection before this handler ever returns,
+    # which is exactly the "backend could not be reached" / TypeError the
+    # frontend was catching. Now the upload happens in the background
+    # thread below, right before translation, so the response always
+    # returns fast regardless of file size.
     with get_db_cursor() as cur:
         cur.execute("""
             INSERT INTO library_books
@@ -654,13 +693,13 @@ async def upload_book(
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         """, (
             slug, title.strip(), author.strip() or None, description.strip() or None,
-            source_language.strip(), file.filename, uploaded["url"], uploaded["public_id"],
+            source_language.strip(), file.filename, "", None,
             hashlib.sha256(content).hexdigest(), page_count, admin["id"],
         ))
         book_id = cur.fetchone()["id"]
 
     threading.Thread(
-        target=_process_book,
+        target=_upload_then_process,
         args=(book_id, slug, content, source_language),
         daemon=True,
         name=f"library-book-{book_id}",
@@ -699,6 +738,12 @@ def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
         book = cur.fetchone()
     if not book:
         raise HTTPException(404, "Failed book not found")
+    if not book["original_pdf_url"]:
+        raise HTTPException(
+            409,
+            "This book failed before its PDF finished uploading to storage. "
+            "Please delete it and upload the file again.",
+        )
     try:
         response = httpx.get(book["original_pdf_url"], timeout=60, follow_redirects=True)
         response.raise_for_status()
@@ -718,4 +763,4 @@ def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
         daemon=True,
         name=f"library-book-retry-{book_id}",
     ).start()
-    return {"id": book_id, "status": "processing"} 
+    return {"id": book_id, "status": "processing"}
