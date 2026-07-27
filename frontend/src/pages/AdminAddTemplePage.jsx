@@ -965,11 +965,14 @@ export default function AdminAddTemplePage() {
     if (!validate(9)) { triggerErrorFeedback(); return; }
     if (!allConsents) return;
     setSubmitting(true);
-    try {
-      const savedId = await saveDraft({ quiet: true });
-      if (!savedId) throw new Error('The draft ID was not returned.');
-      await volunteerApi.submitSubmission(savedId);
-      localStorage.removeItem(VOLUNTEER_DRAFT_KEY);
+      try {
+        const savedId = await saveDraft({ quiet: true });
+        if (!savedId) throw new Error('The draft ID was not returned.');
+        if (photos.some((slot) => slot?.file)) {
+          await volunteerApi.uploadSubmissionMedia(savedId, photos);
+        }
+        await volunteerApi.submitSubmission(savedId);
+        localStorage.removeItem(VOLUNTEER_DRAFT_KEY);
       setQrId(`SUBMISSION-${savedId}`);
       setSubmitted(true);
       window.scrollTo({ top:0, behavior:'smooth' });

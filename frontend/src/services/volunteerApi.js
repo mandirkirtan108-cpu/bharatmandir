@@ -337,6 +337,28 @@ export const volunteerApi = {
     );
   },
 
+  uploadSubmissionMedia(submissionId, photos = []) {
+    const body = new FormData();
+    const heroFile = photos[0]?.file;
+    const seenFiles = new Set();
+
+    if (heroFile) {
+      body.append('hero_image', heroFile);
+      seenFiles.add(heroFile);
+    }
+
+    photos.slice(1).forEach((slot) => {
+      if (!slot?.file || seenFiles.has(slot.file)) return;
+      seenFiles.add(slot.file);
+      body.append('gallery_images', slot.file);
+    });
+
+    return volunteerClient.post(
+      `/api/volunteer/submissions/${submissionId}/media`,
+      body,
+    );
+  },
+
   autofillFromMapsLink(url) {
     return volunteerClient.get('/api/volunteer/automation/maps-link', {
       params: { url },
