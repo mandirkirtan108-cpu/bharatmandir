@@ -714,39 +714,17 @@ function buildAngaCard(record) {
 // Replaces the old raw key-dump list. One clean row per Tithi/Nakshatra/
 // Yoga/Karana: icon, name (+ Vriddhi/Kshaya badge if applicable), a
 // readable time range, and secondary attributes as small chips.
-// Builds a readable time range for each row, working around a real gap in
-// DivineAPI's own data: entries in these lists (nakshatra pada, sun
-// nakshatras, etc.) generally only carry an END boundary per record, not a
-// start — the convention is that one segment's start is the previous
-// segment's end. This chains endRaw -> next row's startRaw so "Moola" (end
-// only) reads as "Until 10:28 AM" and the following row reads
-// "10:28 AM – <its end>" instead of concatenating a "Start unavailable"
-// placeholder straight onto the end time with no separator.
 function AngaSection({ title, icon, accent, records }) {
-  const cards = (Array.isArray(records) ? records : []).map(buildAngaCard).filter(Boolean);
-
-  let previousEnd = null;
-  const rows = cards.map((row, index) => {
-    const startRaw = row.startRaw || previousEnd;
-    const endRaw = row.endRaw;
-    const startLabel = formatTimeOnly(startRaw);
-    const endLabel = formatTimeOnly(endRaw);
-
-    let time;
-    if (startLabel && endLabel) {
-      time = `${startLabel} – ${endLabel}`;
-    } else if (endLabel) {
-      time = `Until ${endLabel}`;
-    } else if (startLabel) {
-      time = `From ${startLabel}`;
-    } else {
-      time = 'Not available';
-    }
-
-    if (endRaw) previousEnd = endRaw;
-
-    return { ...row, id: `${row.name}-${index}`, time };
-  });
+  const rows = (Array.isArray(records) ? records : [])
+    .map(buildAngaCard)
+    .filter(Boolean)
+    .map((row, index) => ({
+      ...row,
+      id: `${row.name}-${index}`,
+      time: row.startRaw || row.endRaw
+        ? `${formatTimeOnly(row.startRaw) || 'Start unavailable'}${row.startRaw && row.endRaw ? ' – ' : ''}${formatTimeOnly(row.endRaw)}`
+        : 'Not available',
+    }));
   return (
     <Panel
       icon={icon}
