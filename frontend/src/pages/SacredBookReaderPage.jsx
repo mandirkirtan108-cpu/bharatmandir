@@ -68,6 +68,21 @@ export default function SacredBookReaderPage() {
 
   const current = pages[leaf];
   const showingScan = language === 'original' && !!current?.page_image_url;
+  const isVerseLanguage = language === 'hi' || language === 'sa';
+
+  // Hindi/Sanskrit text is already one chaupai/verse per line, so it centers
+  // cleanly as-is. English (and other prose) text carries hard line-breaks
+  // meant for left-aligned reading — join those into flowing paragraphs
+  // (keeping real paragraph breaks) so centering looks natural instead of ragged.
+  const displayText = current
+    ? (isVerseLanguage
+        ? current.text
+        : current.text
+            .split(/\n\s*\n/)
+            .map(p => p.replace(/\s*\n\s*/g, ' ').trim())
+            .filter(Boolean)
+            .join('\n\n'))
+    : '';
   const atBookStart = batch === 1 && leaf === 0;
   const atBookEnd = !!(book && current && current.page_number >= book.page_count);
 
@@ -181,7 +196,7 @@ export default function SacredBookReaderPage() {
                     <img src={current.page_image_url} alt={`Page ${current.page_number} — original scan`} />
                   </div>
                 ) : (
-                  <div className="page-text-wrap" ref={textWrapRef}><div className="page-text">{current.text}</div></div>
+                  <div className="page-text-wrap" ref={textWrapRef}><div className="page-text">{displayText}</div></div>
                 )}
 
                 {!showingScan && showScrollHint && (
@@ -303,7 +318,7 @@ export default function SacredBookReaderPage() {
       .page-text-wrap::-webkit-scrollbar-thumb{background:#c9932f66;border-radius:99px}
       .page-text-wrap::-webkit-scrollbar-track{background:transparent}
 
-      .page-text{position:relative;white-space:pre-wrap;font-family:'Crimson Pro',Georgia,serif;font-size:19px;line-height:1.95;color:#2c1c0e;text-align:center;max-width:560px;margin:0 auto}
+      .page-text{position:relative;white-space:pre-line;font-family:'Crimson Pro',Georgia,serif;font-size:19px;line-height:1.95;color:#2c1c0e;text-align:center;max-width:560px;margin:0 auto}
       .page-text::first-letter{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.7em;color:#8b3a15;font-weight:700}
       .page-leaf.devanagari .page-text{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:19px;line-height:2.1}
       .page-leaf.devanagari .page-text::first-letter{font-size:1em;color:inherit;font-weight:inherit;font-family:inherit}
