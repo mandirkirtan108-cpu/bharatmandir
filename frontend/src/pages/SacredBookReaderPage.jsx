@@ -1,33 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Languages, X } from 'lucide-react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Languages, List, X } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import { fetchBook, fetchBookPages } from '../services/sacredBooksApi';
+import {
+  fetchBook,
+  fetchBookPages,
+  fetchBookSections,
+  fetchReadingProgress,
+  isLoggedIn,
+  saveReadingProgress,
+} from '../services/sacredBooksApi';
 
 const LANGUAGES = [
   ['en', 'English'], ['hi', 'हिन्दी'], ['sa', 'संस्कृतम्'], ['original', 'Original'],
 ];
-
-const PAGE_BATCH_SIZE = 10;
-const progressKey = (slug) => `sacredbook-progress:${slug}`;
-
-// Where should this book open? An explicit ?page= in the URL (e.g. from a
-// chapter/index link) always wins; otherwise fall back to the reader's
-// last saved position for this book.
-function getResumeTarget(slug, urlPage) {
-  if (Number.isFinite(urlPage) && urlPage > 0) return { page: urlPage, language: null };
-  try {
-    const saved = JSON.parse(localStorage.getItem(progressKey(slug)) || 'null');
-    if (saved?.pageNumber) return { page: saved.pageNumber, language: saved.language || null };
-  } catch { /* localStorage unavailable or corrupt — ignore */ }
-  return null;
-}
-
-function saveProgress(slug, pageNumber, language, percent) {
-  try {
-    localStorage.setItem(progressKey(slug), JSON.stringify({ pageNumber, language, percent, updatedAt: Date.now() }));
-  } catch { /* ignore quota/availability errors */ }
-}
 
 function TempleArch() {
   return (
@@ -54,25 +40,25 @@ function PageWatermark() {
 export default function SacredBookReaderPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  // Resolve where to open this book, once, from the URL or saved progress —
-  // used to seed the initial language/batch so the very first fetch already
-  // requests the right page (no flash of page 1 before jumping).
-  const initialTarget = getResumeTarget(slug, parseInt(searchParams.get('page'), 10));
-
   const [book, setBook] = useState(null);
   const [pages, setPages] = useState([]);
-  const [language, setLanguage] = useState(initialTarget?.language || 'en');
-  const [batch, setBatch] = useState(initialTarget ? Math.max(1, Math.ceil(initialTarget.page / PAGE_BATCH_SIZE)) : 1);
+  const [language, setLanguage] = useState('en');
+  const [batch, setBatch] = useState(1);
   const [leaf, setLeaf] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [turnDir, setTurnDir] = useState('next');
   const jumpToEnd = useRef(false);
-  // Set whenever we need the *next* successful page fetch to land on a
-  // specific leaf instead of the default (leaf 0) — used by the resume jump.
-  const jumpLeafRef = useRef(initialTarget ? (initialTarget.page - 1) % PAGE_BATCH_SIZE : null);
+
+  // Per-user reading progress: resume where this account left off, and
+  // save as they turn pages. Guests just read without saving.
+  const [progressChecked, setProgressChecked] = useState(false);
+  const pendingLeaf = useRef(null);
+
+  // AI-generated table of contents
+  const [sections, setSections] = useState([]);
+  const [showSections, setShowSections] = useState(false);
+  const [jumpInput, setJumpInput] = useState('');
 
   // Swipe + scroll-hint plumbing
   const touchStartX = useRef(null);
@@ -82,46 +68,66 @@ export default function SacredBookReaderPage() {
 
   useEffect(() => {
     fetchBook(slug).then(setBook).catch(e => setError(e.message));
+    fetchBookSections(slug).then(r => setSections(r.sections || [])).catch(() => setSections([]));
   }, [slug]);
 
-  // Re-resolve the resume target if the reader is reused for a different
-  // book without a full remount (e.g. navigating between books via a link).
-  // On the very first mount this just re-confirms what the lazy state
-  // initializers above already set, so it doesn't cause an extra fetch.
+  // Look up this user's saved progress (if logged in) before the first page
+  // batch loads, so we land straight on their page instead of flashing page 1.
   useEffect(() => {
-    const target = getResumeTarget(slug, parseInt(searchParams.get('page'), 10));
-    if (target) {
-      const targetBatch = Math.max(1, Math.ceil(target.page / PAGE_BATCH_SIZE));
-      jumpLeafRef.current = (target.page - 1) % PAGE_BATCH_SIZE;
-      if (target.language) setLanguage(target.language);
-      setBatch(targetBatch);
-    } else {
-      jumpLeafRef.current = null;
-      setBatch(1);
-    }
-    setLeaf(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    setProgressChecked(false);
+    fetchReadingProgress(slug)
+      .then(({ progress }) => {
+        if (cancelled || !progress?.page_number) return;
+        pendingLeaf.current = (progress.page_number - 1) % 10;
+        if (progress.language) setLanguage(progress.language);
+        setBatch(Math.max(1, Math.ceil(progress.page_number / 10)));
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setProgressChecked(true); });
+    return () => { cancelled = true; };
   }, [slug]);
 
   useEffect(() => {
+    if (!progressChecked) return;
     setLoading(true);
     fetchBookPages(slug, language, batch, 10)
       .then(r => {
         const p = r.pages || [];
         setPages(p);
-        if (jumpToEnd.current) {
-          setLeaf(Math.max(0, p.length - 1));
-        } else if (jumpLeafRef.current !== null) {
-          setLeaf(Math.min(Math.max(jumpLeafRef.current, 0), Math.max(0, p.length - 1)));
+        if (pendingLeaf.current !== null) {
+          setLeaf(Math.min(pendingLeaf.current, Math.max(0, p.length - 1)));
+          pendingLeaf.current = null;
         } else {
-          setLeaf(0);
+          setLeaf(jumpToEnd.current ? Math.max(0, p.length - 1) : 0);
         }
         jumpToEnd.current = false;
-        jumpLeafRef.current = null;
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [slug, language, batch]);
+  }, [slug, language, batch, progressChecked]);
+
+  const jumpToPage = (pageNumber) => {
+    const targetBatch = Math.max(1, Math.ceil(pageNumber / 10));
+    const targetLeaf = (pageNumber - 1) % 10;
+    setShowSections(false);
+    setJumpInput('');
+    setTurnDir('next');
+    if (targetBatch === batch) {
+      setLeaf(Math.min(targetLeaf, Math.max(0, pages.length - 1)));
+    } else {
+      pendingLeaf.current = targetLeaf;
+      setBatch(targetBatch);
+    }
+  };
+
+  const handleJumpSubmit = (e) => {
+    e.preventDefault();
+    const n = parseInt(jumpInput, 10);
+    if (!n || n < 1) return;
+    const max = book?.page_count || n;
+    jumpToPage(Math.min(n, max));
+  };
 
   const current = pages[leaf];
   const showingScan = language === 'original' && !!current?.page_image_url;
@@ -140,6 +146,14 @@ export default function SacredBookReaderPage() {
             .filter(Boolean)
             .join('\n\n'))
     : '';
+
+  // Save progress for logged-in users whenever the visible page settles.
+  useEffect(() => {
+    if (!progressChecked || loading || !current || !isLoggedIn()) return;
+    saveReadingProgress(slug, language, current.page_number).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, language, current?.page_number, loading, progressChecked]);
+
   const atBookStart = batch === 1 && leaf === 0;
   const atBookEnd = !!(book && current && current.page_number >= book.page_count);
 
@@ -201,13 +215,6 @@ export default function SacredBookReaderPage() {
 
   const percent = book?.page_count && current ? Math.min(100, Math.round((current.page_number / book.page_count) * 100)) : 0;
 
-  // Bookmark progress — saved every time the visible page settles, so
-  // reopening this book (or the library card) can resume from here.
-  useEffect(() => {
-    if (!current || loading) return;
-    saveProgress(slug, current.page_number, language, percent);
-  }, [slug, current, language, percent, loading]);
-
   return <>
     <Navbar />
     <main className="reader-shell">
@@ -221,8 +228,51 @@ export default function SacredBookReaderPage() {
             <h1>{book?.title || 'Loading…'}</h1>
             {book?.author && <p>{book.author}</p>}
           </div>
-          <span />
+          <button className="index-btn" onClick={() => setShowSections(s => !s)}>
+            <List size={15} /> Index
+          </button>
         </header>
+
+        {showSections && (
+          <div className="section-backdrop" onClick={() => setShowSections(false)}>
+            <div className="section-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="section-panel-head">
+                <span>Jump to page</span>
+                <button className="section-close" onClick={() => setShowSections(false)} aria-label="Close index"><X size={16} /></button>
+              </div>
+
+              <form className="jump-form" onSubmit={handleJumpSubmit}>
+                <input
+                  type="number"
+                  min="1"
+                  max={book?.page_count || undefined}
+                  placeholder={book?.page_count ? `1 – ${book.page_count}` : 'Page number'}
+                  value={jumpInput}
+                  onChange={(e) => setJumpInput(e.target.value)}
+                />
+                <button type="submit">Go</button>
+              </form>
+
+              {sections.length > 0 && (
+                <>
+                  <div className="section-panel-sub">Sections</div>
+                  <div className="section-list">
+                    {sections.map((s) => (
+                      <button
+                        key={s.page_number}
+                        className={current?.page_number === s.page_number ? 'section-item active' : 'section-item'}
+                        onClick={() => jumpToPage(s.page_number)}
+                      >
+                        <span className="section-item-title">{s.title}</span>
+                        <span className="section-item-page">p.{s.page_number}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <nav className="tab-rail" aria-label="Choose translation">
           <Languages size={15} className="tab-rail-icon" />
@@ -325,6 +375,38 @@ export default function SacredBookReaderPage() {
       .titleblock p{margin:3px 0 0;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.05em;color:#caa06c;text-transform:uppercase}
       .back{justify-self:start;display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-family:'EB Garamond',serif;font-size:13px;white-space:nowrap}
       .back:hover{border-color:#c9932f}
+      .index-btn{justify-self:end;display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-family:'EB Garamond',serif;font-size:13px;white-space:nowrap}
+      .index-btn:hover{border-color:#c9932f}
+
+      .section-backdrop{position:fixed;inset:0;z-index:20;background:#0b0503aa;display:flex;justify-content:center;align-items:flex-start;padding:90px 16px 16px}
+      .section-panel{width:100%;max-width:380px;max-height:76vh;display:flex;flex-direction:column;background:linear-gradient(#241206,#180c05);border:1px solid #7a4a2455;border-radius:14px;box-shadow:0 24px 60px #00000080;overflow:hidden}
+      .section-panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#c9932f;border-bottom:1px solid #7a4a2440}
+      .section-close{background:none;border:none;color:#caa06c;cursor:pointer;padding:2px;display:flex}
+      .section-close:hover{color:#f2d795}
+
+      .jump-form{display:flex;gap:8px;padding:14px 18px}
+      .jump-form input{
+        flex:1;min-width:0;background:#150a05;border:1px solid #7a4a2455;color:#f1dcb8;border-radius:8px;
+        padding:9px 12px;font-family:'EB Garamond',serif;font-size:14px;
+      }
+      .jump-form input:focus{outline:none;border-color:#c9932f}
+      .jump-form button{
+        background:linear-gradient(#e3b761,#c9932f);color:#2a1608;border:none;border-radius:8px;
+        padding:0 18px;font-family:'EB Garamond',serif;font-weight:600;font-size:14px;cursor:pointer;
+      }
+      .jump-form button:hover{filter:brightness(1.08)}
+
+      .section-panel-sub{padding:2px 18px 6px;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8c6238;border-top:1px solid #7a4a2430}
+      .section-list{overflow-y:auto;padding:4px 8px 12px}
+      .section-item{
+        width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;
+        background:none;border:none;color:#e3cda2;text-align:left;padding:10px 10px;border-radius:8px;
+        cursor:pointer;font-family:'EB Garamond',serif;font-size:14px;
+      }
+      .section-item:hover{background:#7a4a2430}
+      .section-item.active{background:#c9932f26;color:#f2d795}
+      .section-item-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .section-item-page{flex-shrink:0;font-size:12px;color:#a9825a;font-variant-numeric:tabular-nums}
 
       .tab-rail{display:flex;justify-content:center;align-items:flex-end;gap:6px;margin-bottom:14px;flex-wrap:wrap}
       .tab-rail-icon{color:#a97b45;margin-right:4px;margin-bottom:9px}
@@ -439,6 +521,9 @@ export default function SacredBookReaderPage() {
         .reader-shell{--page-height:72vh}
         .reader-toolbar{grid-template-columns:1fr;text-align:center;gap:8px}
         .back{justify-self:center}
+        .index-btn{justify-self:center}
+        .section-backdrop{padding:16px}
+        .section-panel{max-width:none;max-height:80vh}
         .page-leaf{padding:36px 22px 26px;border-radius:8px}
         .stack-leaf{display:none}
         .tab-rail{overflow-x:auto;justify-content:flex-start;padding-bottom:2px}
