@@ -86,11 +86,16 @@ const AUSPICIOUS_MEANINGS = {
 const INAUSPICIOUS_MEANINGS = {
   rahu_kaal: { label: 'Rahu Kaal', icon: '⊘', note: 'Avoid starting new or auspicious work.' },
   gulkai_kaal: { label: 'Gulikai Kaal', icon: '⊘', note: 'Avoid important beginnings during this window.' },
+  gulika_kaal: { label: 'Gulika Kaal', icon: '⊘', note: 'Avoid important beginnings during this window.' },
   yamaganda: { label: 'Yamaganda', icon: '⊘', note: 'Ruled by Yama — avoid launching new ventures.' },
+  yamaghanta: { label: 'Yamaghanta', icon: '⊘', note: 'Avoid launching new ventures during this window.' },
   baana: { label: 'Baana', icon: '⚠️', note: 'Inauspicious influence tied to the day\u2019s ruling sign.' },
   panchaka: { label: 'Panchak', icon: '⚠️', note: 'Avoid construction, roofing and funeral rites during this period.' },
   varjyam: { label: 'Varjyam', icon: '⊘', note: 'Best avoided for important tasks.' },
   dur_muhurtam: { label: 'Dur Muhurat', icon: '⊘', note: 'An inauspicious muhurat, unfit for new beginnings.' },
+  kantaka: { label: 'Kantaka / Mrityu', icon: '⊘', note: 'Considered harmful — avoid new beginnings.' },
+  kaalvela: { label: 'Kaalvela / Ardhayaam', icon: '⊘', note: 'Best avoided for auspicious starts.' },
+  kulika_kaal: { label: 'Kulika Kaal', icon: '⊘', note: 'Avoid important beginnings during this window.' },
   hutashana_yoga: { label: 'Hutashana Yoga', icon: '🔥', note: 'Inauspicious yoga — exercise caution.' },
   visha_yoga: { label: 'Visha Yoga', icon: '⚠️', note: '"Poison yoga" — considered inauspicious.' },
   yamaghata_yoga: { label: 'Yamaghata Yoga', icon: '⚠️', note: 'Associated with obstacles — best avoided.' },
@@ -239,6 +244,24 @@ function periodEnd(item) {
   return parts[1]?.trim() || '';
 }
 
+// Pulls a clean list of {start, end, sign} windows out of a raw
+// auspicious/inauspicious timing value, whether it's a single object
+// (Rahu Kaal) or an array of windows (some yogas fire more than once
+// in a day). Used by MuhuratList to print each window as its own
+// "From ... To ..." row, the way Astrotalk's Panchang page does.
+function extractPeriods(value) {
+  const list = Array.isArray(value) ? value : [value];
+  return list
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const start = item.start_time || item.start;
+      const end = item.end_time || item.end;
+      if (!start || !end) return null;
+      return { start, end, sign: item.sign };
+    })
+    .filter(Boolean);
+}
+
 function choghadiyaColor(name) {
   const key = String(name || '').toLowerCase();
   if (key.includes('rog') || key.includes('kaal') || key.includes('udveg')) {
@@ -309,42 +332,6 @@ function SectionTitle({ icon, children, sub }) {
   );
 }
 
-function AngaCard({ label, value, sub, icon }) {
-  return (
-    <div style={{
-      background: '#fff',
-      borderRadius: 12,
-      padding: '16px 12px 14px',
-      textAlign: 'center',
-      border: '1px solid #ececec',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-      minHeight: 118,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
-      <div style={{ color: '#c47a14', marginBottom: 12, minHeight: 22, display: 'flex', alignItems: 'center' }}>{icon}</div>
-      <p style={{
-        fontFamily: UI_FONT,
-        fontSize: 11,
-        fontWeight: 800,
-        color: '#707070',
-        letterSpacing: '.09em',
-        textTransform: 'uppercase',
-      }}>
-        {label}
-      </p>
-      <p style={{ fontFamily: UI_FONT, fontSize: 16, color: '#202020', fontWeight: 800, marginTop: 7, lineHeight: 1.2 }}>
-        {value || 'Not available'}
-      </p>
-      <p style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8d8d8d', marginTop: 4, lineHeight: 1.2 }}>
-        {sub || 'Not available'}
-      </p>
-    </div>
-  );
-}
-
 // FIX: timing value used to be rendered with a raw to12h() call, which
 // only converts the HH:MM portion and leaves any leading "YYYY-MM-DD "
 // text untouched — producing an oversized, wrapping, hard-to-read line
@@ -373,26 +360,210 @@ function TimingCard({ title, value, note, tone }) {
   );
 }
 
-function DailyTimingsPanel({ sunrise, sunset, moonrise, moonset }) {
-  const tiles = [
-    { label: 'Sunrise', value: sunrise, icon: <Sun size={18} />, grad: 'linear-gradient(135deg,#fff6e6,#ffe0a8)', color: '#c47a14' },
-    { label: 'Sunset', value: sunset, icon: <Sun size={18} />, grad: 'linear-gradient(135deg,#fdece2,#ffbf94)', color: '#c2410c' },
-    { label: 'Moonrise', value: moonrise, icon: <Moon size={18} />, grad: 'linear-gradient(135deg,#eef1ff,#c7d2fe)', color: '#4338ca' },
-    { label: 'Moonset', value: moonset, icon: <Moon size={18} />, grad: 'linear-gradient(135deg,#eaf4ff,#bfdbfe)', color: '#1d4ed8' },
+/* ------------------------------------------------------------------ */
+/*  Astrotalk-style "Today Panchang" building blocks                   */
+/*  — sun/moon icon strip, clean key-value facts table, samvat panel,  */
+/*  planetary positions, and a "From ... To ..." muhurat list — all    */
+/*  restyled to the existing saffron/gold/brown BharatMandir theme.    */
+/* ------------------------------------------------------------------ */
+
+// FIX: was `to12h(cleanValue(value))`, which — same issue as TimingCard
+// above — left the date prefix in place for any full "YYYY-MM-DD HH:MM:SS"
+// value. formatTimeOnly() strips it, so every row shows a clean "4:23 AM"
+// instead of "2026-07-10 4:23 AM".
+function detailTime(value) {
+  return formatTimeOnly(cleanValue(value));
+}
+
+// Horizontal Sunrise / Sunset / Moonrise / Moonset strip, mirroring the
+// icon-over-label-over-value layout Astrotalk uses right under the
+// location/date line on their Today Panchang page.
+function SunMoonStrip({ sunrise, sunset, moonrise, moonset }) {
+  const items = [
+    { emoji: '☀️', label: 'Sunrise', value: sunrise },
+    { emoji: '🌇', label: 'Sunset', value: sunset },
+    { emoji: '🌕', label: 'Moonrise', value: moonrise },
+    { emoji: '🌑', label: 'Moonset', value: moonset },
   ];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12 }}>
-      {tiles.map((tile) => (
-        <div key={tile.label} style={{ background: tile.grad, borderRadius: 14, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: '#fff', color: tile.color, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-            {tile.icon}
+    <div className="sunmoon-strip" style={{
+      display: 'flex', flexWrap: 'wrap', gap: 10,
+      background: 'linear-gradient(135deg,#fff8ee,#fdf0da)',
+      border: '1px solid #f3e2c4', borderRadius: 16, padding: '18px 16px',
+    }}>
+      {items.map((item) => (
+        <div key={item.label} style={{
+          flex: '1 1 130px', minWidth: 120, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: 6, padding: '4px 6px',
+        }}>
+          <span style={{ fontSize: 26, lineHeight: 1 }}>{item.emoji}</span>
+          <span style={{ fontFamily: UI_FONT, fontSize: 10.5, fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9a6738' }}>
+            {item.label}
+          </span>
+          <span style={{ fontFamily: UI_FONT, fontSize: 16.5, fontWeight: 900, color: '#2b1608' }}>
+            {detailTime(item.value) || '--:--'}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Clean two-column key/value table for the core five Panchang limbs
+// (Tithi, Nakshatra, Yoga, Karana) plus Paksha and Weekday — matching
+// the plain, scannable table Astrotalk shows ("Nakshatra | Vishakha
+// upto 12:15") instead of a grid of separate cards.
+function KeyFactsTable({ dailyResult }) {
+  const rows = [
+    { label: 'Tithi', value: dailyResult.tithi?.name, end: dailyResult.tithi?.end_time },
+    { label: 'Nakshatra', value: dailyResult.nakshatra?.name, end: dailyResult.nakshatra?.end_time },
+    { label: 'Yoga', value: dailyResult.yoga?.name, end: dailyResult.yoga?.end_time },
+    { label: 'Karana', value: dailyResult.karana?.name, end: dailyResult.karana?.end_time },
+    { label: 'Paksha', value: dailyResult.tithi?.paksha },
+    { label: 'Weekday', value: dailyResult.var?.day },
+  ].filter((row) => row.value);
+
+  if (!rows.length) return <EmptyState text="Panchang details are not available for this date." />;
+
+  return (
+    <div style={{ border: '1px solid #eee2d2', borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+      {rows.map((row, index) => (
+        <div
+          key={row.label}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+            padding: '13px 18px', background: index % 2 === 0 ? '#fffaf3' : '#fff',
+            borderBottom: index < rows.length - 1 ? '1px solid #f2e9da' : 'none',
+          }}
+        >
+          <span style={{ fontFamily: UI_FONT, fontSize: 12.5, fontWeight: 900, color: '#9a6738', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {row.label}
+          </span>
+          <span style={{ fontFamily: UI_FONT, fontSize: 14.5, fontWeight: 800, color: '#251505', textAlign: 'right' }}>
+            {row.value}{row.end ? ` upto ${shortTime(row.end)}` : ''}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Optional Shaka Samvat / Vikram Samvat rows — only rendered when the
+// backend actually sends this data, same two-column table style as
+// KeyFactsTable so the two panels read as one family.
+function SamvatTable({ dailyResult }) {
+  const rows = [];
+  if (dailyResult.shaka_samvat) rows.push({ label: 'Shaka Samvat', value: cleanValue(dailyResult.shaka_samvat) });
+  if (dailyResult.vikram_samvat) rows.push({ label: 'Vikram Samvat', value: cleanValue(dailyResult.vikram_samvat) });
+  if (!rows.length) return null;
+
+  return (
+    <div style={{ border: '1px solid #eee2d2', borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+      {rows.map((row, index) => (
+        <div
+          key={row.label}
+          style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+            padding: '13px 18px', background: index % 2 === 0 ? '#fffaf3' : '#fff',
+            borderBottom: index < rows.length - 1 ? '1px solid #f2e9da' : 'none',
+          }}
+        >
+          <span style={{ fontFamily: UI_FONT, fontSize: 12.5, fontWeight: 900, color: '#9a6738', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+            {row.label}
+          </span>
+          <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 800, color: '#251505', textAlign: 'right' }}>
+            {row.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Optional Planetary Positions table (Ascendant + grahas with Rashi /
+// Longitude / Nakshatra / Pada) — only rendered when the backend sends
+// this data, using the same generic PanchangTable used elsewhere.
+function PlanetaryPositionsPanel({ positions }) {
+  if (!positions?.length) return null;
+  const rows = positions.map((p, index) => ({
+    id: `${p.planet || p.name || 'planet'}-${index}`,
+    planet: p.planet || p.name,
+    rashi: p.rashi || p.sign,
+    longitude: p.longitude,
+    nakshatra: p.nakshatra,
+    pada: p.pada,
+  }));
+  return (
+    <Panel icon={<Star size={16} />} title="Planetary Positions" accent="#7c3aed">
+      <PanchangTable
+        rows={rows}
+        emptyText="Planetary position data is not available for this date."
+        columns={[
+          { key: 'planet', label: 'Planet', width: '22%', render: (row) => <strong>{row.planet || 'Not available'}</strong> },
+          { key: 'rashi', label: 'Rashi', width: '20%' },
+          { key: 'longitude', label: 'Longitude', width: '20%' },
+          { key: 'nakshatra', label: 'Nakshatra', width: '26%' },
+          { key: 'pada', label: 'Pada', align: 'center' },
+        ]}
+      />
+    </Panel>
+  );
+}
+
+// Replaces the old raw table for auspicious/inauspicious timings with a
+// simple, scannable "From ... To ..." row list — the same format
+// Astrotalk uses for its Ashubh Muhurat block ("Rahu Kaal From 10:45 AM
+// To 12:27 PM"), restyled with our saffron/green/red theme colors.
+function MuhuratList({ data, tone, meanings, emptyText }) {
+  const isRed = tone === 'red';
+  const accent = isRed ? '#dc2626' : '#15803d';
+  const bg = isRed ? '#fef2f2' : '#f0fdf4';
+  const border = isRed ? '#fca5a5' : '#86efac';
+  const nameColor = isRed ? '#7f1d1d' : '#14532d';
+
+  const rows = [];
+  Object.entries(data || {}).forEach(([key, value]) => {
+    if (key.toLowerCase().endsWith('_detailed')) return;
+    const meta = meanings?.[key.toLowerCase()] || {
+      label: titleize(key), icon: isRed ? '⊘' : '✦', note: '',
+    };
+    const periods = extractPeriods(value);
+    periods.forEach((period, index) => {
+      rows.push({
+        id: `${key}-${index}`,
+        name: meta.label,
+        icon: meta.icon,
+        from: formatTimeOnly(period.start),
+        to: formatTimeOnly(period.end),
+        sign: period.sign,
+        note: index === 0 ? meta.note : '',
+      });
+    });
+  });
+
+  if (!rows.length) return <EmptyState text={emptyText} />;
+
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {rows.map((row) => (
+        <div key={row.id} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 800, color: nameColor, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{row.icon}</span>{row.name}{row.sign ? <span style={{ fontWeight: 700, opacity: 0.7 }}>&nbsp;({row.sign})</span> : null}
+            </span>
+            <span style={{
+              fontFamily: UI_FONT, fontSize: 12.5, fontWeight: 800, color: accent,
+              background: '#fff', border: `1px solid ${border}`, borderRadius: 8,
+              padding: '5px 10px', whiteSpace: 'nowrap',
+            }}>
+              From {row.from || '—'} &nbsp;·&nbsp; To {row.to || '—'}
+            </span>
           </div>
-          <span style={{ fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, color: tile.color, textTransform: 'uppercase', letterSpacing: '.06em' }}>
-            {tile.label}
-          </span>
-          <span style={{ fontFamily: UI_FONT, fontSize: 19, fontWeight: 900, color: '#1f1f1f' }}>
-            {detailTime(tile.value) || 'Not available'}
-          </span>
+          {row.note && (
+            <p style={{ fontFamily: UI_FONT, fontSize: 12, color: isRed ? '#b91c1c' : '#16a34a', marginTop: 6, lineHeight: 1.5 }}>
+              {row.note}
+            </p>
+          )}
         </div>
       ))}
     </div>
@@ -441,9 +612,7 @@ function EmptyState({ text }) {
 }
 
 const PANCHANG_TABS = [
-  { id: 'overview', label: 'Overview', icon: <Clock size={14} /> },
-  { id: 'auspicious', label: 'Auspicious', icon: <Sparkles size={14} /> },
-  { id: 'inauspicious', label: 'Inauspicious', icon: <AlertCircle size={14} /> },
+  { id: 'details', label: 'Sun & Moon Details', icon: <Sun size={14} /> },
   { id: 'full', label: 'Full Data', icon: <Star size={14} /> },
 ];
 
@@ -562,14 +731,6 @@ function flattenDetails(data, prefix = '') {
   });
 }
 
-// FIX: was `to12h(cleanValue(value))`, which — same as TimingCard above —
-// left the date prefix in place for any full "YYYY-MM-DD HH:MM:SS" value.
-// formatTimeOnly() strips it, so every row in Daily Timings / Sun Details /
-// Moon Details shows a clean "4:23 AM" instead of "2026-07-10 4:23 AM".
-function detailTime(value) {
-  return formatTimeOnly(cleanValue(value));
-}
-
 function InfoRowList({ data }) {
   const items = flattenDetails(data);
   if (!items.length) return <EmptyState text="No details available." />;
@@ -590,64 +751,6 @@ function InfoRowList({ data }) {
         </div>
       ))}
     </div>
-  );
-}
-
-function formatPeriod(item) {
-  if (!item || typeof item !== 'object') return '';
-  const start = item.start_time || item.start;
-  const end = item.end_time || item.end;
-  if (!start || !end) return '';
-  const range = `${formatTimeOnly(start)} - ${formatTimeOnly(end)}`;
-  return item.sign ? `${range} (Sign: ${item.sign})` : range;
-}
-
-function formatTimingValue(value) {
-  if (Array.isArray(value)) {
-    return value.map(formatPeriod).filter(Boolean).join('  •  ');
-  }
-  return formatPeriod(value);
-}
-
-// Auspicious / Inauspicious timings as a scannable list of rows, each
-// with an icon, a proper name, the (correctly formatted, even when
-// multi-window) time range, and a one-line explanation of what it means.
-function MuhuratRowList({ data, tone, meanings, emptyText }) {
-  const isRed = tone === 'red';
-  const accent = isRed ? '#dc2626' : '#15803d';
-  const rows = Object.entries(data || {})
-    .filter(([key]) => !key.toLowerCase().endsWith('_detailed'))
-    .map(([key, value]) => {
-      const meta = meanings?.[key.toLowerCase()] || {
-          label: titleize(key), icon: isRed ? '⊘' : '✦', note: '',
-        };
-      return { id: key, name: meta.label, icon: meta.icon, time: formatTimingValue(value), note: meta.note };
-    })
-    .filter((item) => item.time);
-
-  return (
-    <PanchangTable
-      rows={rows}
-      emptyText={emptyText}
-      columns={[
-        {
-          key: 'name', label: 'Period', width: '28%',
-          render: (row) => <TableName icon={row.icon} name={row.name} accent={accent} />,
-        },
-        {
-          key: 'time', label: 'Timing', width: '26%',
-          render: (row) => (
-            <span className="table-time-pill" style={{ color: accent, background: `${accent}10`, borderColor: `${accent}30` }}>
-              <Clock size={14} />{row.time}
-            </span>
-          ),
-        },
-        {
-          key: 'note', label: 'Guidance',
-          render: (row) => <span className="table-guidance">{row.note || 'No additional guidance available.'}</span>,
-        },
-      ]}
-    />
   );
 }
 
@@ -760,21 +863,13 @@ function ChoghadiyaChips({ rows }) {
 }
 
 function PanchangDetails({ dailyResult }) {
-  const [activeTab, setActiveTab] = useState('overview');
-  // Brahma Muhurat / Abhijit Muhurat / Rahu Kaal are intentionally left out
-  // here — they already have their own colored cards directly above this
-  // panel, so repeating them in the list would just be the same fact twice.
-  const mainTimings = {
-    sunrise: dailyResult.sunrise,
-    sunset: dailyResult.sunset,
-    moonrise: dailyResult.moonrise,
-    moonset: dailyResult.moonset,
-  };
+  const [activeTab, setActiveTab] = useState('details');
 
   // Sun/Moon "details" panels used to just repeat sunrise/sunset and
-  // moonrise/moonset — the exact same two lines already in Daily Timings
-  // above. Only pass through fields that aren't already shown there, and
-  // skip a panel entirely once it has nothing new to say.
+  // moonrise/moonset — the exact same two lines already shown in the
+  // Sunrise/Sunset/Moonrise/Moonset strip above. Only pass through
+  // fields that aren't already shown there, and skip a panel entirely
+  // once it has nothing new to say.
   const sunExtra = dailyResult.sun
     ? Object.fromEntries(Object.entries(dailyResult.sun).filter(([key]) => !['sunrise', 'sunset'].includes(key)))
     : null;
@@ -799,18 +894,15 @@ function PanchangDetails({ dailyResult }) {
           Full Panchang Details
         </h3>
         <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b8b8b', fontWeight: 800 }}>
-          Sunrise, moon timings, periods and Panchang records
+          Extra sun/moon fields and complete Panchang records
         </span>
       </div>
 
       <Tabs tabs={PANCHANG_TABS} active={activeTab} onChange={setActiveTab} />
 
-      {activeTab === 'overview' && (
-        <div className="panchang-tab-content" style={{ display: 'grid', gap: 14 }}>
-         <Panel icon={<Clock size={16} />} title="Daily Timings" accent="#c47a14">
-            <DailyTimingsPanel sunrise={mainTimings.sunrise} sunset={mainTimings.sunset} moonrise={mainTimings.moonrise} moonset={mainTimings.moonset} />
-          </Panel>
-          {(hasSunExtra || hasMoonExtra) && (
+      {activeTab === 'details' && (
+        <div className="panchang-tab-content">
+          {(hasSunExtra || hasMoonExtra) ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14 }}>
               {hasSunExtra && (
                 <Panel icon={<Sun size={16} />} title="Sun Details" accent="#d97706">
@@ -823,33 +915,9 @@ function PanchangDetails({ dailyResult }) {
                 </Panel>
               )}
             </div>
+          ) : (
+            <EmptyState text="No additional sun or moon fields beyond rise/set for this date." />
           )}
-        </div>
-      )}
-
-      {activeTab === 'auspicious' && (
-        <div className="panchang-tab-content">
-          <Panel icon={<Sparkles size={16} />} title="Auspicious Timings" accent="#16a34a">
-            <MuhuratRowList
-              data={dailyResult.auspicious_timings}
-              tone="green"
-              meanings={AUSPICIOUS_MEANINGS}
-              emptyText="No auspicious timings available for this date."
-            />
-          </Panel>
-        </div>
-      )}
-
-      {activeTab === 'inauspicious' && (
-        <div className="panchang-tab-content">
-          <Panel icon={<AlertCircle size={16} />} title="Inauspicious Timings" accent="#dc2626">
-            <MuhuratRowList
-              data={dailyResult.inauspicious_timings}
-              tone="red"
-              meanings={INAUSPICIOUS_MEANINGS}
-              emptyText="No inauspicious timings available for this date."
-            />
-          </Panel>
         </div>
       )}
 
@@ -867,6 +935,7 @@ function PanchangDetails({ dailyResult }) {
 function PanchangDailyResult({ dailyResult }) {
   const dayChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period !== 'night');
   const nightChoghadiya = (dailyResult.choghadiya || []).filter((item) => item.period === 'night');
+  const hasSamvat = Boolean(dailyResult.shaka_samvat || dailyResult.vikram_samvat);
 
   return (
     <div style={{ animation: 'fadeDown .5s ease both' }}>
@@ -882,14 +951,29 @@ function PanchangDailyResult({ dailyResult }) {
         </p>
       </div>
 
-      <div style={{ overflowX: 'auto', marginBottom: 18, WebkitOverflowScrolling: 'touch' }}>
-        <div className="panchang-angas" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, minWidth: 760 }}>
-          <AngaCard label="Tithi" icon={<Moon size={24} />} value={dailyResult.tithi?.name} sub={joinTiny([dailyResult.tithi?.paksha || dailyResult.tithi?.nature, dailyResult.tithi?.end_time && shortTime(dailyResult.tithi.end_time)])} />
-          <AngaCard label="Nakshatra" icon={<Star size={24} />} value={dailyResult.nakshatra?.name} sub={dailyResult.nakshatra?.end_time ? `until ${shortTime(dailyResult.nakshatra.end_time)}` : dailyResult.nakshatra?.lord} />
-          <AngaCard label="Yoga" icon={<span style={{ fontSize: 26, lineHeight: 1 }}>∞</span>} value={dailyResult.yoga?.name} sub={dailyResult.yoga?.end_time ? `until ${shortTime(dailyResult.yoga.end_time)}` : dailyResult.yoga?.time} />
-          <AngaCard label="Karana" icon={<span style={{ fontSize: 20, lineHeight: 1 }}>□</span>} value={dailyResult.karana?.name} sub={dailyResult.karana?.end_time ? `until ${shortTime(dailyResult.karana.end_time)}` : dailyResult.karana?.time} />
-          <AngaCard label="Vaar" icon={<Sun size={24} />} value={dailyResult.var?.day} sub={`Lord: ${dailyResult.var?.lord || 'Not available'}`} />
+      {/* Sunrise / Sunset / Moonrise / Moonset — Astrotalk-style icon strip */}
+      <div style={{ marginBottom: 20 }}>
+        <SunMoonStrip
+          sunrise={dailyResult.sunrise}
+          sunset={dailyResult.sunset}
+          moonrise={dailyResult.moonrise}
+          moonset={dailyResult.moonset}
+        />
+      </div>
+
+      {/* Tithi / Nakshatra / Yoga / Karana / Paksha / Weekday — clean table,
+          plus Samvat alongside it when the backend provides that data. */}
+      <div className="panchang-key-grid" style={{ display: 'grid', gridTemplateColumns: hasSamvat ? '1.4fr 1fr' : '1fr', gap: 16, marginBottom: 20 }}>
+        <div>
+          <SectionTitle icon={<Moon size={14} />}>Panchang Details</SectionTitle>
+          <KeyFactsTable dailyResult={dailyResult} />
         </div>
+        {hasSamvat && (
+          <div>
+            <SectionTitle icon={<Star size={14} />}>Samvat</SectionTitle>
+            <SamvatTable dailyResult={dailyResult} />
+          </div>
+        )}
       </div>
 
       {!!dayChoghadiya.length && (
@@ -910,19 +994,44 @@ function PanchangDailyResult({ dailyResult }) {
         />
       )}
 
-      <div className="panchang-timings" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 18 }}>
+      <div className="panchang-timings" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
         <TimingCard title="Brahma" value={dailyResult.brahma_muhurat?.time} note={dailyResult.brahma_muhurat?.benefit || 'Spiritual practice'} tone="green" />
         <TimingCard title="Abhijit" value={dailyResult.abhijit_muhurat?.time} note={dailyResult.abhijit_muhurat?.benefit || 'Auspicious work'} tone="blue" />
         <TimingCard title="Rahu Kaal" value={dailyResult.rahu_kaal?.time} note={dailyResult.rahu_kaal?.benefit || 'Avoid new beginnings'} tone="red" />
       </div>
 
+      {/* Inauspicious Timings — "From ... To ..." list, mirroring
+          Astrotalk's Ashubh Muhurat block. */}
+      <div style={{ marginBottom: 22 }}>
+        <SectionTitle icon={<AlertCircle size={14} />}>Inauspicious Timings (Ashubh Muhurat)</SectionTitle>
+        <MuhuratList
+          data={dailyResult.inauspicious_timings}
+          tone="red"
+          meanings={INAUSPICIOUS_MEANINGS}
+          emptyText="No inauspicious timings available for this date."
+        />
+      </div>
+
+      {/* Auspicious Timings — same list format, in green. */}
+      <div style={{ marginBottom: 22 }}>
+        <SectionTitle icon={<Sparkles size={14} />}>Auspicious Timings (Shubh Muhurat)</SectionTitle>
+        <MuhuratList
+          data={dailyResult.auspicious_timings}
+          tone="green"
+          meanings={AUSPICIOUS_MEANINGS}
+          emptyText="No auspicious timings available for this date."
+        />
+      </div>
+
+      {!!dailyResult.planetary_positions?.length && (
+        <div style={{ marginBottom: 22 }}>
+          <PlanetaryPositionsPanel positions={dailyResult.planetary_positions} />
+        </div>
+      )}
+
       <PanchangDetails dailyResult={dailyResult} />
     </div>
   );
-}
-
-function joinTiny(parts) {
-  return parts.map((part) => String(part || '').trim()).filter(Boolean).join(' · ');
 }
 
 function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
@@ -1291,7 +1400,7 @@ export default function PanchangPage() {
               </div>
               <p style={{ fontFamily: UI_FONT, fontSize: 14, color: '#6f6f6f', fontWeight: 800, margin: '5px 0 0' }}>
                 {dailyResult
-                  ? `${dailyResult.var?.day || ''}, ${dailyResult.display_date || date} · ${city || dailyResult.location?.name || 'India'} · ${joinTiny([dailyResult.tithi?.paksha, dailyResult.tithi?.name])}`
+                  ? `${dailyResult.var?.day || ''}, ${dailyResult.display_date || date} · ${city || dailyResult.location?.name || 'India'} · ${[dailyResult.tithi?.paksha, dailyResult.tithi?.name].filter(Boolean).join(' ')}`
                   : 'Select date and city to view daily Panchang'}
               </p>
             </div>
@@ -1597,10 +1706,14 @@ export default function PanchangPage() {
         @media (max-width: 900px) {
           .muhurat-results-grid { grid-template-columns: 1fr !important; }
           .panchang-timings { grid-template-columns: 1fr !important; }
+          .panchang-key-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 720px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(3,1fr) !important; }
           .muhurat-form-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+        @media (max-width: 600px) {
+          .sunmoon-strip { justify-content: space-between !important; }
         }
         @media (max-width: 480px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(2,1fr) !important; }
