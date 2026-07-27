@@ -356,6 +356,12 @@ export const volunteerApi = {
     return volunteerClient.post(
       `/api/volunteer/submissions/${submissionId}/media`,
       body,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 120000,
+      },
     );
   },
 
