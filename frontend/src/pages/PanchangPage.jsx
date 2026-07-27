@@ -234,6 +234,21 @@ function normalizeEndMinutes(startMinutes, endMinutes) {
   return endMinutes <= startMinutes ? endMinutes + 24 * 60 : endMinutes;
 }
 
+// True if "now" falls between sunrise and sunset (daytime), false if it's
+// currently night. Used so only one of the Day/Night Choghadiya timelines
+// shows the "Currently In / Next" footer instead of both showing it.
+function isDaytimeNow(sunrise, sunset) {
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const sunriseMinutes = parseTimeToMinutes(firstTimePart(sunrise));
+  const sunsetMinutes = parseTimeToMinutes(firstTimePart(sunset));
+  if (sunriseMinutes === null || sunsetMinutes === null) return true;
+  if (sunriseMinutes <= sunsetMinutes) {
+    return nowMinutes >= sunriseMinutes && nowMinutes <= sunsetMinutes;
+  }
+  return nowMinutes >= sunriseMinutes || nowMinutes <= sunsetMinutes;
+}
+
 function periodStart(item) {
   return item?.start || item?.start_time || firstTimePart(item?.time);
 }
@@ -887,6 +902,7 @@ function PanchangDailyResult({ dailyResult }) {
           rows={dayChoghadiya}
           sunrise={dailyResult.sunrise}
           sunset={dailyResult.sunset}
+          showCurrentPanel={isDaytimeNow(dailyResult.sunrise, dailyResult.sunset)}
         />
       )}
 
@@ -896,6 +912,7 @@ function PanchangDailyResult({ dailyResult }) {
           rows={nightChoghadiya}
           sunrise={dailyResult.sunset}
           sunset={dailyResult.sunrise}
+          showCurrentPanel={!isDaytimeNow(dailyResult.sunrise, dailyResult.sunset)}
         />
       )}
 
@@ -938,7 +955,7 @@ function PanchangDailyResult({ dailyResult }) {
   );
 }
 
-function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
+function ChoghadiyaTimeline({ title, rows, sunrise, sunset, showCurrentPanel = true }) {
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const segments = rows.map((item, index) => {
@@ -1009,20 +1026,22 @@ function ChoghadiyaTimeline({ title, rows, sunrise, sunset }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, borderTop: '1px solid #eeeeee', marginTop: 10, paddingTop: 9 }}>
-        <div style={{ background: '#eef7e3', borderRadius: 7, padding: '7px 9px' }}>
-          <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#6b8d4d', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Currently In</p>
-          <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#285c1f', fontWeight: 900, margin: '2px 0 0' }}>
-            {current?.name || 'Not available'} {current ? `· ${shortTime(periodStart(current))}-${shortTime(periodEnd(current))}` : ''}
-          </p>
+      {showCurrentPanel && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, borderTop: '1px solid #eeeeee', marginTop: 10, paddingTop: 9 }}>
+          <div style={{ background: '#eef7e3', borderRadius: 7, padding: '7px 9px' }}>
+            <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#6b8d4d', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Currently In</p>
+            <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#285c1f', fontWeight: 900, margin: '2px 0 0' }}>
+              {current?.name || 'Not available'} {current ? `· ${shortTime(periodStart(current))}-${shortTime(periodEnd(current))}` : ''}
+            </p>
+          </div>
+          <div style={{ background: '#fafafa', borderRadius: 7, padding: '7px 9px' }}>
+            <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Next</p>
+            <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#292929', fontWeight: 900, margin: '2px 0 0' }}>
+              {next?.name || 'Not available'}{minutesToNext !== null ? ` · in ${minutesToNext} min` : ''}
+            </p>
+          </div>
         </div>
-        <div style={{ background: '#fafafa', borderRadius: 7, padding: '7px 9px' }}>
-          <p style={{ fontFamily: UI_FONT, fontSize: 8.5, color: '#8b8b8b', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', margin: 0 }}>Next</p>
-          <p style={{ fontFamily: UI_FONT, fontSize: 11.5, color: '#292929', fontWeight: 900, margin: '2px 0 0' }}>
-            {next?.name || 'Not available'}{minutesToNext !== null ? ` · in ${minutesToNext} min` : ''}
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
