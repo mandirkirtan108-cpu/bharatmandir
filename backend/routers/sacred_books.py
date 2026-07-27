@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import json
@@ -183,6 +184,28 @@ def _upload_page_image(image_bytes: bytes, slug: str, page_number: int) -> str:
         overwrite=True,
     )
     return result["secure_url"]
+
+
+def _quick_page_count(content: bytes) -> int:
+    """Fast upload-time check: is this a readable, non-empty, non-password
+    -protected PDF? Only opens the PDF and counts pages — does NOT call
+    extract_text() on every page, which is the slow part for large books
+    and is exactly what made big uploads block the request until the proxy
+    gave up. Full text extraction still happens in the background job.
+    """
+    try:
+        reader = PdfReader(io.BytesIO(content))
+    except Exception as exc:
+        raise ValueError("The uploaded file is not a readable PDF.") from exc
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception as exc:
+            raise ValueError("Password-protected PDFs are not supported.") from exc
+    page_count = len(reader.pages)
+    if page_count == 0:
+        raise ValueError("The PDF has no pages.")
+    return page_count
 
 
 def _extract_pages(content: bytes) -> list[str]:
@@ -612,12 +635,17 @@ async def upload_book(
     if not content or len(content) > MAX_PDF_BYTES:
         raise HTTPException(413, f"PDF must be smaller than {MAX_PDF_BYTES // 1024 // 1024} MB")
     try:
-        pages = _extract_pages(content)
+        # Just count pages here — full per-page text extraction is slow for
+        # large books and happens in the background job below. Doing it here
+        # (synchronously, inside an async route) used to stall the event loop
+        # long enough for the reverse proxy to kill the connection, which is
+        # what showed up as "Failed to fetch" on bigger PDFs.
+        page_count = await asyncio.to_thread(_quick_page_count, content)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
     slug = _unique_slug(title)
-    uploaded = _upload_pdf(content, slug)
+    uploaded = await asyncio.to_thread(_upload_pdf, content, slug)
     with get_db_cursor() as cur:
         cur.execute("""
             INSERT INTO library_books
@@ -627,7 +655,7 @@ async def upload_book(
         """, (
             slug, title.strip(), author.strip() or None, description.strip() or None,
             source_language.strip(), file.filename, uploaded["url"], uploaded["public_id"],
-            hashlib.sha256(content).hexdigest(), len(pages), admin["id"],
+            hashlib.sha256(content).hexdigest(), page_count, admin["id"],
         ))
         book_id = cur.fetchone()["id"]
 
@@ -675,7 +703,7 @@ def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
         response = httpx.get(book["original_pdf_url"], timeout=60, follow_redirects=True)
         response.raise_for_status()
         pdf_bytes = response.content
-        _extract_pages(pdf_bytes)
+        _quick_page_count(pdf_bytes)
     except Exception as exc:
         raise HTTPException(502, f"Could not retrieve the original PDF: {exc}") from exc
     with get_db_cursor() as cur:
