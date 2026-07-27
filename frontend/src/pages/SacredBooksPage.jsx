@@ -5,23 +5,24 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { fetchBooks } from '../services/sacredBooksApi';
 
-// A handful of cover tones so the shelf doesn't look uniform.
+// A handful of cover tones, all within the site's warm orange/gold family
+// so the shelf reads as one cohesive theme instead of a mixed color wheel.
 const COVERS = [
-  ['#4a1d0c', '#7a3208'],
-  ['#1f3a2e', '#3c6650'],
-  ['#3a2a12', '#6b4c1f'],
-  ['#2c1a3a', '#5a3a72'],
-  ['#5c1414', '#8f2a1f'],
+  ['#4b1d04', '#7a3208'],
+  ['#5c2508', '#8f3d0f'],
+  ['#3a2410', '#6b4720'],
+  ['#6b2d0a', '#a14a0b'],
+  ['#452008', '#7a4315'],
 ];
 
-// Hand-picked tones for well-known scriptures, so their covers match the
-// mood people already associate with them (e.g. Gita in green, Hanuman
-// Chalisa in a deep maroon) instead of whatever the shelf order lands on.
+// Hand-picked tones for well-known scriptures, so their covers stay
+// consistent (e.g. Hanuman Chalisa always the same deep rust) instead of
+// whatever the shelf order lands on — still within the same theme family.
 const CURATED_COVERS = {
-  'hanuman-chalisa': ['#4a1d0c', '#7a3208'],
-  'bhagavad-gita': ['#1f3a2e', '#3c6650'],
-  'vishnu-purana': ['#1a2a4a', '#2f4d80'],
-  'manusmriti': ['#3a2a12', '#6b4c1f'],
+  'hanuman-chalisa': ['#4b1d04', '#7a3208'],
+  'bhagavad-gita': ['#5c2508', '#8f3d0f'],
+  'vishnu-purana': ['#3a2410', '#6b4720'],
+  'manusmriti': ['#452008', '#7a4315'],
 };
 
 // Simple deterministic hash so any book without a curated color still always
@@ -173,6 +174,7 @@ export default function SacredBooksPage() {
       .book-cover{
         position:relative;padding:28px 20px 36px;min-height:216px;display:flex;flex-direction:column;align-items:center;justify-content:center;
         background:
+          radial-gradient(ellipse 260px 180px at 15% -10%, #ffdca355, transparent 65%),
           repeating-linear-gradient(115deg, #ffffff08 0 2px, transparent 2px 6px),
           linear-gradient(135deg,var(--cover-light),var(--cover-dark));
         box-shadow:inset 0 -3px 10px #00000030;
