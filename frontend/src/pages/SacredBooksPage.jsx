@@ -61,15 +61,7 @@ function BookCover({ book, dark, light }) {
       <CornerFlourish className="corner corner-bl" />
       <CornerFlourish className="corner corner-br" />
       <div className="cover-frame">
-        <div className="cover-emblem" aria-hidden="true">
-          <svg viewBox="0 0 60 60"><g fill="none" stroke="currentColor" strokeWidth="0.8" opacity=".55">
-            <circle cx="30" cy="30" r="20" />
-            {Array.from({ length: 12 }).map((_, i) => (
-              <line key={i} x1="30" y1="30" x2={30 + 26 * Math.cos((i * Math.PI) / 6)} y2={30 + 26 * Math.sin((i * Math.PI) / 6)} />
-            ))}
-          </g></svg>
-          <span>ॐ</span>
-        </div>
+        <div className="cover-emblem" aria-hidden="true"><span>ॐ</span></div>
         <div className="cover-rule" />
         <h2 className="cover-title">{book.title}</h2>
         {book.author && <p className="cover-author">{book.author}</p>}
@@ -163,7 +155,8 @@ export default function SacredBooksPage() {
 
       .shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:28px}
       .book-card{
-        display:flex;flex-direction:column;height:100%;background:#fffefb;border-radius:12px;overflow:hidden;cursor:pointer;
+        display:flex;flex-direction:column;height:100%;border-radius:12px;overflow:hidden;cursor:pointer;
+        background:linear-gradient(165deg, #fffefb 0%, #fdf1dc 60%, #fbe6c4 100%);
         box-shadow:0 10px 26px #5c270b1a;transition:transform .2s ease, box-shadow .2s ease;border:1px solid #e9dcc6;
       }
       .book-card:hover{transform:translateY(-6px);box-shadow:0 22px 44px #5c270b33}
@@ -182,9 +175,8 @@ export default function SacredBooksPage() {
       }
       .cover-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center, transparent 45%, #00000040 100%);pointer-events:none}
       .cover-frame{position:relative;width:100%;text-align:center;padding:16px 16px;border:1px solid #f1e0b855;border-radius:2px;box-shadow:0 0 0 4px #00000018, inset 0 0 0 1px #ffffff12}
-      .cover-emblem{position:relative;display:flex;align-items:center;justify-content:center;height:30px;margin-bottom:2px;color:#f1e0b8}
-      .cover-emblem svg{position:absolute;width:60px;height:60px;top:50%;left:50%;transform:translate(-50%,-50%)}
-      .cover-emblem span{position:relative;font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:17px;color:#f1e0b8dd}
+      .cover-emblem{position:relative;display:flex;align-items:center;justify-content:center;height:36px;margin-bottom:2px;color:#f1e0b8}
+      .cover-emblem span{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:30px;color:#f1e0b8dd;line-height:1}
       .cover-rule{height:1px;width:36px;margin:8px auto;background:#f1e0b866}
       .cover-rule.diamond{position:relative}
       .cover-rule.diamond::after{content:'';position:absolute;left:50%;top:50%;width:5px;height:5px;transform:translate(-50%,-50%) rotate(45deg);background:#f1e0b899}
