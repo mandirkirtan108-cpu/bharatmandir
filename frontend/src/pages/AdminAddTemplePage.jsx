@@ -969,7 +969,11 @@ export default function AdminAddTemplePage() {
         const savedId = await saveDraft({ quiet: true });
         if (!savedId) throw new Error('The draft ID was not returned.');
         if (photos.some((slot) => slot?.file)) {
-          await volunteerApi.uploadSubmissionMedia(savedId, photos);
+          const mediaResponse = await volunteerApi.uploadSubmissionMedia(savedId, photos);
+          const uploadedMedia = mediaResponse.data?.media;
+          if (!Array.isArray(uploadedMedia) || uploadedMedia.length === 0) {
+            throw new Error('Temple photos were not uploaded. Please try again.');
+          }
         }
         await volunteerApi.submitSubmission(savedId);
         localStorage.removeItem(VOLUNTEER_DRAFT_KEY);

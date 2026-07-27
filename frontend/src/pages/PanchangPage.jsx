@@ -247,8 +247,7 @@ function periodEnd(item) {
 // Pulls a clean list of {start, end, sign} windows out of a raw
 // auspicious/inauspicious timing value, whether it's a single object
 // (Rahu Kaal) or an array of windows (some yogas fire more than once
-// in a day). Used by MuhuratList to print each window as its own
-// "From ... To ..." row, the way Astrotalk's Panchang page does.
+// in a day). Used by MuhuratList to print each window as its own row.
 function extractPeriods(value) {
   const list = Array.isArray(value) ? value : [value];
   return list
@@ -363,8 +362,8 @@ function TimingCard({ title, value, note, tone }) {
 /* ------------------------------------------------------------------ */
 /*  Astrotalk-style "Today Panchang" building blocks                   */
 /*  — sun/moon icon strip, clean key-value facts table, samvat panel,  */
-/*  planetary positions, and a "From ... To ..." muhurat list — all    */
-/*  restyled to the existing saffron/gold/brown BharatMandir theme.    */
+/*  planetary positions, and a muhurat list — all restyled to the      */
+/*  existing saffron/gold/brown BharatMandir theme.                    */
 /* ------------------------------------------------------------------ */
 
 // FIX: was `to12h(cleanValue(value))`, which — same issue as TimingCard
@@ -510,29 +509,26 @@ function PlanetaryPositionsPanel({ positions }) {
   );
 }
 
-// Replaces the old raw table for auspicious/inauspicious timings with a
-// simple, scannable "From ... To ..." row list — the same format
-// Astrotalk uses for its Ashubh Muhurat block ("Rahu Kaal From 10:45 AM
-// To 12:27 PM"), restyled with our saffron/green/red theme colors.
+// Auspicious / Inauspicious Timings — restyled to match the same clean,
+// two-column "Panchang Details" row-table look (KeyFactsTable /
+// SamvatTable) instead of the previous boxed-card list: label on the
+// left (uppercase, small, brown), the "From ... To ..." time range on
+// the right (bold, tone-colored), alternating row background, and an
+// optional one-line note underneath when the meaning dictionary has one.
 function MuhuratList({ data, tone, meanings, emptyText }) {
   const isRed = tone === 'red';
-  const accent = isRed ? '#dc2626' : '#15803d';
-  const bg = isRed ? '#fef2f2' : '#f0fdf4';
-  const border = isRed ? '#fca5a5' : '#86efac';
-  const nameColor = isRed ? '#7f1d1d' : '#14532d';
+  const valueColor = isRed ? '#dc2626' : '#15803d';
+  const noteColor = isRed ? '#b45309' : '#8a7256';
 
   const rows = [];
   Object.entries(data || {}).forEach(([key, value]) => {
     if (key.toLowerCase().endsWith('_detailed')) return;
-    const meta = meanings?.[key.toLowerCase()] || {
-      label: titleize(key), icon: isRed ? '⊘' : '✦', note: '',
-    };
+    const meta = meanings?.[key.toLowerCase()] || { label: titleize(key), note: '' };
     const periods = extractPeriods(value);
     periods.forEach((period, index) => {
       rows.push({
         id: `${key}-${index}`,
         name: meta.label,
-        icon: meta.icon,
         from: formatTimeOnly(period.start),
         to: formatTimeOnly(period.end),
         sign: period.sign,
@@ -544,23 +540,26 @@ function MuhuratList({ data, tone, meanings, emptyText }) {
   if (!rows.length) return <EmptyState text={emptyText} />;
 
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      {rows.map((row) => (
-        <div key={row.id} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: '12px 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 800, color: nameColor, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>{row.icon}</span>{row.name}{row.sign ? <span style={{ fontWeight: 700, opacity: 0.7 }}>&nbsp;({row.sign})</span> : null}
+    <div style={{ border: '1px solid #eee2d2', borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+      {rows.map((row, index) => (
+        <div
+          key={row.id}
+          style={{
+            padding: '13px 18px',
+            background: index % 2 === 0 ? '#fffaf3' : '#fff',
+            borderBottom: index < rows.length - 1 ? '1px solid #f2e9da' : 'none',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: UI_FONT, fontSize: 12.5, fontWeight: 900, color: '#9a6738', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              {row.name}{row.sign ? <span style={{ opacity: 0.75 }}>{` (${row.sign})`}</span> : null}
             </span>
-            <span style={{
-              fontFamily: UI_FONT, fontSize: 12.5, fontWeight: 800, color: accent,
-              background: '#fff', border: `1px solid ${border}`, borderRadius: 8,
-              padding: '5px 10px', whiteSpace: 'nowrap',
-            }}>
-              From {row.from || '—'} &nbsp;·&nbsp; To {row.to || '—'}
+            <span style={{ fontFamily: UI_FONT, fontSize: 14.5, fontWeight: 800, color: valueColor, textAlign: 'right', whiteSpace: 'nowrap' }}>
+              From {row.from || '—'} · To {row.to || '—'}
             </span>
           </div>
           {row.note && (
-            <p style={{ fontFamily: UI_FONT, fontSize: 12, color: isRed ? '#b91c1c' : '#16a34a', marginTop: 6, lineHeight: 1.5 }}>
+            <p style={{ fontFamily: UI_FONT, fontSize: 12, color: noteColor, marginTop: 5, lineHeight: 1.5 }}>
               {row.note}
             </p>
           )}
@@ -608,34 +607,6 @@ function EmptyState({ text }) {
     <p style={{ fontFamily: UI_FONT, fontSize: 13, color: '#a3a3a3', fontStyle: 'italic', padding: '10px 0', textAlign: 'center', margin: 0 }}>
       {text}
     </p>
-  );
-}
-
-const PANCHANG_TABS = [
-  { id: 'details', label: 'Sun & Moon Details', icon: <Sun size={14} /> },
-  { id: 'full', label: 'Full Data', icon: <Star size={14} /> },
-];
-
-function Tabs({ tabs, active, onChange }) {
-  return (
-    <div className="panchang-tabs" role="tablist">
-      {tabs.map((tab) => {
-        const isActive = tab.id === active;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            className={`panchang-tab ${isActive ? 'active' : ''}`}
-            onClick={() => onChange(tab.id)}
-          >
-            <span className="panchang-tab-icon">{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -702,53 +673,6 @@ function TableChips({ chips = [], accent = '#d45508' }) {
         >
           <strong>{chip.label}:</strong> {chip.value}
         </span>
-      ))}
-    </div>
-  );
-}
-
-// Turns any flat data object (sunrise/sunset, sun/moon details, hindu
-// calendar...) into a clean settings-style row list instead of a grid
-// of tiny boxes.
-function flattenDetails(data, prefix = '') {
-  if (!data || typeof data !== 'object') return [];
-  return Object.entries(data).flatMap(([key, value]) => {
-    if (HIDDEN_KEYS.has(key)) return [];
-    const labelKey = LABEL_MAP[key] || titleize(key);
-    const label = prefix ? `${prefix} ${labelKey}` : labelKey;
-    if (value === null || value === undefined || value === '') return [];
-    if (Array.isArray(value)) {
-      if (!value.length) return [];
-      if (value.every((item) => typeof item !== 'object')) {
-        return [{ label, value: value.join(', ') }];
-      }
-      return [];
-    }
-    if (typeof value === 'object') {
-      return flattenDetails(value, label);
-    }
-    return [{ label, value }];
-  });
-}
-
-function InfoRowList({ data }) {
-  const items = flattenDetails(data);
-  if (!items.length) return <EmptyState text="No details available." />;
-  return (
-    <div>
-      {items.map((item, index) => (
-        <div
-          key={`${item.label}-${index}`}
-          style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-            padding: '11px 0', borderBottom: index < items.length - 1 ? '1px solid #f2f2f2' : 'none',
-          }}
-        >
-          <span style={{ fontFamily: UI_FONT, fontSize: 13, color: '#7d7d7d', fontWeight: 700 }}>{item.label}</span>
-          <span style={{ fontFamily: UI_FONT, fontSize: 13.5, color: '#1f1f1f', fontWeight: 800, textAlign: 'right' }}>
-            {detailTime(item.value)}
-          </span>
-        </div>
       ))}
     </div>
   );
@@ -863,22 +787,6 @@ function ChoghadiyaChips({ rows }) {
 }
 
 function PanchangDetails({ dailyResult }) {
-  const [activeTab, setActiveTab] = useState('details');
-
-  // Sun/Moon "details" panels used to just repeat sunrise/sunset and
-  // moonrise/moonset — the exact same two lines already shown in the
-  // Sunrise/Sunset/Moonrise/Moonset strip above. Only pass through
-  // fields that aren't already shown there, and skip a panel entirely
-  // once it has nothing new to say.
-  const sunExtra = dailyResult.sun
-    ? Object.fromEntries(Object.entries(dailyResult.sun).filter(([key]) => !['sunrise', 'sunset'].includes(key)))
-    : null;
-  const moonExtra = dailyResult.moon
-    ? Object.fromEntries(Object.entries(dailyResult.moon).filter(([key]) => !['moonrise', 'moonset'].includes(key)))
-    : null;
-  const hasSunExtra = sunExtra && Object.values(sunExtra).some((v) => v !== null && v !== undefined && v !== '');
-  const hasMoonExtra = moonExtra && Object.values(moonExtra).some((v) => v !== null && v !== undefined && v !== '');
-
   const angaGroups = [
     { key: 'tithis', title: 'All Tithis', icon: <Moon size={16} />, accent: '#c47a14', records: dailyResult.all_panchang?.tithis },
     { key: 'nakshatras', title: 'All Nakshatras', icon: <Star size={16} />, accent: '#2563eb', records: dailyResult.all_panchang?.nakshatras },
@@ -894,40 +802,15 @@ function PanchangDetails({ dailyResult }) {
           Full Panchang Details
         </h3>
         <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b8b8b', fontWeight: 800 }}>
-          Extra sun/moon fields and complete Panchang records
+          Complete Panchang records for this date
         </span>
       </div>
 
-      <Tabs tabs={PANCHANG_TABS} active={activeTab} onChange={setActiveTab} />
-
-      {activeTab === 'details' && (
-        <div className="panchang-tab-content">
-          {(hasSunExtra || hasMoonExtra) ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14 }}>
-              {hasSunExtra && (
-                <Panel icon={<Sun size={16} />} title="Sun Details" accent="#d97706">
-                  <InfoRowList data={sunExtra} />
-                </Panel>
-              )}
-              {hasMoonExtra && (
-                <Panel icon={<Moon size={16} />} title="Moon Details" accent="#2563eb">
-                  <InfoRowList data={moonExtra} />
-                </Panel>
-              )}
-            </div>
-          ) : (
-            <EmptyState text="No additional sun or moon fields beyond rise/set for this date." />
-          )}
-        </div>
-      )}
-
-      {activeTab === 'full' && (
-        <div className="panchang-tab-content" style={{ display: 'grid', gap: 14 }}>
-          {angaGroups.map((group) => (
-            <AngaSection key={group.key} title={group.title} icon={group.icon} accent={group.accent} records={group.records} />
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'grid', gap: 14 }}>
+        {angaGroups.map((group) => (
+          <AngaSection key={group.key} title={group.title} icon={group.icon} accent={group.accent} records={group.records} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1000,8 +883,7 @@ function PanchangDailyResult({ dailyResult }) {
         <TimingCard title="Rahu Kaal" value={dailyResult.rahu_kaal?.time} note={dailyResult.rahu_kaal?.benefit || 'Avoid new beginnings'} tone="red" />
       </div>
 
-      {/* Inauspicious Timings — "From ... To ..." list, mirroring
-          Astrotalk's Ashubh Muhurat block. */}
+      {/* Inauspicious Timings — clean Panchang-Details-style row table. */}
       <div style={{ marginBottom: 22 }}>
         <SectionTitle icon={<AlertCircle size={14} />}>Inauspicious Timings (Ashubh Muhurat)</SectionTitle>
         <MuhuratList
@@ -1012,7 +894,7 @@ function PanchangDailyResult({ dailyResult }) {
         />
       </div>
 
-      {/* Auspicious Timings — same list format, in green. */}
+      {/* Auspicious Timings — same row-table format, in green. */}
       <div style={{ marginBottom: 22 }}>
         <SectionTitle icon={<Sparkles size={14} />}>Auspicious Timings (Shubh Muhurat)</SectionTitle>
         <MuhuratList
