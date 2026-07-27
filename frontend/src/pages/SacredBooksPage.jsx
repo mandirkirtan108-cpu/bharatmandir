@@ -78,10 +78,26 @@ export default function SacredBooksPage() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [progressMap, setProgressMap] = useState({});
 
   useEffect(() => {
     fetchBooks().then(r => setBooks(r.books || [])).catch(e => setError(e.message)).finally(() => setLoading(false));
   }, []);
+
+  // Pick up "continue reading" bookmarks the reader page saves per book,
+  // so the shelf can show progress and jump straight back to that page.
+  useEffect(() => {
+    try {
+      const map = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith('sacredbook-progress:')) continue;
+        const val = JSON.parse(localStorage.getItem(key) || 'null');
+        if (val?.pageNumber) map[key.slice('sacredbook-progress:'.length)] = val;
+      }
+      setProgressMap(map);
+    } catch { /* localStorage unavailable — just skip progress badges */ }
+  }, [books]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -110,12 +126,22 @@ export default function SacredBooksPage() {
         <div className="shelf">
           {visible.map((book) => {
             const [dark, light] = coverColors(book);
+            const progress = progressMap[book.slug];
+            const openHref = progress
+              ? `/sacred-books/library/${book.slug}?page=${progress.pageNumber}`
+              : `/sacred-books/library/${book.slug}`;
             return (
-              <article className="book-card" key={book.id} onClick={() => navigate(`/sacred-books/library/${book.slug}`)}>
+              <article className="book-card" key={book.id} onClick={() => navigate(openHref)}>
                 <BookCover book={book} dark={dark} light={light} />
                 <div className="book-face">
                   <p className="book-desc">{book.description || 'Available in three complete translations and the original edition.'}</p>
-                  <button>Open book <span>→</span></button>
+                  {progress && (
+                    <div className="book-progress">
+                      <div className="book-progress-rail"><div className="book-progress-fill" style={{ width: `${progress.percent || 0}%` }} /></div>
+                      <span>{progress.percent || 0}% read</span>
+                    </div>
+                  )}
+                  <button>{progress ? 'Continue reading' : 'Open book'} <span>→</span></button>
                 </div>
               </article>
             );
@@ -198,6 +224,11 @@ export default function SacredBooksPage() {
       .book-desc{color:#775e4c;line-height:1.65;font-size:13.5px;font-family:'Crimson Pro',serif;margin:0 0 16px;flex:1;
         display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
       .book-face button{align-self:flex-start;border:0;background:none;color:#8b3a15;font-weight:700;padding:0;cursor:pointer;font-family:'EB Garamond',serif;font-size:14px;letter-spacing:.02em}
+
+      .book-progress{display:flex;align-items:center;gap:8px;margin:0 0 12px}
+      .book-progress-rail{flex:1;height:4px;border-radius:99px;background:#e9dcc6;overflow:hidden}
+      .book-progress-fill{height:100%;background:linear-gradient(90deg,#c9932f,#f2a545);transition:width .3s ease}
+      .book-progress span{flex-shrink:0;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.05em;color:#a9752f;text-transform:uppercase}
 
       .library-state{position:relative;z-index:1;text-align:center;padding:50px;color:#806957;font-family:'Crimson Pro',serif}
       .library-state.error{color:#a11}
