@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Image as ImageIcon, Languages, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Languages, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { fetchBook, fetchBookPages } from '../services/sacredBooksApi';
@@ -43,6 +43,12 @@ export default function SacredBookReaderPage() {
   const [turnDir, setTurnDir] = useState('next');
   const jumpToEnd = useRef(false);
 
+  // Swipe + scroll-hint plumbing
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const textWrapRef = useRef(null);
+  const [showScrollHint, setShowScrollHint] = useState(false);
+
   useEffect(() => {
     fetchBook(slug).then(setBook).catch(e => setError(e.message));
   }, [slug]);
@@ -61,6 +67,7 @@ export default function SacredBookReaderPage() {
   }, [slug, language, batch]);
 
   const current = pages[leaf];
+  const showingScan = language === 'original' && !!current?.page_image_url;
   const atBookStart = batch === 1 && leaf === 0;
   const atBookEnd = !!(book && current && current.page_number >= book.page_count);
 
@@ -86,8 +93,41 @@ export default function SacredBookReaderPage() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  // Swipe-to-turn — mirrors a real page turn using the same turn-next/turn-prev animation
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const onTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - (touchStartY.current ?? 0);
+    touchStartX.current = null;
+    touchStartY.current = null;
+    // Ignore short drags and mostly-vertical drags (those are scrolling the page text)
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+    if (dx < 0) goNext(); else goPrev();
+  };
+
+  // Show a subtle "more to read" hint whenever the current page's text overflows
+  useEffect(() => {
+    const el = textWrapRef.current;
+    if (!el || showingScan || loading) { setShowScrollHint(false); return; }
+    const check = () => {
+      const overflowing = el.scrollHeight > el.clientHeight + 4;
+      const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+      setShowScrollHint(overflowing && !nearBottom);
+    };
+    check();
+    el.addEventListener('scroll', check);
+    window.addEventListener('resize', check);
+    return () => {
+      el.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+  }, [current, language, showingScan, loading]);
+
   const percent = book?.page_count && current ? Math.min(100, Math.round((current.page_number / book.page_count) * 100)) : 0;
-  const showingScan = language === 'original' && !!current?.page_image_url;
 
   return <>
     <Navbar />
@@ -102,9 +142,7 @@ export default function SacredBookReaderPage() {
             <h1>{book?.title || 'Loading…'}</h1>
             {book?.author && <p>{book.author}</p>}
           </div>
-          {book?.original_pdf_url
-            ? <a className="seal" href={book.original_pdf_url} target="_blank" rel="noreferrer" title="Download original PDF"><Download size={16} /></a>
-            : <span />}
+          <span />
         </header>
 
         <nav className="tab-rail" aria-label="Choose translation">
@@ -121,7 +159,7 @@ export default function SacredBookReaderPage() {
         {error && <div className="reader-status error">{error}</div>}
 
         <div className="book-stage">
-          <div className="book-frame">
+          <div className="book-frame" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
             <div className="stack-leaf stack-2" aria-hidden="true" />
             <div className="stack-leaf stack-1" aria-hidden="true" />
 
@@ -143,17 +181,18 @@ export default function SacredBookReaderPage() {
                     <img src={current.page_image_url} alt={`Page ${current.page_number} — original scan`} />
                   </div>
                 ) : (
-                  <div className="page-text-wrap"><div className="page-text">{current.text}</div></div>
+                  <div className="page-text-wrap" ref={textWrapRef}><div className="page-text">{current.text}</div></div>
+                )}
+
+                {!showingScan && showScrollHint && (
+                  <div className="scroll-hint" aria-hidden="true">
+                    Scroll for more <span className="scroll-hint-chevron">⌄</span>
+                  </div>
                 )}
 
                 <div className="rule rule-bottom" />
                 <div className="folio">
                   <span>{book?.title}</span>
-                  {current.page_image_url && !showingScan && (
-                    <a className="folio-scan" href={current.page_image_url} target="_blank" rel="noreferrer">
-                      <ImageIcon size={11} /> View original scan
-                    </a>
-                  )}
                   <span className="folio-num">{current.page_number} / {book?.page_count || '—'}</span>
                 </div>
               </article>
@@ -177,6 +216,7 @@ export default function SacredBookReaderPage() {
           <span className="pager-percent">{percent}% read</span>
           <button disabled={atBookEnd} onClick={goNext}>Next <ChevronRight size={18} /></button>
         </footer>
+        <p className="swipe-hint">Swipe left or right to turn the page</p>
       </div>
     </main>
 
@@ -206,11 +246,6 @@ export default function SacredBookReaderPage() {
       .titleblock p{margin:3px 0 0;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.05em;color:#caa06c;text-transform:uppercase}
       .back{justify-self:start;display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-family:'EB Garamond',serif;font-size:13px;white-space:nowrap}
       .back:hover{border-color:#c9932f}
-      .seal{
-        justify-self:end;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;
-        background:radial-gradient(circle at 35% 30%,#e3b45a,#8b5a1e 70%,#6b3f10);
-        color:#2a1503;box-shadow:0 2px 6px #00000060,inset 0 1px 1px #ffffff55;text-decoration:none;
-      }
 
       .tab-rail{display:flex;justify-content:center;align-items:flex-end;gap:6px;margin-bottom:14px;flex-wrap:wrap}
       .tab-rail-icon{color:#a97b45;margin-right:4px;margin-bottom:9px}
@@ -222,7 +257,7 @@ export default function SacredBookReaderPage() {
       .tab.active{background:linear-gradient(#fff8e6,#f3e3bd);color:#7a3b12;transform:translateY(0);box-shadow:0 -4px 10px #0000003a;border-color:#c9932f;font-weight:600}
 
       .book-stage{position:relative;margin-top:14px}
-      .book-frame{position:relative;display:flex;justify-content:center}
+      .book-frame{position:relative;display:flex;justify-content:center;touch-action:pan-y}
 
       /* Stacked leaves behind the current page give consistent thickness —
          sized off the same fixed --page-height so it never shifts between pages. */
@@ -273,12 +308,22 @@ export default function SacredBookReaderPage() {
       .page-leaf.devanagari .page-text{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:19px;line-height:2.1}
       .page-leaf.devanagari .page-text::first-letter{font-size:1em;float:none;padding:0;color:inherit;font-weight:inherit;font-family:inherit}
 
+      /* Scroll hint — fades in over the bottom of the text when there's more to read,
+         and disappears automatically once the reader scrolls near the end of the page. */
+      .scroll-hint{
+        position:absolute;left:50%;bottom:54px;transform:translateX(-50%);
+        display:flex;align-items:center;gap:4px;pointer-events:none;z-index:2;
+        font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+        color:#9c6a2f;background:linear-gradient(180deg, transparent, #fdf6e3 55%);
+        padding:18px 12px 4px;
+      }
+      .scroll-hint-chevron{display:inline-block;animation:hintBob 1.4s ease-in-out infinite}
+      @keyframes hintBob{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+
       .page-scan{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;text-align:center}
       .page-scan img{max-width:100%;max-height:100%;height:auto;width:auto;object-fit:contain;border-radius:4px;box-shadow:0 6px 20px #00000030;border:1px solid #d9c49a}
 
-      .folio{position:relative;flex-shrink:0;display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a07a4a}
-      .folio-scan{display:flex;align-items:center;gap:5px;color:#8b3a15;text-decoration:none;letter-spacing:.05em;text-transform:none;font-size:12px}
-      .folio-scan:hover{text-decoration:underline}
+      .folio{position:relative;flex-shrink:0;display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8c6238}
       .folio-num{font-variant-numeric:tabular-nums;white-space:nowrap}
 
       .page-leaf.loading{align-items:center;justify-content:center}
@@ -304,6 +349,10 @@ export default function SacredBookReaderPage() {
       .reader-pager button:disabled{opacity:.35;cursor:default}
       .pager-percent{color:#a9825a;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.05em}
 
+      /* Only shown on touch devices, so desktop users (who already see the click zones) don't see it */
+      .swipe-hint{display:none;text-align:center;margin-top:10px;font-family:'EB Garamond',serif;font-size:12px;color:#8b6a45}
+      @media (hover:none) and (pointer:coarse){.swipe-hint{display:block}}
+
       .reader-status{text-align:center;padding:60px 20px;color:#8b6a45;font-family:'EB Garamond',serif}
       .reader-status.error{color:#e08a6a}
 
@@ -311,7 +360,6 @@ export default function SacredBookReaderPage() {
         .reader-shell{--page-height:72vh}
         .reader-toolbar{grid-template-columns:1fr;text-align:center;gap:8px}
         .back{justify-self:center}
-        .seal{justify-self:center}
         .page-leaf{padding:36px 22px 26px;border-radius:8px}
         .stack-leaf{display:none}
         .tab-rail{overflow-x:auto;justify-content:flex-start;padding-bottom:2px}

@@ -5,7 +5,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { fetchBooks } from '../services/sacredBooksApi';
 
-// A handful of cover tones so the shelf doesn't look uniform — cycled by index.
+// A handful of cover tones so the shelf doesn't look uniform.
 const COVERS = [
   ['#4a1d0c', '#7a3208'],
   ['#1f3a2e', '#3c6650'],
@@ -13,6 +13,32 @@ const COVERS = [
   ['#2c1a3a', '#5a3a72'],
   ['#5c1414', '#8f2a1f'],
 ];
+
+// Hand-picked tones for well-known scriptures, so their covers match the
+// mood people already associate with them (e.g. Gita in green, Hanuman
+// Chalisa in a deep maroon) instead of whatever the shelf order lands on.
+const CURATED_COVERS = {
+  'hanuman-chalisa': ['#4a1d0c', '#7a3208'],
+  'bhagavad-gita': ['#1f3a2e', '#3c6650'],
+  'vishnu-purana': ['#1a2a4a', '#2f4d80'],
+  'manusmriti': ['#3a2a12', '#6b4c1f'],
+};
+
+// Simple deterministic hash so any book without a curated color still always
+// gets the *same* cover, regardless of search filters or list order.
+function hashKey(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function coverColors(book) {
+  const key = (book.slug || book.title || String(book.id) || '').toLowerCase();
+  if (CURATED_COVERS[key]) return CURATED_COVERS[key];
+  return COVERS[hashKey(key) % COVERS.length];
+}
 
 function CornerFlourish({ className }) {
   return (
@@ -89,8 +115,8 @@ export default function SacredBooksPage() {
         {!loading && !error && visible.length === 0 && <div className="library-state">No books have been published yet.</div>}
 
         <div className="shelf">
-          {visible.map((book, i) => {
-            const [dark, light] = COVERS[i % COVERS.length];
+          {visible.map((book) => {
+            const [dark, light] = coverColors(book);
             return (
               <article className="book-card" key={book.id} onClick={() => navigate(`/sacred-books/library/${book.slug}`)}>
                 <BookCover book={book} dark={dark} light={light} />
