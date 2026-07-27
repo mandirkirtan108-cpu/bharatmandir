@@ -6,8 +6,10 @@ from psycopg2.extras import Json
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     HTTPException,
     Query,
+    UploadFile,
     status,
 )
 
@@ -23,6 +25,7 @@ from routers.admin_auth import (
 from routers.volunteer_auth import (
     get_current_volunteer,
 )
+from services.cloudinary_service import delete_file, upload_file
 
 router = APIRouter(
     prefix="/api",
@@ -45,6 +48,54 @@ ADMIN_REVIEW_ACTIONS = {
     "rejected",
     "changes_requested",
 }
+
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+
+async def upload_submission_image(
+    image: UploadFile,
+    prefix: str,
+) -> dict:
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only JPG, PNG and WebP images are supported",
+        )
+
+    content = await image.read()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{image.filename or 'Image'} is empty",
+        )
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"{image.filename or 'Image'} exceeds the 10 MB limit",
+        )
+
+    try:
+        return upload_file(
+            content,
+            image.filename or "temple-image.jpg",
+            prefix=prefix,
+            resource_type="image",
+        )
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The temple photo could not be uploaded",
+        ) from error
 
 
 def create_temple_slug(
@@ -286,6 +337,107 @@ def update_volunteer_submission(
         )
 
     return updated_submission
+
+
+@router.post("/volunteer/submissions/{submission_id}/media")
+async def upload_volunteer_submission_media(
+    submission_id: int,
+    hero_image: UploadFile | None = File(default=None),
+    gallery_images: list[UploadFile] = File(default=[]),
+    volunteer: dict = Depends(get_current_volunteer),
+):
+    """Upload volunteer temple photos and store their permanent Cloudinary URLs."""
+    current = get_volunteer_submission(submission_id, volunteer["id"])
+    if current["status"] not in VOLUNTEER_EDITABLE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Photos can only be changed while the submission is editable",
+        )
+
+    gallery_files = [
+        image for image in gallery_images
+        if image and image.filename
+    ]
+    if not (hero_image and hero_image.filename) and not gallery_files:
+        return {
+            "image_url": current.get("image_url"),
+            "media": (current.get("form_payload") or {}).get("_uploaded_media", []),
+        }
+
+    uploaded_media: list[dict] = []
+    uploaded_public_ids: list[str] = []
+    try:
+        if hero_image and hero_image.filename:
+            uploaded = await upload_submission_image(
+                hero_image,
+                prefix=f"submission-{submission_id}-hero-",
+            )
+            uploaded_public_ids.append(uploaded["public_id"])
+            uploaded_media.append({
+                "url": uploaded["url"],
+                "public_id": uploaded["public_id"],
+                "file_name": hero_image.filename,
+                "is_hero": True,
+                "sort_order": 0,
+            })
+
+        for index, image in enumerate(gallery_files, start=1):
+            uploaded = await upload_submission_image(
+                image,
+                prefix=f"submission-{submission_id}-gallery-{index}-",
+            )
+            uploaded_public_ids.append(uploaded["public_id"])
+            uploaded_media.append({
+                "url": uploaded["url"],
+                "public_id": uploaded["public_id"],
+                "file_name": image.filename,
+                "is_hero": False,
+                "sort_order": index,
+            })
+    except Exception:
+        for public_id in uploaded_public_ids:
+            delete_file(public_id, resource_type="image")
+        raise
+
+    payload = dict(current.get("form_payload") or {})
+    previous_media = payload.get("_uploaded_media") or []
+    payload["_uploaded_media"] = uploaded_media
+    hero_url = next(
+        (item["url"] for item in uploaded_media if item["is_hero"]),
+        current.get("image_url"),
+    )
+
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE temple_submissions
+                SET image_url = %s, form_payload = %s, updated_at = NOW()
+                WHERE id = %s AND volunteer_id = %s
+                RETURNING image_url, form_payload
+                """,
+                (
+                    hero_url,
+                    Json(payload),
+                    submission_id,
+                    volunteer["id"],
+                ),
+            )
+            updated = cursor.fetchone()
+    except Exception:
+        for public_id in uploaded_public_ids:
+            delete_file(public_id, resource_type="image")
+        raise
+
+    for item in previous_media:
+        old_public_id = item.get("public_id") if isinstance(item, dict) else None
+        if old_public_id and old_public_id not in uploaded_public_ids:
+            delete_file(old_public_id, resource_type="image")
+
+    return {
+        "image_url": updated["image_url"],
+        "media": updated["form_payload"].get("_uploaded_media", []),
+    }
 
 
 @router.post("/volunteer/submissions/{submission_id}/submit")
@@ -571,6 +723,20 @@ def review_volunteer_submission(
                 f"MKT-{state_code}-"
                 f"{uuid4().hex[:6].upper()}"
             )
+            form_payload = submission.get("form_payload") or {}
+            uploaded_media = (
+                form_payload.get("_uploaded_media") or []
+                if isinstance(form_payload, dict)
+                else []
+            )
+            hero_image_url = submission.get("image_url") or next(
+                (
+                    item.get("url")
+                    for item in uploaded_media
+                    if isinstance(item, dict) and item.get("is_hero")
+                ),
+                None,
+            )
 
             cursor.execute(
                 """
@@ -590,6 +756,7 @@ def review_volunteer_submission(
                     location,
                     significance,
                     history,
+                    hero_image_url,
                     status,
                     source,
                     verified
@@ -614,6 +781,7 @@ def review_volunteer_submission(
                         )
                         ELSE NULL
                     END,
+                    %s,
                     %s,
                     %s,
                     'published',
@@ -641,12 +809,46 @@ def review_volunteer_submission(
                     submission.get("latitude"),
                     submission.get("description"),
                     submission.get("history"),
+                    hero_image_url,
                 ),
             )
 
             published_temple = (
                 cursor.fetchone()
             )
+
+            for item in uploaded_media:
+                if (
+                    not isinstance(item, dict)
+                    or item.get("is_hero")
+                    or not item.get("url")
+                ):
+                    continue
+                cursor.execute(
+                    """
+                    INSERT INTO temple_media (
+                        temple_id,
+                        media_type,
+                        file_url,
+                        file_name,
+                        caption,
+                        is_hero,
+                        sort_order,
+                        cloudinary_public_id
+                    )
+                    VALUES (
+                        %s, 'image', %s, %s, NULL,
+                        FALSE, %s, %s
+                    )
+                    """,
+                    (
+                        published_temple["id"],
+                        item["url"],
+                        item.get("file_name"),
+                        item.get("sort_order", 1),
+                        item.get("public_id"),
+                    ),
+                )
 
         cursor.execute(
             """
