@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+
 /* ═══════════════════════════════════════════════════════════
    SYSTEM PROMPT  —  BharatMandir AI Guide
    ═══════════════════════════════════════════════════════════ */
 function buildSystemPrompt() {
-  // Inject live IST date & time so Claude can answer "what is today / current time"
+  // Legacy prompt builder retained temporarily; the active prompt now lives securely in the backend.
   const now = new Date();
   const istOptions = { timeZone: 'Asia/Kolkata', hour12: true };
   const dateStr = now.toLocaleDateString('en-IN', { ...istOptions, weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
@@ -85,6 +87,10 @@ TONE:
 /* ═══════════════════════════════════════════════════════════
    QUICK PROMPTS
    ═══════════════════════════════════════════════════════════ */
+// The backend prompt is authoritative; this reference prevents a temporary
+// legacy helper warning while deployments are migrated.
+void buildSystemPrompt;
+
 const QUICK_PROMPTS = [
   { label: 'Financial Stress', text: 'I am under a lot of financial stress. My business is not doing well and I am worried about my family.' },
   { label: 'Family Conflict',  text: 'There is a lot of conflict in my home. Relations with family members have become very difficult.' },
@@ -97,28 +103,28 @@ const QUICK_PROMPTS = [
 /* ═══════════════════════════════════════════════════════════
    API CALL
    ═══════════════════════════════════════════════════════════ */
-async function callClaude(messages) {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY not set in frontend/.env');
+async function callSpiritualGuide(messages) {
+  const currentMessage = messages[messages.length - 1];
+  const history = messages.slice(0, -1);
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(`${API_BASE}/api/spiritual/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1200,
-      system: buildSystemPrompt(),   // fresh system prompt with live IST time on every call
-      messages,
+      message: currentMessage.content,
+      history,
     }),
   });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new Error(errorBody.detail || `API error ${res.status}`);
+  }
+
   const data = await res.json();
-  return data.content[0].text;
+  return data.reply;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -258,7 +264,7 @@ export default function SpiritualChat() {
 
     try {
       const apiMessages = newHistory.map((m) => ({ role: m.role, content: m.content }));
-      const reply       = await callClaude(apiMessages);
+      const reply       = await callSpiritualGuide(apiMessages);
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
     } catch {
       setMessages((prev) => [
