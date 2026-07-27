@@ -35,13 +35,24 @@ export default function AdminLibraryPage() {
     try {
       const res = await fetch(`${API_BASE}/api/admin/books`, { method: 'POST', headers: auth(), body: data });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.detail || 'Upload failed');
+      if (!res.ok) {
+        const detail = Array.isArray(body.detail)
+          ? body.detail.map(item => item.msg || JSON.stringify(item)).join(', ')
+          : body.detail;
+        throw new Error(detail || `Upload failed (HTTP ${res.status})`);
+      }
       setMessage('PDF uploaded. Full translations are now processing.');
       setForm({ title: '', author: '', description: '', source_language: 'Hindi' });
       setFile(null);
       document.getElementById('book-pdf').value = '';
       load();
-    } catch (err) { setMessage(err.message); } finally { setBusy(false); }
+    } catch (err) {
+      setMessage(
+        err instanceof TypeError
+          ? 'The backend could not be reached. Check the Railway deployment and CORS configuration.'
+          : err.message
+      );
+    } finally { setBusy(false); }
   };
 
   const remove = async book => {

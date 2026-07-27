@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import os
 import re
 import threading
@@ -16,12 +17,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from openai import OpenAI
 from pypdf import PdfReader
 
-try:
-    import fitz  # PyMuPDF — used to render each page to an image so embedded
-    #                        illustrations/diagrams survive exactly as printed.
-except ImportError:  # pragma: no cover - optional at runtime, degrades gracefully
-    fitz = None
-
 from db.connection import get_db_cursor
 from routers.admin_auth import get_current_admin
 from services.cloudinary_service import _ensure_configured
@@ -32,6 +27,7 @@ load_dotenv(
 )
 
 router = APIRouter(tags=["Library"])
+logger = logging.getLogger(__name__)
 
 TARGET_LANGUAGES = {
     "en": "English",
@@ -43,7 +39,6 @@ TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "gpt-4.1")
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
-PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
 _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
 
 
@@ -88,17 +83,12 @@ def ensure_library_schema() -> None:
                 text_en TEXT,
                 text_hi TEXT,
                 text_sa TEXT,
-                page_image_url TEXT,
                 UNIQUE(book_id, page_number)
             )
         """)
         cur.execute("""
             ALTER TABLE library_books
             ADD COLUMN IF NOT EXISTS processed_pages INTEGER NOT NULL DEFAULT 0
-        """)
-        cur.execute("""
-            ALTER TABLE library_book_pages
-            ADD COLUMN IF NOT EXISTS page_image_url TEXT
         """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_library_pages_book
@@ -136,60 +126,33 @@ def _upload_pdf(content: bytes, slug: str) -> dict:
     return {"url": result["secure_url"], "public_id": result["public_id"]}
 
 
-def _upload_page_image(image_bytes: bytes, slug: str, page_number: int) -> str:
-    """Upload a rendered page image, keeping every diagram/illustration on that
-    page exactly as it appears in the original PDF."""
-    _ensure_configured()
-    result = cloudinary.uploader.upload(
-        image_bytes,
-        resource_type="image",
-        folder=f"bharatmandir/library/{slug}/pages",
-        public_id=f"page-{page_number:04d}",
-        overwrite=True,
-    )
-    return result["secure_url"]
-
-
 def _extract_pages(content: bytes) -> list[str]:
     try:
         reader = PdfReader(io.BytesIO(content))
-    except Exception as exc:
-        raise ValueError("The uploaded file is not a readable PDF.") from exc
-    if reader.is_encrypted:
-        try:
+        if reader.is_encrypted:
             reader.decrypt("")
-        except Exception as exc:
-            raise ValueError("Password-protected PDFs are not supported.") from exc
-    pages = [(page.extract_text() or "").strip() for page in reader.pages]
+        pages = []
+        for page_number, page in enumerate(reader.pages, 1):
+            try:
+                pages.append((page.extract_text() or "").strip())
+            except Exception as exc:
+                raise ValueError(
+                    f"Text could not be extracted from PDF page {page_number}. "
+                    "Please export the document as a text-based PDF and try again."
+                ) from exc
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(
+            "The uploaded file is unreadable or password-protected. "
+            "Please upload a valid text-based PDF."
+        ) from exc
+
     if not pages:
         raise ValueError("The PDF has no pages.")
     if sum(map(len, pages)) < 20:
         raise ValueError("No usable text was found. Scan-only PDFs require OCR before upload.")
     return pages
-
-
-def _render_page_images(content: bytes) -> list[bytes | None]:
-    """Render every PDF page to a PNG at PAGE_IMAGE_DPI so embedded pictures,
-    diagrams, and layout are preserved exactly as printed — not just the text.
-    Returns one entry per page; entries are None only if rendering is
-    unavailable, in which case the rest of the book still processes normally.
-    """
-    if fitz is None:
-        return []
-    images: list[bytes | None] = []
-    doc = fitz.open(stream=content, filetype="pdf")
-    try:
-        zoom = PAGE_IMAGE_DPI / 72
-        matrix = fitz.Matrix(zoom, zoom)
-        for page in doc:
-            try:
-                pix = page.get_pixmap(matrix=matrix, alpha=False)
-                images.append(pix.tobytes("png"))
-            except Exception:
-                images.append(None)
-    finally:
-        doc.close()
-    return images
 
 
 def _split_text(text: str) -> list[str]:
@@ -243,7 +206,7 @@ def _translate(client: OpenAI, text: str, source_language: str, code: str) -> st
     )
 
 
-def _process_book(book_id: int, slug: str, pdf_bytes: bytes, source_language: str) -> None:
+def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
     try:
         pages = _extract_pages(pdf_bytes)
         key = _api_key()
@@ -253,59 +216,42 @@ def _process_book(book_id: int, slug: str, pdf_bytes: bytes, source_language: st
             )
         client = OpenAI(api_key=key, timeout=TRANSLATION_TIMEOUT, max_retries=2)
 
-        # Render page images up front. If PyMuPDF isn't installed, or a
-        # specific page fails to rasterize, translation still proceeds —
-        # those pages simply won't have a preserved scan.
-        try:
-            page_images = _render_page_images(pdf_bytes)
-        except Exception:
-            page_images = []
-        if len(page_images) != len(pages):
-            page_images = [None] * len(pages)
-
         with get_db_cursor() as cur:
             cur.execute("""
                 UPDATE library_books SET page_count=%s, processed_pages=0,
                     processing_error=NULL, updated_at=NOW() WHERE id=%s
             """, (len(pages), book_id))
 
-        def translate_page(page_number: int, source_text: str, image_bytes: bytes | None):
+        def translate_page(page_number: int, source_text: str):
             try:
                 translated = {
                     code: _translate(client, source_text, source_language, code)
                     for code in TARGET_LANGUAGES
                 }
-                image_url = None
-                if image_bytes:
-                    try:
-                        image_url = _upload_page_image(image_bytes, slug, page_number)
-                    except Exception:
-                        image_url = None  # keep the book processing even if one upload fails
-                return page_number, source_text, translated, image_url
+                return page_number, source_text, translated
             except Exception as exc:
                 raise RuntimeError(f"Translation stopped on PDF page {page_number}: {exc}") from exc
 
         with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
             jobs = [
-                executor.submit(translate_page, number, text, page_images[number - 1])
+                executor.submit(translate_page, number, text)
                 for number, text in enumerate(pages, 1)
             ]
             for job in as_completed(jobs):
-                page_number, source_text, translated, image_url = job.result()
+                page_number, source_text, translated = job.result()
                 with get_db_cursor() as cur:
                     cur.execute("""
                         INSERT INTO library_book_pages
-                            (book_id,page_number,source_text,text_en,text_hi,text_sa,page_image_url)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s)
+                            (book_id,page_number,source_text,text_en,text_hi,text_sa)
+                        VALUES (%s,%s,%s,%s,%s,%s)
                         ON CONFLICT (book_id,page_number) DO UPDATE SET
                             source_text=EXCLUDED.source_text,
                             text_en=EXCLUDED.text_en,
                             text_hi=EXCLUDED.text_hi,
-                            text_sa=EXCLUDED.text_sa,
-                            page_image_url=EXCLUDED.page_image_url
+                            text_sa=EXCLUDED.text_sa
                     """, (
                         book_id, page_number, source_text, translated["en"],
-                        translated["hi"], translated["sa"], image_url,
+                        translated["hi"], translated["sa"],
                     ))
                     cur.execute("""
                         UPDATE library_books SET processed_pages=processed_pages+1,
@@ -365,7 +311,7 @@ def get_pages(
         if not book:
             raise HTTPException(404, "Book not found")
         cur.execute(f"""
-            SELECT page_number,{column} AS text,page_image_url FROM library_book_pages
+            SELECT page_number,{column} AS text FROM library_book_pages
             WHERE book_id=%s ORDER BY page_number LIMIT %s OFFSET %s
         """, (book["id"], per_page, (page - 1) * per_page))
         pages = [dict(row) for row in cur.fetchall()]
@@ -383,7 +329,7 @@ def search_book(slug: str, q: str = Query(..., min_length=2), language: str = "e
         if not book:
             raise HTTPException(404, "Book not found")
         cur.execute(f"""
-            SELECT page_number,{column} AS text,page_image_url FROM library_book_pages
+            SELECT page_number,{column} AS text FROM library_book_pages
             WHERE book_id=%s AND {column} ILIKE %s ORDER BY page_number LIMIT 50
         """, (book["id"], f"%{q}%"))
         results = [dict(row) for row in cur.fetchall()]
@@ -401,32 +347,72 @@ async def upload_book(
 ):
     if file.content_type != "application/pdf" and not file.filename.lower().endswith(".pdf"):
         raise HTTPException(415, "Only PDF files are accepted")
-    content = await file.read(MAX_PDF_BYTES + 1)
+
+    try:
+        content = await file.read(MAX_PDF_BYTES + 1)
+    except Exception as exc:
+        logger.exception("Could not read uploaded library PDF")
+        raise HTTPException(400, "The uploaded PDF could not be read. Please select it again.") from exc
+
     if not content or len(content) > MAX_PDF_BYTES:
         raise HTTPException(413, f"PDF must be smaller than {MAX_PDF_BYTES // 1024 // 1024} MB")
+
     try:
         pages = _extract_pages(content)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
-    slug = _unique_slug(title)
-    uploaded = _upload_pdf(content, slug)
-    with get_db_cursor() as cur:
-        cur.execute("""
-            INSERT INTO library_books
-                (slug,title,author,description,source_language,original_filename,
-                 original_pdf_url,storage_public_id,file_sha256,page_count,created_by)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
-        """, (
-            slug, title.strip(), author.strip() or None, description.strip() or None,
-            source_language.strip(), file.filename, uploaded["url"], uploaded["public_id"],
-            hashlib.sha256(content).hexdigest(), len(pages), admin["id"],
-        ))
-        book_id = cur.fetchone()["id"]
+    if not _api_key():
+        raise HTTPException(
+            503,
+            "OPENAI_API_KEY is not configured on the backend. "
+            "Add it in Railway Variables and redeploy.",
+        )
+
+    try:
+        slug = _unique_slug(title)
+    except Exception as exc:
+        logger.exception("Could not prepare a unique library book slug")
+        raise HTTPException(503, "The library database is currently unavailable.") from exc
+
+    try:
+        uploaded = _upload_pdf(content, slug)
+    except Exception as exc:
+        logger.exception("Cloudinary PDF upload failed for %s", file.filename)
+        raise HTTPException(
+            502,
+            "PDF storage upload failed. Check the Cloudinary credentials and "
+            "whether raw PDF delivery is enabled.",
+        ) from exc
+
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("""
+                INSERT INTO library_books
+                    (slug,title,author,description,source_language,original_filename,
+                     original_pdf_url,storage_public_id,file_sha256,page_count,created_by)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+            """, (
+                slug, title.strip(), author.strip() or None, description.strip() or None,
+                source_language.strip(), file.filename, uploaded["url"], uploaded["public_id"],
+                hashlib.sha256(content).hexdigest(), len(pages), admin["id"],
+            ))
+            book_id = cur.fetchone()["id"]
+    except Exception as exc:
+        logger.exception("Could not save uploaded library book metadata")
+        try:
+            cloudinary.uploader.destroy(uploaded["public_id"], resource_type="raw")
+        except Exception:
+            logger.warning("Could not remove orphaned Cloudinary PDF", exc_info=True)
+        raise HTTPException(
+            503,
+            "The PDF was uploaded, but its library record could not be saved. "
+            "Please check the database schema and try again.",
+        ) from exc
 
     threading.Thread(
         target=_process_book,
-        args=(book_id, slug, content, source_language),
+        args=(book_id, content, source_language),
         daemon=True,
         name=f"library-book-{book_id}",
     ).start()
@@ -458,7 +444,7 @@ def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
         raise HTTPException(503, "OpenAI key is unavailable to the backend process.")
     with get_db_cursor() as cur:
         cur.execute("""
-            SELECT id,slug,original_pdf_url,source_language FROM library_books
+            SELECT id,original_pdf_url,source_language FROM library_books
             WHERE id=%s AND status='failed'
         """, (book_id,))
         book = cur.fetchone()
@@ -479,7 +465,7 @@ def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
         """, (book_id,))
     threading.Thread(
         target=_process_book,
-        args=(book_id, book["slug"], pdf_bytes, book["source_language"]),
+        args=(book_id, pdf_bytes, book["source_language"]),
         daemon=True,
         name=f"library-book-retry-{book_id}",
     ).start()
