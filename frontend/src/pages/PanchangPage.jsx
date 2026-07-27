@@ -610,34 +610,6 @@ function EmptyState({ text }) {
   );
 }
 
-const PANCHANG_TABS = [
-  { id: 'details', label: 'Sun & Moon Details', icon: <Sun size={14} /> },
-  { id: 'full', label: 'Full Data', icon: <Star size={14} /> },
-];
-
-function Tabs({ tabs, active, onChange }) {
-  return (
-    <div className="panchang-tabs" role="tablist">
-      {tabs.map((tab) => {
-        const isActive = tab.id === active;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            className={`panchang-tab ${isActive ? 'active' : ''}`}
-            onClick={() => onChange(tab.id)}
-          >
-            <span className="panchang-tab-icon">{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function PanchangTable({ columns, rows, emptyText = 'No information available.' }) {
   if (!rows?.length) return <EmptyState text={emptyText} />;
 
@@ -701,53 +673,6 @@ function TableChips({ chips = [], accent = '#d45508' }) {
         >
           <strong>{chip.label}:</strong> {chip.value}
         </span>
-      ))}
-    </div>
-  );
-}
-
-// Turns any flat data object (sunrise/sunset, sun/moon details, hindu
-// calendar...) into a clean settings-style row list instead of a grid
-// of tiny boxes.
-function flattenDetails(data, prefix = '') {
-  if (!data || typeof data !== 'object') return [];
-  return Object.entries(data).flatMap(([key, value]) => {
-    if (HIDDEN_KEYS.has(key)) return [];
-    const labelKey = LABEL_MAP[key] || titleize(key);
-    const label = prefix ? `${prefix} ${labelKey}` : labelKey;
-    if (value === null || value === undefined || value === '') return [];
-    if (Array.isArray(value)) {
-      if (!value.length) return [];
-      if (value.every((item) => typeof item !== 'object')) {
-        return [{ label, value: value.join(', ') }];
-      }
-      return [];
-    }
-    if (typeof value === 'object') {
-      return flattenDetails(value, label);
-    }
-    return [{ label, value }];
-  });
-}
-
-function InfoRowList({ data }) {
-  const items = flattenDetails(data);
-  if (!items.length) return <EmptyState text="No details available." />;
-  return (
-    <div>
-      {items.map((item, index) => (
-        <div
-          key={`${item.label}-${index}`}
-          style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-            padding: '11px 0', borderBottom: index < items.length - 1 ? '1px solid #f2f2f2' : 'none',
-          }}
-        >
-          <span style={{ fontFamily: UI_FONT, fontSize: 13, color: '#7d7d7d', fontWeight: 700 }}>{item.label}</span>
-          <span style={{ fontFamily: UI_FONT, fontSize: 13.5, color: '#1f1f1f', fontWeight: 800, textAlign: 'right' }}>
-            {detailTime(item.value)}
-          </span>
-        </div>
       ))}
     </div>
   );
@@ -862,22 +787,6 @@ function ChoghadiyaChips({ rows }) {
 }
 
 function PanchangDetails({ dailyResult }) {
-  const [activeTab, setActiveTab] = useState('details');
-
-  // Sun/Moon "details" panels used to just repeat sunrise/sunset and
-  // moonrise/moonset — the exact same two lines already shown in the
-  // Sunrise/Sunset/Moonrise/Moonset strip above. Only pass through
-  // fields that aren't already shown there, and skip a panel entirely
-  // once it has nothing new to say.
-  const sunExtra = dailyResult.sun
-    ? Object.fromEntries(Object.entries(dailyResult.sun).filter(([key]) => !['sunrise', 'sunset'].includes(key)))
-    : null;
-  const moonExtra = dailyResult.moon
-    ? Object.fromEntries(Object.entries(dailyResult.moon).filter(([key]) => !['moonrise', 'moonset'].includes(key)))
-    : null;
-  const hasSunExtra = sunExtra && Object.values(sunExtra).some((v) => v !== null && v !== undefined && v !== '');
-  const hasMoonExtra = moonExtra && Object.values(moonExtra).some((v) => v !== null && v !== undefined && v !== '');
-
   const angaGroups = [
     { key: 'tithis', title: 'All Tithis', icon: <Moon size={16} />, accent: '#c47a14', records: dailyResult.all_panchang?.tithis },
     { key: 'nakshatras', title: 'All Nakshatras', icon: <Star size={16} />, accent: '#2563eb', records: dailyResult.all_panchang?.nakshatras },
@@ -893,40 +802,15 @@ function PanchangDetails({ dailyResult }) {
           Full Panchang Details
         </h3>
         <span style={{ fontFamily: UI_FONT, fontSize: 12, color: '#8b8b8b', fontWeight: 800 }}>
-          Extra sun/moon fields and complete Panchang records
+          Complete Panchang records for this date
         </span>
       </div>
 
-      <Tabs tabs={PANCHANG_TABS} active={activeTab} onChange={setActiveTab} />
-
-      {activeTab === 'details' && (
-        <div className="panchang-tab-content">
-          {(hasSunExtra || hasMoonExtra) ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14 }}>
-              {hasSunExtra && (
-                <Panel icon={<Sun size={16} />} title="Sun Details" accent="#d97706">
-                  <InfoRowList data={sunExtra} />
-                </Panel>
-              )}
-              {hasMoonExtra && (
-                <Panel icon={<Moon size={16} />} title="Moon Details" accent="#2563eb">
-                  <InfoRowList data={moonExtra} />
-                </Panel>
-              )}
-            </div>
-          ) : (
-            <EmptyState text="No additional sun or moon fields beyond rise/set for this date." />
-          )}
-        </div>
-      )}
-
-      {activeTab === 'full' && (
-        <div className="panchang-tab-content" style={{ display: 'grid', gap: 14 }}>
-          {angaGroups.map((group) => (
-            <AngaSection key={group.key} title={group.title} icon={group.icon} accent={group.accent} records={group.records} />
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'grid', gap: 14 }}>
+        {angaGroups.map((group) => (
+          <AngaSection key={group.key} title={group.title} icon={group.icon} accent={group.accent} records={group.records} />
+        ))}
+      </div>
     </div>
   );
 }
