@@ -247,8 +247,7 @@ function periodEnd(item) {
 // Pulls a clean list of {start, end, sign} windows out of a raw
 // auspicious/inauspicious timing value, whether it's a single object
 // (Rahu Kaal) or an array of windows (some yogas fire more than once
-// in a day). Used by MuhuratList to print each window as its own
-// "From ... To ..." row, the way Astrotalk's Panchang page does.
+// in a day). Used by MuhuratList to print each window as its own row.
 function extractPeriods(value) {
   const list = Array.isArray(value) ? value : [value];
   return list
@@ -363,8 +362,8 @@ function TimingCard({ title, value, note, tone }) {
 /* ------------------------------------------------------------------ */
 /*  Astrotalk-style "Today Panchang" building blocks                   */
 /*  — sun/moon icon strip, clean key-value facts table, samvat panel,  */
-/*  planetary positions, and a "From ... To ..." muhurat list — all    */
-/*  restyled to the existing saffron/gold/brown BharatMandir theme.    */
+/*  planetary positions, and a muhurat list — all restyled to the      */
+/*  existing saffron/gold/brown BharatMandir theme.                    */
 /* ------------------------------------------------------------------ */
 
 // FIX: was `to12h(cleanValue(value))`, which — same issue as TimingCard
@@ -510,29 +509,26 @@ function PlanetaryPositionsPanel({ positions }) {
   );
 }
 
-// Replaces the old raw table for auspicious/inauspicious timings with a
-// simple, scannable "From ... To ..." row list — the same format
-// Astrotalk uses for its Ashubh Muhurat block ("Rahu Kaal From 10:45 AM
-// To 12:27 PM"), restyled with our saffron/green/red theme colors.
+// Auspicious / Inauspicious Timings — restyled to match the same clean,
+// two-column "Panchang Details" row-table look (KeyFactsTable /
+// SamvatTable) instead of the previous boxed-card list: label on the
+// left (uppercase, small, brown), the "From ... To ..." time range on
+// the right (bold, tone-colored), alternating row background, and an
+// optional one-line note underneath when the meaning dictionary has one.
 function MuhuratList({ data, tone, meanings, emptyText }) {
   const isRed = tone === 'red';
-  const accent = isRed ? '#dc2626' : '#15803d';
-  const bg = isRed ? '#fef2f2' : '#f0fdf4';
-  const border = isRed ? '#fca5a5' : '#86efac';
-  const nameColor = isRed ? '#7f1d1d' : '#14532d';
+  const valueColor = isRed ? '#dc2626' : '#15803d';
+  const noteColor = isRed ? '#b45309' : '#8a7256';
 
   const rows = [];
   Object.entries(data || {}).forEach(([key, value]) => {
     if (key.toLowerCase().endsWith('_detailed')) return;
-    const meta = meanings?.[key.toLowerCase()] || {
-      label: titleize(key), icon: isRed ? '⊘' : '✦', note: '',
-    };
+    const meta = meanings?.[key.toLowerCase()] || { label: titleize(key), note: '' };
     const periods = extractPeriods(value);
     periods.forEach((period, index) => {
       rows.push({
         id: `${key}-${index}`,
         name: meta.label,
-        icon: meta.icon,
         from: formatTimeOnly(period.start),
         to: formatTimeOnly(period.end),
         sign: period.sign,
@@ -544,23 +540,26 @@ function MuhuratList({ data, tone, meanings, emptyText }) {
   if (!rows.length) return <EmptyState text={emptyText} />;
 
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      {rows.map((row) => (
-        <div key={row.id} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: '12px 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 800, color: nameColor, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>{row.icon}</span>{row.name}{row.sign ? <span style={{ fontWeight: 700, opacity: 0.7 }}>&nbsp;({row.sign})</span> : null}
+    <div style={{ border: '1px solid #eee2d2', borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+      {rows.map((row, index) => (
+        <div
+          key={row.id}
+          style={{
+            padding: '13px 18px',
+            background: index % 2 === 0 ? '#fffaf3' : '#fff',
+            borderBottom: index < rows.length - 1 ? '1px solid #f2e9da' : 'none',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: UI_FONT, fontSize: 12.5, fontWeight: 900, color: '#9a6738', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              {row.name}{row.sign ? <span style={{ opacity: 0.75 }}>{` (${row.sign})`}</span> : null}
             </span>
-            <span style={{
-              fontFamily: UI_FONT, fontSize: 12.5, fontWeight: 800, color: accent,
-              background: '#fff', border: `1px solid ${border}`, borderRadius: 8,
-              padding: '5px 10px', whiteSpace: 'nowrap',
-            }}>
-              From {row.from || '—'} &nbsp;·&nbsp; To {row.to || '—'}
+            <span style={{ fontFamily: UI_FONT, fontSize: 14.5, fontWeight: 800, color: valueColor, textAlign: 'right', whiteSpace: 'nowrap' }}>
+              From {row.from || '—'} · To {row.to || '—'}
             </span>
           </div>
           {row.note && (
-            <p style={{ fontFamily: UI_FONT, fontSize: 12, color: isRed ? '#b91c1c' : '#16a34a', marginTop: 6, lineHeight: 1.5 }}>
+            <p style={{ fontFamily: UI_FONT, fontSize: 12, color: noteColor, marginTop: 5, lineHeight: 1.5 }}>
               {row.note}
             </p>
           )}
@@ -1000,8 +999,7 @@ function PanchangDailyResult({ dailyResult }) {
         <TimingCard title="Rahu Kaal" value={dailyResult.rahu_kaal?.time} note={dailyResult.rahu_kaal?.benefit || 'Avoid new beginnings'} tone="red" />
       </div>
 
-      {/* Inauspicious Timings — "From ... To ..." list, mirroring
-          Astrotalk's Ashubh Muhurat block. */}
+      {/* Inauspicious Timings — clean Panchang-Details-style row table. */}
       <div style={{ marginBottom: 22 }}>
         <SectionTitle icon={<AlertCircle size={14} />}>Inauspicious Timings (Ashubh Muhurat)</SectionTitle>
         <MuhuratList
@@ -1012,7 +1010,7 @@ function PanchangDailyResult({ dailyResult }) {
         />
       </div>
 
-      {/* Auspicious Timings — same list format, in green. */}
+      {/* Auspicious Timings — same row-table format, in green. */}
       <div style={{ marginBottom: 22 }}>
         <SectionTitle icon={<Sparkles size={14} />}>Auspicious Timings (Shubh Muhurat)</SectionTitle>
         <MuhuratList
