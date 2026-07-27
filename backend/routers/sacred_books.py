@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import json
 import os
 import re
 import threading
@@ -13,12 +14,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import cloudinary.uploader
 import httpx
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from openai import OpenAI
 from pypdf import PdfReader
 
 from db.connection import get_db_cursor
 from routers.admin_auth import get_current_admin
+from routers.user_auth import decode_token, get_current_user, get_user_by_id
 from services.cloudinary_service import _ensure_configured
 
 load_dotenv(
@@ -93,6 +96,38 @@ def ensure_library_schema() -> None:
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_library_pages_book
             ON library_book_pages(book_id, page_number)
+        """)
+        # AI-generated table of contents — one row per detected section/chapter.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS library_book_sections (
+                id BIGSERIAL PRIMARY KEY,
+                book_id BIGINT NOT NULL REFERENCES library_books(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                page_number INTEGER NOT NULL,
+                order_index INTEGER NOT NULL,
+                UNIQUE(book_id, page_number)
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_library_sections_book
+            ON library_book_sections(book_id, order_index)
+        """)
+        # Per-user reading progress — one row per (user, book), so Rohit's
+        # place in a book never overwrites Tanisha's and vice versa.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS library_reading_progress (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                book_id BIGINT NOT NULL REFERENCES library_books(id) ON DELETE CASCADE,
+                language TEXT NOT NULL DEFAULT 'en',
+                page_number INTEGER NOT NULL DEFAULT 1,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(user_id, book_id)
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_library_progress_user
+            ON library_reading_progress(user_id, book_id)
         """)
 
 
@@ -206,6 +241,80 @@ def _translate(client: OpenAI, text: str, source_language: str, code: str) -> st
     )
 
 
+def _generate_sections(client: OpenAI, book_id: int, page_texts: dict[int, str]) -> None:
+    """Ask the model to read through the (English) page text and propose a
+    table of contents — chapter/canto/part boundaries with the page each one
+    starts on. This is best-effort: any failure here is swallowed so a book
+    still finishes processing even if the index can't be generated.
+    """
+    if not page_texts:
+        return
+    ordered = sorted(page_texts.items())
+    # Bound the prompt size regardless of book length by shrinking the
+    # per-page snippet for very long books, rather than dropping pages.
+    snippet_len = max(60, min(220, 90000 // max(len(ordered), 1)))
+    lines = []
+    for page_number, text in ordered:
+        snippet = re.sub(r"\s+", " ", (text or "")).strip()[:snippet_len]
+        lines.append(f"--- PAGE {page_number} ---\n{snippet}")
+    prompt = f"""You are building a clickable table of contents for a digitized book.
+Below is the start of every page (truncated), in order.
+
+Identify the natural high-level sections of this book — chapters, parts, cantos (kand), books, or similarly major divisions. Do NOT list minor subheadings, verse numbers, or every page.
+- Return between 3 and 40 entries depending on the book's actual structure. If the book is short or has no clear divisions, return as few as make sense (even just 1).
+- "page_number" must be the exact page where that section begins, taken from the "PAGE" markers below.
+- "title" should be short (a few words), in English, using the book's own naming when evident (e.g. "Bal Kand", "Chapter 3: The Forest").
+- Order entries by ascending page_number.
+
+Respond with ONLY a JSON array, no prose, no code fences, in this exact shape:
+[{{"title": "...", "page_number": 1}}, ...]
+
+PAGES:
+{chr(10).join(lines)}"""
+
+    with _translation_slots:
+        response = client.responses.create(
+            model=TRANSLATION_MODEL,
+            input=prompt,
+            temperature=0,
+            timeout=TRANSLATION_TIMEOUT,
+        )
+    raw = response.output_text.strip()
+    raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    sections = json.loads(raw)
+    if not isinstance(sections, list):
+        return
+
+    max_page = ordered[-1][0]
+    cleaned: list[tuple[str, int]] = []
+    seen_pages: set[int] = set()
+    for entry in sections:
+        if not isinstance(entry, dict):
+            continue
+        title = str(entry.get("title") or "").strip()
+        try:
+            page_number = int(entry.get("page_number"))
+        except (TypeError, ValueError):
+            continue
+        if not title or page_number < 1 or page_number > max_page or page_number in seen_pages:
+            continue
+        seen_pages.add(page_number)
+        cleaned.append((title[:200], page_number))
+    cleaned.sort(key=lambda item: item[1])
+    if not cleaned:
+        return
+
+    with get_db_cursor() as cur:
+        cur.execute("DELETE FROM library_book_sections WHERE book_id=%s", (book_id,))
+        for order_index, (title, page_number) in enumerate(cleaned):
+            cur.execute("""
+                INSERT INTO library_book_sections (book_id, title, page_number, order_index)
+                VALUES (%s,%s,%s,%s)
+                ON CONFLICT (book_id, page_number) DO UPDATE SET
+                    title=EXCLUDED.title, order_index=EXCLUDED.order_index
+            """, (book_id, title, page_number, order_index))
+
+
 def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
     try:
         pages = _extract_pages(pdf_bytes)
@@ -232,6 +341,7 @@ def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
             except Exception as exc:
                 raise RuntimeError(f"Translation stopped on PDF page {page_number}: {exc}") from exc
 
+        page_text_en: dict[int, str] = {}
         with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
             jobs = [
                 executor.submit(translate_page, number, text)
@@ -239,6 +349,7 @@ def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
             ]
             for job in as_completed(jobs):
                 page_number, source_text, translated = job.result()
+                page_text_en[page_number] = translated["en"]
                 with get_db_cursor() as cur:
                     cur.execute("""
                         INSERT INTO library_book_pages
@@ -257,6 +368,13 @@ def _process_book(book_id: int, pdf_bytes: bytes, source_language: str) -> None:
                         UPDATE library_books SET processed_pages=processed_pages+1,
                             updated_at=NOW() WHERE id=%s
                     """, (book_id,))
+
+        # Best-effort: build the AI table of contents. Never let a hiccup here
+        # (bad JSON, model timeout, etc.) stop the book from going live.
+        try:
+            _generate_sections(client, book_id, page_text_en)
+        except Exception:
+            pass
 
         with get_db_cursor() as cur:
             cur.execute("""
@@ -316,6 +434,95 @@ def get_pages(
         """, (book["id"], per_page, (page - 1) * per_page))
         pages = [dict(row) for row in cur.fetchall()]
     return {"pages": pages, "page": page, "per_page": per_page, "total_pages": book["page_count"]}
+
+
+@router.get("/api/books/{slug}/sections")
+def get_sections(slug: str):
+    """AI-generated table of contents for the reader's chapter/section jump menu."""
+    with get_db_cursor() as cur:
+        cur.execute("SELECT id FROM library_books WHERE slug=%s AND status='ready'", (slug,))
+        book = cur.fetchone()
+        if not book:
+            raise HTTPException(404, "Book not found")
+        cur.execute("""
+            SELECT title, page_number FROM library_book_sections
+            WHERE book_id=%s ORDER BY order_index
+        """, (book["id"],))
+        sections = [dict(row) for row in cur.fetchall()]
+    return {"sections": sections}
+
+
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+def get_optional_user(credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer)) -> dict | None:
+    """Same as user_auth.get_current_user, but returns None instead of 401
+    when there's no/invalid token — so guests can still read books, they
+    just won't get progress saved/restored."""
+    if not credentials:
+        return None
+    try:
+        payload = decode_token(credentials.credentials)
+        if payload.get("type") != "access":
+            return None
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        user = get_user_by_id(int(user_id))
+        if not user or not user.get("is_active"):
+            return None
+        return user
+    except Exception:
+        return None
+
+
+@router.get("/api/books/{slug}/progress")
+def get_progress(slug: str, user: dict | None = Depends(get_optional_user)):
+    """Returns this user's saved place in the book, or null for guests /
+    users who haven't read this book before."""
+    if not user:
+        return {"progress": None}
+    with get_db_cursor() as cur:
+        cur.execute("SELECT id FROM library_books WHERE slug=%s AND status='ready'", (slug,))
+        book = cur.fetchone()
+        if not book:
+            raise HTTPException(404, "Book not found")
+        cur.execute("""
+            SELECT language, page_number, updated_at FROM library_reading_progress
+            WHERE user_id=%s AND book_id=%s
+        """, (user["id"], book["id"]))
+        row = cur.fetchone()
+    return {"progress": dict(row) if row else None}
+
+
+@router.put("/api/books/{slug}/progress")
+def save_progress(slug: str, payload: dict = Body(...), user: dict = Depends(get_current_user)):
+    """Saves/updates where this logged-in user is in the book. Each user has
+    their own row, so Rohit's progress and Tanisha's progress never collide."""
+    language = str(payload.get("language") or "en")
+    if language not in {"en", "hi", "sa", "original"}:
+        raise HTTPException(422, "Unsupported language")
+    try:
+        page_number = int(payload.get("page_number"))
+    except (TypeError, ValueError):
+        raise HTTPException(422, "page_number is required")
+
+    with get_db_cursor() as cur:
+        cur.execute("SELECT id,page_count FROM library_books WHERE slug=%s AND status='ready'", (slug,))
+        book = cur.fetchone()
+        if not book:
+            raise HTTPException(404, "Book not found")
+        if book["page_count"]:
+            page_number = max(1, min(page_number, book["page_count"]))
+        else:
+            page_number = max(1, page_number)
+        cur.execute("""
+            INSERT INTO library_reading_progress (user_id, book_id, language, page_number, updated_at)
+            VALUES (%s,%s,%s,%s,NOW())
+            ON CONFLICT (user_id, book_id) DO UPDATE SET
+                language=EXCLUDED.language, page_number=EXCLUDED.page_number, updated_at=NOW()
+        """, (user["id"], book["id"], language, page_number))
+    return {"status": "saved", "language": language, "page_number": page_number}
 
 
 @router.get("/api/books/{slug}/search")
