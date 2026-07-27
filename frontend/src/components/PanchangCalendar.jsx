@@ -33,13 +33,15 @@ function classifyFestival(festival) {
 
 function splitDayFestivals(day) {
   const named = [];
-  const phaseDots = [];
+  const phaseColors = [];
   (day?.festivals || []).forEach((festival) => {
     const meta = classifyFestival(festival);
     if (meta.isNamedFestival) named.push({ ...festival, color: meta.color });
-    else phaseDots.push(meta.color);
+    else phaseColors.push(meta.color);
   });
-  return { named, phaseDots: phaseDots.slice(0, 3) };
+  // Only the first phase color drives the highlighted border on the date
+  // box — this replaces the old small colored dots under the date.
+  return { named, phaseColor: phaseColors[0] || null };
 }
 
 function paranaText(parana) {
@@ -162,9 +164,21 @@ export default function PanchangCalendar() {
               const isSaturday = date.getDay() === 6;
               const tithi = day?.tithi?.name || '';
               const paksha = day?.tithi?.paksha?.substring(0, 6) || '';
-              const { named, phaseDots } = splitDayFestivals(day);
+              const { named, phaseColor } = splitDayFestivals(day);
               const primaryNamed = named[0];
               const extraNamedCount = named.length - 1;
+
+              // Border priority: selection > today > phase-observance
+              // highlight (Ekadashi/Amavasya/etc., replacing the old dots)
+              // > default hairline border.
+              let borderStyle = '1px solid #f0e4d2';
+              if (selected) {
+                borderStyle = '2px solid #E8650A';
+              } else if (isToday) {
+                borderStyle = '2px solid rgba(232,101,10,0.35)';
+              } else if (phaseColor) {
+                borderStyle = `2px solid ${phaseColor}`;
+              }
 
               return (
                 <button
@@ -173,9 +187,9 @@ export default function PanchangCalendar() {
                   onClick={() => setSelectedKey(key)}
                   title={(day?.festivals || []).map((festival) => festival.name).join(', ') || undefined}
                   style={{
-                    border: selected ? '2px solid #E8650A' : isToday ? '2px solid rgba(232,101,10,0.35)' : '1px solid #f0e4d2',
+                    border: borderStyle,
                     borderRadius: 8,
-                    background: selected ? '#fff7f0' : primaryNamed ? '#f9fdf9' : '#fff',
+                    background: selected ? '#fff7f0' : primaryNamed ? '#f9fdf9' : phaseColor ? `${phaseColor}0d` : '#fff',
                     cursor: 'pointer',
                     padding: '8px 4px 8px',
                     textAlign: 'center',
@@ -206,12 +220,6 @@ export default function PanchangCalendar() {
                       {extraNamedCount > 0 && <div style={{ fontFamily: UI_FONT, fontSize: 8, fontWeight: 700, color: '#9A7150', textAlign: 'center', marginTop: 2 }}>+{extraNamedCount} more</div>}
                     </div>
                   )}
-
-                  {phaseDots.length > 0 && (
-                    <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 2 }}>
-                      {phaseDots.map((color, i) => <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />)}
-                    </div>
-                  )}
                 </button>
               );
             })}
@@ -224,7 +232,7 @@ export default function PanchangCalendar() {
             </span>
             {FESTIVAL_PHASE_MATCHERS.map(({ color, label }) => (
               <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                <span style={{ width: 12, height: 12, borderRadius: 4, border: `2px solid ${color}`, background: `${color}0d`, display: 'inline-block' }} />
                 {label}
               </span>
             ))}
