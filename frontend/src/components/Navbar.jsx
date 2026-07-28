@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Menu, X, Navigation, CalendarDays, BookOpen, PenLine, User, LogOut, MessageSquareHeart } from 'lucide-react';
+import { Search, Menu, X, Navigation, CalendarDays, BookOpen, PenLine, User, LogOut, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useUserAuth } from '../hooks/useUserAuth';
@@ -293,7 +293,7 @@ export default function Navbar() {
             className={`sidebar-link${isActive('/feedback') ? ' active' : ''}`}
             onClick={() => setSidebarOpen(false)}
           >
-            <span className="sidebar-link-icon"><MessageSquareHeart size={16} /></span>
+            <span className="sidebar-link-icon"><Star size={16} /></span>
             Feedback
           </Link>
 
@@ -408,7 +408,7 @@ export default function Navbar() {
           e.currentTarget.style.boxShadow = '0 4px 20px rgba(200,82,10,0.32)';
         }}
       >
-        <MessageSquareHeart size={15} />
+        <Star size={15} />
         Feedback
       </Link>
     </>
