@@ -16,7 +16,6 @@ openai
 resend
 pydantic[email]
 cloudinary
-boto3
 beautifulsoup4
 pypdf
 PyMuPDF
