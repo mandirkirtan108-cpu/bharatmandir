@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MessageSquareHeart, Star, Send, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { Landmark, ArrowLeft, Home, Star, Send, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
@@ -95,6 +96,23 @@ export default function FeedbackPage() {
             alignItems: 'center',
             textAlign: 'center',
           }}>
+            {/* Back to Home */}
+            <Link
+              to="/"
+              style={{
+                alignSelf: 'flex-start',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                marginBottom: 18, padding: '6px 4px',
+                color: 'rgba(255,213,128,0.85)', fontSize: 13, fontWeight: 500,
+                textDecoration: 'none', fontFamily: UI_FONT,
+                transition: 'color .15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#ffffff'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,213,128,0.85)'}
+            >
+              <ArrowLeft size={15} /> Back to Home
+            </Link>
+
             {/* Badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -106,7 +124,7 @@ export default function FeedbackPage() {
               whiteSpace: 'nowrap',
               fontFamily: UI_FONT,
             }}>
-              <MessageSquareHeart size={11} /> We'd love to hear from you
+              <Landmark size={11} /> We'd love to hear from you
             </div>
 
             {/* Title */}
@@ -170,18 +188,32 @@ export default function FeedbackPage() {
                     Your feedback has been received. We truly appreciate you taking
                     the time to help us improve.
                   </p>
-                  <button
-                    onClick={() => setSubmitted(false)}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 8,
-                      padding: '11px 22px', borderRadius: 50, border: 'none',
-                      background: 'linear-gradient(135deg, var(--saffron-light, #E06B25), var(--saffron-dark, #9A3C05))',
-                      color: 'white', fontFamily: 'var(--font-display)', fontSize: 13,
-                      letterSpacing: '.04em', fontWeight: 700, cursor: 'pointer',
-                    }}
-                  >
-                    Send more feedback
-                  </button>
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => setSubmitted(false)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 8,
+                        padding: '11px 22px', borderRadius: 50, border: 'none',
+                        background: 'linear-gradient(135deg, var(--saffron-light, #E06B25), var(--saffron-dark, #9A3C05))',
+                        color: 'white', fontFamily: 'var(--font-display)', fontSize: 13,
+                        letterSpacing: '.04em', fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      Send more feedback
+                    </button>
+                    <Link
+                      to="/"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 8,
+                        padding: '11px 22px', borderRadius: 50,
+                        border: '2px solid var(--cream-dark, #EDE3CE)', background: 'white',
+                        color: 'var(--text-mid, #4A2C10)', fontFamily: 'var(--font-display)', fontSize: 13,
+                        letterSpacing: '.04em', fontWeight: 700, textDecoration: 'none',
+                      }}
+                    >
+                      <Home size={14} /> Back to Home
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} style={{ fontFamily: UI_FONT }}>
