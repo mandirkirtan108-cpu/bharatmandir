@@ -140,6 +140,26 @@ def ensure_library_schema() -> None:
             CREATE INDEX IF NOT EXISTS idx_library_progress_user
             ON library_reading_progress(user_id, book_id)
         """)
+        # Per-user bookmarks — a reader can save any number of pages in a
+        # book. Scoped to user_id (not a device/browser), so Rohit's
+        # bookmarks and Tanisha's bookmarks stay separate and each follows
+        # their own account across every device they log in on.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS library_bookmarks (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                book_id BIGINT NOT NULL REFERENCES library_books(id) ON DELETE CASCADE,
+                page_number INTEGER NOT NULL,
+                language TEXT NOT NULL DEFAULT 'en',
+                label TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(user_id, book_id, page_number)
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_library_bookmarks_user
+            ON library_bookmarks(user_id, book_id)
+        """)
 
 
 def _slugify(value: str) -> str:
@@ -592,6 +612,29 @@ def get_optional_user(credentials: HTTPAuthorizationCredentials | None = Depends
         return None
 
 
+@router.get("/api/library/progress")
+def list_all_progress(user: dict | None = Depends(get_optional_user)):
+    """This logged-in user's reading progress across every book in the
+    library, keyed by slug — powers the "Continue reading" badges on the
+    shelf. Read from the same library_reading_progress table the reader
+    page writes to, so it's the identical progress on every device this
+    person signs into. Guests get an empty list."""
+    if not user:
+        return {"progress": []}
+    with get_db_cursor() as cur:
+        cur.execute("""
+            SELECT b.slug, p.language, p.page_number, b.page_count, p.updated_at
+            FROM library_reading_progress p
+            JOIN library_books b ON b.id = p.book_id
+            WHERE p.user_id=%s AND b.status='ready'
+        """, (user["id"],))
+        rows = [dict(r) for r in cur.fetchall()]
+    for row in rows:
+        page_count = row.get("page_count") or 0
+        row["percent"] = round(min(100, (row["page_number"] / page_count) * 100)) if page_count else 0
+    return {"progress": rows}
+
+
 @router.get("/api/books/{slug}/progress")
 def get_progress(slug: str, user: dict | None = Depends(get_optional_user)):
     """Returns this user's saved place in the book, or null for guests /
@@ -639,6 +682,73 @@ def save_progress(slug: str, payload: dict = Body(...), user: dict = Depends(get
                 language=EXCLUDED.language, page_number=EXCLUDED.page_number, updated_at=NOW()
         """, (user["id"], book["id"], language, page_number))
     return {"status": "saved", "language": language, "page_number": page_number}
+
+
+@router.get("/api/books/{slug}/bookmarks")
+def list_bookmarks(slug: str, user: dict | None = Depends(get_optional_user)):
+    """This user's saved bookmarks for the book, in page order. Guests get
+    an empty list — bookmarks are per-account, same as reading progress."""
+    if not user:
+        return {"bookmarks": []}
+    with get_db_cursor() as cur:
+        cur.execute("SELECT id FROM library_books WHERE slug=%s AND status='ready'", (slug,))
+        book = cur.fetchone()
+        if not book:
+            raise HTTPException(404, "Book not found")
+        cur.execute("""
+            SELECT id, page_number, language, label, created_at
+            FROM library_bookmarks WHERE user_id=%s AND book_id=%s
+            ORDER BY page_number
+        """, (user["id"], book["id"]))
+        bookmarks = [dict(row) for row in cur.fetchall()]
+    return {"bookmarks": bookmarks}
+
+
+@router.post("/api/books/{slug}/bookmarks", status_code=201)
+def create_bookmark(slug: str, payload: dict = Body(...), user: dict = Depends(get_current_user)):
+    """Saves a bookmark at the given page for this logged-in user. Stored
+    under their user_id (not a device id), so it shows up the same way on
+    any device they sign into."""
+    try:
+        page_number = int(payload.get("page_number"))
+    except (TypeError, ValueError):
+        raise HTTPException(422, "page_number is required")
+    language = str(payload.get("language") or "en")
+    if language not in {"en", "hi", "sa", "original"}:
+        raise HTTPException(422, "Unsupported language")
+    label = (payload.get("label") or "").strip() or None
+
+    with get_db_cursor() as cur:
+        cur.execute("SELECT id,page_count FROM library_books WHERE slug=%s AND status='ready'", (slug,))
+        book = cur.fetchone()
+        if not book:
+            raise HTTPException(404, "Book not found")
+        if book["page_count"]:
+            page_number = max(1, min(page_number, book["page_count"]))
+        else:
+            page_number = max(1, page_number)
+        cur.execute("""
+            INSERT INTO library_bookmarks (user_id, book_id, page_number, language, label)
+            VALUES (%s,%s,%s,%s,%s)
+            ON CONFLICT (user_id, book_id, page_number) DO UPDATE SET
+                language=EXCLUDED.language, label=EXCLUDED.label
+            RETURNING id, page_number, language, label, created_at
+        """, (user["id"], book["id"], page_number, language, label))
+        row = cur.fetchone()
+    return {"bookmark": dict(row)}
+
+
+@router.delete("/api/books/{slug}/bookmarks/{bookmark_id}")
+def delete_bookmark(slug: str, bookmark_id: int, user: dict = Depends(get_current_user)):
+    """Removes one of this user's own bookmarks. Scoped by user_id so nobody
+    can delete another account's bookmark by guessing an id."""
+    with get_db_cursor() as cur:
+        cur.execute("""
+            DELETE FROM library_bookmarks WHERE id=%s AND user_id=%s RETURNING id
+        """, (bookmark_id, user["id"]))
+        if not cur.fetchone():
+            raise HTTPException(404, "Bookmark not found")
+    return {"status": "deleted"}
 
 
 @router.get("/api/books/{slug}/search")

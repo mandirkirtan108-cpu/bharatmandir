@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Languages, List, Pause, Play, Square, X } from 'lucide-react';
+import { Bookmark, ChevronLeft, ChevronRight, Languages, List, Pause, Play, Square, Trash2, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import {
+  addBookmark,
   fetchBook,
+  fetchBookmarks,
   fetchBookPages,
   fetchBookSections,
   fetchReadingProgress,
   isLoggedIn,
+  removeBookmark,
   saveReadingProgress,
 } from '../services/sacredBooksApi';
 
@@ -60,6 +63,11 @@ export default function SacredBookReaderPage() {
   const [showSections, setShowSections] = useState(false);
   const [jumpInput, setJumpInput] = useState('');
 
+  // Per-user bookmarks — saved under the account, so they follow this
+  // reader to any device they sign into (guests simply see none).
+  const [bookmarks, setBookmarks] = useState([]);
+  const [bookmarkBusy, setBookmarkBusy] = useState(false);
+
   // Voice reading (Web Speech API — browser/OS voices, free, no backend needed)
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -75,6 +83,7 @@ export default function SacredBookReaderPage() {
   useEffect(() => {
     fetchBook(slug).then(setBook).catch(e => setError(e.message));
     fetchBookSections(slug).then(r => setSections(r.sections || [])).catch(() => setSections([]));
+    fetchBookmarks(slug).then(r => setBookmarks(r.bookmarks || [])).catch(() => setBookmarks([]));
   }, [slug]);
 
   // Look up this user's saved progress (if logged in) before the first page
@@ -159,6 +168,39 @@ export default function SacredBookReaderPage() {
     saveReadingProgress(slug, language, current.page_number).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, language, current?.page_number, loading, progressChecked]);
+
+  const currentBookmark = current
+    ? bookmarks.find(b => b.page_number === current.page_number)
+    : null;
+
+  const toggleBookmark = async () => {
+    if (!current || bookmarkBusy) return;
+    if (!isLoggedIn()) { setError('Please sign in to save bookmarks.'); return; }
+    setBookmarkBusy(true);
+    try {
+      if (currentBookmark) {
+        await removeBookmark(slug, currentBookmark.id);
+        setBookmarks(bs => bs.filter(b => b.id !== currentBookmark.id));
+      } else {
+        const { bookmark } = await addBookmark(slug, current.page_number, language);
+        setBookmarks(bs => [...bs.filter(b => b.page_number !== bookmark.page_number), bookmark]
+          .sort((a, b) => a.page_number - b.page_number));
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBookmarkBusy(false);
+    }
+  };
+
+  const removeBookmarkById = async (bookmarkId) => {
+    try {
+      await removeBookmark(slug, bookmarkId);
+      setBookmarks(bs => bs.filter(b => b.id !== bookmarkId));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   const atBookStart = batch === 1 && leaf === 0;
   const atBookEnd = !!(book && current && current.page_number >= book.page_count);
@@ -296,9 +338,20 @@ export default function SacredBookReaderPage() {
             <h1>{book?.title || 'Loading…'}</h1>
             {book?.author && <p>{book.author}</p>}
           </div>
-          <button className="index-btn" onClick={() => setShowSections(s => !s)}>
-            <List size={15} /> Index
-          </button>
+          <div className="toolbar-actions">
+            <button
+              className={currentBookmark ? 'bookmark-btn active' : 'bookmark-btn'}
+              onClick={toggleBookmark}
+              disabled={bookmarkBusy || !current}
+              title={currentBookmark ? 'Remove bookmark from this page' : 'Bookmark this page'}
+            >
+              <Bookmark size={15} fill={currentBookmark ? 'currentColor' : 'none'} />
+              {currentBookmark ? 'Bookmarked' : 'Bookmark'}
+            </button>
+            <button className="index-btn" onClick={() => setShowSections(s => !s)}>
+              <List size={15} /> Index
+            </button>
+          </div>
         </header>
 
         {showSections && (
@@ -320,6 +373,36 @@ export default function SacredBookReaderPage() {
                 />
                 <button type="submit">Go</button>
               </form>
+
+              {isLoggedIn() && (
+                <>
+                  <div className="section-panel-sub">Your bookmarks</div>
+                  <div className="section-list">
+                    {bookmarks.length === 0 && (
+                      <p className="bookmark-empty">No bookmarks yet — tap "Bookmark" while reading a page.</p>
+                    )}
+                    {bookmarks.map((b) => (
+                      <div
+                        key={b.id}
+                        className={current?.page_number === b.page_number ? 'bookmark-item active' : 'bookmark-item'}
+                      >
+                        <button className="bookmark-item-jump" onClick={() => jumpToPage(b.page_number)}>
+                          <Bookmark size={13} fill="currentColor" />
+                          <span className="section-item-title">{b.label || `Page ${b.page_number}`}</span>
+                          <span className="section-item-page">p.{b.page_number}</span>
+                        </button>
+                        <button
+                          className="bookmark-item-remove"
+                          title="Remove bookmark"
+                          onClick={() => removeBookmarkById(b.id)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
 
               {sections.length > 0 && (
                 <>
@@ -467,8 +550,23 @@ export default function SacredBookReaderPage() {
       .titleblock p{margin:3px 0 0;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.05em;color:#caa06c;text-transform:uppercase}
       .back{justify-self:start;display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-family:'EB Garamond',serif;font-size:13px;white-space:nowrap}
       .back:hover{border-color:#c9932f}
-      .index-btn{justify-self:end;display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-family:'EB Garamond',serif;font-size:13px;white-space:nowrap}
+      .toolbar-actions{justify-self:end;display:flex;align-items:center;gap:8px}
+      .index-btn{display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-family:'EB Garamond',serif;font-size:13px;white-space:nowrap}
       .index-btn:hover{border-color:#c9932f}
+
+      .bookmark-btn{display:flex;align-items:center;gap:7px;background:none;border:1px solid #7a4a2440;color:#e9c795;border-radius:99px;padding:8px 14px;cursor:pointer;font-family:'EB Garamond',serif;font-size:13px;white-space:nowrap}
+      .bookmark-btn:hover:not(:disabled){border-color:#c9932f}
+      .bookmark-btn:disabled{opacity:.5;cursor:default}
+      .bookmark-btn.active{background:#c9932f26;border-color:#c9932f;color:#f2d795}
+
+      .bookmark-empty{padding:4px 10px 10px;font-family:'EB Garamond',serif;font-size:13px;color:#a9825a}
+      .bookmark-item{display:flex;align-items:center;gap:4px;border-radius:8px}
+      .bookmark-item:hover{background:#7a4a2430}
+      .bookmark-item.active{background:#c9932f26}
+      .bookmark-item-jump{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:none;border:none;color:#e3cda2;text-align:left;padding:10px 10px;cursor:pointer;font-family:'EB Garamond',serif;font-size:14px}
+      .bookmark-item.active .bookmark-item-jump{color:#f2d795}
+      .bookmark-item-remove{flex-shrink:0;background:none;border:none;color:#a9825a;padding:8px;margin-right:4px;cursor:pointer;border-radius:6px}
+      .bookmark-item-remove:hover{color:#e08a6a;background:#00000020}
 
       .section-backdrop{position:fixed;inset:0;z-index:20;background:#0b0503aa;display:flex;justify-content:center;align-items:flex-start;padding:90px 16px 16px}
       .section-panel{width:100%;max-width:380px;max-height:76vh;display:flex;flex-direction:column;background:linear-gradient(#241206,#180c05);border:1px solid #7a4a2455;border-radius:14px;box-shadow:0 24px 60px #00000080;overflow:hidden}
@@ -623,7 +721,7 @@ export default function SacredBookReaderPage() {
         .reader-shell{--page-height:72vh}
         .reader-toolbar{grid-template-columns:1fr;text-align:center;gap:8px}
         .back{justify-self:center}
-        .index-btn{justify-self:center}
+        .toolbar-actions{justify-self:center}
         .section-backdrop{padding:16px}
         .section-panel{max-width:none;max-height:80vh}
         .page-leaf{padding:36px 22px 26px;border-radius:8px}

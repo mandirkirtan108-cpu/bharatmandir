@@ -3,7 +3,7 @@ import { BookOpen, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { fetchBooks } from '../services/sacredBooksApi';
+import { fetchAllProgress, fetchBooks, isLoggedIn } from '../services/sacredBooksApi';
 
 // A handful of cover tones, all within the site's warm orange/gold family
 // so the shelf reads as one cohesive theme instead of a mixed color wheel.
@@ -84,19 +84,24 @@ export default function SacredBooksPage() {
     fetchBooks().then(r => setBooks(r.books || [])).catch(e => setError(e.message)).finally(() => setLoading(false));
   }, []);
 
-  // Pick up "continue reading" bookmarks the reader page saves per book,
-  // so the shelf can show progress and jump straight back to that page.
+  // "Continue reading" progress, per book, for whoever is signed in right
+  // now. Pulled from the account's saved progress in the database — not
+  // this browser's storage — so it's the same shelf whether this is Rohit
+  // opening it on his laptop or his phone, and never mixes with Tanisha's.
   useEffect(() => {
-    try {
-      const map = {};
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key?.startsWith('sacredbook-progress:')) continue;
-        const val = JSON.parse(localStorage.getItem(key) || 'null');
-        if (val?.pageNumber) map[key.slice('sacredbook-progress:'.length)] = val;
-      }
-      setProgressMap(map);
-    } catch { /* localStorage unavailable — just skip progress badges */ }
+    if (!isLoggedIn()) { setProgressMap({}); return; }
+    let cancelled = false;
+    fetchAllProgress()
+      .then((r) => {
+        if (cancelled) return;
+        const map = {};
+        for (const p of r.progress || []) {
+          map[p.slug] = { pageNumber: p.page_number, percent: p.percent || 0 };
+        }
+        setProgressMap(map);
+      })
+      .catch(() => { if (!cancelled) setProgressMap({}); });
+    return () => { cancelled = true; };
   }, [books]);
 
   const visible = useMemo(() => {
@@ -127,9 +132,7 @@ export default function SacredBooksPage() {
           {visible.map((book) => {
             const [dark, light] = coverColors(book);
             const progress = progressMap[book.slug];
-            const openHref = progress
-              ? `/sacred-books/library/${book.slug}?page=${progress.pageNumber}`
-              : `/sacred-books/library/${book.slug}`;
+            const openHref = `/sacred-books/library/${book.slug}`;
             return (
               <article className="book-card" key={book.id} onClick={() => navigate(openHref)}>
                 <BookCover book={book} dark={dark} light={light} />

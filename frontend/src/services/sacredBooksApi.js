@@ -43,3 +43,28 @@ export const saveReadingProgress = (slug, language, pageNumber) =>
   });
 
 export const isLoggedIn = () => !!localStorage.getItem(USER_ACCESS_KEY);
+
+// This user's progress across every book, keyed by slug — used by the
+// shelf page to show "Continue reading". Comes straight from the same
+// DB table the reader page saves to, so it's never stale or device-local.
+export const fetchAllProgress = () =>
+  request('/api/library/progress', { headers: authHeaders() });
+
+// Per-user bookmarks — stored under the account (user_id) on the backend,
+// so they show the same list on any device the user signs into. Guests
+// (no token) get back an empty list and cannot add one.
+export const fetchBookmarks = (slug) =>
+  request(`/api/books/${encodeURIComponent(slug)}/bookmarks`, { headers: authHeaders() });
+
+export const addBookmark = (slug, pageNumber, language, label) =>
+  request(`/api/books/${encodeURIComponent(slug)}/bookmarks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ page_number: pageNumber, language, label }),
+  });
+
+export const removeBookmark = (slug, bookmarkId) =>
+  request(`/api/books/${encodeURIComponent(slug)}/bookmarks/${bookmarkId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
