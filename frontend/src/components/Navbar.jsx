@@ -294,7 +294,7 @@ export default function Navbar() {
             onClick={() => setSidebarOpen(false)}
           >
             <span className="sidebar-link-icon"><MessageSquareHeart size={16} /></span>
-            {t('nav.floating_feedback')}
+            Feedback
           </Link>
 
           {/* User section in sidebar */}
@@ -409,7 +409,7 @@ export default function Navbar() {
         }}
       >
         <MessageSquareHeart size={15} />
-        {t('nav.floating_feedback')}
+        Feedback
       </Link>
     </>
   );
