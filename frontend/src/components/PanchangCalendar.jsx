@@ -7,11 +7,14 @@ const DEFAULT_COORDINATES = '25.3176,82.9739';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+// Colors kept distinct from the "named festival" green (#16a34a) and the
+// brand orange (#E8650A) used for Today / Selected, so tithi highlights read
+// clearly as their own category.
 const FESTIVAL_PHASE_MATCHERS = [
-  { test: (n) => n.includes('ekadashi'), color: '#e67e22', label: 'Ekadashi' },
+  { test: (n) => n.includes('ekadashi'), color: '#2563eb', label: 'Ekadashi' },
   { test: (n) => n.includes('pradosh') || n.includes('purnima'), color: '#9b59b6', label: 'Pradosh / Purnima' },
-  { test: (n) => n.includes('amavasya'), color: '#374151', label: 'Amavasya' },
-  { test: (n) => n.includes('chaturthi') && !n.includes('ganesh'), color: '#e74c3c', label: 'Chaturthi' },
+  { test: (n) => n.includes('amavasya'), color: '#0f766e', label: 'Amavasya' },
+  { test: (n) => n.includes('chaturthi') && !n.includes('ganesh'), color: '#e11d48', label: 'Chaturthi' },
 ];
 
 function toDateKey(date) {
@@ -33,13 +36,16 @@ function classifyFestival(festival) {
 
 function splitDayFestivals(day) {
   const named = [];
-  const phaseDots = [];
+  const phaseBadgesMap = new Map();
   (day?.festivals || []).forEach((festival) => {
     const meta = classifyFestival(festival);
-    if (meta.isNamedFestival) named.push({ ...festival, color: meta.color });
-    else phaseDots.push(meta.color);
+    if (meta.isNamedFestival) {
+      named.push({ ...festival, color: meta.color });
+    } else if (!phaseBadgesMap.has(meta.label)) {
+      phaseBadgesMap.set(meta.label, { label: meta.label, color: meta.color });
+    }
   });
-  return { named, phaseDots: phaseDots.slice(0, 3) };
+  return { named, phaseBadges: Array.from(phaseBadgesMap.values()).slice(0, 2) };
 }
 
 function paranaText(parana) {
@@ -162,9 +168,10 @@ export default function PanchangCalendar() {
               const isSaturday = date.getDay() === 6;
               const tithi = day?.tithi?.name || '';
               const paksha = day?.tithi?.paksha?.substring(0, 6) || '';
-              const { named, phaseDots } = splitDayFestivals(day);
+              const { named, phaseBadges } = splitDayFestivals(day);
               const primaryNamed = named[0];
               const extraNamedCount = named.length - 1;
+              const hasHighlight = Boolean(primaryNamed) || phaseBadges.length > 0;
 
               return (
                 <button
@@ -179,7 +186,7 @@ export default function PanchangCalendar() {
                     cursor: 'pointer',
                     padding: '8px 4px 8px',
                     textAlign: 'center',
-                    minHeight: primaryNamed ? 106 : 84,
+                    minHeight: hasHighlight ? 106 + (phaseBadges.length * 16) : 84,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -207,9 +214,15 @@ export default function PanchangCalendar() {
                     </div>
                   )}
 
-                  {phaseDots.length > 0 && (
-                    <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 2 }}>
-                      {phaseDots.map((color, i) => <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />)}
+                  {phaseBadges.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', marginTop: 2, padding: '0 2px' }}>
+                      {phaseBadges.map((badge) => (
+                        <div key={badge.label} style={{
+                          fontFamily: UI_FONT, fontSize: 8.5, fontWeight: 700, lineHeight: 1.2,
+                          color: badge.color, background: `${badge.color}1a`, border: `1px solid ${badge.color}55`,
+                          borderRadius: 4, padding: '2px 4px', whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'center',
+                        }}>{badge.label}</div>
+                      ))}
                     </div>
                   )}
                 </button>
@@ -224,8 +237,10 @@ export default function PanchangCalendar() {
             </span>
             {FESTIVAL_PHASE_MATCHERS.map(({ color, label }) => (
               <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
-                {label}
+                <span style={{
+                  fontFamily: UI_FONT, fontSize: 9, fontWeight: 700, color,
+                  background: `${color}1a`, border: `1px solid ${color}55`, borderRadius: 4, padding: '1px 5px',
+                }}>{label}</span>
               </span>
             ))}
           </div>
