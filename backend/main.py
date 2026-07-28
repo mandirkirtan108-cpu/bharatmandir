@@ -39,6 +39,10 @@ from routers.ai_festival_cache import (
 from routers.blogs import (
     router as blogs_router,
 )
+from routers.feedback import (
+    ensure_feedback_schema,
+    router as feedback_router,
+)
 from routers.panchang import (
     router as panchang_router,
 )
@@ -107,6 +111,7 @@ async def lifespan(
                 """
             )
         ensure_library_schema()
+        ensure_feedback_schema()
 
         print(
             "Database connection pool ready."
@@ -262,6 +267,10 @@ app.include_router(
 
 app.include_router(
     blogs_router
+)
+
+app.include_router(
+    feedback_router
 )
 
 

@@ -22,6 +22,7 @@ import FestivalCalendarPage from './pages/FestivalCalendarPage';
 import SacredBooksPage from './pages/SacredBooksPage';
 import SacredBookReaderPage from './pages/SacredBookReaderPage';
 import BlogPage from './pages/BlogPage';
+import FeedbackPage from './pages/FeedbackPage';
 
 // User authentication pages
 import LoginPage from './pages/LoginPage';
@@ -114,6 +115,12 @@ export default function App() {
           <Route
             path="/profile"
             element={<UserProfilePage />}
+          />
+
+          {/* Public feedback route */}
+          <Route
+            path="/feedback"
+            element={<FeedbackPage />}
           />
 
           {/* Sacred Books routes */}

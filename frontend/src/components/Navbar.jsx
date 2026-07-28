@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Menu, X, Navigation, CalendarDays, BookOpen, PenLine, User, LogOut } from 'lucide-react';
+import { Search, Menu, X, Navigation, CalendarDays, BookOpen, PenLine, User, LogOut, MessageSquareHeart } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useUserAuth } from '../hooks/useUserAuth';
@@ -287,6 +287,16 @@ export default function Navbar() {
             </Link>
           ))}
 
+          {/* Feedback link in sidebar (mobile) */}
+          <Link
+            to="/feedback"
+            className={`sidebar-link${isActive('/feedback') ? ' active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <span className="sidebar-link-icon"><MessageSquareHeart size={16} /></span>
+            {t('nav.floating_feedback')}
+          </Link>
+
           {/* User section in sidebar */}
           {isLoggedIn && (
             <>
@@ -343,7 +353,7 @@ export default function Navbar() {
         </div>
       </aside>
 
-      {/* ── Floating AI Guide button ── */}
+      {/* ── Floating AI Guide button (right) ── */}
       <Link
         to="/spiritual-guide"
         style={{
@@ -370,6 +380,36 @@ export default function Navbar() {
         }}
       >
         {t('nav.floating_ai')}
+      </Link>
+
+      {/* ── Floating Feedback button (left) — mirrors AI Guide, same size/alignment ── */}
+      <Link
+        to="/feedback"
+        style={{
+          display: sidebarOpen || isActive('/feedback') ? 'none' : 'flex',
+          position: 'fixed', bottom: 28, left: 28, zIndex: 9999,
+          alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 50,
+          fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap',
+          border: '2px solid #C8520A',
+          background: isActive('/feedback')
+            ? 'linear-gradient(135deg,#E06B25,#9A3C05)'
+            : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
+          color: isActive('/feedback') ? '#fff' : '#C8520A',
+          boxShadow: '0 4px 20px rgba(200,82,10,0.32)',
+          transition: 'all .2s',
+          fontFamily: "'DM Sans', sans-serif",
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'scale(1.07)';
+          e.currentTarget.style.boxShadow = '0 6px 28px rgba(200,82,10,0.50)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.boxShadow = '0 4px 20px rgba(200,82,10,0.32)';
+        }}
+      >
+        <MessageSquareHeart size={15} />
+        {t('nav.floating_feedback')}
       </Link>
     </>
   );

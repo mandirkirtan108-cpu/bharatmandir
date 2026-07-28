@@ -14,7 +14,7 @@ import {
   MapPin, User, Star, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, LayoutDashboard, PlusCircle,
   CalendarPlus, LogOut, Pencil, Trash2, Save, X, FileText, BookOpen,
-  ImagePlus, Images,
+  ImagePlus, Images, MessageSquareHeart, Mail, CheckCheck,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -163,6 +163,23 @@ async function patchBlog(id, fields) {
 
 async function deleteBlog(id) {
   return apiFetch(`/api/admin/blogs/${id}`, { method: 'DELETE' });
+}
+
+// ── Feedback API calls ──────────────────────────────────────────────────────────
+async function fetchAdminFeedback(status = 'all') {
+  const params = status && status !== 'all' ? `?status=${status}` : '';
+  return apiFetch(`/api/admin/feedback${params}`);
+}
+
+async function patchFeedbackStatus(id, status) {
+  return apiFetch(`/api/admin/feedback/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+async function deleteFeedbackEntry(id) {
+  return apiFetch(`/api/admin/feedback/${id}`, { method: 'DELETE' });
 }
 
 // ── Flag section helper ───────────────────────────────────────────────────────
@@ -1573,6 +1590,506 @@ function BlogManagement() {
   );
 }
 
+// ── Feedback star display ─────────────────────────────────────────────────────
+function FeedbackStars({ rating }) {
+  if (!rating) return <span style={{ fontSize: 12, color: 'var(--text-light)' }}>—</span>;
+  return (
+    <div style={{ display: 'flex', gap: 1 }}>
+      {[1, 2, 3, 4, 5].map(n => (
+        <Star
+          key={n}
+          size={13}
+          fill={n <= rating ? '#E8650A' : 'none'}
+          color={n <= rating ? '#E8650A' : '#D8C7AC'}
+          strokeWidth={1.8}
+        />
+      ))}
+    </div>
+  );
+}
+
+const FEEDBACK_STATUS_META = {
+  new:      { label: 'New',      color: '#1d4ed8', bg: '#eff6ff', dot: '#3b82f6' },
+  reviewed: { label: 'Reviewed', color: '#15803d', bg: '#f0fdf4', dot: '#22c55e' },
+  archived: { label: 'Archived', color: '#6b7280', bg: '#f3f4f6', dot: '#9ca3af' },
+};
+const FEEDBACK_STATUSES = ['all', 'new', 'reviewed', 'archived'];
+
+function FeedbackStatusBadge({ status }) {
+  const m = FEEDBACK_STATUS_META[status] || FEEDBACK_STATUS_META.new;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 10px', borderRadius: 50,
+      background: m.bg, color: m.color,
+      fontSize: 12, fontFamily: 'var(--font-display)',
+      letterSpacing: '.04em', fontWeight: 600, whiteSpace: 'nowrap',
+    }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: m.dot, flexShrink: 0 }} />
+      {m.label}
+    </span>
+  );
+}
+
+// ── Feedback Detail Modal ───────────────────────────────────────────────────────
+function FeedbackDetailModal({ item, onClose, onStatusChange }) {
+  const [updating, setUpdating] = useState(null);
+  const [error, setError] = useState(null);
+
+  const setStatus = async (status) => {
+    setUpdating(status);
+    setError(null);
+    try {
+      const res = await patchFeedbackStatus(item.id, status);
+      onStatusChange(res.feedback);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10001,
+      background: 'rgba(29,15,0,.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: 'white', borderRadius: 20,
+        width: '100%', maxWidth: 520, padding: '28px',
+        boxShadow: '0 24px 80px rgba(61,31,0,.35)',
+        maxHeight: '85vh', overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--brown)', margin: '0 0 4px' }}>
+              Feedback #{item.id}
+            </h2>
+            <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{fmtDate(item.created_at)}</div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-light)', padding: 4,
+          }}><X size={20} /></button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <FeedbackStatusBadge status={item.status} />
+          <FeedbackStars rating={item.rating} />
+        </div>
+
+        <InfoSection title="From" fullWidth>
+          <Row label="Name" value={item.name || 'Anonymous'} />
+          <Row label="Email" value={item.email} />
+          <Row label="Page" value={item.page_url} />
+        </InfoSection>
+
+        <div style={{ marginTop: 14 }}>
+          <h4 style={{
+            fontFamily: 'var(--font-display)', fontSize: 12,
+            letterSpacing: '.08em', color: 'var(--saffron)',
+            margin: '0 0 10px', textTransform: 'uppercase',
+          }}>Message</h4>
+          <p style={{
+            background: 'var(--cream)', borderRadius: 12, padding: '14px 16px',
+            fontSize: 14, lineHeight: 1.7, color: 'var(--text-dark)', margin: 0,
+            whiteSpace: 'pre-wrap',
+          }}>{item.message}</p>
+        </div>
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', borderRadius: 10, padding: '10px 14px', marginTop: 16,
+            fontFamily: 'var(--font-display)', fontSize: 12, color: '#b91c1c',
+          }}>Error: {error}</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 22, flexWrap: 'wrap' }}>
+          <ActionBtn
+            icon={<CheckCheck size={14} />}
+            label="Mark Reviewed"
+            color="#15803d" bg="#f0fdf4" border="#bbf7d0"
+            loading={updating === 'reviewed'}
+            onClick={() => setStatus('reviewed')}
+          />
+          <ActionBtn
+            icon={<Archive size={14} />}
+            label="Archive"
+            color="#6b7280" bg="#f3f4f6" border="#e5e7eb"
+            loading={updating === 'archived'}
+            onClick={() => setStatus('archived')}
+          />
+          {item.status !== 'new' && (
+            <ActionBtn
+              icon={<Mail size={14} />}
+              label="Mark New"
+              color="#1d4ed8" bg="#eff6ff" border="#bfdbfe"
+              loading={updating === 'new'}
+              onClick={() => setStatus('new')}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Feedback Delete Modal ───────────────────────────────────────────────────────
+function FeedbackDeleteModal({ item, onClose, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteFeedbackEntry(item.id);
+      onDeleted(item.id);
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10002,
+      background: 'rgba(29,15,0,.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: 'white', borderRadius: 20,
+        width: '100%', maxWidth: 420, padding: '32px',
+        boxShadow: '0 24px 80px rgba(61,31,0,.35)',
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%',
+          background: '#fef2f2', border: '2px solid #fca5a5',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 18px',
+        }}>
+          <Trash2 size={22} color="#b91c1c" />
+        </div>
+
+        <h2 style={{
+          fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700,
+          color: 'var(--brown)', textAlign: 'center', margin: '0 0 10px',
+        }}>Delete Feedback?</h2>
+
+        <p style={{
+          fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
+          color: '#b91c1c', textAlign: 'center', margin: '0 0 20px',
+          lineHeight: 1.4,
+        }}>"{(item.message || '').slice(0, 80)}{item.message?.length > 80 ? '…' : ''}"</p>
+
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5',
+          borderRadius: 10, padding: '10px 14px', marginBottom: 24,
+          fontFamily: 'var(--font-display)', fontSize: 12, color: '#b91c1c',
+        }}>
+          This action cannot be undone.
+        </div>
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+            fontFamily: 'var(--font-display)', fontSize: 12, color: '#b91c1c',
+          }}>Error: {error}</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '11px 0', borderRadius: 50,
+            border: '2px solid var(--cream-dark)', background: 'white',
+            fontFamily: 'var(--font-display)', fontSize: 13, cursor: 'pointer',
+            color: 'var(--text-mid)', fontWeight: 600,
+          }}>Cancel</button>
+          <button onClick={handleDelete} disabled={deleting} style={{
+            flex: 1, padding: '11px 0', borderRadius: 50,
+            border: '2px solid #b91c1c', background: deleting ? '#fca5a5' : '#b91c1c',
+            fontFamily: 'var(--font-display)', fontSize: 13, cursor: deleting ? 'not-allowed' : 'pointer',
+            color: 'white', fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}>
+            {deleting
+              ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Deleting…</>
+              : <><Trash2 size={13} /> Delete</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Feedback Management Tab ─────────────────────────────────────────────────────
+function FeedbackManagement() {
+  const [items, setItems] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [viewing, setViewing] = useState(null);
+  const [deletingItem, setDeletingItem] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null);
+
+  const load = async (status = statusFilter) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchAdminFeedback(status);
+      setItems(Array.isArray(data.feedback) ? data.feedback : []);
+      setCounts(data.counts || {});
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(statusFilter); }, [statusFilter]);
+
+  const filtered = items.filter(f => {
+    const q = search.toLowerCase();
+    if (!q) return true;
+    return (
+      f.name?.toLowerCase().includes(q) ||
+      f.email?.toLowerCase().includes(q) ||
+      f.message?.toLowerCase().includes(q)
+    );
+  });
+
+  const handleStatusChange = (updated) => {
+    setItems(prev => prev.map(i => i.id === updated.id ? updated : i));
+    setViewing(updated);
+    load(statusFilter);
+  };
+
+  const quickSetStatus = async (id, status) => {
+    setActionLoading(id);
+    try {
+      const res = await patchFeedbackStatus(id, status);
+      setItems(prev => prev.map(i => i.id === id ? res.feedback : i));
+      load(statusFilter);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleted = (id) => {
+    setItems(prev => prev.filter(i => i.id !== id));
+    load(statusFilter);
+  };
+
+  return (
+    <div>
+      {/* Controls */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: '1 1 200px' }}>
+          <Search size={15} style={{
+            position: 'absolute', left: 13, top: '50%',
+            transform: 'translateY(-50%)', color: 'var(--text-light)', pointerEvents: 'none',
+          }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name, email, or message…"
+            style={{
+              width: '100%', padding: '9px 14px 9px 38px',
+              border: '2px solid var(--cream-dark)', borderRadius: 50,
+              fontFamily: 'var(--font-body)', fontSize: 13,
+              background: 'white', outline: 'none', boxSizing: 'border-box',
+            }}
+            onFocus={e => e.target.style.borderColor = 'var(--saffron)'}
+            onBlur={e => e.target.style.borderColor = 'var(--cream-dark)'}
+          />
+        </div>
+
+        <button onClick={() => load(statusFilter)} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '9px 16px', border: '2px solid var(--cream-dark)',
+          borderRadius: 50, background: 'white',
+          fontFamily: 'var(--font-display)', fontSize: 12, cursor: 'pointer',
+          color: 'var(--text-mid)',
+        }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--saffron)'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cream-dark)'}
+        >
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      {/* Status Tabs */}
+      <div style={{
+        display: 'flex', gap: 0, marginBottom: 20,
+        borderBottom: '2px solid var(--cream-dark)', overflowX: 'auto',
+      }}>
+        {FEEDBACK_STATUSES.map(s => {
+          const active = statusFilter === s;
+          const meta = s === 'all' ? { label: 'All', dot: 'var(--saffron)' } : FEEDBACK_STATUS_META[s];
+          const count = counts[s] ?? 0;
+          return (
+            <button key={s} onClick={() => setStatusFilter(s)} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '9px 14px', border: 'none',
+              borderBottom: active ? '3px solid var(--saffron)' : '3px solid transparent',
+              background: 'transparent',
+              fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
+              cursor: 'pointer', color: active ? 'var(--saffron)' : 'var(--text-light)',
+              marginBottom: -2, fontWeight: active ? 700 : 400, whiteSpace: 'nowrap', flexShrink: 0,
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
+              {meta.label}
+              <span style={{
+                background: active ? 'var(--saffron)' : 'var(--cream-dark)',
+                color: active ? 'white' : 'var(--text-light)',
+                borderRadius: 50, padding: '1px 7px', fontSize: 11, fontWeight: 700,
+              }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {error && (
+        <div style={{
+          background: '#fef2f2', border: '1.5px solid #fca5a5',
+          borderRadius: 12, padding: '12px 18px', marginBottom: 16,
+          display: 'flex', gap: 8, alignItems: 'center',
+          color: '#b91c1c', fontFamily: 'var(--font-display)', fontSize: 13,
+        }}>
+          <AlertTriangle size={16} /> {error}
+        </div>
+      )}
+
+      {/* Feedback Table */}
+      <div style={{
+        background: 'white', borderRadius: 16,
+        border: '1.5px solid var(--cream-dark)', overflow: 'hidden',
+        boxShadow: '0 4px 20px var(--shadow)',
+      }}>
+        <div className="admin-table-header" style={{
+          display: 'grid', gridTemplateColumns: '1.4fr 2fr 90px 120px 110px 150px',
+          padding: '12px 20px',
+          background: 'var(--cream)', borderBottom: '2px solid var(--cream-dark)',
+          fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '.08em',
+          color: 'var(--text-light)',
+        }}>
+          <span>FROM</span>
+          <span>MESSAGE</span>
+          <span>RATING</span>
+          <span>STATUS</span>
+          <span>SUBMITTED</span>
+          <span style={{ textAlign: 'right' }}>ACTIONS</span>
+        </div>
+
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '50px 0', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <Loader2 size={28} color="#7a3208" style={{ animation: 'spin .8s linear infinite' }} />
+            <span style={{ fontFamily: 'var(--font-display)', color: 'var(--text-light)', fontSize: 13 }}>Loading feedback…</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: '50px 20px', textAlign: 'center', color: 'var(--text-light)' }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
+            <p style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--brown)' }}>
+              {search ? 'No feedback matches your search' : 'No feedback yet'}
+            </p>
+          </div>
+        ) : (
+          filtered.map((f, i) => (
+            <div
+              key={f.id}
+              onClick={() => setViewing(f)}
+              style={{
+                display: 'grid', gridTemplateColumns: '1.4fr 2fr 90px 120px 110px 150px',
+                padding: '14px 20px', cursor: 'pointer',
+                borderBottom: i < filtered.length - 1 ? '1px solid var(--cream-dark)' : 'none',
+                alignItems: 'center', background: 'white', transition: 'background .15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
+              onMouseLeave={e => e.currentTarget.style.background = 'white'}
+            >
+              {/* From */}
+              <div style={{ paddingRight: 12, overflow: 'hidden' }}>
+                <div style={{
+                  fontFamily: 'var(--font-display)', fontSize: 13, color: 'var(--brown)',
+                  fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{f.name || 'Anonymous'}</div>
+                {f.email && (
+                  <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {f.email}
+                  </div>
+                )}
+              </div>
+
+              {/* Message preview */}
+              <div style={{
+                fontSize: 13, color: 'var(--text-mid)', paddingRight: 12,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {f.message}
+              </div>
+
+              {/* Rating */}
+              <FeedbackStars rating={f.rating} />
+
+              {/* Status */}
+              <div><FeedbackStatusBadge status={f.status} /></div>
+
+              {/* Date */}
+              <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{fmtDate(f.created_at)}</div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                {f.status !== 'reviewed' && (
+                  <QuickBtn
+                    icon={<CheckCheck size={14} />}
+                    color="#15803d"
+                    title="Mark Reviewed"
+                    loading={actionLoading === f.id}
+                    onClick={e => { e.stopPropagation(); quickSetStatus(f.id, 'reviewed'); }}
+                  />
+                )}
+                <QuickBtn
+                  icon={<Eye size={14} />}
+                  color="#1d4ed8"
+                  title="View Feedback"
+                  onClick={e => { e.stopPropagation(); setViewing(f); }}
+                />
+                <QuickBtn
+                  icon={<Trash2 size={14} />}
+                  color="#b91c1c"
+                  title="Delete Feedback"
+                  hoverBg="#fef2f2"
+                  onClick={e => { e.stopPropagation(); setDeletingItem(f); }}
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Modals */}
+      {viewing && (
+        <FeedbackDetailModal
+          item={viewing}
+          onClose={() => setViewing(null)}
+          onStatusChange={handleStatusChange}
+        />
+      )}
+      {deletingItem && (
+        <FeedbackDeleteModal
+          item={deletingItem}
+          onClose={() => setDeletingItem(null)}
+          onDeleted={handleDeleted}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Shared sub-components ─────────────────────────────────────────────────────
 function InfoSection({ title, children, fullWidth }) {
   return (
@@ -1786,6 +2303,7 @@ export default function AdminPanelPage() {
               { id: 'temples', label: 'Temples' },
               { id: 'approvals', label: 'Verification Center' },
               { id: 'blogs', label: 'Blog Posts' },
+              { id: 'feedback', label: 'Feedback' },
             ].map(v => (
               <button
                 key={v.id}
@@ -2004,6 +2522,7 @@ export default function AdminPanelPage() {
           {/* ── BLOGS VIEW ── */}
           {mainView === 'blogs' && <BlogManagement />}
           {mainView === 'approvals' && <AdminApprovalWorkflow />}
+          {mainView === 'feedback' && <FeedbackManagement />}
            
 
         </div>
