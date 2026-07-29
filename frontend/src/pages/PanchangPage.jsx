@@ -1307,7 +1307,7 @@ export default function PanchangPage() {
           overflow: 'hidden',
           color: 'white',
           background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-          padding: '34px 12px',
+          padding: '50px 12px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',

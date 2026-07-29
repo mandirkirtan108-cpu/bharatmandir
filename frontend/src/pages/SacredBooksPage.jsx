@@ -166,7 +166,7 @@ export default function SacredBooksPage() {
         background:
           radial-gradient(ellipse 900px 400px at 50% 0%, #ffdca330, transparent 70%),
           linear-gradient(135deg,#4b1d04 0%,#7a3208 55%,#a14a0b 100%);
-        padding:70px 20px 120px;
+        padding:50px 20px 120px;
       }
       .library-hero-inner{position:relative;z-index:1;max-width:760px;margin:0 auto;text-align:center;color:#f1dcb8}
       .library-badge{display:inline-flex;gap:8px;align-items:center;padding:7px 16px;border:1px solid #c9932f60;border-radius:99px;color:#e9c795;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.05em}
