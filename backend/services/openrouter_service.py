@@ -21,6 +21,7 @@ def chat(
     temperature: float = 0,
     max_tokens: int | None = None,
     response_format: dict[str, Any] | None = None,
+    reasoning: dict[str, Any] | None = None,
     timeout: float = 180,
 ) -> dict[str, Any]:
     key = api_key()
@@ -36,6 +37,8 @@ def chat(
         payload["max_tokens"] = max_tokens
     if response_format is not None:
         payload["response_format"] = response_format
+    if reasoning is not None:
+        payload["reasoning"] = reasoning
 
     headers = {
         "Authorization": f"Bearer {key}",

@@ -15,7 +15,10 @@ from services.openrouter_service import api_key, chat, content
 
 router = APIRouter(prefix="/api/spiritual", tags=["Spiritual Chat"])
 logger = logging.getLogger(__name__)
-OPENROUTER_MODEL = os.getenv("OPENROUTER_AI_GUIDE_MODEL", "openrouter/auto")
+OPENROUTER_MODEL = os.getenv(
+    "OPENROUTER_AI_GUIDE_MODEL",
+    "~google/gemini-flash-latest",
+)
 
 # ──────────────────────────────────────────────
 # System Prompt — Language-aware, structured
@@ -127,7 +130,8 @@ def spiritual_chat(req: ChatRequest):
         response = chat(
             model=OPENROUTER_MODEL,
             messages=[{"role": "system", "content": get_system_prompt()}, *messages],
-            max_tokens=1024,
+            max_tokens=2048,
+            reasoning={"effort": "none"},
         )
     except Exception as e:
         logger.exception(
@@ -140,7 +144,25 @@ def spiritual_chat(req: ChatRequest):
     elapsed_ms = int((time.time() - start) * 1000)
     reply = content(response)
     if not reply:
-        raise HTTPException(status_code=502, detail="OpenRouter returned an empty response")
+        choice = (response.get("choices") or [{}])[0]
+        message = choice.get("message") or {}
+        logger.error(
+            "OpenRouter returned empty content (model=%s, finish_reason=%s, "
+            "native_finish_reason=%s, message_keys=%s, usage=%s)",
+            response.get("model", OPENROUTER_MODEL),
+            choice.get("finish_reason"),
+            choice.get("native_finish_reason"),
+            sorted(message.keys()),
+            response.get("usage"),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "OpenRouter returned an empty response "
+                f"(model={response.get('model', OPENROUTER_MODEL)}, "
+                f"finish_reason={choice.get('finish_reason')})"
+            ),
+        )
 
     return ChatResponse(
         reply=reply,
