@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Search, Menu, X, Navigation, CalendarDays, BookOpen, PenLine, User, LogOut, LayoutDashboard, RefreshCw } from 'lucide-react';
+import { Search, Menu, X, Navigation, CalendarDays, BookOpen, PenLine, User, LogOut, Star } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLang } from '../LangContext';
 import { useUserAuth } from '../hooks/useUserAuth';
-import { useAdminAuth } from '../hooks/useAdminAuth';
 
 export default function Navbar() {
   const [query, setQuery]         = useState('');
@@ -17,10 +16,6 @@ export default function Navbar() {
   const sidebarRef  = useRef(null);
   const userMenuRef = useRef(null);
   const { isLoggedIn, user, logout: userLogout } = useUserAuth();
-  const {
-    isLoggedIn: isAdminLoggedIn,
-    logout: adminLogout,
-  } = useAdminAuth();
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -60,14 +55,7 @@ export default function Navbar() {
     setSidebarOpen(false);
   };
 
-  const handleAdminLogout = async () => {
-    await adminLogout();
-    setSidebarOpen(false);
-    setUserMenuOpen(false);
-    navigate('/admin/login');
-  };
-
-  const USER_NAV_LINKS = [
+  const NAV_LINKS = [
     { to: '/search',          label: '🛕 ' + t('nav.temples'),       icon: <Search size={16} /> },
     { to: '/route-planner',   label: t('nav.route'),                 icon: <Navigation size={16} /> },
     { to: '/panchang',        label: t('nav.panchang'),              icon: <CalendarDays size={16} /> },
@@ -75,17 +63,6 @@ export default function Navbar() {
     { to: '/library',         label: '📚 ' + t('nav.library'),       icon: <BookOpen size={16} /> },
     { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'),     icon: null },
   ];
-
-  const ADMIN_NAV_LINKS = [
-    { to: '/admin/panel', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
-    { to: '/admin/add-festival', label: 'Add Festival', icon: <CalendarDays size={16} /> },
-    { to: '/admin/add-blog', label: 'Add Blog', icon: <PenLine size={16} /> },
-    { to: '/admin/library', label: 'Library', icon: <BookOpen size={16} /> },
-    { action: () => window.location.reload(), label: 'Refresh', icon: <RefreshCw size={16} /> },
-    { action: handleAdminLogout, label: 'Logout', icon: <LogOut size={16} />, danger: true },
-  ];
-
-  const NAV_LINKS = isAdminLoggedIn ? ADMIN_NAV_LINKS : USER_NAV_LINKS;
 
   const tickerText = '🔱 OM NAMAH SHIVAYA  ·  JAI SHRI RAM  ·  HAR HAR MAHADEV  ·  JAI MATA DI  ·  JAI GANESH  ·  HARE KRISHNA HARE RAM  ·  ';
 
@@ -131,31 +108,13 @@ export default function Navbar() {
             justifyContent: 'center',   // ← centers within that space
             // REMOVED: position, left, transform
           }}>
-            {NAV_LINKS.map((link) => link.action ? (
-              <button
-                key={link.label}
-                type="button"
-                className="nav-link"
-                onClick={link.action}
-                style={{
-                  border: link.danger ? '1px solid #fca5a5' : '1px solid #ead5bd',
-                  background: '#fff',
-                  color: link.danger ? '#b91c1c' : '#5c3010',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                {link.icon}{link.label}
-              </button>
-            ) : (
+            {NAV_LINKS.map((link) => (
               <Link
                 key={link.to}
                 to={link.to}
                 className={`nav-link${isActive(link.to) ? ' active' : ''}`}
               >
-                {link.icon}{link.label}
+                {link.label}
               </Link>
             ))}
           </div>
@@ -181,7 +140,7 @@ export default function Navbar() {
               <option value="ta">🌺 தமிழ்</option>
             </select>
 
-            {!isAdminLoggedIn && (isLoggedIn ? (
+            {isLoggedIn ? (
               /* ── User pill with dropdown ── */
               <div ref={userMenuRef} style={{ position: 'relative' }}>
                 <button
@@ -278,7 +237,7 @@ export default function Navbar() {
               >
                 {t('nav.sign_in')}
               </Link>
-            ))}
+            )}
           </div>
 
           {/* Hamburger — mobile only */}
@@ -316,24 +275,7 @@ export default function Navbar() {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_LINKS.map((link) => link.action ? (
-            <button
-              key={link.label}
-              type="button"
-              className="sidebar-link"
-              onClick={link.action}
-              style={{
-                border: 'none',
-                width: '100%',
-                cursor: 'pointer',
-                textAlign: 'left',
-                color: link.danger ? '#ef4444' : undefined,
-              }}
-            >
-              <span className="sidebar-link-icon">{link.icon}</span>
-              {link.label}
-            </button>
-          ) : (
+          {NAV_LINKS.map((link) => (
             <Link
               key={link.to}
               to={link.to}
@@ -345,8 +287,18 @@ export default function Navbar() {
             </Link>
           ))}
 
+          {/* Feedback link in sidebar (mobile) */}
+          <Link
+            to="/feedback"
+            className={`sidebar-link${isActive('/feedback') ? ' active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <span className="sidebar-link-icon"><Star size={16} /></span>
+            Feedback
+          </Link>
+
           {/* User section in sidebar */}
-          {!isAdminLoggedIn && isLoggedIn && (
+          {isLoggedIn && (
             <>
               <div style={{ margin: '8px 20px 0', borderTop: '1px solid rgba(255,153,0,0.15)', paddingTop: 8 }} />
               <Link
@@ -374,7 +326,7 @@ export default function Navbar() {
             </>
           )}
 
-          {!isAdminLoggedIn && !isLoggedIn && (
+          {!isLoggedIn && (
             <Link
               to="/login"
               className="sidebar-link"
@@ -401,11 +353,11 @@ export default function Navbar() {
         </div>
       </aside>
 
-      {/* ── Floating AI Guide button ── */}
+      {/* ── Floating AI Guide button (right) ── */}
       <Link
         to="/spiritual-guide"
         style={{
-          display: isAdminLoggedIn || sidebarOpen || isActive('/spiritual-guide') ? 'none' : 'flex',
+          display: sidebarOpen || isActive('/spiritual-guide') ? 'none' : 'flex',
           position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
           alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 50,
           fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap',
@@ -428,6 +380,36 @@ export default function Navbar() {
         }}
       >
         {t('nav.floating_ai')}
+      </Link>
+
+      {/* ── Floating Feedback button (left) — mirrors AI Guide, same size/alignment ── */}
+      <Link
+        to="/feedback"
+        style={{
+          display: sidebarOpen || isActive('/feedback') ? 'none' : 'flex',
+          position: 'fixed', bottom: 28, left: 28, zIndex: 9999,
+          alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 50,
+          fontSize: 14, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap',
+          border: '2px solid #C8520A',
+          background: isActive('/feedback')
+            ? 'linear-gradient(135deg,#E06B25,#9A3C05)'
+            : 'linear-gradient(135deg,#fff5e6,#ffe5c0)',
+          color: isActive('/feedback') ? '#fff' : '#C8520A',
+          boxShadow: '0 4px 20px rgba(200,82,10,0.32)',
+          transition: 'all .2s',
+          fontFamily: "'DM Sans', sans-serif",
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'scale(1.07)';
+          e.currentTarget.style.boxShadow = '0 6px 28px rgba(200,82,10,0.50)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.boxShadow = '0 4px 20px rgba(200,82,10,0.32)';
+        }}
+      >
+        <Star size={15} />
+        Feedback
       </Link>
     </>
   );
