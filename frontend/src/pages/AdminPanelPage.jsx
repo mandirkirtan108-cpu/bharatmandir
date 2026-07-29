@@ -16,7 +16,7 @@ import {
   CalendarPlus, LogOut, Pencil, Trash2, Save, X, FileText, BookOpen,
   ImagePlus, Images, MessageSquareHeart, Mail, CheckCheck,
 } from 'lucide-react';
-import Navbar from '../components/Navbar';
+import AdminNavbar from '../components/admin/AdminNavbar';
 import Footer from '../components/Footer';
 import AdminApprovalWorkflow from '../components/admin/AdminApprovalWorkflow';
 
@@ -2249,7 +2249,7 @@ export default function AdminPanelPage() {
 
   return (
     <>
-      <Navbar />
+      <AdminNavbar />
       <div style={{ minHeight: '100vh', background: 'var(--cream)', paddingBottom: 60 }}>
 
         {/* Page Header */}

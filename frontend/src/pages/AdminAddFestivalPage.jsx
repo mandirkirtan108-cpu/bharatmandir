@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import Navbar from '../components/Navbar';
+import AdminNavbar from '../components/admin/AdminNavbar';
 import Footer from '../components/Footer';
 
 const API_BASE   = import.meta.env.VITE_API_URL  || 'http://localhost:8000';
@@ -358,7 +358,7 @@ export default function AdminAddFestivalPage() {
     return (
       <>
         <style>{CSS}</style>
-        <Navbar />
+        <AdminNavbar />
         <div className="result-wrap">
           <div className="result-card">
             <div className="result-icon">🪔</div>
@@ -384,7 +384,7 @@ export default function AdminAddFestivalPage() {
   return (
     <>
       <style>{CSS}</style>
-      <Navbar />
+      <AdminNavbar />
 
       {/* Hero */}
       <div className="hero">
