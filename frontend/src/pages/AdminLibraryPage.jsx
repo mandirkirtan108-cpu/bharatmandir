@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, BookOpen, FileUp, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import Navbar from '../components/Navbar';
+import AdminNavbar from '../components/admin/AdminNavbar';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const auth = () => ({ Authorization: `Bearer ${sessionStorage.getItem('bm_access_token') || ''}` });
@@ -73,7 +73,7 @@ export default function AdminLibraryPage() {
   };
 
   return <>
-    <Navbar />
+    <AdminNavbar />
     <main className="admin-library">
       <section className="library-admin-head">
         <div className="library-admin-head-inner">

@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Navbar  from '../components/Navbar';
+import AdminNavbar from '../components/admin/AdminNavbar';
 import Footer  from '../components/Footer';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -163,7 +163,7 @@ export default function AdminAddBlogPage() {
   return (
     <>
       <style>{CSS}</style>
-      <Navbar />
+      <AdminNavbar />
 
       {/* ── Hero — matches PanchangPage exactly ── */}
       <section style={{
