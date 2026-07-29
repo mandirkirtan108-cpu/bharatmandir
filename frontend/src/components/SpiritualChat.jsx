@@ -266,10 +266,11 @@ export default function SpiritualChat() {
       const apiMessages = newHistory.map((m) => ({ role: m.role, content: m.content }));
       const reply       = await callSpiritualGuide(apiMessages);
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
-    } catch {
+    } catch (error) {
+      console.error('Spiritual guide request failed:', error);
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: '⚠️ Could not reach the spiritual guide right now. Please check your API key or try again later.\n\nॐ शान्तिः शान्तिः शान्तिः' },
+        { role: 'assistant', content: `⚠️ Could not reach the spiritual guide: ${error.message}\n\nॐ शान्तिः शान्तिः शान्तिः` },
       ]);
     } finally {
       setLoading(false);

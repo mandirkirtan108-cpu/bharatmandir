@@ -6,6 +6,7 @@ Add to main.py: from routers import spiritual_chat; app.include_router(spiritual
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
+import logging
 import os
 import time
 from datetime import datetime
@@ -13,6 +14,7 @@ import pytz
 from services.openrouter_service import api_key, chat, content
 
 router = APIRouter(prefix="/api/spiritual", tags=["Spiritual Chat"])
+logger = logging.getLogger(__name__)
 OPENROUTER_MODEL = os.getenv("OPENROUTER_AI_GUIDE_MODEL", "openrouter/auto")
 
 # ──────────────────────────────────────────────
@@ -128,6 +130,11 @@ def spiritual_chat(req: ChatRequest):
             max_tokens=1024,
         )
     except Exception as e:
+        logger.exception(
+            "OpenRouter spiritual chat failed (model=%s): %s",
+            OPENROUTER_MODEL,
+            e,
+        )
         raise HTTPException(status_code=502, detail=f"OpenRouter API error: {str(e)}")
 
     elapsed_ms = int((time.time() - start) * 1000)
