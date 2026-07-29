@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import io
 import json
 import os
 import re
+import tempfile
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 import cloudinary.uploader
-import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -50,6 +51,12 @@ TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHA
 PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
 _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
 
+# Original PDFs are never kept permanently — a book only needs its raw file
+# on disk for the duration of extraction/translation. This directory lives
+# on Railway's local (ephemeral) container disk and every file in it is
+# deleted the moment processing finishes, whether it succeeds or fails.
+LIBRARY_TMP_DIR = Path(os.getenv("LIBRARY_TMP_DIR") or tempfile.gettempdir()) / "bharatmandir-library"
+
 
 def _api_key() -> str:
     return (
@@ -70,7 +77,7 @@ def ensure_library_schema() -> None:
                 description TEXT,
                 source_language TEXT NOT NULL,
                 original_filename TEXT NOT NULL,
-                original_pdf_url TEXT NOT NULL,
+                original_pdf_url TEXT,
                 storage_public_id TEXT,
                 file_sha256 TEXT NOT NULL,
                 page_count INTEGER NOT NULL DEFAULT 0,
@@ -99,6 +106,13 @@ def ensure_library_schema() -> None:
         cur.execute("""
             ALTER TABLE library_books
             ADD COLUMN IF NOT EXISTS processed_pages INTEGER NOT NULL DEFAULT 0
+        """)
+        # The original PDF is no longer stored permanently (see LIBRARY_TMP_DIR
+        # below), so this column is no longer always populated. Relax the
+        # constraint for databases created before this change.
+        cur.execute("""
+            ALTER TABLE library_books
+            ALTER COLUMN original_pdf_url DROP NOT NULL
         """)
         cur.execute("""
             ALTER TABLE library_book_pages
@@ -179,26 +193,27 @@ def _unique_slug(title: str) -> str:
     return f"{base}-{number}"
 
 
-def _upload_pdf(content: bytes, slug: str) -> dict:
-    """Upload the raw PDF to Cloudinary.
+def _write_temp_pdf(content: bytes) -> Path:
+    """Write the uploaded PDF to local disk just long enough to process it.
 
-    Cloudinary's plain upload() call is capped at a 10MB single-request
-    limit on most plans, which rejects larger books outright with a
-    "File size too large" error — that's unrelated to our own
-    MAX_PDF_BYTES setting. upload_large() streams the file in chunks
-    instead, so it isn't bound by that single-request cap.
+    This replaces permanent Cloudinary storage of the raw PDF — the file
+    only needs to exist for the lifetime of one upload's extraction +
+    translation run, so it's written under LIBRARY_TMP_DIR and always
+    removed afterwards via _cleanup_temp_pdf(), success or failure.
     """
-    _ensure_configured()
-    result = cloudinary.uploader.upload_large(
-        io.BytesIO(content),
-        resource_type="raw",
-        type="upload",
-        folder="bharatmandir/library",
-        public_id=f"{slug}-{hashlib.sha256(content).hexdigest()[:12]}.pdf",
-        overwrite=False,
-        chunk_size=6_000_000,
-    )
-    return {"url": result["secure_url"], "public_id": result["public_id"]}
+    LIBRARY_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    path = LIBRARY_TMP_DIR / f"{uuid.uuid4().hex}.pdf"
+    path.write_bytes(content)
+    return path
+
+
+def _cleanup_temp_pdf(path: Path) -> None:
+    """Best-effort delete of a temp PDF. Never let cleanup failure mask a
+    real processing error or crash a background thread."""
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 def _upload_page_image(image_bytes: bytes, slug: str, page_number: int) -> str:
@@ -215,7 +230,7 @@ def _upload_page_image(image_bytes: bytes, slug: str, page_number: int) -> str:
     return result["secure_url"]
 
 
-def _quick_page_count(content: bytes) -> int:
+def _quick_page_count(pdf_path: Path) -> int:
     """Fast upload-time check: is this a readable, non-empty, non-password
     -protected PDF? Only opens the PDF and counts pages — does NOT call
     extract_text() on every page, which is the slow part for large books
@@ -223,7 +238,7 @@ def _quick_page_count(content: bytes) -> int:
     gave up. Full text extraction still happens in the background job.
     """
     try:
-        reader = PdfReader(io.BytesIO(content))
+        reader = PdfReader(str(pdf_path))
     except Exception as exc:
         raise ValueError("The uploaded file is not a readable PDF.") from exc
     if reader.is_encrypted:
@@ -237,9 +252,9 @@ def _quick_page_count(content: bytes) -> int:
     return page_count
 
 
-def _extract_pages(content: bytes) -> list[str]:
+def _extract_pages(pdf_path: Path) -> list[str]:
     try:
-        reader = PdfReader(io.BytesIO(content))
+        reader = PdfReader(str(pdf_path))
     except Exception as exc:
         raise ValueError("The uploaded file is not a readable PDF.") from exc
     if reader.is_encrypted:
@@ -255,7 +270,7 @@ def _extract_pages(content: bytes) -> list[str]:
     return pages
 
 
-def _render_page_images(content: bytes) -> list[bytes | None]:
+def _render_page_images(pdf_path: Path) -> list[bytes | None]:
     """Render every PDF page to a PNG at PAGE_IMAGE_DPI so embedded pictures,
     diagrams, and layout are preserved exactly as printed — not just the text.
     Returns one entry per page; entries are None only if rendering is
@@ -264,7 +279,7 @@ def _render_page_images(content: bytes) -> list[bytes | None]:
     if fitz is None:
         return []
     images: list[bytes | None] = []
-    doc = fitz.open(stream=content, filetype="pdf")
+    doc = fitz.open(str(pdf_path))
     try:
         zoom = PAGE_IMAGE_DPI / 72
         matrix = fitz.Matrix(zoom, zoom)
@@ -404,9 +419,9 @@ PAGES:
             """, (book_id, title, page_number, order_index))
 
 
-def _process_book(book_id: int, slug: str, pdf_bytes: bytes, source_language: str) -> None:
+def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str) -> None:
     try:
-        pages = _extract_pages(pdf_bytes)
+        pages = _extract_pages(pdf_path)
         key = _api_key()
         if not key:
             raise RuntimeError(
@@ -418,7 +433,7 @@ def _process_book(book_id: int, slug: str, pdf_bytes: bytes, source_language: st
         # specific page fails to rasterize, translation still proceeds —
         # those pages simply won't have a preserved scan.
         try:
-            page_images = _render_page_images(pdf_bytes)
+            page_images = _render_page_images(pdf_path)
         except Exception:
             page_images = []
         if len(page_images) != len(pages):
@@ -496,34 +511,20 @@ def _process_book(book_id: int, slug: str, pdf_bytes: bytes, source_language: st
             """, (str(exc)[:2000], book_id))
 
 
-def _upload_then_process(book_id: int, slug: str, content: bytes, source_language: str) -> None:
+def _process_and_cleanup(book_id: int, slug: str, pdf_path: Path, source_language: str) -> None:
     """Runs entirely in a background thread, off the request/response cycle.
 
-    Uploads the raw PDF to Cloudinary first (this is what used to run
-    synchronously inside the request and could take long enough on big
-    files for the reverse proxy to kill the connection — the same class of
-    "Failed to fetch" problem _quick_page_count was written to avoid for
-    text extraction). Once the PDF is safely stored and original_pdf_url is
-    recorded, translation/page-image/table-of-contents processing proceeds
-    exactly as before via _process_book.
+    The PDF is no longer uploaded to Cloudinary or kept anywhere permanent —
+    it was already written to LIBRARY_TMP_DIR (local Railway disk) by the
+    upload endpoint before this thread started. This function processes
+    directly from that temp file and unconditionally deletes it afterwards,
+    whether processing succeeds or fails, so nothing outlives one book's
+    extraction + translation run.
     """
     try:
-        uploaded = _upload_pdf(content, slug)
-    except Exception as exc:
-        with get_db_cursor() as cur:
-            cur.execute("""
-                UPDATE library_books SET status='failed', processing_error=%s,
-                    updated_at=NOW() WHERE id=%s
-            """, (f"PDF storage failed: {exc}"[:2000], book_id))
-        return
-
-    with get_db_cursor() as cur:
-        cur.execute("""
-            UPDATE library_books SET original_pdf_url=%s, storage_public_id=%s,
-                updated_at=NOW() WHERE id=%s
-        """, (uploaded["url"], uploaded["public_id"], book_id))
-
-    _process_book(book_id, slug, content, source_language)
+        _process_book(book_id, slug, pdf_path, source_language)
+    finally:
+        _cleanup_temp_pdf(pdf_path)
 
 
 BOOK_SELECT = """
@@ -783,27 +784,36 @@ async def upload_book(
     content = await file.read(MAX_PDF_BYTES + 1)
     if not content or len(content) > MAX_PDF_BYTES:
         raise HTTPException(413, f"PDF must be smaller than {MAX_PDF_BYTES // 1024 // 1024} MB")
+
+    file_sha256 = hashlib.sha256(content).hexdigest()
+
+    # Write the PDF to local (Railway) disk once, up front. Everything after
+    # this — the quick page-count check and the full background processing
+    # job — reads from this temp file. It is never uploaded to Cloudinary or
+    # kept anywhere permanent; _process_and_cleanup() deletes it once the
+    # book finishes processing (success or failure).
+    pdf_path = await asyncio.to_thread(_write_temp_pdf, content)
+    del content  # the temp file is now the only copy we need going forward
+
     try:
         # Just count pages here — full per-page text extraction is slow for
         # large books and happens in the background job below. Doing it here
         # (synchronously, inside an async route) used to stall the event loop
         # long enough for the reverse proxy to kill the connection, which is
         # what showed up as "Failed to fetch" on bigger PDFs.
-        page_count = await asyncio.to_thread(_quick_page_count, content)
+        page_count = await asyncio.to_thread(_quick_page_count, pdf_path)
     except ValueError as exc:
+        _cleanup_temp_pdf(pdf_path)
         raise HTTPException(422, str(exc)) from exc
 
     slug = _unique_slug(title)
 
-    # Insert a placeholder row right away (empty original_pdf_url) so the
-    # admin panel shows the book as "processing" immediately. The Cloudinary
-    # upload of the raw PDF used to happen synchronously here too — for a
-    # 40-50 page book that upload alone can take long enough that the
-    # reverse proxy drops the connection before this handler ever returns,
-    # which is exactly the "backend could not be reached" / TypeError the
-    # frontend was catching. Now the upload happens in the background
-    # thread below, right before translation, so the response always
-    # returns fast regardless of file size.
+    # Insert a placeholder row right away (no original_pdf_url — the PDF
+    # only ever exists temporarily on local disk, see LIBRARY_TMP_DIR) so
+    # the admin panel shows the book as "processing" immediately. Full
+    # extraction/translation happens in the background thread below, right
+    # after this returns, so the response always comes back fast regardless
+    # of file size.
     with get_db_cursor() as cur:
         cur.execute("""
             INSERT INTO library_books
@@ -812,14 +822,14 @@ async def upload_book(
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         """, (
             slug, title.strip(), author.strip() or None, description.strip() or None,
-            source_language.strip(), file.filename, "", None,
-            hashlib.sha256(content).hexdigest(), page_count, admin["id"],
+            source_language.strip(), file.filename, None, None,
+            file_sha256, page_count, admin["id"],
         ))
         book_id = cur.fetchone()["id"]
 
     threading.Thread(
-        target=_upload_then_process,
-        args=(book_id, slug, content, source_language),
+        target=_process_and_cleanup,
+        args=(book_id, slug, pdf_path, source_language),
         daemon=True,
         name=f"library-book-{book_id}",
     ).start()
@@ -847,39 +857,19 @@ def archive_book(book_id: int, admin: dict = Depends(get_current_admin)):
 
 @router.post("/api/admin/books/{book_id}/retry", status_code=202)
 def retry_book(book_id: int, admin: dict = Depends(get_current_admin)):
-    if not _api_key():
-        raise HTTPException(503, "OpenAI key is unavailable to the backend process.")
+    """Retrying a failed book used to re-download the original PDF from
+    Cloudinary and reprocess it. Since the PDF is no longer stored anywhere
+    after its first (and only) processing run — see LIBRARY_TMP_DIR — there
+    is nothing left to retry from. The admin needs to re-upload the file,
+    which starts a fresh processing run from scratch.
+    """
     with get_db_cursor() as cur:
-        cur.execute("""
-            SELECT id,slug,original_pdf_url,source_language FROM library_books
-            WHERE id=%s AND status='failed'
-        """, (book_id,))
+        cur.execute("SELECT id FROM library_books WHERE id=%s AND status='failed'", (book_id,))
         book = cur.fetchone()
     if not book:
         raise HTTPException(404, "Failed book not found")
-    if not book["original_pdf_url"]:
-        raise HTTPException(
-            409,
-            "This book failed before its PDF finished uploading to storage. "
-            "Please delete it and upload the file again.",
-        )
-    try:
-        response = httpx.get(book["original_pdf_url"], timeout=60, follow_redirects=True)
-        response.raise_for_status()
-        pdf_bytes = response.content
-        _quick_page_count(pdf_bytes)
-    except Exception as exc:
-        raise HTTPException(502, f"Could not retrieve the original PDF: {exc}") from exc
-    with get_db_cursor() as cur:
-        cur.execute("DELETE FROM library_book_pages WHERE book_id=%s", (book_id,))
-        cur.execute("""
-            UPDATE library_books SET status='processing',processed_pages=0,
-                processing_error=NULL,updated_at=NOW() WHERE id=%s
-        """, (book_id,))
-    threading.Thread(
-        target=_process_book,
-        args=(book_id, book["slug"], pdf_bytes, book["source_language"]),
-        daemon=True,
-        name=f"library-book-retry-{book_id}",
-    ).start()
-    return {"id": book_id, "status": "processing"}
+    raise HTTPException(
+        409,
+        "The original PDF isn't kept in storage, so failed books can't be "
+        "automatically retried. Please delete this entry and upload the file again.",
+    )
