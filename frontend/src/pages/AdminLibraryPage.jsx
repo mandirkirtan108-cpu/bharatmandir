@@ -90,7 +90,7 @@ export default function AdminLibraryPage() {
           <label>Author / source<input value={form.author} onChange={e => setForm({...form,author:e.target.value})}/></label>
           <label>Original language<input required value={form.source_language} onChange={e => setForm({...form,source_language:e.target.value})} placeholder="e.g. Hindi, Sanskrit, Bengali"/></label>
           <label>Description<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})}/></label>
-          <label className="drop"><FileUp size={30}/><strong>Choose text-based PDF</strong><span>Maximum 40 MB. Scanned PDFs require OCR first.</span><input id="book-pdf" type="file" accept=".pdf,application/pdf" onChange={e => setFile(e.target.files[0])}/>{file && <em>{file.name}</em>}</label>
+          <label className="drop"><FileUp size={30}/><strong>Choose text-based PDF</strong><span>Maximum 200 MB. Scanned PDFs require OCR first.</span><input id="book-pdf" type="file" accept=".pdf,application/pdf" onChange={e => setFile(e.target.files[0])}/>{file && <em>{file.name}</em>}</label>
           <button disabled={busy}>{busy ? <><Loader2 className="spin"/> Uploading…</> : 'Upload and translate'}</button>
           {message && <p className="message">{message}</p>}
         </form>
