@@ -271,7 +271,7 @@ def _extract_pages(pdf_path: Path) -> list[str]:
     return pages
 
 
-def _render_page_images(pdf_path: Path) -> list[bytes | None]:
+def _render_page_images(pdf_path: Path, book_id: int | None = None) -> list[bytes | None]:
     """Render every PDF page to a PNG at PAGE_IMAGE_DPI so embedded pictures,
     diagrams, and layout are preserved exactly as printed — not just the text.
     Returns one entry per page; entries are None only if rendering is
@@ -284,11 +284,13 @@ def _render_page_images(pdf_path: Path) -> list[bytes | None]:
     try:
         zoom = PAGE_IMAGE_DPI / 72
         matrix = fitz.Matrix(zoom, zoom)
-        for page in doc:
+        for index, page in enumerate(doc, 1):
             try:
                 pix = page.get_pixmap(matrix=matrix, alpha=False)
                 images.append(pix.tobytes("png"))
-            except Exception:
+                print(f"[library] book {book_id}: rendered page image {index}/{len(doc)} ({len(images[-1])} bytes)")
+            except Exception as exc:
+                print(f"[library] book {book_id}: page image {index}/{len(doc)} render FAILED — {type(exc).__name__}: {exc}")
                 images.append(None)
     finally:
         doc.close()
@@ -437,7 +439,7 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
         # specific page fails to rasterize, translation still proceeds —
         # those pages simply won't have a preserved scan.
         try:
-            page_images = _render_page_images(pdf_path)
+            page_images = _render_page_images(pdf_path, book_id)
         except Exception:
             page_images = []
         if len(page_images) != len(pages):
