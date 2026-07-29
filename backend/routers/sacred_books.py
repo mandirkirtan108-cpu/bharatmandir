@@ -11,6 +11,7 @@ import tempfile
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
 
 import cloudinary.uploader
@@ -420,8 +421,11 @@ PAGES:
 
 
 def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str) -> None:
+    print(f"[library] book {book_id}: processing started (file={pdf_path.name})")
     try:
         pages = _extract_pages(pdf_path)
+        print(f"[library] book {book_id}: extracted {len(pages)} pages of text")
+
         key = _api_key()
         if not key:
             raise RuntimeError(
@@ -438,6 +442,7 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             page_images = []
         if len(page_images) != len(pages):
             page_images = [None] * len(pages)
+        print(f"[library] book {book_id}: rendered {sum(1 for i in page_images if i)}/{len(pages)} page images")
 
         with get_db_cursor() as cur:
             cur.execute("""
@@ -446,11 +451,15 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             """, (len(pages), book_id))
 
         def translate_page(page_number: int, source_text: str, image_bytes: bytes | None):
+            print(f"[library] book {book_id}: page {page_number} — calling OpenAI ({TRANSLATION_MODEL}) for en/hi/sa")
+            page_started = datetime.utcnow()
             try:
                 translated = {
                     code: _translate(client, source_text, source_language, code)
                     for code in TARGET_LANGUAGES
                 }
+                elapsed = (datetime.utcnow() - page_started).total_seconds()
+                print(f"[library] book {book_id}: page {page_number} — translated in {elapsed:.1f}s")
                 image_url = None
                 if image_bytes:
                     try:
@@ -459,6 +468,11 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                         image_url = None  # keep the book processing even if one upload fails
                 return page_number, source_text, translated, image_url
             except Exception as exc:
+                elapsed = (datetime.utcnow() - page_started).total_seconds()
+                print(
+                    f"[library] book {book_id}: page {page_number} FAILED after {elapsed:.1f}s "
+                    f"— {type(exc).__name__}: {exc}"
+                )
                 raise RuntimeError(f"Translation stopped on PDF page {page_number}: {exc}") from exc
 
         page_text_en: dict[int, str] = {}
@@ -503,7 +517,9 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                     processed_pages=%s, processing_error=NULL, updated_at=NOW()
                 WHERE id=%s
             """, (len(pages), len(pages), book_id))
+        print(f"[library] book {book_id}: DONE — status=ready, {len(pages)} pages")
     except Exception as exc:
+        print(f"[library] book {book_id}: FAILED — {type(exc).__name__}: {exc}")
         with get_db_cursor() as cur:
             cur.execute("""
                 UPDATE library_books SET status='failed', processing_error=%s,
@@ -525,6 +541,7 @@ def _process_and_cleanup(book_id: int, slug: str, pdf_path: Path, source_languag
         _process_book(book_id, slug, pdf_path, source_language)
     finally:
         _cleanup_temp_pdf(pdf_path)
+        print(f"[library] book {book_id}: temp file cleaned up ({pdf_path.name})")
 
 
 BOOK_SELECT = """
