@@ -390,22 +390,8 @@ export default function RoutePlannerPage() {
     <>
       <Navbar />
 
-      {/* ══════════════ HERO — standardized size (matches Temples page) ══════════════ */}
-      <section style={{
-        position: 'relative',
-        overflow: 'hidden',
-        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        minHeight: 340,
-        padding: '50px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center',
-        color: 'white',
-        boxSizing: 'border-box',
-        width: '100%',
-      }}>
-        <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 700, padding: '0 24px', boxSizing: 'border-box' }}>
+      <section style={{ background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)', padding: '65px 15px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'white', boxSizing: 'border-box' }}>
+        <div style={{ maxWidth: 720, margin: '0 auto' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 16px', marginBottom: 14, color: '#FFD580', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600 }}>
             <Map size={13} /> {t('route_page.badge')}
           </div>
@@ -417,7 +403,6 @@ export default function RoutePlannerPage() {
           </p>
         </div>
       </section>
-      {/* ════════════════════════════════════ */}
 
       <section style={{ background: '#F7F2EC', padding: '48px 20px 80px' }}>
         <div style={{ maxWidth: 980, margin: '0 auto' }}>
