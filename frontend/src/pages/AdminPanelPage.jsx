@@ -13,7 +13,7 @@ import {
   Search, Shield, ShieldCheck, ExternalLink, Clock,
   MapPin, User, Star, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, LayoutDashboard, PlusCircle,
-  CalendarPlus, LogOut, Pencil, Trash2, Save, X, FileText, BookOpen,
+  Pencil, Trash2, Save, X, FileText,
   ImagePlus, Images, MessageSquareHeart, Mail, CheckCheck,
 } from 'lucide-react';
 import AdminNavbar from '../components/admin/AdminNavbar';
@@ -2162,13 +2162,6 @@ export default function AdminPanelPage() {
     if (!token) navigate('/admin/login', { replace: true });
   }, []);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('bm_access_token');
-    sessionStorage.removeItem('bm_refresh_token');
-    sessionStorage.removeItem('bm_admin_user');
-    navigate('/admin/login', { replace: true });
-  };
-
   const loadTemples = useCallback(async (tab = activeTab, pg = page) => {
     setLoading(true);
     setError(null);
@@ -2347,76 +2340,6 @@ export default function AdminPanelPage() {
                   />
                 </div>
 
-                {/* Add Festival — brown */}
-                <Link to="/admin/add-festival" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '10px 18px',
-                  background: 'linear-gradient(135deg, #92400e, #bf5310)',
-                  border: '2px solid transparent', borderRadius: 50,
-                  fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
-                  color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-                >
-                  <CalendarPlus size={15} />
-                  <span className="btn-label-festival">Add Festival</span>
-                </Link>
-
-                {/* Add Blog — FIXED: lighter warm brown so it reads as a third distinct button */}
-                <Link to="/admin/add-blog" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '10px 18px',
-                  background: 'linear-gradient(135deg, #a14a0b, #c76020)',
-                  border: '2px solid transparent', borderRadius: 50,
-                  fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
-                  color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-                >
-                  <FileText size={15} />
-                  <span>Add Blog</span>
-                </Link>
-
-                <Link to="/admin/library" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  padding: '10px 18px', background: 'linear-gradient(135deg, #63320f, #8c531d)',
-                  border: '2px solid transparent', borderRadius: 50,
-                  fontFamily: 'var(--font-display)', fontSize: 13, letterSpacing: '.04em', fontWeight: 700,
-                  color: 'white', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-                }}>
-                  <BookOpen size={15} />
-                  <span>Library</span>
-                </Link>
-
-                <button onClick={() => { loadTemples(); loadCounts(); }} style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '10px 16px', border: '2px solid var(--cream-dark)',
-                  borderRadius: 50, background: 'white',
-                  fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
-                  cursor: 'pointer', color: 'var(--text-mid)', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s',
-                }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--saffron)'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cream-dark)'}
-                >
-                  <RefreshCw size={14} />
-                  <span className="refresh-label">Refresh</span>
-                </button>
-
-                <button onClick={handleLogout} style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '10px 16px', border: '2px solid #fca5a5',
-                  borderRadius: 50, background: '#fef2f2',
-                  fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '.05em',
-                  cursor: 'pointer', color: '#b91c1c', whiteSpace: 'nowrap', flexShrink: 0, transition: 'all .2s', fontWeight: 600,
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#b91c1c'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = '#b91c1c'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#b91c1c'; e.currentTarget.style.borderColor = '#fca5a5'; }}
-                >
-                  <LogOut size={14} />
-                  <span className="logout-label">Logout</span>
-                </button>
               </div>
 
               {/* Status Tabs */}
