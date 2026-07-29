@@ -5,6 +5,7 @@ in routers/admin.py.
 """
 
 import json
+import os
 import re
 from datetime import datetime
 
@@ -230,7 +231,7 @@ def _run_translation_job(book_id: int, translation_id: int, target_lang: str) ->
                             DO UPDATE SET translated_text = EXCLUDED.translated_text,
                                           model_used = EXCLUDED.model_used
                             """,
-                            (translation_id, page_number, json.dumps(translated_blocks), "gpt-4.1"),
+                            (translation_id, page_number, json.dumps(translated_blocks), os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")),
                         )
 
             done += len(batch_numbers)

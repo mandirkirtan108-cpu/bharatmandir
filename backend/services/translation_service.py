@@ -1,14 +1,14 @@
 """
 Translation pipeline for the Sacred Books Library.
 
-Uses the `openai` package already in backend/requirements.txt.
-Requires OPENAI_API_KEY in backend/.env (same style as your other services
+Uses OpenRouter's chat-completions API.
+Requires OPENROUTER_API_KEY in backend/.env (same style as your other services
 reading env vars via python-dotenv).
 
 Design:
 - Translate once at publish/trigger time, store in Postgres, never
   translate on read (see routers/library.py) — this is what keeps
-  OpenAI cost bounded regardless of traffic.
+  AI cost bounded regardless of traffic.
 - Batch ~8 pages per API call to cut round-trips on long books.
 - Resumable: each page's translation is written individually, so a job
   that fails on page 400 of 1000 resumes from 400, not from zero.
@@ -21,14 +21,12 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from services.openrouter_service import chat, content
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(ENV_PATH)
 
-_client: OpenAI | None = None
-
-MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "gpt-4.1")
+MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
 PAGES_PER_BATCH = 8
 
 _LANGUAGE_NAMES = {"en": "English", "hi": "Hindi", "sa": "Sanskrit"}
@@ -54,16 +52,6 @@ rather than re-"translating" it.
 matching the input page order — no commentary, no markdown fences."""
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY is not set in backend/.env")
-        _client = OpenAI(api_key=api_key)
-    return _client
-
-
 def chunk_pages(pages: list[list[dict]], size: int = PAGES_PER_BATCH):
     for i in range(0, len(pages), size):
         yield pages[i : i + size]
@@ -76,9 +64,7 @@ def translate_page_batch(pages: list[list[dict]], target_lang: str) -> list[list
     Returns the same shape, translated.
     """
     lang_name = _LANGUAGE_NAMES.get(target_lang, target_lang)
-    client = _get_client()
-
-    response = client.chat.completions.create(
+    response = chat(
         model=MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -94,7 +80,7 @@ def translate_page_batch(pages: list[list[dict]], target_lang: str) -> list[list
         temperature=0.2,
     )
 
-    parsed = json.loads(response.choices[0].message.content)
+    parsed = json.loads(content(response))
     translated_pages = parsed.get("pages")
 
     if not isinstance(translated_pages, list) or len(translated_pages) != len(pages):

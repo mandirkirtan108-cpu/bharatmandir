@@ -19,7 +19,6 @@ import cloudinary.uploader
 from dotenv import load_dotenv
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from openai import OpenAI
 from pypdf import PdfReader
 
 try:
@@ -32,6 +31,7 @@ from db.connection import get_db_cursor
 from routers.admin_auth import get_current_admin
 from routers.user_auth import decode_token, get_current_user, get_user_by_id
 from services.cloudinary_service import _ensure_configured
+from services.openrouter_service import api_key, chat, content
 
 load_dotenv(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
@@ -46,7 +46,7 @@ TARGET_LANGUAGES = {
     "sa": "Sanskrit (Devanagari)",
 }
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
-TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "gpt-4.1")
+TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
@@ -64,11 +64,7 @@ LIBRARY_TMP_DIR = Path(os.getenv("LIBRARY_TMP_DIR") or tempfile.gettempdir()) / 
 
 
 def _api_key() -> str:
-    return (
-        os.getenv("OPENAI_API_KEY")
-        or os.getenv("VITE_OPENAI_API_KEY")
-        or ""
-    ).strip()
+    return api_key()
 
 
 def ensure_library_schema() -> None:
@@ -262,7 +258,7 @@ def _extract_pages(pdf_path: Path) -> list[str]:
     layer. Pages with no usable text layer — i.e. scanned image pages, which
     is common for older Gita Press-style scans — come back as "" here rather
     than raising. Those get a second chance via OCR in _process_book() once
-    page images and an OpenAI client are available; only if a page still has
+    page images and an OpenRouter connection are available; only if a page still has
     no text after that fallback does the book actually fail.
     """
     try:
@@ -306,7 +302,7 @@ def _render_page_images(pdf_path: Path, book_id: int | None = None) -> list[byte
     return images
 
 
-def _ocr_page_image(client: OpenAI, image_bytes: bytes, source_language: str) -> str:
+def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
     """Transcribes a scanned page image via vision when the PDF has no
     extractable text layer (e.g. Gita Press-style scans where every page is
     a printed photo, not real text). Used only as a fallback for pages
@@ -327,19 +323,19 @@ def _ocr_page_image(client: OpenAI, image_bytes: bytes, source_language: str) ->
         f"no preface, no code fence."
     )
     with _translation_slots:
-        response = client.responses.create(
+        response = chat(
             model=TRANSLATION_MODEL,
-            input=[{
+            messages=[{
                 "role": "user",
                 "content": [
-                    {"type": "input_text", "text": prompt},
-                    {"type": "input_image", "image_url": f"data:image/png;base64,{b64}"},
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
                 ],
             }],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
         )
-    return response.output_text.strip()
+    return content(response)
 
 
 def _split_text(text: str) -> list[str]:
@@ -362,7 +358,7 @@ def _split_text(text: str) -> list[str]:
     return chunks
 
 
-def _translate_chunk(client: OpenAI, text: str, source_language: str, code: str) -> str:
+def _translate_chunk(text: str, source_language: str, code: str) -> str:
     if not text.strip():
         return ""
     prompt = f"""Translate this document text from {source_language} to {TARGET_LANGUAGES[code]}.
@@ -377,23 +373,23 @@ RULES:
 SOURCE TEXT:
 {text}"""
     with _translation_slots:
-        response = client.responses.create(
+        response = chat(
             model=TRANSLATION_MODEL,
-            input=prompt,
+            messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
         )
-    return response.output_text.strip()
+    return content(response)
 
 
-def _translate(client: OpenAI, text: str, source_language: str, code: str) -> str:
+def _translate(text: str, source_language: str, code: str) -> str:
     return "\n\n".join(
-        _translate_chunk(client, chunk, source_language, code)
+        _translate_chunk(chunk, source_language, code)
         for chunk in _split_text(text)
     )
 
 
-def _generate_sections(client: OpenAI, book_id: int, page_texts: dict[int, str]) -> None:
+def _generate_sections(book_id: int, page_texts: dict[int, str]) -> None:
     """Ask the model to read through the (English) page text and propose a
     table of contents — chapter/canto/part boundaries with the page each one
     starts on. This is best-effort: any failure here is swallowed so a book
@@ -425,13 +421,13 @@ PAGES:
 {chr(10).join(lines)}"""
 
     with _translation_slots:
-        response = client.responses.create(
+        response = chat(
             model=TRANSLATION_MODEL,
-            input=prompt,
+            messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
         )
-    raw = response.output_text.strip()
+    raw = content(response)
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
     sections = json.loads(raw)
     if not isinstance(sections, list):
@@ -477,9 +473,8 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
         key = _api_key()
         if not key:
             raise RuntimeError(
-                "OPENAI_API_KEY is unavailable to the backend. Add it and restart the backend."
+                "OPENROUTER_API_KEY is unavailable to the backend. Add it and restart the backend."
             )
-        client = OpenAI(api_key=key, timeout=TRANSLATION_TIMEOUT, max_retries=2)
 
         # Render page images up front. If PyMuPDF isn't installed, or a
         # specific page fails to rasterize, translation still proceeds —
@@ -497,7 +492,7 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
         # every page is a printed photo rather than real text. Transcribe
         # those specific pages via vision before falling back to a hard
         # failure. Pages that already have a native text layer are left
-        # untouched to avoid unnecessary OpenAI calls.
+        # untouched to avoid unnecessary AI calls.
         needs_ocr = [
             i for i, text in enumerate(pages)
             if len(text) < OCR_MIN_TEXT_CHARS and page_images[i]
@@ -508,7 +503,7 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             def _ocr_one(index: int):
                 page_number = index + 1
                 try:
-                    text = _ocr_page_image(client, page_images[index], source_language)
+                    text = _ocr_page_image(page_images[index], source_language)
                     print(f"[library] book {book_id}: OCR page {page_number}/{len(pages)} — {len(text)} chars")
                     return index, text
                 except Exception as exc:
@@ -535,11 +530,11 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             """, (len(pages), book_id))
 
         def translate_page(page_number: int, source_text: str, image_bytes: bytes | None):
-            print(f"[library] book {book_id}: page {page_number} — calling OpenAI ({TRANSLATION_MODEL}) for en/hi/sa")
+            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for en/hi/sa")
             page_started = datetime.utcnow()
             try:
                 translated = {
-                    code: _translate(client, source_text, source_language, code)
+                    code: _translate(source_text, source_language, code)
                     for code in TARGET_LANGUAGES
                 }
                 elapsed = (datetime.utcnow() - page_started).total_seconds()
@@ -591,7 +586,7 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
         # Best-effort: build the AI table of contents. Never let a hiccup here
         # (bad JSON, model timeout, etc.) stop the book from going live.
         try:
-            _generate_sections(client, book_id, page_text_en)
+            _generate_sections(book_id, page_text_en)
         except Exception:
             pass
 

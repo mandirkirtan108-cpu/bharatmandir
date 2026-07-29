@@ -7,7 +7,7 @@ GET  /api/festivals/ai-cache/debug         → diagnostic info
 POST /api/admin/festivals/ai-refresh       → admin force-refresh (X-Admin-Key header)
 
 Data source : Calendarific API (verified Hindu festival dates)
-Descriptions: OpenAI (gpt-4o) — used ONLY for text, never for dates
+Descriptions: OpenRouter — used ONLY for text, never for dates
 Year-aware  : auto-detects new year, fetches fresh data automatically
 """
 
@@ -23,9 +23,9 @@ router = APIRouter(tags=["AI Festival Cache"])
 CALENDARIFIC_API_KEY    = os.getenv("CALENDARIFIC_API_KEY", "")
 CALENDARIFIC_URL        = "https://calendarific.com/api/v2/holidays"
 
-OPENAI_API_KEY          = os.getenv("VITE_OPENAI_API_KEY", "")
-OPENAI_URL              = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL            = "gpt-4o"
+OPENROUTER_API_KEY      = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_URL          = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL        = os.getenv("OPENROUTER_FESTIVAL_MODEL", "openrouter/auto")
 
 MIN_CACHE_COUNT         = 10
 _ADMIN_SECRET           = os.getenv("VITE_ADMIN_SECRET_KEY", "change-me-now")
@@ -268,18 +268,18 @@ async def _fetch_from_calendarific(year: int) -> list[dict]:
     return festivals
 
 
-# ── OpenAI enrichment (descriptions only, NEVER dates) ───────────────────────
+# ── OpenRouter enrichment (descriptions only, NEVER dates) ───────────────────
 async def _enrich_with_descriptions(festivals: list[dict]) -> list[dict]:
     """
-    Use OpenAI ONLY to add:
+    Use OpenRouter ONLY to add:
       - significance (1 sentence)
       - description  (2-3 sentences)
       - hindu_month  (Sanskrit month name)
 
     Dates, names — all come from Calendarific. Never from AI.
-    Falls back to placeholder text gracefully if OpenAI fails.
+    Falls back to placeholder text gracefully if OpenRouter fails.
     """
-    if not OPENAI_API_KEY:
+    if not OPENROUTER_API_KEY:
         for f in festivals:
             f["significance"] = f"{f['name']} is an important Hindu observance."
             f["description"]  = f"{f['name']} is celebrated with great devotion across India."
@@ -298,13 +298,13 @@ async def _enrich_with_descriptions(festivals: list[dict]) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=90) as client:
             r = await client.post(
-                OPENAI_URL,
+                OPENROUTER_URL,
                 headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type":  "application/json",
                 },
                 json={
-                    "model":       OPENAI_MODEL,
+                    "model":       OPENROUTER_MODEL,
                     "temperature": 0,
                     "messages": [
                         {
@@ -320,7 +320,7 @@ async def _enrich_with_descriptions(festivals: list[dict]) -> list[dict]:
             )
 
         if r.status_code != 200:
-            raise RuntimeError(f"OpenAI {r.status_code}: {r.text[:200]}")
+            raise RuntimeError(f"OpenRouter {r.status_code}: {r.text[:200]}")
 
         raw     = r.json().get("choices", [{}])[0].get("message", {}).get("content", "[]")
         cleaned = raw.strip()
@@ -340,10 +340,10 @@ async def _enrich_with_descriptions(festivals: list[dict]) -> list[dict]:
             f["description"]  = m.get("description",  f"{f['name']} is celebrated with great devotion across India.")
             f["hindu_month"]  = m.get("hindu_month",   f["hindu_month"] or "")
 
-        logger.info(f"OpenAI enriched {len(festivals)} festivals with descriptions")
+        logger.info(f"OpenRouter enriched {len(festivals)} festivals with descriptions")
 
     except Exception as e:
-        logger.warning(f"OpenAI enrichment failed: {e} — using placeholder descriptions")
+        logger.warning(f"OpenRouter enrichment failed: {e} — using placeholder descriptions")
         for f in festivals:
             f.setdefault("significance", f"{f['name']} is an important Hindu observance.")
             f.setdefault("description",  f"{f['name']} is celebrated with great devotion across India.")
@@ -508,7 +508,7 @@ async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
     """
     1. Check DB cache — return immediately if >=10 rows exist for this year.
     2. On miss (or force=True): fetch from Calendarific (real verified dates).
-    3. Enrich with OpenAI descriptions (dates never touched by AI).
+    3. Enrich with OpenRouter descriptions (dates never touched by AI).
     4. Store in DB and return.
     """
     _ensure_cached_year_columns()
@@ -530,7 +530,7 @@ async def _fetch_and_store(year: int, force: bool = False) -> list[dict]:
             "Check CALENDARIFIC_API_KEY in Railway environment variables."
         )
 
-    # Enrich with OpenAI descriptions only (never dates)
+    # Enrich with OpenRouter descriptions only (never dates)
     festivals = await _enrich_with_descriptions(festivals)
 
     # Persist to DB
@@ -577,7 +577,7 @@ async def debug_ai_cache():
         "min_needed_for_cache_hit": MIN_CACHE_COUNT,
         "will_hit_cache":           this_yr >= MIN_CACHE_COUNT,
         "calendarific_key_set":     bool(CALENDARIFIC_API_KEY),
-        "openai_key_set":           bool(OPENAI_API_KEY),
+        "openrouter_key_set":       bool(OPENROUTER_API_KEY),
         "breakdown_by_year":        breakdown,
     }
 
@@ -591,7 +591,7 @@ async def get_ai_festival_cache(
     Return Hindu festivals for the current year.
 
     - DB hit  → instant response (zero external API calls)
-    - DB miss → Calendarific fetch + OpenAI descriptions + store → return
+    - DB miss → Calendarific fetch + OpenRouter descriptions + store → return
     - Jan 1   → automatic cache miss for new year → fresh Calendarific data
     - ?refresh=true → wipe year cache → re-fetch from Calendarific
     """

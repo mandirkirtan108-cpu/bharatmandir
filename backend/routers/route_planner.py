@@ -1,7 +1,7 @@
 """
 Route Planner API for BharatMandir.
 
-This version removes OpenAI from route planning and uses OpenRouteService for:
+This route planner uses OpenRouteService for:
 - city geocoding
 - actual road distance
 - actual road duration

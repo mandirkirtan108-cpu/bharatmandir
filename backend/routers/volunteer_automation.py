@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from db.connection import get_db_cursor
 from routers.volunteer_auth import get_current_volunteer
+from services.openrouter_service import chat, content
 
 
 router = APIRouter(
@@ -975,23 +976,21 @@ async def place_photo(
     )
 
 
-def _openai_json(prompt: str, image_data_url: str | None = None) -> dict[str, Any]:
-    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("VITE_OPENAI_API_KEY")
-    if not api_key:
+def _openrouter_json(prompt: str, image_data_url: str | None = None) -> dict[str, Any]:
+    if not os.getenv("OPENROUTER_API_KEY"):
         raise HTTPException(status_code=503, detail="AI automation is not configured")
-    from openai import OpenAI
 
-    content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+    message_content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
     if image_data_url:
-        content.append({"type": "image_url", "image_url": {"url": image_data_url}})
-    response = OpenAI(api_key=api_key).chat.completions.create(
-        model=os.getenv("OPENAI_AUTOFILL_MODEL", "gpt-4o-mini"),
+        message_content.append({"type": "image_url", "image_url": {"url": image_data_url}})
+    response = chat(
+        model=os.getenv("OPENROUTER_AUTOFILL_MODEL", "openrouter/auto"),
         response_format={"type": "json_object"},
-        messages=[{"role": "user", "content": content}],
+        messages=[{"role": "user", "content": message_content}],
         temperature=0.1,
         max_tokens=700,
     )
-    return json.loads(response.choices[0].message.content or "{}")
+    return json.loads(content(response) or "{}")
 
 
 @router.post("/ocr")
@@ -1009,7 +1008,7 @@ async def ocr_signboard(
         "Read this Indian temple signboard. Return JSON only with keys extracted_text, "
         "temple_name, address, trust_name, contact_phone. Use null when unknown. Do not invent facts."
     )
-    return _openai_json(prompt, data_url)
+    return _openrouter_json(prompt, data_url)
 
 
 @router.post("/suggestions")
@@ -1023,7 +1022,7 @@ def ai_suggestions(
         "(array), confidence_notes. Do not present guesses as verified facts. Input: "
         f"{body.model_dump_json()}"
     )
-    return _openai_json(prompt)
+    return _openrouter_json(prompt)
 
 
 @router.post("/translate-to-hindi")
@@ -1040,7 +1039,7 @@ def translate_to_hindi(
         "Return JSON only with one key named translation. Text: "
         f"{source_text}"
     )
-    result = _openai_json(prompt)
+    result = _openrouter_json(prompt)
     translation = str(result.get("translation") or "").strip()
     if not translation:
         raise HTTPException(status_code=502, detail="Hindi translation was not returned")

@@ -12,7 +12,6 @@ bcrypt
 passlib[bcrypt]
 python-jose[cryptography]
 pytz
-openai
 resend
 pydantic[email]
 cloudinary
