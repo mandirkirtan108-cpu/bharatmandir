@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import os
@@ -50,6 +51,9 @@ TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
 PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
+# Minimum extracted-text length below which a page is treated as having no
+# usable text layer (i.e. a scanned image) and is sent through OCR instead.
+OCR_MIN_TEXT_CHARS = max(1, int(os.getenv("LIBRARY_OCR_MIN_TEXT_CHARS", "20")))
 _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
 
 # Original PDFs are never kept permanently — a book only needs its raw file
@@ -254,6 +258,13 @@ def _quick_page_count(pdf_path: Path) -> int:
 
 
 def _extract_pages(pdf_path: Path) -> list[str]:
+    """One text string per page, taken straight from the PDF's embedded text
+    layer. Pages with no usable text layer — i.e. scanned image pages, which
+    is common for older Gita Press-style scans — come back as "" here rather
+    than raising. Those get a second chance via OCR in _process_book() once
+    page images and an OpenAI client are available; only if a page still has
+    no text after that fallback does the book actually fail.
+    """
     try:
         reader = PdfReader(str(pdf_path))
     except Exception as exc:
@@ -266,8 +277,6 @@ def _extract_pages(pdf_path: Path) -> list[str]:
     pages = [(page.extract_text() or "").strip() for page in reader.pages]
     if not pages:
         raise ValueError("The PDF has no pages.")
-    if sum(map(len, pages)) < 20:
-        raise ValueError("No usable text was found. Scan-only PDFs require OCR before upload.")
     return pages
 
 
@@ -295,6 +304,42 @@ def _render_page_images(pdf_path: Path, book_id: int | None = None) -> list[byte
     finally:
         doc.close()
     return images
+
+
+def _ocr_page_image(client: OpenAI, image_bytes: bytes, source_language: str) -> str:
+    """Transcribes a scanned page image via vision when the PDF has no
+    extractable text layer (e.g. Gita Press-style scans where every page is
+    a printed photo, not real text). Used only as a fallback for pages
+    where pypdf's extract_text() came back empty/too short. Returns plain
+    source-language text — never a translation, never commentary — so it
+    can be fed straight into the normal _translate() pipeline afterwards.
+    """
+    if not image_bytes:
+        return ""
+    b64 = base64.b64encode(image_bytes).decode("utf-8")
+    prompt = (
+        f"Transcribe every visible word of text on this scanned book page, "
+        f"written in {source_language}. Preserve headings, verse breaks, "
+        f"line breaks, numbering and punctuation exactly as printed. "
+        f"Never summarize, omit, shorten, explain, censor, or add commentary. "
+        f"Mark only genuinely unreadable fragments as [illegible]. "
+        f"Return only the transcribed source-language text — no translation, "
+        f"no preface, no code fence."
+    )
+    with _translation_slots:
+        response = client.responses.create(
+            model=TRANSLATION_MODEL,
+            input=[{
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": prompt},
+                    {"type": "input_image", "image_url": f"data:image/png;base64,{b64}"},
+                ],
+            }],
+            temperature=0,
+            timeout=TRANSLATION_TIMEOUT,
+        )
+    return response.output_text.strip()
 
 
 def _split_text(text: str) -> list[str]:
@@ -426,7 +471,8 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
     print(f"[library] book {book_id}: processing started (file={pdf_path.name})")
     try:
         pages = _extract_pages(pdf_path)
-        print(f"[library] book {book_id}: extracted {len(pages)} pages of text")
+        native_count = sum(1 for p in pages if len(p) >= OCR_MIN_TEXT_CHARS)
+        print(f"[library] book {book_id}: {len(pages)} pages total, {native_count} with a native text layer")
 
         key = _api_key()
         if not key:
@@ -445,6 +491,42 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
         if len(page_images) != len(pages):
             page_images = [None] * len(pages)
         print(f"[library] book {book_id}: rendered {sum(1 for i in page_images if i)}/{len(pages)} page images")
+
+        # OCR fallback: pages with no (or a near-empty) text layer are
+        # scanned images — common for older Gita Press-style PDFs where
+        # every page is a printed photo rather than real text. Transcribe
+        # those specific pages via vision before falling back to a hard
+        # failure. Pages that already have a native text layer are left
+        # untouched to avoid unnecessary OpenAI calls.
+        needs_ocr = [
+            i for i, text in enumerate(pages)
+            if len(text) < OCR_MIN_TEXT_CHARS and page_images[i]
+        ]
+        if needs_ocr:
+            print(f"[library] book {book_id}: {len(needs_ocr)}/{len(pages)} pages have no text layer — running OCR")
+
+            def _ocr_one(index: int):
+                page_number = index + 1
+                try:
+                    text = _ocr_page_image(client, page_images[index], source_language)
+                    print(f"[library] book {book_id}: OCR page {page_number}/{len(pages)} — {len(text)} chars")
+                    return index, text
+                except Exception as exc:
+                    print(f"[library] book {book_id}: OCR FAILED on page {page_number}/{len(pages)} — {type(exc).__name__}: {exc}")
+                    return index, ""
+
+            with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
+                jobs = [executor.submit(_ocr_one, index) for index in needs_ocr]
+                for job in as_completed(jobs):
+                    index, text = job.result()
+                    if text:
+                        pages[index] = text
+
+        if sum(map(len, pages)) < OCR_MIN_TEXT_CHARS:
+            raise ValueError(
+                "No usable text was found, even after OCR. The scan may be too low "
+                "quality to transcribe — try a higher-resolution scan of this PDF."
+            )
 
         with get_db_cursor() as cur:
             cur.execute("""
