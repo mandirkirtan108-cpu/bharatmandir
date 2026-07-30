@@ -26,7 +26,10 @@ export default function Navbar() {
     }
   };
 
-  const isActive = (path) => location.pathname === path;
+  // FIX: isActive now also matches nested/child routes (e.g. /library/some-book)
+  // so the parent nav item stays highlighted while browsing inside that section.
+  const isActive = (path) =>
+    location.pathname === path || location.pathname.startsWith(path + '/');
 
   useEffect(() => { setSidebarOpen(false); setUserMenuOpen(false); }, [location.pathname]);
 
@@ -55,12 +58,16 @@ export default function Navbar() {
     setSidebarOpen(false);
   };
 
+  // FIX: Library link now points to '/sacred-books' — that is the ACTUAL route
+  // your Library page lives at (confirmed from your screenshot's URL bar).
+  // It was previously set to '/library', which never matched location.pathname,
+  // so isActive('/library') was always false and the tab never highlighted.
   const NAV_LINKS = [
     { to: '/search',          label: '🛕 ' + t('nav.temples'),       icon: <Search size={16} /> },
     { to: '/route-planner',   label: t('nav.route'),                 icon: <Navigation size={16} /> },
     { to: '/panchang',        label: t('nav.panchang'),              icon: <CalendarDays size={16} /> },
     { to: '/blog',            label: '📖 ' + t('nav.blog'),          icon: <PenLine size={16} /> },
-    { to: '/library',         label: '📚 ' + t('nav.library'),       icon: <BookOpen size={16} /> },
+    { to: '/sacred-books',    label: '📚 ' + t('nav.library'),       icon: <BookOpen size={16} /> },
     { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'),     icon: null },
   ];
 
@@ -84,7 +91,6 @@ export default function Navbar() {
           maxWidth: 1200,
           margin: '0 auto',
           gap: 0,
-          // REMOVED: position: 'relative' — no longer needed since links are in-flow
         }}>
 
           {/* Logo — left, fixed width so centre links truly center */}
@@ -97,16 +103,12 @@ export default function Navbar() {
           </Link>
 
           {/* ── Desktop centre links ── */}
-          {/* FIX: was position:absolute which caused overlap + height jump.
-              Now flex:1 + justifyContent:center keeps links in-flow so the
-              navbar height is stable and nothing overlaps the logo or right controls. */}
           <div className="nav-actions-desktop" style={{
             display: 'flex',
             alignItems: 'center',
             gap: 2,
-            flex: 1,                    // ← fills remaining horizontal space
-            justifyContent: 'center',   // ← centers within that space
-            // REMOVED: position, left, transform
+            flex: 1,
+            justifyContent: 'center',
           }}>
             {NAV_LINKS.map((link) => (
               <Link
@@ -120,14 +122,11 @@ export default function Navbar() {
           </div>
 
           {/* ── Right side: lang + user ── */}
-          {/* FIX: removed marginLeft:'auto' — flex:1 on centre div already pushes
-              this block to the right. flexShrink:0 prevents it from squishing. */}
           <div className="nav-actions-desktop" style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            flexShrink: 0,             // ← never shrink; links shrink first
-            // REMOVED: marginLeft: 'auto'
+            flexShrink: 0,
           }}>
             <select
               className="nav-lang-select"
@@ -241,11 +240,6 @@ export default function Navbar() {
           </div>
 
           {/* Hamburger — mobile only */}
-          {/* FIX: marginLeft 'auto' pins this to the right edge on mobile.
-              Previously marginLeft:12 relied on the .nav-actions-desktop
-              blocks (hidden on mobile via CSS) to push it right — with
-              those gone, it just sat next to the logo. 'auto' guarantees
-              it's flush right regardless of what else is visible. */}
           <button
             className="nav-hamburger"
             onClick={() => setSidebarOpen(true)}
