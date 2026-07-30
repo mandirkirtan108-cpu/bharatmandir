@@ -598,8 +598,8 @@ export default function SacredBookReaderPage() {
       .section-item-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .section-item-page{flex-shrink:0;font-size:12px;color:#a9825a;font-variant-numeric:tabular-nums}
 
-      .tab-rail{display:flex;justify-content:center;align-items:flex-end;gap:6px;margin-bottom:14px;flex-wrap:wrap}
-      .tab-rail-icon{color:#a97b45;margin-right:4px;margin-bottom:9px}
+      .tab-rail{display:flex;justify-content:center;align-items:center;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+      .tab-rail-icon{color:#a97b45;margin-right:4px}
       .tab{
         font-family:'EB Garamond',serif;font-size:14px;letter-spacing:.03em;cursor:pointer;
         background:linear-gradient(#ece0c4,#d9c69a);color:#5a3c1e;border:1px solid #b8975f;border-bottom:none;
@@ -607,12 +607,12 @@ export default function SacredBookReaderPage() {
       }
       .tab.active{background:linear-gradient(#fff8e6,#f3e3bd);color:#7a3b12;transform:translateY(0);box-shadow:0 -4px 10px #0000003a;border-color:#c9932f;font-weight:600}
 
-      .voice-controls{display:flex;align-items:center;gap:6px;margin-left:8px;margin-bottom:9px}
+      .voice-controls{display:flex;align-items:center;gap:6px;margin-left:8px}
       .voice-btn{
         display:flex;align-items:center;gap:6px;
-        font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.03em;cursor:pointer;
+        font-family:'EB Garamond',serif;font-size:14px;letter-spacing:.03em;cursor:pointer;
         background:linear-gradient(#2a1608,#1c0d05);color:#e9c795;border:1px solid #ad7f4880;
-        border-radius:99px;padding:7px 14px;
+        border-radius:99px;padding:8px 14px 9px;
       }
       .voice-btn:hover:not(:disabled){border-color:#c9932f}
       .voice-btn:disabled{opacity:.35;cursor:default}
