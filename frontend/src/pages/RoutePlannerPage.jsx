@@ -390,15 +390,61 @@ export default function RoutePlannerPage() {
     <>
       <Navbar />
 
-      <section style={{ background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)', padding: '65px 15px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'white', boxSizing: 'border-box' }}>
-        <div style={{ maxWidth: 720, margin: '0 auto' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)', borderRadius: 50, padding: '5px 16px', marginBottom: 14, color: '#FFD580', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600 }}>
-            <Map size={13} /> {t('route_page.badge')}
+      {/* ══════════════ HERO — matches AI Guide / Panchang hero size ══════════════ */}
+      <section style={{
+        position: 'relative',
+        overflow: 'hidden',
+        color: 'white',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '50px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        boxSizing: 'border-box',
+      }}>
+        <div style={{
+          position: 'relative', zIndex: 1,
+          width: '100%', maxWidth: 700,
+          padding: '0 24px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+            color: '#FFD580', fontSize: 11, letterSpacing: '.1em',
+            textTransform: 'uppercase', fontWeight: 500,
+            whiteSpace: 'nowrap',
+            fontFamily: UI_FONT,
+          }}>
+            <Map size={11} /> {t('route_page.badge')}
           </div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1, margin: 0 }}>
+
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 900,
+            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+            marginBottom: 10, marginTop: 0,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#ffffff',
+            width: '100%',
+          }}>
             {t('route_page.title')}
           </h1>
-          <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: 15, maxWidth: 560, margin: '12px auto 0', lineHeight: 1.7, fontFamily: UI_FONT }}>
+
+          <p style={{
+            color: 'rgba(255,255,255,0.7)', fontSize: 14,
+            width: '100%', maxWidth: 520,
+            margin: 0,
+            fontWeight: 300, lineHeight: 1.7,
+            textAlign: 'center',
+            fontFamily: UI_FONT,
+          }}>
             {t('route_page.subtitle')}
           </p>
         </div>

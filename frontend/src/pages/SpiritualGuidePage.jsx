@@ -14,7 +14,8 @@ export default function SpiritualGuidePage() {
 
       <main style={{ minHeight: '100vh', background: '#f8f4ef' }}>
 
-        {/* ══════════════ HERO — matches PanchangPage exactly ══════════════ */}
+        {/* ══════════════ HERO — matches PanchangPage / RoutePlannerPage size,
+            with a wider inner container so the longer title fits one line ══════════════ */}
         <section style={{
           position: 'relative',
           overflow: 'hidden',
@@ -38,7 +39,7 @@ export default function SpiritualGuidePage() {
 
           <div style={{
             position: 'relative', zIndex: 1,
-            width: '100%', maxWidth: 700,
+            width: '100%', maxWidth: 860,
             padding: '0 24px',
             boxSizing: 'border-box',
             display: 'flex',
@@ -60,14 +61,15 @@ export default function SpiritualGuidePage() {
               <Sun size={11} /> {t('guide.badge')}
             </div>
 
-            {/* Title */}
+            {/* Title — kept on one line, matching Route Planner's hero */}
             <h1 style={{
               fontFamily: 'var(--font-display)', fontWeight: 900,
-              fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+              fontSize: 'clamp(24px, 4.4vw, 48px)', lineHeight: 1.1,
               marginBottom: 10, marginTop: 0,
               textShadow: '0 4px 40px rgba(0,0,0,0.3)',
               color: '#ffffff',
               width: '100%',
+              whiteSpace: 'nowrap',
             }}>
               {t('guide.title')}
             </h1>
