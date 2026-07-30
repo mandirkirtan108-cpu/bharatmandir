@@ -123,6 +123,84 @@ def create_temple_slug(
     return slug
 
 
+TEMPLE_TEXT_FIELDS = (
+    "name_hindi", "name_local", "temple_type", "architecture_style",
+    "managing_authority", "trust_name", "trust_registration_no",
+    "address", "city", "district", "state", "pincode",
+    "setting_environment", "google_maps_link", "nearest_bus_stand",
+    "local_landmark", "nearest_railway", "nearest_airport",
+    "primary_deity", "sect", "history", "history_hindi",
+    "sthala_purana", "significance", "estimated_year_built",
+    "founded_by", "last_renovation_year", "building_condition",
+    "puranic_stories", "opening_time", "closing_time",
+    "afternoon_closure_start", "afternoon_closure_end",
+    "weekly_special_day", "online_puja_available",
+    "live_darshan_available", "live_stream_url", "prasad_type",
+    "hero_image_url", "video_aarti_url", "video_intro_url",
+    "video_360_url", "bank_account_name", "bank_name_branch",
+    "bank_account_number", "bank_ifsc", "upi_id",
+    "certificate_80g_no", "phone", "whatsapp_number",
+    "official_email", "website_url", "facebook_page",
+    "youtube_channel", "instagram_handle", "best_time_to_call",
+    "dress_code", "best_time_to_visit", "custom_designation",
+    "custom_facility",
+)
+
+TEMPLE_BOOLEAN_FIELDS = (
+    "is_jyotirlinga", "is_shaktipeeth", "is_divya_desam",
+    "is_ashtavinayak", "is_char_dham", "is_heritage_site",
+    "is_asi_protected", "is_pancha_bhuta", "is_51_shakti_peeths",
+    "is_unesco_heritage", "is_state_heritage",
+    "puja_rudrabhishek", "puja_satyanarayan", "puja_havan_homa",
+    "puja_laghu_rudra", "puja_mahamrityunjaya",
+    "puja_griha_pravesh", "puja_naamkaran", "puja_vivah",
+    "puja_annaprashan", "puja_mundan", "puja_pitru_tarpan",
+    "puja_sahasranamarchana", "accept_online_donations",
+    "donation_temple_renovation", "donation_annadanam",
+    "donation_priest_salary", "donation_vedic_education",
+    "donation_festival", "donation_medical_camps",
+    "donation_general", "facility_electricity",
+    "facility_water_supply", "facility_clean_toilets",
+    "facility_wheelchair", "facility_dharamshala",
+    "facility_prasad_dining", "facility_parking",
+    "facility_security", "facility_cctv", "facility_pa_system",
+    "facility_internet_wifi", "facility_library_pathshala",
+    "facility_gaushaala", "facility_medical_support",
+    "prog_free_food", "prog_medical_camps", "prog_scholarship_edu",
+    "prog_womens_selfhelp", "prog_bhajan_kirtan",
+    "prog_disaster_relief",
+)
+
+
+def _clean_text(value):
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value or None
+
+
+def _to_int(value):
+    try:
+        return int(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_float(value):
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_list(value):
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return []
+
+
 def get_volunteer_submission(
     submission_id: int,
     volunteer_id: int,
@@ -724,10 +802,13 @@ def review_volunteer_submission(
                 f"{uuid4().hex[:6].upper()}"
             )
             form_payload = submission.get("form_payload") or {}
+            if not isinstance(form_payload, dict):
+                form_payload = {}
+            form_data = form_payload.get("form") or {}
+            if not isinstance(form_data, dict):
+                form_data = {}
             uploaded_media = (
                 form_payload.get("_uploaded_media") or []
-                if isinstance(form_payload, dict)
-                else []
             )
             hero_image_url = submission.get("image_url") or next(
                 (
@@ -738,42 +819,75 @@ def review_volunteer_submission(
                 None,
             )
 
-            cursor.execute(
-                """
-                INSERT INTO temples (
-                    uuid,
-                    name,
-                    slug,
-                    mkt_id,
-                    primary_deity,
-                    address,
-                    city,
-                    district,
-                    state,
-                    pincode,
-                    latitude,
-                    longitude,
-                    location,
-                    significance,
-                    history,
-                    hero_image_url,
-                    status,
-                    source,
-                    verified
+            latitude = _to_float(
+                form_data.get("latitude", submission.get("latitude"))
+            )
+            longitude = _to_float(
+                form_data.get("longitude", submission.get("longitude"))
+            )
+            temple_values = {
+                "uuid": str(uuid4()),
+                "name": _clean_text(form_data.get("name"))
+                or submission["temple_name"],
+                "slug": unique_slug,
+                "mkt_id": mkt_id,
+            }
+            for field in TEMPLE_TEXT_FIELDS:
+                temple_values[field] = _clean_text(form_data.get(field))
+            for field in TEMPLE_BOOLEAN_FIELDS:
+                temple_values[field] = bool(form_data.get(field, False))
+
+            # Use the submission summary as a fallback for older drafts.
+            temple_values.update({
+                "primary_deity": temple_values.get("primary_deity")
+                or submission.get("deity"),
+                "address": temple_values.get("address")
+                or submission.get("address"),
+                "city": temple_values.get("city") or submission.get("city"),
+                "district": temple_values.get("district")
+                or submission.get("district"),
+                "state": temple_values.get("state") or submission.get("state"),
+                "pincode": temple_values.get("pincode")
+                or submission.get("pincode"),
+                "latitude": latitude,
+                "longitude": longitude,
+                "significance": temple_values.get("significance")
+                or submission.get("description"),
+                "history": temple_values.get("history")
+                or submission.get("history"),
+                "hero_image_url": hero_image_url
+                or temple_values.get("hero_image_url"),
+                "secondary_deities": _as_list(
+                    form_data.get("secondary_deities")
+                ),
+                "category_tags": _as_list(form_data.get("category_tags")),
+                "entry_fee": _to_float(form_data.get("entry_fee")),
+                "status": "published",
+                "source": "manual",
+                "verified": True,
+            })
+
+            architecture_styles = form_payload.get("archStyles") or []
+            if architecture_styles:
+                temple_values["architecture_style"] = ", ".join(
+                    str(item).strip()
+                    for item in architecture_styles
+                    if str(item).strip()
                 )
+            temple_values["custom_designation"] = _clean_text(
+                form_payload.get("customDesignationText")
+            ) or temple_values.get("custom_designation")
+            temple_values["custom_facility"] = _clean_text(
+                form_payload.get("customFacilityText")
+            ) or temple_values.get("custom_facility")
+
+            temple_columns = list(temple_values)
+            temple_placeholders = ", ".join(["%s"] * len(temple_columns))
+            cursor.execute(
+                f"""
+                INSERT INTO temples ({", ".join(temple_columns)}, location, submitted_at)
                 VALUES (
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
+                    {temple_placeholders},
                     CASE
                         WHEN %s IS NOT NULL AND %s IS NOT NULL
                         THEN ST_GeogFromText(
@@ -781,41 +895,150 @@ def review_volunteer_submission(
                         )
                         ELSE NULL
                     END,
-                    %s,
-                    %s,
-                    %s,
-                    'published',
-                    'manual',
-                    TRUE
+                    NOW()
                 )
                 RETURNING id
                 """,
-                (
-                    str(uuid4()),
-                    submission["temple_name"],
-                    unique_slug,
-                    mkt_id,
-                    submission.get("deity"),
-                    submission["address"],
-                    submission["city"],
-                    submission.get("district"),
-                    submission["state"],
-                    submission.get("pincode"),
-                    submission.get("latitude"),
-                    submission.get("longitude"),
-                    submission.get("latitude"),
-                    submission.get("longitude"),
-                    submission.get("longitude"),
-                    submission.get("latitude"),
-                    submission.get("description"),
-                    submission.get("history"),
-                    hero_image_url,
-                ),
+                [
+                    *temple_values.values(),
+                    latitude,
+                    longitude,
+                    longitude,
+                    latitude,
+                ],
             )
 
             published_temple = (
                 cursor.fetchone()
             )
+            temple_id = published_temple["id"]
+
+            # Save every dynamic form section in its normalized table.
+            for index, schedule in enumerate(form_payload.get("scheds") or []):
+                if not isinstance(schedule, dict):
+                    continue
+                puja_name = _clean_text(schedule.get("name"))
+                puja_time = _clean_text(schedule.get("time"))
+                if not puja_name or not puja_time:
+                    continue
+                cursor.execute(
+                    """
+                    INSERT INTO temple_puja_schedule
+                        (temple_id, puja_name, puja_time, puja_type, sort_order)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        temple_id,
+                        puja_name,
+                        puja_time,
+                        _clean_text(schedule.get("type")) or "Aarti",
+                        index,
+                    ),
+                )
+
+            for priest in form_payload.get("priests") or []:
+                if not isinstance(priest, dict):
+                    continue
+                full_name = _clean_text(priest.get("name"))
+                phone = _clean_text(priest.get("phone"))
+                if not full_name or not phone:
+                    continue
+                cursor.execute(
+                    """
+                    INSERT INTO temple_priests (
+                        temple_id, is_head_priest, full_name,
+                        title_designation, phone, sampradaya,
+                        years_of_service, appointment_type
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        temple_id,
+                        bool(priest.get("is_head")),
+                        full_name,
+                        _clean_text(priest.get("title")),
+                        phone,
+                        _clean_text(priest.get("sampradaya")),
+                        _to_int(priest.get("years")),
+                        _clean_text(priest.get("appt_type")),
+                    ),
+                )
+
+            for index, festival in enumerate(form_payload.get("festivals") or []):
+                if not isinstance(festival, dict):
+                    continue
+                festival_name = _clean_text(festival.get("name"))
+                if not festival_name:
+                    continue
+                cursor.execute(
+                    """
+                    INSERT INTO festivals (
+                        temple_id, name, description, month, hindu_month,
+                        duration_days, is_major, source, ai_generated
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'manual', FALSE)
+                    """,
+                    (
+                        temple_id,
+                        festival_name,
+                        _clean_text(festival.get("desc")),
+                        _to_int(festival.get("month")),
+                        _clean_text(festival.get("hmonth")),
+                        _to_int(festival.get("days")),
+                        bool(festival.get("major")),
+                    ),
+                )
+
+            for index, mantra in enumerate(form_payload.get("mantras") or []):
+                if not isinstance(mantra, dict):
+                    continue
+                mantra_title = _clean_text(mantra.get("title"))
+                if not mantra_title:
+                    continue
+                cursor.execute(
+                    """
+                    INSERT INTO mantras (
+                        temple_id, title, sanskrit, transliteration,
+                        meaning, deity, verified, sort_order
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s)
+                    """,
+                    (
+                        temple_id,
+                        mantra_title,
+                        _clean_text(mantra.get("sanskrit")),
+                        _clean_text(mantra.get("transliteration")),
+                        _clean_text(mantra.get("meaning")),
+                        _clean_text(mantra.get("deity")),
+                        index,
+                    ),
+                )
+
+            if any(
+                form_data.get(field)
+                for field in (
+                    "chairman_name", "chairman_contact",
+                    "committee_count", "election_cycle",
+                )
+            ):
+                cursor.execute(
+                    """
+                    INSERT INTO temple_committees (
+                        temple_id, chairman_name, chairman_contact,
+                        committee_member_count, election_cycle
+                    )
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        temple_id,
+                        _clean_text(form_data.get("chairman_name")),
+                        _clean_text(form_data.get("chairman_contact")),
+                        _to_int(form_data.get("committee_count")),
+                        _clean_text(form_data.get("election_cycle_custom"))
+                        if form_data.get("election_cycle") == "__custom__"
+                        else _clean_text(form_data.get("election_cycle")),
+                    ),
+                )
 
             for item in uploaded_media:
                 if (
@@ -842,7 +1065,7 @@ def review_volunteer_submission(
                     )
                     """,
                     (
-                        published_temple["id"],
+                        temple_id,
                         item["url"],
                         item.get("file_name"),
                         item.get("sort_order", 1),
