@@ -1302,6 +1302,9 @@ export default function PanchangPage() {
     <>
       <Navbar />
       <div style={{ background: 'var(--cream)', minHeight: '100vh', paddingBottom: 80 }}>
+        {/* ══════════════ HERO — matches AI Guide / Route Planner / Blog
+            hero size: wide inner container + nowrap title so it stays
+            on one line at the same scale across every page ══════════════ */}
         <section style={{
           position: 'relative',
           overflow: 'hidden',
@@ -1315,7 +1318,7 @@ export default function PanchangPage() {
           width: '100%',
           boxSizing: 'border-box',
         }}>
-          <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 700, padding: '0 24px', boxSizing: 'border-box', textAlign: 'center' }}>
+          <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 860, padding: '0 24px', boxSizing: 'border-box', textAlign: 'center' }}>
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1329,7 +1332,7 @@ export default function PanchangPage() {
               fontSize: 11,
               letterSpacing: '.1em',
               textTransform: 'uppercase',
-              fontWeight: 600,
+              fontWeight: 500,
               fontFamily: UI_FONT,
             }}>
               <Sun size={11} /> {t('panchang.badge')}
@@ -1337,16 +1340,17 @@ export default function PanchangPage() {
             <h1 style={{
               fontFamily: 'var(--font-display)',
               fontWeight: 900,
-              fontSize: 'clamp(28px, 5vw, 52px)',
+              fontSize: 'clamp(24px, 4.4vw, 48px)',
               lineHeight: 1.1,
               marginBottom: 10,
               marginTop: 0,
               textShadow: '0 4px 40px rgba(0,0,0,0.3)',
               color: '#ffffff',
+              whiteSpace: 'nowrap',
             }}>
-              AI Pandit Ji - <span style={{ color: '#FFD580' }}>Panchang &amp; Muhurat</span>
+              <span style={{ color: '#FFD580' }}>Panchang &amp; Muhurat</span>
             </h1>
-            <p style={{ color: 'rgba(255,255,255,0.74)', fontSize: 14, maxWidth: 540, margin: '0 auto', fontWeight: 300, lineHeight: 1.7, fontFamily: UI_FONT }}>
+            <p style={{ color: 'rgba(255,255,255,0.74)', fontSize: 14, maxWidth: 520, margin: '0 auto', fontWeight: 300, lineHeight: 1.7, fontFamily: UI_FONT }}>
               {t('panchang.subtitle')}
             </p>
           </div>

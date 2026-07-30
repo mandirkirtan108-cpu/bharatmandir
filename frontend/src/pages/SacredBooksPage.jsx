@@ -109,21 +109,144 @@ export default function SacredBooksPage() {
     return q ? books.filter(b => `${b.title} ${b.author || ''} ${b.description || ''}`.toLowerCase().includes(q)) : books;
   }, [books, query]);
 
+  const handleSearch = (e) => {
+    e.preventDefault();
+  };
+
   return <>
     <Navbar />
     <main className="library">
-      <section className="library-hero">
-        <div className="library-hero-inner">
-          <div className="library-badge"><BookOpen size={15} /> Digital scripture library</div>
-          <h1>A quiet place to read the scriptures</h1>
-          <p>Every page kept exactly as it was written — Sanskrit, Hindi, English, and the original, side by side. Open a book, not a webpage.</p>
-          <div className="library-blessing">सुस्वागतम् — welcome, devotee</div>
+
+      {/* ══════════════ HERO (matches Search page hero) ══════════════ */}
+      <section style={{
+        position: 'relative',
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
+        padding: '50px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+        boxSizing: 'border-box',
+      }}>
+        <div style={{
+          position: 'relative', zIndex: 1,
+          width: '100%', maxWidth: 700,
+          padding: '0 24px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+        }}>
+
+          {/* Badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,213,128,0.3)',
+            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
+            color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
+            textTransform: 'uppercase', fontWeight: 500,
+            backdropFilter: 'blur(8px)',
+            whiteSpace: 'nowrap',
+          }}><BookOpen size={13} style={{ marginRight: 2 }} /> Digital scripture library</div>
+
+          {/* Title */}
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 900,
+            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+            marginBottom: 10, marginTop: 0,
+            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
+            color: '#ffffff',
+            width: '100%',
+          }}>
+            A quiet place to read the scriptures
+          </h1>
+
+          {/* Subtitle */}
+          <p style={{
+            color: 'rgba(255,255,255,0.7)', fontSize: 14,
+            width: '100%', maxWidth: 520,
+            margin: '0 0 10px 0',
+            fontWeight: 300, lineHeight: 1.7,
+            textAlign: 'center',
+          }}>
+            Every page kept exactly as it was written — Sanskrit, Hindi, English, and the original, side by side. Open a book, not a webpage.
+          </p>
+
+          <div style={{
+            fontFamily: 'var(--font-hindi, "Noto Serif Devanagari", serif)',
+            fontSize: 14, color: 'rgba(233,199,149,0.8)',
+            marginBottom: 22, letterSpacing: '.02em',
+          }}>
+            सुस्वागतम् — welcome, devotee
+          </div>
+
+          {/* Search bar — same shape/behavior as the Search page */}
+          <form
+            onSubmit={handleSearch}
+            style={{
+              display: 'flex',
+              width: '100%',
+              maxWidth: 580,
+              background: 'rgba(255,255,255,0.97)',
+              borderRadius: 16,
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+              border: '1px solid rgba(255,213,128,0.25)',
+            }}
+          >
+            <input
+              id="library-search-input"
+              name="library-search-query"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search books, authors, or subjects"
+              autoFocus
+              style={{
+                flex: 1,
+                border: 'none',
+                outline: 'none',
+                padding: '15px 18px',
+                fontSize: 15,
+                fontFamily: 'var(--font-body)',
+                color: '#1A0A00',
+                background: 'transparent',
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                padding: '15px 24px',
+                background: 'linear-gradient(135deg, #E8650A 0%, #B84D00 100%)',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 14,
+                fontWeight: 700,
+                fontFamily: 'var(--font-display)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                letterSpacing: '.04em',
+                whiteSpace: 'nowrap',
+                transition: 'opacity .2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              <Search size={15} />
+              Search
+            </button>
+          </form>
+
         </div>
       </section>
+      {/* ════════════════════════════════════ */}
 
       <section className="library-content">
-        <label className="library-search"><Search size={18} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search books, authors, or subjects" /></label>
-
         {loading && <div className="library-state">Bringing the volumes to the table…</div>}
         {error && <div className="library-state error">{error}</div>}
         {!loading && !error && visible.length === 0 && <div className="library-state">No books have been published yet.</div>}
@@ -158,29 +281,7 @@ export default function SacredBooksPage() {
 
       .library{position:relative;min-height:100vh;background:#f8f2e4}
 
-      /* Full-bleed hero: breaks out of any parent max-width wrapper so the
-         banner always spans the true viewport width, never just the content column. */
-      .library-hero{
-        position:relative;overflow:hidden;
-        width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);
-        background:
-          radial-gradient(ellipse 900px 400px at 50% 0%, #ffdca330, transparent 70%),
-          linear-gradient(135deg,#4b1d04 0%,#7a3208 55%,#a14a0b 100%);
-        padding:50px 20px 120px;
-      }
-      .library-hero-inner{position:relative;z-index:1;max-width:760px;margin:0 auto;text-align:center;color:#f1dcb8}
-      .library-badge{display:inline-flex;gap:8px;align-items:center;padding:7px 16px;border:1px solid #c9932f60;border-radius:99px;color:#e9c795;font-family:'EB Garamond',serif;font-size:13px;letter-spacing:.05em}
-      .library-hero h1{font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;font-size:clamp(30px,4.6vw,50px);margin:20px 0 14px;
-        background:linear-gradient(180deg,#f7e2ae,#c9932f);-webkit-background-clip:text;background-clip:text;color:transparent}
-      .library-hero p{opacity:.85;font-size:16px;font-family:'Crimson Pro',serif;margin:0 auto}
-      .library-blessing{margin-top:18px;font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:15px;color:#e9c795cc;letter-spacing:.02em}
-
-      .library-content{position:relative;z-index:1;max-width:1160px;margin:auto;padding:0 20px 80px}
-      .library-search{
-        max-width:520px;margin:-64px auto 44px;background:#fffaf0;border:1px solid #dcc7a4;border-radius:14px;
-        padding:14px 18px;display:flex;gap:10px;align-items:center;box-shadow:0 12px 30px #5c270b25;color:#7a5230
-      }
-      .library-search input{border:0;outline:0;width:100%;font-size:15px;background:transparent;font-family:'Crimson Pro',serif;color:#432516}
+      .library-content{position:relative;z-index:1;max-width:1160px;margin:auto;padding:44px 20px 80px}
 
       .shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:28px}
       .book-card{
