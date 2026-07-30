@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import io
 import json
 import os
 import re
 import tempfile
 import threading
 import uuid
+import wave
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -73,6 +75,18 @@ TTS_VOICES = {
     "hi": os.getenv("LIBRARY_TTS_VOICE_HI", "Kore"),
     "sa": os.getenv("LIBRARY_TTS_VOICE_SA", "Kore"),
 }
+# Not every TTS model supports every response_format — Gemini's TTS models
+# only support "pcm" (OpenRouter rejects "mp3" for them with a 400), while
+# OpenAI's TTS models support "mp3" directly. This must match whatever
+# model each language above is actually using.
+TTS_FORMATS = {
+    "en": os.getenv("LIBRARY_TTS_FORMAT_EN", "mp3"),
+    "hi": os.getenv("LIBRARY_TTS_FORMAT_HI", "pcm"),
+    "sa": os.getenv("LIBRARY_TTS_FORMAT_SA", "pcm"),
+}
+# Sample rate of the raw PCM Gemini's TTS returns (24kHz/16-bit mono), used
+# to wrap it in a playable WAV container — see _pcm_to_wav() below.
+TTS_PCM_SAMPLE_RATE = int(os.getenv("LIBRARY_TTS_PCM_SAMPLE_RATE", "24000"))
 # A page's worth of prose comfortably fits under this; longer input is
 # truncated so one request can't blow past a TTS model's context window.
 TTS_MAX_CHARS = max(500, int(os.getenv("LIBRARY_TTS_MAX_CHARS", "4000")))
@@ -275,8 +289,8 @@ def _upload_page_image(image_bytes: bytes, slug: str, page_number: int) -> str:
     return result["secure_url"]
 
 
-def _upload_page_audio(audio_bytes: bytes, slug: str, page_number: int, language: str) -> str:
-    """Upload a synthesized page's MP3 so it's generated via OpenRouter only
+def _upload_page_audio(audio_bytes: bytes, slug: str, page_number: int, language: str, audio_format: str) -> str:
+    """Upload a synthesized page's audio so it's generated via OpenRouter only
     once per (page, language) and served from Cloudinary's CDN every time
     after. Cloudinary treats audio under its "video" resource type."""
     _ensure_configured()
@@ -286,9 +300,23 @@ def _upload_page_audio(audio_bytes: bytes, slug: str, page_number: int, language
         folder=f"bharatmandir/library/{slug}/audio",
         public_id=f"page-{page_number:04d}-{language}",
         overwrite=True,
-        format="mp3",
+        format=audio_format,
     )
     return result["secure_url"]
+
+
+def _pcm_to_wav(pcm_bytes: bytes, *, sample_rate: int, channels: int = 1, sample_width: int = 2) -> bytes:
+    """Wraps raw PCM16 bytes (what Gemini's TTS models return — OpenRouter
+    rejects "mp3" for them) in a minimal WAV header. Raw PCM has no
+    container/header at all, so it won't play from a plain <audio src=...>
+    or upload as a recognizable file type without this."""
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(sample_width)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_bytes)
+    return buffer.getvalue()
 
 
 def _quick_page_count(pdf_path: Path) -> int:
@@ -984,15 +1012,26 @@ def synthesize_speech(payload: dict = Body(...)):
 
     model = TTS_MODELS[language]
     voice = TTS_VOICES[language]
+    audio_format = TTS_FORMATS[language]  # "mp3" or "pcm", per what this language's model supports
 
     try:
-        audio = speech(input=text, model=model, voice=voice, response_format="mp3")
+        audio = speech(input=text, model=model, voice=voice, response_format=audio_format)
     except RuntimeError as exc:
         raise HTTPException(502, str(exc)) from exc
 
+    if audio_format == "pcm":
+        # Raw PCM has no container — wrap it in a WAV header so it's an
+        # actual playable/uploadable file, then treat it as "wav" from here on.
+        audio = _pcm_to_wav(audio, sample_rate=TTS_PCM_SAMPLE_RATE)
+        upload_format = "wav"
+        media_type = "audio/wav"
+    else:
+        upload_format = "mp3"
+        media_type = "audio/mpeg"
+
     if book_id is not None:
         try:
-            audio_url = _upload_page_audio(audio, slug, page_number, language)
+            audio_url = _upload_page_audio(audio, slug, page_number, language, upload_format)
             with get_db_cursor() as cur:
                 cur.execute(
                     f"UPDATE library_book_pages SET {audio_column}=%s WHERE book_id=%s AND page_number=%s",
@@ -1002,20 +1041,20 @@ def synthesize_speech(payload: dict = Body(...)):
             # Storing is a bonus, not a requirement — a Cloudinary/DB hiccup
             # here shouldn't stop this request's audio from playing.
             pass
-        return Response(content=audio, media_type="audio/mpeg")
+        return Response(content=audio, media_type=media_type)
 
     # No book context to store against — fall back to the process-local
     # cache so at least identical repeat requests in this session are free.
     cache_key = hashlib.sha256(f"{language}:{model}:{voice}:{text}".encode("utf-8")).hexdigest()
     cached = _tts_cache.get(cache_key)
     if cached is not None:
-        return Response(content=cached, media_type="audio/mpeg")
+        return Response(content=cached, media_type=media_type)
     _tts_cache[cache_key] = audio
     _tts_cache_order.append(cache_key)
     if len(_tts_cache_order) > _TTS_CACHE_LIMIT:
         oldest = _tts_cache_order.pop(0)
         _tts_cache.pop(oldest, None)
-    return Response(content=audio, media_type="audio/mpeg")
+    return Response(content=audio, media_type=media_type)
 
 
 @router.post("/api/admin/books", status_code=202)
