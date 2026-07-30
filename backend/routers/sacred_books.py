@@ -66,12 +66,12 @@ _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
 # both (mirroring the old browser fallback of reading Sanskrit with a Hindi
 # voice, but with a model actually trained on it).
 TTS_MODELS = {
-    "en": os.getenv("LIBRARY_TTS_MODEL_EN", "openai/gpt-4o-mini-tts-2025-12-15"),
+    "en": os.getenv("LIBRARY_TTS_MODEL_EN", "google/gemini-3.1-flash-tts-preview"),
     "hi": os.getenv("LIBRARY_TTS_MODEL_HI", "google/gemini-3.1-flash-tts-preview"),
     "sa": os.getenv("LIBRARY_TTS_MODEL_SA", "google/gemini-3.1-flash-tts-preview"),
 }
 TTS_VOICES = {
-    "en": os.getenv("LIBRARY_TTS_VOICE_EN", "alloy"),
+    "en": os.getenv("LIBRARY_TTS_VOICE_EN", "Kore"),
     "hi": os.getenv("LIBRARY_TTS_VOICE_HI", "Kore"),
     "sa": os.getenv("LIBRARY_TTS_VOICE_SA", "Kore"),
 }
@@ -80,7 +80,7 @@ TTS_VOICES = {
 # OpenAI's TTS models support "mp3" directly. This must match whatever
 # model each language above is actually using.
 TTS_FORMATS = {
-    "en": os.getenv("LIBRARY_TTS_FORMAT_EN", "mp3"),
+    "en": os.getenv("LIBRARY_TTS_FORMAT_EN", "pcm"),
     "hi": os.getenv("LIBRARY_TTS_FORMAT_HI", "pcm"),
     "sa": os.getenv("LIBRARY_TTS_FORMAT_SA", "pcm"),
 }
