@@ -18,9 +18,9 @@ from datetime import datetime
 from pathlib import Path
 
 import cloudinary.uploader
+import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Response, UploadFile
-from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pypdf import PdfReader
 
@@ -1008,7 +1008,40 @@ def synthesize_speech(payload: dict = Body(...)):
         if row:
             book_id = row["book_id"]
             if row["audio_url"]:
-                return RedirectResponse(row["audio_url"], status_code=307)
+                # Do not redirect this POST request to Cloudinary. A 307 keeps
+                # the POST method, while a Cloudinary delivery URL expects GET;
+                # browser fetch can also be blocked by the CDN's CORS response.
+                # Proxy the cached file through this same-origin API instead.
+                try:
+                    cached_response = httpx.get(
+                        row["audio_url"],
+                        timeout=60,
+                        follow_redirects=True,
+                    )
+                    cached_response.raise_for_status()
+                    cached_media_type = (
+                        cached_response.headers.get("content-type", "")
+                        .split(";", 1)[0]
+                        .strip()
+                    )
+                    if not cached_media_type.startswith("audio/"):
+                        cached_media_type = (
+                            "audio/wav"
+                            if TTS_FORMATS[language] == "pcm"
+                            else "audio/mpeg"
+                        )
+                    return Response(
+                        content=cached_response.content,
+                        media_type=cached_media_type,
+                        headers={"Cache-Control": "public, max-age=31536000"},
+                    )
+                except httpx.HTTPError as exc:
+                    # If an old Cloudinary asset is missing or temporarily
+                    # unavailable, continue below and regenerate the page audio.
+                    print(
+                        f"[library] cached TTS unavailable for "
+                        f"{slug} page {page_number} ({language}): {exc}"
+                    )
 
     model = TTS_MODELS[language]
     voice = TTS_VOICES[language]
