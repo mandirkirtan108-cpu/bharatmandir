@@ -1348,7 +1348,7 @@ export default function PanchangPage() {
               color: '#ffffff',
               whiteSpace: 'nowrap',
             }}>
-              <span style={{ color: '#FFD580' }}>Panchang &amp; Muhurat</span>
+              Panchang &amp; Muhurat
             </h1>
             <p style={{ color: 'rgba(255,255,255,0.74)', fontSize: 14, maxWidth: 520, margin: '0 auto', fontWeight: 300, lineHeight: 1.7, fontFamily: UI_FONT }}>
               {t('panchang.subtitle')}
