@@ -14,6 +14,11 @@ import { useLang } from '../LangContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// Same UI font used for the badge/subtitle on the AI Guide, Panchang, and
+// Route Planner heroes — kept separate from the blog body's serif/Devanagari
+// stack (--fb / --fh) so the hero text style stays consistent site-wide.
+const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
+
 // ── CSS ────────────────────────────────────────────────────────────────────────
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,400&family=Noto+Sans+Devanagari:wght@400;600&display=swap');
@@ -221,7 +226,9 @@ export default function BlogPage() {
       <style>{CSS}</style>
       <Navbar />
 
-      {/* ── Hero — matches RoutePlannerPage exactly ── */}
+      {/* ── Hero — sized and typeset to match the AI Guide hero:
+          UI_FONT for badge/subtitle, var(--font-display) for the title,
+          wide inner container + nowrap so the title reads on one line ── */}
       <section style={{
         position: 'relative', overflow: 'hidden',
         background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
@@ -230,7 +237,7 @@ export default function BlogPage() {
         width: '100%', boxSizing: 'border-box',
       }}>
         <div style={{
-          position: 'relative', zIndex: 1, width: '100%', maxWidth: 700,
+          position: 'relative', zIndex: 1, width: '100%', maxWidth: 860,
           padding: '0 24px', boxSizing: 'border-box',
           display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
         }}>
@@ -242,17 +249,19 @@ export default function BlogPage() {
             color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
             textTransform: 'uppercase', fontWeight: 500,
             backdropFilter: 'blur(8px)', whiteSpace: 'nowrap',
+            fontFamily: UI_FONT,
           }}>
             📖 {t('blog.badge')}
           </div>
 
           {/* Title */}
           <h1 style={{
-            fontFamily: 'var(--fd)', fontWeight: 900,
-            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
+            fontFamily: 'var(--font-display)', fontWeight: 900,
+            fontSize: 'clamp(24px, 4.4vw, 48px)', lineHeight: 1.1,
             marginBottom: 10, marginTop: 0,
             textShadow: '0 4px 40px rgba(0,0,0,0.3)',
             color: '#ffffff', width: '100%',
+            whiteSpace: 'nowrap',
           }}>
             {t('blog.title')}
           </h1>
@@ -264,6 +273,7 @@ export default function BlogPage() {
             margin: '0',
             fontWeight: 300, lineHeight: 1.7,
             textAlign: 'center',
+            fontFamily: UI_FONT,
           }}>
             {t('blog.subtitle')}
           </p>
