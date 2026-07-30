@@ -1043,7 +1043,6 @@ def review_volunteer_submission(
             for item in uploaded_media:
                 if (
                     not isinstance(item, dict)
-                    or item.get("is_hero")
                     or not item.get("url")
                 ):
                     continue
@@ -1060,14 +1059,16 @@ def review_volunteer_submission(
                         cloudinary_public_id
                     )
                     VALUES (
-                        %s, 'image', %s, %s, NULL,
-                        FALSE, %s, %s
+                        %s, 'image', %s, %s, %s,
+                        %s, %s, %s
                     )
                     """,
                     (
                         temple_id,
                         item["url"],
                         item.get("file_name"),
+                        temple_values["name"],
+                        bool(item.get("is_hero")),
                         item.get("sort_order", 1),
                         item.get("public_id"),
                     ),
