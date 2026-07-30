@@ -12,6 +12,7 @@ import {
   isLoggedIn,
   removeBookmark,
   saveReadingProgress,
+  synthesizeSpeech,
 } from '../services/sacredBooksApi';
 
 const LANGUAGES = [
@@ -68,11 +69,13 @@ export default function SacredBookReaderPage() {
   const [bookmarks, setBookmarks] = useState([]);
   const [bookmarkBusy, setBookmarkBusy] = useState(false);
 
-  // Voice reading (Web Speech API — browser/OS voices, free, no backend needed)
+  // Voice reading — text is sent to the backend, which synthesizes it via
+  // OpenRouter and streams back an MP3 that plays through a plain <audio>.
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [voicesLoaded, setVoicesLoaded] = useState(false);
-  const utteranceRef = useRef(null);
+  const [voiceLoading, setVoiceLoading] = useState(false);
+  const audioRef = useRef(null);
+  const audioUrlRef = useRef(null);
 
   // Swipe + scroll-hint plumbing
   const touchStartX = useRef(null);
@@ -262,56 +265,47 @@ export default function SacredBookReaderPage() {
   }, [current, language, showingScan, loading]);
 
   // ── Voice reading ────────────────────────────────────────────────────────
-  // Load available voices — some browsers (Chrome especially) populate the
-  // voice list asynchronously after the page loads.
-  useEffect(() => {
-    if (!('speechSynthesis' in window)) return;
-    const load = () => setVoicesLoaded(true);
-    load();
-    window.speechSynthesis.addEventListener('voiceschanged', load);
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
-  }, []);
-
-  // Sanskrit has no dedicated browser voice on any platform — best-effort
-  // fallback to a Hindi voice, which at least reads Devanagari correctly.
-  const pickVoice = (langCode) => {
-    if (!('speechSynthesis' in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
-    const wantLang = langCode === 'hi' || langCode === 'sa' ? 'hi' : 'en';
-    return (
-      voices.find(v => v.lang.toLowerCase().startsWith(wantLang)) ||
-      voices.find(v => v.lang.toLowerCase().startsWith('en')) ||
-      voices[0] ||
-      null
-    );
-  };
-
   const stopSpeaking = () => {
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
     setSpeaking(false);
     setPaused(false);
+    setVoiceLoading(false);
   };
 
-  const speak = () => {
-    if (!('speechSynthesis' in window) || !current || showingScan || !displayText.trim()) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(displayText);
-    const voice = pickVoice(language);
-    if (voice) utter.voice = voice;
-    utter.lang = voice?.lang || (language === 'hi' || language === 'sa' ? 'hi-IN' : 'en-US');
-    utter.rate = 0.95;
-    utter.onend = () => { setSpeaking(false); setPaused(false); };
-    utter.onerror = () => { setSpeaking(false); setPaused(false); };
-    utteranceRef.current = utter;
-    window.speechSynthesis.speak(utter);
-    setSpeaking(true);
-    setPaused(false);
+  const speak = async () => {
+    if (!current || showingScan || !displayText.trim() || voiceLoading) return;
+    stopSpeaking();
+    setVoiceLoading(true);
+    try {
+      const blob = await synthesizeSpeech(displayText, language === 'original' ? 'en' : language, slug, current.page_number);
+      const url = URL.createObjectURL(blob);
+      audioUrlRef.current = url;
+      const audio = new Audio(url);
+      audio.onended = () => { setSpeaking(false); setPaused(false); };
+      audio.onerror = () => { setSpeaking(false); setPaused(false); setError('Voice reading failed. Please try again.'); };
+      audioRef.current = audio;
+      await audio.play();
+      setSpeaking(true);
+      setPaused(false);
+    } catch (e) {
+      setError(e.message || 'Voice reading failed. Please try again.');
+    } finally {
+      setVoiceLoading(false);
+    }
   };
 
   const togglePause = () => {
-    if (!('speechSynthesis' in window) || !speaking) return;
-    if (paused) { window.speechSynthesis.resume(); setPaused(false); }
-    else { window.speechSynthesis.pause(); setPaused(true); }
+    if (!audioRef.current || !speaking) return;
+    if (paused) { audioRef.current.play(); setPaused(false); }
+    else { audioRef.current.pause(); setPaused(true); }
   };
 
   // Stop reading whenever the page or language changes, and on unmount —
@@ -435,16 +429,16 @@ export default function SacredBookReaderPage() {
             >{label}</button>
           ))}
 
-          {'speechSynthesis' in window && language !== 'original' && (
+          {language !== 'original' && (
             <div className="voice-controls">
               {!speaking ? (
                 <button
                   className="voice-btn"
                   onClick={speak}
-                  disabled={!voicesLoaded || !current || !displayText.trim()}
+                  disabled={voiceLoading || !current || !displayText.trim()}
                   title="Read this page aloud"
                 >
-                  <Play size={14} /> Listen
+                  <Play size={14} /> {voiceLoading ? 'Loading…' : 'Listen'}
                 </button>
               ) : (
                 <>

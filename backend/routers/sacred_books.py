@@ -17,7 +17,8 @@ from pathlib import Path
 
 import cloudinary.uploader
 from dotenv import load_dotenv
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pypdf import PdfReader
 
@@ -31,7 +32,7 @@ from db.connection import get_db_cursor
 from routers.admin_auth import get_current_admin
 from routers.user_auth import decode_token, get_current_user, get_user_by_id
 from services.cloudinary_service import _ensure_configured
-from services.openrouter_service import api_key, chat, content
+from services.openrouter_service import api_key, chat, content, speech
 
 load_dotenv(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
@@ -55,6 +56,33 @@ PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
 # usable text layer (i.e. a scanned image) and is sent through OCR instead.
 OCR_MIN_TEXT_CHARS = max(1, int(os.getenv("LIBRARY_OCR_MIN_TEXT_CHARS", "20")))
 _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
+
+# ── Voice reading (OpenRouter text-to-speech) ───────────────────────────────
+# One model/voice pair per reader language. English uses OpenAI's TTS voices;
+# Hindi and Sanskrit use Gemini's TTS model instead, since it covers far more
+# languages than OpenAI's voices do and reads Devanagari text correctly for
+# both (mirroring the old browser fallback of reading Sanskrit with a Hindi
+# voice, but with a model actually trained on it).
+TTS_MODELS = {
+    "en": os.getenv("LIBRARY_TTS_MODEL_EN", "openai/gpt-4o-mini-tts-2025-12-15"),
+    "hi": os.getenv("LIBRARY_TTS_MODEL_HI", "google/gemini-3.1-flash-tts-preview"),
+    "sa": os.getenv("LIBRARY_TTS_MODEL_SA", "google/gemini-3.1-flash-tts-preview"),
+}
+TTS_VOICES = {
+    "en": os.getenv("LIBRARY_TTS_VOICE_EN", "alloy"),
+    "hi": os.getenv("LIBRARY_TTS_VOICE_HI", "Kore"),
+    "sa": os.getenv("LIBRARY_TTS_VOICE_SA", "Kore"),
+}
+# A page's worth of prose comfortably fits under this; longer input is
+# truncated so one request can't blow past a TTS model's context window.
+TTS_MAX_CHARS = max(500, int(os.getenv("LIBRARY_TTS_MAX_CHARS", "4000")))
+# Small in-memory cache so replaying the same page's audio (switching tabs
+# and back, re-opening "Listen") doesn't re-pay OpenRouter's per-character
+# TTS cost every time. Bounded and process-local — fine for a "nice to have",
+# not meant as a durable cache.
+_TTS_CACHE_LIMIT = 200
+_tts_cache: dict[str, bytes] = {}
+_tts_cache_order: list[str] = []
 
 # Original PDFs are never kept permanently — a book only needs its raw file
 # on disk for the duration of extraction/translation. This directory lives
@@ -118,6 +146,22 @@ def ensure_library_schema() -> None:
         cur.execute("""
             ALTER TABLE library_book_pages
             ADD COLUMN IF NOT EXISTS page_image_url TEXT
+        """)
+        # Generated once per (page, language) and reused forever after —
+        # see synthesize_speech() below. Cached permanently in Cloudinary,
+        # not just in-process memory, so it survives restarts/deploys and
+        # is shared across every reader instead of being regenerated.
+        cur.execute("""
+            ALTER TABLE library_book_pages
+            ADD COLUMN IF NOT EXISTS audio_en_url TEXT
+        """)
+        cur.execute("""
+            ALTER TABLE library_book_pages
+            ADD COLUMN IF NOT EXISTS audio_hi_url TEXT
+        """)
+        cur.execute("""
+            ALTER TABLE library_book_pages
+            ADD COLUMN IF NOT EXISTS audio_sa_url TEXT
         """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_library_pages_book
@@ -227,6 +271,22 @@ def _upload_page_image(image_bytes: bytes, slug: str, page_number: int) -> str:
         folder=f"bharatmandir/library/{slug}/pages",
         public_id=f"page-{page_number:04d}",
         overwrite=True,
+    )
+    return result["secure_url"]
+
+
+def _upload_page_audio(audio_bytes: bytes, slug: str, page_number: int, language: str) -> str:
+    """Upload a synthesized page's MP3 so it's generated via OpenRouter only
+    once per (page, language) and served from Cloudinary's CDN every time
+    after. Cloudinary treats audio under its "video" resource type."""
+    _ensure_configured()
+    result = cloudinary.uploader.upload(
+        audio_bytes,
+        resource_type="video",
+        folder=f"bharatmandir/library/{slug}/audio",
+        public_id=f"page-{page_number:04d}-{language}",
+        overwrite=True,
+        format="mp3",
     )
     return result["secure_url"]
 
@@ -573,7 +633,10 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                             text_en=EXCLUDED.text_en,
                             text_hi=EXCLUDED.text_hi,
                             text_sa=EXCLUDED.text_sa,
-                            page_image_url=EXCLUDED.page_image_url
+                            page_image_url=EXCLUDED.page_image_url,
+                            audio_en_url=NULL,
+                            audio_hi_url=NULL,
+                            audio_sa_url=NULL
                     """, (
                         book_id, page_number, source_text, translated["en"],
                         translated["hi"], translated["sa"], image_url,
@@ -864,6 +927,95 @@ def search_book(slug: str, q: str = Query(..., min_length=2), language: str = "e
         """, (book["id"], f"%{q}%"))
         results = [dict(row) for row in cur.fetchall()]
     return {"results": results}
+
+
+AUDIO_COLUMNS = {"en": "audio_en_url", "hi": "audio_hi_url", "sa": "audio_sa_url"}
+
+
+@router.post("/api/books/tts")
+def synthesize_speech(payload: dict = Body(...)):
+    """Text-to-speech for the reader's "Listen" button, via OpenRouter.
+
+    Public (no auth) — mirrors /api/books/{slug}/pages, which any reader,
+    logged in or not, can already fetch.
+
+    When `slug` + `page_number` are supplied, this generates each page's
+    audio via OpenRouter only the first time it's ever requested, uploads
+    it to Cloudinary, and remembers the URL on that library_book_pages row.
+    Every request after that 307-redirects straight to the stored CDN URL
+    instead of calling OpenRouter again — so a page is paid for once and
+    reused by every reader, not re-synthesized on every "Listen" click.
+
+    Without `slug`/`page_number` (or if storing fails for any reason) this
+    falls back to synthesizing on the spot and serving the bytes directly,
+    backed by the small in-process cache below.
+    """
+
+    text = (payload.get("text") or "").strip()
+    language = payload.get("language") or "en"
+    if language not in TTS_MODELS:
+        language = "en"
+    if not text:
+        raise HTTPException(400, "text is required")
+    if len(text) > TTS_MAX_CHARS:
+        text = text[:TTS_MAX_CHARS]
+
+    slug = (payload.get("slug") or "").strip()
+    page_number = payload.get("page_number")
+    audio_column = AUDIO_COLUMNS[language]
+    book_id = None
+
+    if slug and isinstance(page_number, int):
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT b.id AS book_id, p.{audio_column} AS audio_url
+                FROM library_books b
+                JOIN library_book_pages p ON p.book_id = b.id
+                WHERE b.slug=%s AND p.page_number=%s AND b.status='ready'
+                """,
+                (slug, page_number),
+            )
+            row = cur.fetchone()
+        if row:
+            book_id = row["book_id"]
+            if row["audio_url"]:
+                return RedirectResponse(row["audio_url"], status_code=307)
+
+    model = TTS_MODELS[language]
+    voice = TTS_VOICES[language]
+
+    try:
+        audio = speech(input=text, model=model, voice=voice, response_format="mp3")
+    except RuntimeError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+    if book_id is not None:
+        try:
+            audio_url = _upload_page_audio(audio, slug, page_number, language)
+            with get_db_cursor() as cur:
+                cur.execute(
+                    f"UPDATE library_book_pages SET {audio_column}=%s WHERE book_id=%s AND page_number=%s",
+                    (audio_url, book_id, page_number),
+                )
+        except Exception:
+            # Storing is a bonus, not a requirement — a Cloudinary/DB hiccup
+            # here shouldn't stop this request's audio from playing.
+            pass
+        return Response(content=audio, media_type="audio/mpeg")
+
+    # No book context to store against — fall back to the process-local
+    # cache so at least identical repeat requests in this session are free.
+    cache_key = hashlib.sha256(f"{language}:{model}:{voice}:{text}".encode("utf-8")).hexdigest()
+    cached = _tts_cache.get(cache_key)
+    if cached is not None:
+        return Response(content=cached, media_type="audio/mpeg")
+    _tts_cache[cache_key] = audio
+    _tts_cache_order.append(cache_key)
+    if len(_tts_cache_order) > _TTS_CACHE_LIMIT:
+        oldest = _tts_cache_order.pop(0)
+        _tts_cache.pop(oldest, None)
+    return Response(content=audio, media_type="audio/mpeg")
 
 
 @router.post("/api/admin/books", status_code=202)

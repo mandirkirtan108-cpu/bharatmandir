@@ -44,6 +44,24 @@ export const saveReadingProgress = (slug, language, pageNumber) =>
 
 export const isLoggedIn = () => !!localStorage.getItem(USER_ACCESS_KEY);
 
+// Voice reading — sends the page's text to the backend, which synthesizes
+// it via OpenRouter and streams back an MP3 (or, once a page's audio has
+// been generated before, redirects straight to the stored Cloudinary URL).
+// Passing slug + pageNumber lets the backend cache/reuse per page; both
+// are optional, falling back to a one-off, unstored synthesis without them.
+export const synthesizeSpeech = async (text, language, slug, pageNumber) => {
+  const response = await fetch(`${BASE}/api/books/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, language, slug, page_number: pageNumber }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `Voice reading failed (${response.status})`);
+  }
+  return response.blob();
+};
+
 // This user's progress across every book, keyed by slug — used by the
 // shelf page to show "Continue reading". Comes straight from the same
 // DB table the reader page saves to, so it's never stale or device-local.
