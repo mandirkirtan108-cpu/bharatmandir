@@ -84,12 +84,7 @@ export default function PanchangCalendar() {
         }
       } catch (err) {
         if (!active) return;
-        setError(
-  friendlyError(
-    err,
-    "We couldn't prepare the sacred calendar right now. Please try again in a few moments."
-  )
-);
+        setError(friendlyError(err, "We couldn't prepare the sacred calendar right now. Please try again in a few moments."));
         setMonthData(null);
       } finally {
         if (active) setLoading(false);

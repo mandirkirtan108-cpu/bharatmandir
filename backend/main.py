@@ -9,7 +9,9 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import (
     CORSMiddleware,
 )
@@ -147,6 +149,69 @@ app = FastAPI(
     redoc_url="/api/redoc",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    error: RequestValidationError,
+):
+    """Keep framework validation details out of user-facing responses."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": (
+                "Please review the highlighted details and try again."
+            )
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def friendly_http_exception_handler(
+    request: Request,
+    error: HTTPException,
+):
+    """Preserve helpful client guidance while shielding service internals."""
+    if error.status_code >= 500:
+        detail = (
+            "We couldn't complete this right now. "
+            "Please try again in a few moments."
+        )
+    elif error.status_code == 401:
+        detail = (
+            "Your session has ended. Please sign in again to continue."
+        )
+    elif error.status_code == 403:
+        detail = (
+            "You don't have access to this area. "
+            "Please use an account with the required permission."
+        )
+    else:
+        detail = error.detail
+
+    return JSONResponse(
+        status_code=error.status_code,
+        content={"detail": detail},
+        headers=error.headers,
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(
+    request: Request,
+    error: Exception,
+):
+    """Return a reassuring response without exposing exception text."""
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                "We couldn't complete this right now. "
+                "Please try again in a few moments."
+            )
+        },
+    )
 
 
 app.mount(

@@ -17,7 +17,6 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PanchangCalendar from '../components/PanchangCalendar';
 import CityAutocomplete from '../components/CityAutocomplete';
-import { friendlyError } from '../utils/uiMessages';
 
 const MUHURAT_TYPES = [
   { id: 'vivah', label: 'Vivah', hindi: 'Vivah', desc: 'Marriage ceremony' },
@@ -1143,9 +1142,7 @@ export default function PanchangPage() {
 
   const getUserLocation = () => {
     if (!navigator.geolocation) {
-     setLocationError(
-  "Location isn't available in this browser. Please enter your city instead."
-);
+      setLocationError('Your browser does not support location access.');
       return;
     }
     setLocLoading(true);
@@ -1159,9 +1156,7 @@ export default function PanchangPage() {
         reverseGeocodeCity(latitude, longitude);
       },
       () => {
-       setLocationError(
-  'We could not use your location. Please allow location access or enter your city instead.'
-);
+        setLocationError('Location access denied. Please allow location in your browser and try again.');
         setLocLoading(false);
       },
       { timeout: 10000 }
@@ -1212,21 +1207,11 @@ export default function PanchangPage() {
       // instead of silently generating Panchang for a wrong fallback city.
       // `!res.ok` already surfaces that message here — no change needed on
       // this side beyond making sure city text isn't trusted blindly.
-   if (!res.ok) {
-  throw Object.assign(
-    new Error(data.detail),
-    { status: res.status }
-  );
-}
+      if (!res.ok) throw new Error(data.detail || "We couldn't prepare the Panchang right now. Please try again in a few moments.");
       setDailyResult(data);
-   } catch (error) {
-  setDailyError(
-    friendlyError(
-      error,
-      "We couldn't prepare the Panchang right now. Please try again in a few moments."
-    )
-  );
-} finally {
+    } catch (e) {
+      setDailyError(e.message || 'Could not load Panchang');
+    } finally {
       setDailyLoading(false);
     }
   };
@@ -1255,22 +1240,11 @@ export default function PanchangPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) {
-  throw Object.assign(
-    new Error(data.detail),
-    { status: res.status }
-  );
-}
+      if (!res.ok) throw new Error(data.detail || "We couldn't gather the Muhurat details right now. Please try again in a few moments.");
       setResult(data);
-    } catch (error) {
-  setMuhuratError(
-    friendlyError(
-      error,
-      "We couldn't gather the Muhurat details right now. Please try again in a few moments."
-    )
-  );
-}
-finally {
+    } catch (e) {
+      setMuhuratError(`Could not get Muhurat: ${e.message}`);
+    } finally {
       setLoading(false);
     }
   };
@@ -1452,13 +1426,7 @@ finally {
                 <button className="btn-primary panchang-submit-button" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
                   {dailyLoading ? (
                     <>
-                     <Loader2
-  size={15}
-  style={{
-    animation: 'spin .8s linear infinite',
-  }}
-/>
-Gathering today's Panchang...
+                      <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Just a moment while we prepare everything...
                     </>
                   ) : (
                     <>
