@@ -101,33 +101,34 @@ export default function VolunteerDashboardPage() {
     'Volunteer';
 
   return (
-    <div style={styles.page}>
+    <div className="volunteer-dashboard-page" style={styles.page}>
       <VolunteerNavbar />
 
-      <section style={styles.hero}>
+      <section className="volunteer-dashboard-hero" style={styles.hero}>
         <div style={styles.heroGlow} />
 
-        <div style={styles.heroInner}>
+        <div className="volunteer-dashboard-hero-inner" style={styles.heroInner}>
           <div style={styles.heroBadge}>
             <Landmark size={13} />
             VOLUNTEER PORTAL
           </div>
 
-          <h1 style={styles.heroTitle}>
+          <h1 className="volunteer-dashboard-hero-title" style={styles.heroTitle}>
             Namaste,{' '}
             <span style={styles.heroHighlight}>
               {volunteerName}
             </span>
           </h1>
 
-          <p style={styles.heroText}>
+          <p className="volunteer-dashboard-hero-text" style={styles.heroText}>
             The temple information you submit helps preserve
             India&apos;s sacred heritage.
           </p>
 
-          <div style={styles.heroActions}>
+          <div className="volunteer-dashboard-hero-actions" style={styles.heroActions}>
             <Link
               to="/volunteer/add-temple"
+              className="volunteer-dashboard-primary-action"
               style={styles.primaryButton}
             >
               <Plus size={17} />
@@ -136,6 +137,7 @@ export default function VolunteerDashboardPage() {
 
             <Link
               to="/volunteer/submissions"
+              className="volunteer-dashboard-secondary-action"
               style={styles.secondaryButton}
             >
               View My Submissions
@@ -144,7 +146,7 @@ export default function VolunteerDashboardPage() {
         </div>
       </section>
 
-      <main style={styles.main}>
+      <main className="volunteer-dashboard-main" style={styles.main}>
         <div
           className="volunteer-dashboard-stats"
           style={styles.statsGrid}
@@ -186,8 +188,8 @@ export default function VolunteerDashboardPage() {
           className="volunteer-dashboard-content"
           style={styles.contentGrid}
         >
-          <section style={styles.panel}>
-            <div style={styles.panelHeader}>
+          <section className="volunteer-dashboard-panel" style={styles.panel}>
+            <div className="volunteer-dashboard-panel-header" style={styles.panelHeader}>
               <div>
                 <p style={styles.eyebrow}>
                   RECENT ACTIVITY
@@ -233,8 +235,8 @@ export default function VolunteerDashboardPage() {
             )}
           </section>
 
-          <aside style={styles.sidebar}>
-            <section style={styles.sevaCard}>
+          <aside className="volunteer-dashboard-sidebar" style={styles.sidebar}>
+            <section className="volunteer-dashboard-seva-card" style={styles.sevaCard}>
               <div style={styles.sevaIcon}>
                 <Landmark size={27} />
               </div>
@@ -295,25 +297,146 @@ export default function VolunteerDashboardPage() {
 
       <style>
         {`
+          .volunteer-dashboard-page,
+          .volunteer-dashboard-page * {
+            box-sizing: border-box;
+          }
+
+          .volunteer-dashboard-page {
+            width: 100%;
+            overflow-x: hidden;
+          }
+
+          .volunteer-dashboard-content,
+          .volunteer-dashboard-panel,
+          .volunteer-dashboard-sidebar {
+            min-width: 0;
+          }
+
           @media (max-width: 780px) {
+            .volunteer-dashboard-hero {
+              padding: 48px 18px 54px !important;
+            }
+
+            .volunteer-dashboard-main {
+              width: 100% !important;
+              padding: 28px 16px 56px !important;
+            }
+
             .volunteer-dashboard-content {
               grid-template-columns: 1fr !important;
+              gap: 18px !important;
             }
 
             .volunteer-dashboard-stats {
               margin-top: -28px !important;
             }
+
+            .volunteer-dashboard-sidebar {
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .volunteer-dashboard-seva-card {
+              grid-column: 1 / -1;
+            }
           }
 
           @media (max-width: 520px) {
+            .volunteer-dashboard-hero {
+              padding: 38px 14px 46px !important;
+            }
+
+            .volunteer-dashboard-hero-inner {
+              width: 100%;
+            }
+
+            .volunteer-dashboard-hero-title {
+              font-size: clamp(30px, 11vw, 42px) !important;
+              line-height: 1.12 !important;
+              overflow-wrap: anywhere;
+            }
+
+            .volunteer-dashboard-hero-text {
+              font-size: 13px !important;
+              line-height: 1.6 !important;
+            }
+
+            .volunteer-dashboard-hero-actions {
+              display: grid !important;
+              grid-template-columns: 1fr !important;
+              width: 100%;
+            }
+
+            .volunteer-dashboard-primary-action,
+            .volunteer-dashboard-secondary-action {
+              width: 100% !important;
+              min-height: 46px;
+              justify-content: center;
+              text-align: center;
+            }
+
+            .volunteer-dashboard-main {
+              padding: 24px 12px 46px !important;
+            }
+
             .volunteer-dashboard-stats {
               grid-template-columns: 1fr 1fr !important;
+              gap: 10px !important;
+              margin-top: -24px !important;
+            }
+
+            .volunteer-dashboard-stat-card {
+              min-width: 0;
+              gap: 10px !important;
+              padding: 14px 12px !important;
+              border-radius: 12px !important;
+            }
+
+            .volunteer-dashboard-panel {
+              padding: 16px 14px !important;
+              border-radius: 13px !important;
+            }
+
+            .volunteer-dashboard-panel-header {
+              align-items: flex-start !important;
+            }
+
+            .volunteer-dashboard-submission-row {
+              display: grid !important;
+              grid-template-columns: 42px minmax(0, 1fr) !important;
+              align-items: start !important;
+              gap: 10px !important;
+              padding: 14px 0 !important;
+            }
+
+            .volunteer-dashboard-status-area {
+              grid-column: 2;
+              width: 100%;
+              text-align: left !important;
+            }
+
+            .volunteer-dashboard-sidebar {
+              grid-template-columns: 1fr !important;
+            }
+
+            .volunteer-dashboard-seva-card {
+              grid-column: auto;
+              padding: 20px !important;
+            }
+
+            .volunteer-dashboard-empty {
+              padding: 36px 10px !important;
             }
           }
 
           @media (max-width: 390px) {
             .volunteer-dashboard-stats {
               grid-template-columns: 1fr !important;
+            }
+
+            .volunteer-dashboard-panel-header {
+              flex-direction: column;
+              gap: 8px !important;
             }
           }
         `}
@@ -330,7 +453,7 @@ function StatCard({
   background,
 }) {
   return (
-    <article style={styles.statCard}>
+    <article className="volunteer-dashboard-stat-card" style={styles.statCard}>
       <div
         style={{
           ...styles.statIcon,
@@ -367,6 +490,7 @@ function SubmissionRow({
 
   return (
     <article
+      className="volunteer-dashboard-submission-row"
       style={{
         ...styles.submissionRow,
         borderBottom: isLast
@@ -395,7 +519,7 @@ function SubmissionRow({
         )}
       </div>
 
-      <div style={styles.statusArea}>
+      <div className="volunteer-dashboard-status-area" style={styles.statusArea}>
         <SubmissionStatusBadge
           status={submission.status}
         />
@@ -410,7 +534,7 @@ function SubmissionRow({
 
 function EmptySubmissions() {
   return (
-    <div style={styles.empty}>
+    <div className="volunteer-dashboard-empty" style={styles.empty}>
       <div style={styles.emptyIcon}>
         <Landmark size={30} />
       </div>
@@ -425,6 +549,7 @@ function EmptySubmissions() {
 
       <Link
         to="/volunteer/add-temple"
+        className="volunteer-dashboard-primary-action"
         style={styles.primaryButton}
       >
         <Plus size={16} />
