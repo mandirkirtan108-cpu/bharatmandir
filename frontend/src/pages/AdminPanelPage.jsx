@@ -243,25 +243,25 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
   const currentStatus = t.status || temple.status;
 
   return (
-    <div style={{
+    <div className="temple-review-overlay" style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       background: 'rgba(29,15,0,.55)', backdropFilter: 'blur(4px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
     }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{
+      <div className="temple-review-modal" style={{
         background: 'var(--cream)', borderRadius: 20,
         width: '100%', maxWidth: 820, maxHeight: '92vh',
         overflow: 'hidden', display: 'flex', flexDirection: 'column',
         boxShadow: '0 24px 80px rgba(61,31,0,.35)',
       }}>
         {/* Header */}
-        <div style={{
+        <div className="temple-review-header" style={{
           background: 'linear-gradient(135deg, var(--saffron-dark), var(--brown-mid))',
           padding: '20px 28px',
           display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
         }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <div className="temple-review-heading">
+            <div className="temple-review-badges" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
               <StatusBadge status={currentStatus} />
               {t.verified && (
                 <span style={{
@@ -274,7 +274,7 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
                 </span>
               )}
             </div>
-            <h2 style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: 22, fontWeight: 700, margin: 0 }}>{t.name}</h2>
+            <h2 className="temple-review-title" style={{ fontFamily: 'var(--font-display)', color: 'white', fontSize: 22, fontWeight: 700, margin: 0 }}>{t.name}</h2>
             {t.name_hindi && (
               <p style={{ fontFamily: 'var(--font-hindi)', color: 'rgba(255,255,255,.75)', margin: '2px 0 0', fontSize: 14 }}>{t.name_hindi}</p>
             )}
@@ -301,13 +301,13 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
         )}
 
         {/* Body */}
-        <div style={{ overflowY: 'auto', flex: 1, padding: '24px 28px' }}>
+        <div className="temple-review-body" style={{ overflowY: 'auto', flex: 1, padding: '24px 28px' }}>
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
               <Loader2 size={32} color="var(--saffron)" style={{ animation: 'spin .8s linear infinite' }} />
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="temple-review-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
               {/* Identity */}
               <InfoSection title="🏛️ Identity">
@@ -452,7 +452,7 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
 
               {/* Contact */}
               <InfoSection title="📞 Contact & Social" fullWidth>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+                <div className="temple-review-contact-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
                   <Row label="Phone" value={t.phone} />
                   <Row label="WhatsApp" value={t.whatsapp_number} />
                   <Row label="Email" value={t.official_email} />
@@ -478,13 +478,13 @@ function ReviewModal({ temple, onClose, onStatusChange, onVerify }) {
         </div>
 
         {/* Action Footer */}
-        <div style={{
+        <div className="temple-review-footer" style={{
           borderTop: '2px solid var(--cream-dark)',
           padding: '16px 28px', background: 'white',
           display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div className="temple-review-footer-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {currentStatus !== 'published' && (
               <ActionBtn icon={<CheckCircle2 size={15} />} label="Approve"
                 color="#15803d" bg="#f0fdf4" border="#86efac"
@@ -2093,7 +2093,7 @@ function FeedbackManagement() {
 // ── Shared sub-components ─────────────────────────────────────────────────────
 function InfoSection({ title, children, fullWidth }) {
   return (
-    <div style={{
+    <div className="temple-info-section" style={{
       gridColumn: fullWidth ? '1 / -1' : undefined,
       background: 'white', borderRadius: 12, padding: '16px 18px',
       border: '1.5px solid var(--cream-dark)',
@@ -2111,11 +2111,11 @@ function InfoSection({ title, children, fullWidth }) {
 function Row({ label, value, mono }) {
   if (!value && value !== 0 && value !== false) return null;
   return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
-      <span style={{ color: 'var(--text-light)', fontSize: 12, minWidth: 110, flexShrink: 0, fontFamily: 'var(--font-display)', letterSpacing: '.03em' }}>
+    <div className="temple-info-row" style={{ display: 'flex', gap: 8, marginBottom: 5, alignItems: 'flex-start' }}>
+      <span className="temple-info-label" style={{ color: 'var(--text-light)', fontSize: 12, minWidth: 110, flexShrink: 0, fontFamily: 'var(--font-display)', letterSpacing: '.03em' }}>
         {label}
       </span>
-      <span style={{ color: 'var(--text-dark)', fontSize: 13, lineHeight: 1.4, fontFamily: mono ? 'monospace' : 'var(--font-body)', wordBreak: 'break-all' }}>
+      <span className="temple-info-value" style={{ color: 'var(--text-dark)', fontSize: 13, lineHeight: 1.4, fontFamily: mono ? 'monospace' : 'var(--font-body)', overflowWrap: 'anywhere', wordBreak: 'normal' }}>
         {String(value)}
       </span>
     </div>
@@ -2124,7 +2124,7 @@ function Row({ label, value, mono }) {
 
 function ActionBtn({ icon, label, color, bg, border, loading, onClick }) {
   return (
-    <button onClick={onClick} disabled={loading} style={{
+    <button className="temple-review-action-button" onClick={onClick} disabled={loading} style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
       padding: '8px 14px', borderRadius: 50,
       background: bg, color, border: `1.5px solid ${border}`,
@@ -2469,6 +2469,17 @@ export default function AdminPanelPage() {
         .admin-panel-page,
         .admin-panel-page * { box-sizing: border-box; }
         .admin-panel-page { width: 100%; overflow-x: hidden; }
+        .temple-review-overlay,
+        .temple-review-overlay * { box-sizing: border-box; }
+        .temple-review-heading,
+        .temple-info-section,
+        .temple-info-row,
+        .temple-info-value { min-width: 0; }
+        .temple-info-value {
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          word-break: normal;
+        }
         .admin-view-switcher,
         .admin-status-tabs {
           max-width: 100%;
@@ -2562,10 +2573,90 @@ export default function AdminPanelPage() {
             height: 40px !important;
             border-radius: 9px !important;
           }
+          .temple-review-overlay {
+            align-items: stretch !important;
+            padding: 0 !important;
+          }
+          .temple-review-modal {
+            width: 100% !important;
+            max-width: none !important;
+            max-height: 100dvh !important;
+            min-height: 100dvh;
+            border-radius: 0 !important;
+          }
+          .temple-review-header {
+            padding: 15px 14px !important;
+            gap: 10px;
+          }
+          .temple-review-heading { flex: 1; }
+          .temple-review-badges {
+            flex-wrap: wrap;
+            gap: 6px !important;
+          }
+          .temple-review-title {
+            font-size: 19px !important;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+          }
+          .temple-review-body {
+            padding: 14px 10px !important;
+            overscroll-behavior: contain;
+          }
+          .temple-review-grid,
+          .temple-review-contact-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 10px !important;
+          }
+          .temple-info-section {
+            grid-column: 1 !important;
+            width: 100%;
+            padding: 14px 12px !important;
+            border-radius: 10px !important;
+          }
+          .temple-info-row {
+            display: grid !important;
+            grid-template-columns: minmax(88px, 34%) minmax(0, 1fr);
+            gap: 8px !important;
+            margin-bottom: 8px !important;
+          }
+          .temple-info-label {
+            min-width: 0 !important;
+            width: auto !important;
+          }
+          .temple-info-value {
+            min-width: 0;
+            width: 100%;
+            line-height: 1.45 !important;
+            overflow-wrap: anywhere !important;
+            word-break: normal !important;
+          }
+          .temple-review-footer {
+            padding: 12px 10px calc(12px + env(safe-area-inset-bottom)) !important;
+            align-items: stretch !important;
+            gap: 10px !important;
+          }
+          .temple-review-footer-actions {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            width: 100%;
+          }
+          .temple-review-action-button {
+            width: 100%;
+            min-height: 40px;
+            justify-content: center;
+            padding: 8px 10px !important;
+          }
+          .temple-review-footer > a {
+            width: 100%;
+            justify-content: center;
+            padding: 6px;
+          }
         }
         @media (max-width: 380px) {
           .admin-summary-grid { grid-template-columns: 1fr !important; }
           .temple-row-actions { grid-template-columns: repeat(3, minmax(44px, 1fr)) !important; }
+          .temple-info-row { grid-template-columns: 1fr !important; gap: 2px !important; }
+          .temple-review-footer-actions { grid-template-columns: 1fr !important; }
         }
         @media (min-width: 641px) {
           .refresh-label, .logout-label, .btn-label-temple, .btn-label-festival { display: inline; }
