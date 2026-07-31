@@ -295,7 +295,7 @@ function LoadingState({ message = 'Consulting the stars...' }) {
       <Loader2 size={38} color="var(--saffron)" style={{ animation: 'spin .8s linear infinite', marginBottom: 14 }} />
       <p style={{ fontFamily: 'var(--font-display)', color: 'var(--brown)', fontSize: 17 }}>{message}</p>
       <p style={{ color: 'var(--text-light)', fontSize: 13, marginTop: 6 }}>
-        Fetching Panchang, Choghadiya and timings from Divine API
+        Fetching Panchang, Choghadiya and timings.
       </p>
     </div>
   );
