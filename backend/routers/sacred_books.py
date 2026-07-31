@@ -49,7 +49,10 @@ TARGET_LANGUAGES = {
     "sa": "Sanskrit (Devanagari)",
 }
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
-TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
+TRANSLATION_MODEL = os.getenv(
+    "LIBRARY_TRANSLATION_MODEL",
+    "qwen/qwen3.5-flash-02-23",
+)
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
@@ -66,23 +69,50 @@ _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
 # both (mirroring the old browser fallback of reading Sanskrit with a Hindi
 # voice, but with a model actually trained on it).
 TTS_MODELS = {
-    "en": os.getenv("LIBRARY_TTS_MODEL_EN", "google/gemini-3.1-flash-tts-preview"),
-    "hi": os.getenv("LIBRARY_TTS_MODEL_HI", "google/gemini-3.1-flash-tts-preview"),
-    "sa": os.getenv("LIBRARY_TTS_MODEL_SA", "google/gemini-3.1-flash-tts-preview"),
+    "en": os.getenv(
+        "LIBRARY_TTS_MODEL_EN",
+        "openai/gpt-4o-mini-tts-2025-12-15",
+    ),
+    "hi": os.getenv(
+        "LIBRARY_TTS_MODEL_HI",
+        "openai/gpt-4o-mini-tts-2025-12-15",
+    ),
+    "sa": os.getenv(
+        "LIBRARY_TTS_MODEL_SA",
+        "openai/gpt-4o-mini-tts-2025-12-15",
+    ),
 }
 TTS_VOICES = {
-    "en": os.getenv("LIBRARY_TTS_VOICE_EN", "Kore"),
-    "hi": os.getenv("LIBRARY_TTS_VOICE_HI", "Kore"),
-    "sa": os.getenv("LIBRARY_TTS_VOICE_SA", "Kore"),
+    "en": os.getenv(
+        "LIBRARY_TTS_VOICE_EN",
+        "alloy",
+    ),
+    "hi": os.getenv(
+        "LIBRARY_TTS_VOICE_HI",
+        "alloy",
+    ),
+    "sa": os.getenv(
+        "LIBRARY_TTS_VOICE_SA",
+        "alloy",
+    ),
 }
 # Not every TTS model supports every response_format — Gemini's TTS models
 # only support "pcm" (OpenRouter rejects "mp3" for them with a 400), while
 # OpenAI's TTS models support "mp3" directly. This must match whatever
 # model each language above is actually using.
 TTS_FORMATS = {
-    "en": os.getenv("LIBRARY_TTS_FORMAT_EN", "pcm"),
-    "hi": os.getenv("LIBRARY_TTS_FORMAT_HI", "pcm"),
-    "sa": os.getenv("LIBRARY_TTS_FORMAT_SA", "pcm"),
+    "en": os.getenv(
+        "LIBRARY_TTS_FORMAT_EN",
+        "mp3",
+    ),
+    "hi": os.getenv(
+        "LIBRARY_TTS_FORMAT_HI",
+        "mp3",
+    ),
+    "sa": os.getenv(
+        "LIBRARY_TTS_FORMAT_SA",
+        "mp3",
+    ),
 }
 # Sample rate of the raw PCM Gemini's TTS returns (24kHz/16-bit mono), used
 # to wrap it in a playable WAV container — see _pcm_to_wav() below.
