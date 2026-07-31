@@ -1305,7 +1305,7 @@ export default function PanchangPage() {
         {/* ══════════════ HERO — matches AI Guide / Route Planner / Blog
             hero size: wide inner container + nowrap title so it stays
             on one line at the same scale across every page ══════════════ */}
-        <section style={{
+        <section className="panchang-hero" style={{
           position: 'relative',
           overflow: 'hidden',
           color: 'white',
@@ -1318,7 +1318,7 @@ export default function PanchangPage() {
           width: '100%',
           boxSizing: 'border-box',
         }}>
-          <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 860, padding: '0 24px', boxSizing: 'border-box', textAlign: 'center' }}>
+          <div className="panchang-hero-inner" style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 860, padding: '0 24px', boxSizing: 'border-box', textAlign: 'center' }}>
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1337,7 +1337,7 @@ export default function PanchangPage() {
             }}>
               <Sun size={11} /> {t('panchang.badge')}
             </div>
-            <h1 style={{
+            <h1 className="panchang-hero-title" style={{
               fontFamily: 'var(--font-display)',
               fontWeight: 900,
               fontSize: 'clamp(24px, 4.4vw, 48px)',
@@ -1356,7 +1356,7 @@ export default function PanchangPage() {
           </div>
         </section>
 
-        <div className="container" style={{ maxWidth: 1050, paddingTop: 36 }}>
+        <div className="container panchang-page-container" style={{ maxWidth: 1050, paddingTop: 36 }}>
           <Card style={{ background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, marginBottom: 28 }}>
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
@@ -1383,27 +1383,27 @@ export default function PanchangPage() {
                 }
               }}
             >
-              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 8 }}>
-                <div>
+              <div className="panchang-search-form" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 8 }}>
+                <div className="panchang-search-field panchang-date-field">
                   <label style={labelStyle}>Date</label>
                   <input
                     type="date"
                     value={date}
                     onChange={(e) => { setDate(e.target.value); setResult(null); setDailyResult(null); }}
-                    style={{ ...inputStyle, width: 192, height: 44, background: '#fff', border: '1px solid #e7d8c6', borderRadius: 9 }}
+                    style={{ ...inputStyle, width: '100%', height: 44, background: '#fff', border: '1px solid #e7d8c6', borderRadius: 9 }}
                   />
                 </div>
-                <div>
+                <div className="panchang-search-field panchang-city-field">
                   <label style={labelStyle}>City *</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="panchang-city-controls" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <CityAutocomplete
                       value={city}
                       onChange={handleCityChange}
                       placeholder="e.g. Ujjain, Mumbai"
-                      style={{ ...inputStyle, width: 240, height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
+                      style={{ ...inputStyle, width: '100%', height: 44, background: '#fff', border: `1px solid ${dailyError ? '#ef4444' : '#e7d8c6'}`, borderRadius: 9 }}
                     />
                     {usingLocation ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 44 }}>
+                      <div className="panchang-location-actions" style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 44 }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eafaf1', color: '#27ae60', borderRadius: 20, padding: '3px 10px', fontFamily: UI_FONT, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap' }}>
                           <MapPin size={11} /> Location detected
                         </span>
@@ -1423,7 +1423,7 @@ export default function PanchangPage() {
                     )}
                   </div>
                 </div>
-                <button className="btn-primary" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
+                <button className="btn-primary panchang-submit-button" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
                   {dailyLoading ? (
                     <>
                       <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading...
@@ -1560,6 +1560,13 @@ export default function PanchangPage() {
           display:inline-flex; align-items:center; padding:5px 10px; border:1px solid; border-radius:999px;
           font-family:${UI_FONT}; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.05em;
         }
+        .panchang-page-container,
+        .panchang-search-form,
+        .panchang-search-field,
+        .panchang-city-controls { min-width:0; box-sizing:border-box; }
+        .panchang-date-field { width:192px; }
+        .panchang-city-field { min-width:330px; }
+        .panchang-city-controls > :first-child { flex:1 1 240px; min-width:0; }
 
         @media (max-width: 900px) {
           .muhurat-results-grid { grid-template-columns: 1fr !important; }
@@ -1569,6 +1576,16 @@ export default function PanchangPage() {
         @media (max-width: 720px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(3,1fr) !important; }
           .muhurat-form-grid { grid-template-columns: 1fr 1fr !important; }
+          .panchang-hero { padding:38px 12px !important; }
+          .panchang-hero-inner { padding:0 8px !important; }
+          .panchang-hero-title { white-space:normal !important; font-size:clamp(30px,10vw,42px) !important; }
+          .panchang-page-container { width:100% !important; padding:24px 14px 0 !important; }
+          .panchang-search-form { display:grid !important; grid-template-columns:1fr !important; gap:12px !important; }
+          .panchang-search-field { width:100% !important; min-width:0 !important; }
+          .panchang-city-controls { width:100%; flex-wrap:wrap; align-items:stretch !important; }
+          .panchang-city-controls > :first-child { flex:1 1 100%; width:100% !important; }
+          .panchang-location-actions { width:100%; height:auto !important; flex-wrap:wrap; }
+          .panchang-submit-button { width:100%; justify-content:center; }
         }
         @media (max-width: 600px) {
           .sunmoon-strip { justify-content: space-between !important; }
@@ -1576,6 +1593,10 @@ export default function PanchangPage() {
         @media (max-width: 480px) {
           .muhurat-occasion-grid { grid-template-columns: repeat(2,1fr) !important; }
           .muhurat-form-grid { grid-template-columns: 1fr !important; }
+          .panchang-hero { padding:32px 10px !important; }
+          .panchang-page-container { padding-left:10px !important; padding-right:10px !important; }
+          .panchang-tabs { border-radius:12px; padding:5px; }
+          .panchang-tab { min-height:38px; padding:8px 11px; font-size:11px; }
         }
         @media (max-width:700px) {
           .panchang-tabs { flex-wrap:nowrap; }

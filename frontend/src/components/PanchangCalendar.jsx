@@ -119,17 +119,17 @@ export default function PanchangCalendar() {
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
 
   return (
-    <section style={{ background: '#fff', padding: '0 0 60px 0', borderTop: '1px solid #f0e8da' }}>
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 20px 0' }}>
+    <section className="panchang-calendar-section" style={{ background: '#fff', padding: '0 0 60px 0', borderTop: '1px solid #f0e8da' }}>
+      <div className="panchang-calendar-container" style={{ maxWidth: 960, margin: '0 auto', padding: '40px 20px 0' }}>
         <div style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 600, color: '#9A7150', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
           Calendar grid - with festival names and observance highlights
         </div>
 
-        <div style={calendarCardStyle}>
-          <div style={monthHeaderStyle}>
+        <div className="panchang-calendar-card" style={calendarCardStyle}>
+          <div className="panchang-month-header" style={monthHeaderStyle}>
             <button type="button" onClick={prevMonth} style={navBtnStyle} aria-label="Previous month"><ChevronLeft size={16} /></button>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: UI_FONT, fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>
+              <div className="panchang-month-title" style={{ fontFamily: UI_FONT, fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>
                 {MONTH_NAMES[month]} {year}
               </div>
               <div style={{ fontFamily: UI_FONT, fontSize: 12, color: '#9A7150', marginTop: 2 }}>
@@ -148,16 +148,16 @@ export default function PanchangCalendar() {
 
           {error && <div style={errorStyle}>{error}</div>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '10px 16px 4px' }}>
+          <div className="panchang-weekdays" style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '10px 16px 4px' }}>
             {DAY_LABELS.map((day, index) => (
-              <div key={day} style={{
+              <div className="panchang-weekday" key={day} style={{
                 textAlign: 'center', fontFamily: UI_FONT, fontSize: 12, fontWeight: 600,
                 color: index === 0 ? '#B42020' : index === 6 ? '#1A6A3A' : '#6b7280', paddingBottom: 6,
               }}>{day}</div>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '0 12px 16px', gap: 3 }}>
+          <div className="panchang-calendar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', padding: '0 12px 16px', gap: 3 }}>
             {cells.map((date, index) => {
               if (!date) return <div key={`empty-${index}`} />;
               const key = toDateKey(date);
@@ -175,6 +175,7 @@ export default function PanchangCalendar() {
 
               return (
                 <button
+                  className="panchang-day-cell"
                   key={key}
                   type="button"
                   onClick={() => setSelectedKey(key)}
@@ -195,13 +196,13 @@ export default function PanchangCalendar() {
                   }}
                 >
                   {isToday && <div style={todayPillStyle}>Today</div>}
-                  <span style={{
+                  <span className="panchang-day-number" style={{
                     fontFamily: UI_FONT, fontSize: 15, fontWeight: 700, lineHeight: 1,
                     color: selected ? '#E8650A' : isSunday ? '#B42020' : isSaturday ? '#1A6A3A' : '#1a1a1a',
                     marginTop: isToday ? 14 : 0,
                   }}>{date.getDate()}</span>
-                  {tithi && <span style={smallCellTextStyle}>{tithi}</span>}
-                  {paksha && <span style={{ ...smallCellTextStyle, color: '#9A7150' }}>{paksha}</span>}
+                  {tithi && <span className="panchang-day-tithi" style={smallCellTextStyle}>{tithi}</span>}
+                  {paksha && <span className="panchang-day-paksha" style={{ ...smallCellTextStyle, color: '#9A7150' }}>{paksha}</span>}
 
                   {primaryNamed && (
                     <div style={{ width: '100%', marginTop: 2, padding: '0 2px' }}>
@@ -230,7 +231,7 @@ export default function PanchangCalendar() {
             })}
           </div>
 
-          <div style={legendStyle}>
+          <div className="panchang-calendar-legend" style={legendStyle}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={namedLegendStyle}>Diwali</span>
               Named festival
@@ -247,13 +248,13 @@ export default function PanchangCalendar() {
         </div>
 
         {selectedKey && (
-          <div style={selectedPanelStyle}>
+          <div className="panchang-selected-panel" style={selectedPanelStyle}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
               <div>
                 <div style={{ fontFamily: UI_FONT, fontSize: 11, color: '#9A7150', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>
                   Selected date
                 </div>
-                <div style={{ fontFamily: UI_FONT, fontSize: 25, fontWeight: 800, color: '#1a1a1a' }}>
+                <div className="panchang-selected-date" style={{ fontFamily: UI_FONT, fontSize: 25, fontWeight: 800, color: '#1a1a1a' }}>
                   {parseDateKey(selectedKey).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </div>
               </div>
@@ -311,7 +312,7 @@ export default function PanchangCalendar() {
         )}
 
         {monthFestivalDays.length > 0 && (
-          <div style={monthListStyle}>
+          <div className="panchang-month-list" style={monthListStyle}>
             <div style={{ fontFamily: UI_FONT, fontSize: 14, fontWeight: 800, color: '#1a1a1a', marginBottom: 10 }}>
               Festivals this month
             </div>
@@ -333,8 +334,47 @@ export default function PanchangCalendar() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        .panchang-calendar-section,
+        .panchang-calendar-container,
+        .panchang-calendar-card { min-width: 0; box-sizing: border-box; }
+        .panchang-calendar-section * { box-sizing: border-box; }
         @media (max-width: 720px) {
           .festival-detail-grid { grid-template-columns: 1fr !important; }
+          .panchang-calendar-section { padding-bottom: 36px !important; }
+          .panchang-calendar-container { padding: 26px 12px 0 !important; }
+          .panchang-calendar-card { border-radius: 10px !important; }
+          .panchang-month-header { padding: 12px 10px !important; }
+          .panchang-month-title { font-size: 16px !important; }
+          .panchang-weekdays { padding: 8px 5px 3px !important; }
+          .panchang-weekday { padding-bottom: 4px !important; font-size: 10px !important; }
+          .panchang-calendar-grid { padding: 0 5px 8px !important; gap: 2px !important; }
+          .panchang-day-cell {
+            min-width: 0 !important;
+            min-height: 78px !important;
+            padding: 6px 2px !important;
+            border-radius: 6px !important;
+            gap: 1px !important;
+          }
+          .panchang-day-number { font-size: 13px !important; }
+          .panchang-day-tithi,
+          .panchang-day-paksha {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 8px !important;
+          }
+          .panchang-calendar-legend { padding: 10px !important; gap: 8px !important; font-size: 10px !important; }
+          .panchang-selected-panel,
+          .panchang-month-list { padding: 16px 13px !important; border-radius: 10px !important; }
+          .panchang-selected-date { font-size: 20px !important; line-height: 1.25; }
+        }
+        @media (max-width: 480px) {
+          .panchang-calendar-container { padding-left: 8px !important; padding-right: 8px !important; }
+          .panchang-weekday { font-size: 8px !important; }
+          .panchang-day-cell { min-height: 62px !important; padding: 5px 1px !important; }
+          .panchang-day-number { font-size: 12px !important; }
+          .panchang-day-paksha { display: none !important; }
+          .panchang-calendar-legend { align-items: flex-start !important; }
         }
       `}</style>
     </section>
