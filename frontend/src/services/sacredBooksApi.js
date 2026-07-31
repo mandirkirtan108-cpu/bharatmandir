@@ -9,7 +9,7 @@ async function request(path, options) {
   const response = await fetch(`${BASE}${path}`, options);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || `Request failed (${response.status})`);
+    throw new Error(body.detail || "We couldn't open the sacred library right now. Please try again in a few moments.");
   }
   return response.json();
 }
@@ -57,7 +57,7 @@ export const synthesizeSpeech = async (text, language, slug, pageNumber) => {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || `Voice reading failed (${response.status})`);
+    throw new Error(body.detail || "We couldn't prepare the sacred reading right now. Please try again in a few moments.");
   }
   return response.blob();
 };

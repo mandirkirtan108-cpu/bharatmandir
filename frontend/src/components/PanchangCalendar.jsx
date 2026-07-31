@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { panchangAPI } from '../services/api';
+import { friendlyError } from '../utils/uiMessages';
 
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
 const DEFAULT_COORDINATES = '25.3176,82.9739';
@@ -83,7 +84,12 @@ export default function PanchangCalendar() {
         }
       } catch (err) {
         if (!active) return;
-        setError(err.response?.data?.detail?.message || err.response?.data?.detail || err.message || 'Could not load calendar data');
+        setError(
+  friendlyError(
+    err,
+    "We couldn't prepare the sacred calendar right now. Please try again in a few moments."
+  )
+);
         setMonthData(null);
       } finally {
         if (active) setLoading(false);
@@ -142,7 +148,7 @@ export default function PanchangCalendar() {
           {loading && (
             <div style={loadingStyle}>
               <Loader2 size={14} style={{ animation: 'spin .9s linear infinite', color: '#E8650A' }} />
-              <span>Loading month...</span>
+              <span>Preparing the sacred calendar...</span>
             </div>
           )}
 

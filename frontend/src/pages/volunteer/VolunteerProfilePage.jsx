@@ -15,7 +15,7 @@ export default function VolunteerProfilePage() {
     volunteerApi
       .me()
       .then((response) => setForm({ ...initialForm, ...response.data }))
-    .catch(() => setError('Unable to load the profile. Please try again.'))
+    .catch(() => setError("We couldn't prepare your profile right now. Please try again in a few moments."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -39,7 +39,7 @@ export default function VolunteerProfilePage() {
       });
       setMessage('Profile updated successfully.');
     } catch (requestError) {
-      setError(requestError.response?.data?.detail || 'Unable to update the profile.');
+      setError(requestError.response?.data?.detail || "We couldn't save your profile changes right now. Please review them and try again.");
     } finally {
       setSaving(false);
     }
@@ -71,7 +71,7 @@ export default function VolunteerProfilePage() {
           </div>
 
           {loading ? (
-        <p style={styles.loading}>Loading profile...</p>
+        <p style={styles.loading}>Preparing your profile...</p>
           ) : (
             <form onSubmit={handleSubmit} style={styles.form}>
               <div style={styles.formGrid}>

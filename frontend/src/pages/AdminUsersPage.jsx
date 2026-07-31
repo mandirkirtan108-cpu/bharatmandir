@@ -134,7 +134,7 @@ export default function AdminUsersPage() {
           <h2 style={{ margin: '0 0 20px', color: '#3d1f00', fontSize: 18 }}>All Admins</h2>
 
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Loading...</div>
+            <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Just a moment while we prepare everything...</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>

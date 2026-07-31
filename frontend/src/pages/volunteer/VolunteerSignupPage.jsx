@@ -68,7 +68,7 @@ export default function VolunteerSignupPage() {
       setError(
         requestError.response?.data?.detail ||
           requestError.message ||
-          'Unable to create the account. Please try again.'
+          "We couldn't create your account right now. Please review your details and try again."
       );
     } finally {
       setLoading(false);

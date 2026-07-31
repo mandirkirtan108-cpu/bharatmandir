@@ -87,8 +87,8 @@ export default function ReaderPage() {
 
   const addBookmark = () => {
     libraryAPI.addBookmark({ book_id: Number(bookId), page_number: currentPage })
-      .then(() => window.alert('Bookmarked'))
-      .catch(() => window.alert('Log in to bookmark pages'));
+      .then(() => window.alert('This page has been saved for your spiritual journey.'))
+      .catch(() => window.alert('Please sign in to save pages for your spiritual journey.'));
   };
 
   const speakPage = () => {
@@ -149,7 +149,7 @@ export default function ReaderPage() {
       </div>
 
       <article className="reader__page">
-        {status === 'loading' && <p className="reader__status">Loading page...</p>}
+        {status === 'loading' && <p className="reader__status">Opening this sacred page...</p>}
         {status === 'translating' && (
           <p className="reader__status">This page is still being translated — try again shortly.</p>
         )}

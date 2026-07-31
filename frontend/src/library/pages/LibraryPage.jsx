@@ -49,7 +49,7 @@ export default function LibraryPage() {
         setBooksByCategory(grouped);
       } catch (err) {
         console.error('Failed to load library', err);
-        if (active) setError(t('library.loadError', 'Unable to load the library right now.'));
+        if (active) setError(t('library.loadError', "We couldn't open the sacred library right now. Please try again in a few moments."));
       } finally {
         if (active) setLoading(false);
       }
@@ -138,7 +138,7 @@ export default function LibraryPage() {
             )}
 
             {loading && (
-              <p className="library-loading">{t('common.loading', 'Loading...')}</p>
+              <p className="library-loading">{t('common.loading', 'Just a moment while we prepare everything...')}</p>
             )}
             {!loading && error && <p className="library-empty">{error}</p>}
             {!loading && !error && categories.map((category) => {

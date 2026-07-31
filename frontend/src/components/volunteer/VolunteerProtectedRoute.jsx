@@ -15,7 +15,7 @@ export default function VolunteerProtectedRoute({ children }) {
         <div style={styles.loader} />
 
         <p style={styles.loadingText}>
-          Loading the volunteer portal...
+          Preparing the volunteer seva space...
         </p>
       </main>
     );

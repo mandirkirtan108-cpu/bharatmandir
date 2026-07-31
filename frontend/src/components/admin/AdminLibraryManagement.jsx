@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, Loader2, Trash2, UploadCloud } from 'lucide-react';
 import { libraryAdminAPI, libraryAPI } from '../../services/api';
+import { friendlyError, UI_MESSAGES } from '../../utils/uiMessages';
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -38,7 +39,7 @@ export default function AdminLibraryManagement() {
       setBooks(bookList);
       setCategories(cats);
     } catch (err) {
-      setError(err.response?.data?.detail || err.message);
+      setError(friendlyError(err, "We couldn't open the library management area right now. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -91,7 +92,7 @@ export default function AdminLibraryManagement() {
       resetForm();
       load();
     } catch (err) {
-      setError(err.response?.data?.detail || err.message);
+      setError(friendlyError(err, UI_MESSAGES.error.upload));
     } finally {
       setUploading(false);
     }
@@ -102,7 +103,7 @@ export default function AdminLibraryManagement() {
       await libraryAdminAPI.updateBook(book.id, { is_published: !book.is_published });
       load();
     } catch (err) {
-      setError(err.response?.data?.detail || err.message);
+      setError(friendlyError(err, UI_MESSAGES.error.save));
     }
   };
 
@@ -112,7 +113,7 @@ export default function AdminLibraryManagement() {
       await libraryAdminAPI.deleteBook(book.id);
       load();
     } catch (err) {
-      setError(err.response?.data?.detail || err.message);
+      setError(friendlyError(err, "We couldn't remove this book right now. Please try again."));
     }
   };
 
@@ -129,7 +130,7 @@ export default function AdminLibraryManagement() {
       setTranslatingId(null);
       load();
     } catch (err) {
-      setError(err.response?.data?.detail || err.message);
+      setError(friendlyError(err, "We couldn't begin preparing the translations right now. Please try again."));
     }
   };
 
@@ -241,7 +242,7 @@ export default function AdminLibraryManagement() {
               }}
             >
               {uploading ? <Loader2 size={16} className="spin" /> : <UploadCloud size={16} />}
-              {uploading ? 'Uploading...' : 'Upload Book'}
+              {uploading ? 'Safely placing this in the library...' : 'Upload Book'}
             </button>
           </div>
         </form>
@@ -249,7 +250,7 @@ export default function AdminLibraryManagement() {
 
       {/* ── Book list ── */}
       {loading ? (
-        <p style={{ color: 'var(--text-light)' }}>Loading books...</p>
+        <p style={{ color: 'var(--text-light)' }}>Arranging the sacred library...</p>
       ) : books.length === 0 ? (
         <p style={{ color: 'var(--text-light)' }}>No books uploaded yet.</p>
       ) : (

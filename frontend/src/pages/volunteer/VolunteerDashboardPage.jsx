@@ -50,7 +50,7 @@ export default function VolunteerDashboardPage() {
         if (active) {
           setError(
             requestError.response?.data?.detail ||
-        'Unable to load submissions.'
+        "We couldn't load your submissions right now. Please try again in a few moments."
           );
         }
       } finally {

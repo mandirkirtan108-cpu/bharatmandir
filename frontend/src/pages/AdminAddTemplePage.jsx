@@ -981,7 +981,7 @@ export default function AdminAddTemplePage() {
       setSubmitted(true);
       window.scrollTo({ top:0, behavior:'smooth' });
     } catch (error) {
-      alert('Error submitting temple: ' + (error.response?.data?.detail || error.message || 'Unknown error'));
+      alert('Error submitting temple: ' + (error.response?.data?.detail || error.message || "We couldn't complete this right now. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -1050,7 +1050,7 @@ export default function AdminAddTemplePage() {
       setSubmitted(true);
       window.scrollTo({ top:0, behavior:'smooth' });
     } catch (err) {
-      alert('Error saving temple: ' + (err.response?.data?.detail || err.message || 'Unknown error'));
+      alert('Error saving temple: ' + (err.response?.data?.detail || err.message || "We couldn't complete this right now. Please try again."));
     } finally {
       setSubmitting(false);
     }

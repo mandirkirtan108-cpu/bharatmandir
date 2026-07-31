@@ -71,7 +71,7 @@ export default function VolunteerSubmissionsPage() {
     } catch (requestError) {
       setError(
         requestError.response?.data?.detail ||
-        'Unable to load submissions.'
+        "We couldn't load your submissions right now. Please try again in a few moments."
       );
     } finally {
       setLoading(false);
@@ -138,7 +138,7 @@ export default function VolunteerSubmissionsPage() {
     } catch (requestError) {
       setError(
         requestError.response?.data?.detail ||
-        'Unable to delete the submission.'
+        "We couldn't remove this submission right now. Please try again."
       );
     } finally {
       setDeletingId(null);
