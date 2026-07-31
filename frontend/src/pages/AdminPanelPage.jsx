@@ -2243,10 +2243,10 @@ export default function AdminPanelPage() {
   return (
     <>
       <AdminNavbar />
-      <div style={{ minHeight: '100vh', background: 'var(--cream)', paddingBottom: 60 }}>
+      <div className="admin-panel-page" style={{ minHeight: '100vh', background: 'var(--cream)', paddingBottom: 60 }}>
 
         {/* Page Header */}
-        <div style={{
+        <div className="admin-panel-hero" style={{
           background: 'linear-gradient(135deg, var(--saffron-dark) 0%, var(--brown-mid) 60%, var(--brown) 100%)',
           padding: '36px 24px 28px',
         }}>
@@ -2262,14 +2262,14 @@ export default function AdminPanelPage() {
               Temple Onboarding &amp; Verification Dashboard
             </p>
 
-            <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
+            <div className="admin-summary-grid" style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
               {[
                 { label: 'Total', value: counts.all || 0, color: '#F5934A' },
                 { label: 'Pending Review', value: (counts.draft || 0) + (counts.review || 0), color: '#60a5fa' },
                 { label: 'Published', value: counts.published || 0, color: '#4ade80' },
                 { label: 'Flagged', value: counts.flagged || 0, color: '#f87171' },
               ].map(s => (
-                <div key={s.label} style={{
+                <div className="admin-summary-card" key={s.label} style={{
                   background: 'rgba(255,255,255,.12)', borderRadius: 12,
                   padding: '10px 18px', backdropFilter: 'blur(8px)',
                 }}>
@@ -2283,10 +2283,10 @@ export default function AdminPanelPage() {
           </div>
         </div>
 
-        <div className="container" style={{ marginTop: 28 }}>
+        <div className="container admin-panel-container" style={{ marginTop: 28 }}>
 
           {/* Main View Switcher */}
-          <div style={{
+          <div className="admin-view-switcher" style={{
             display: 'flex', gap: 4, marginBottom: 24,
             background: 'white', border: '1.5px solid var(--cream-dark)',
             borderRadius: 50, padding: 4, width: 'fit-content',
@@ -2319,7 +2319,7 @@ export default function AdminPanelPage() {
           {mainView === 'temples' && (
             <>
               {/* Controls */}
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+              <div className="admin-temple-controls" style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
                 <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 0 }}>
                   <Search size={16} style={{
                     position: 'absolute', left: 14, top: '50%',
@@ -2343,7 +2343,7 @@ export default function AdminPanelPage() {
               </div>
 
               {/* Status Tabs */}
-              <div style={{
+              <div className="admin-status-tabs" style={{
                 display: 'flex', gap: 0, marginBottom: 20,
                 borderBottom: '2px solid var(--cream-dark)', overflowX: 'auto',
               }}>
@@ -2385,7 +2385,7 @@ export default function AdminPanelPage() {
               )}
 
               {/* Table */}
-              <div style={{
+              <div className="admin-temple-list" style={{
                 background: 'white', borderRadius: 16,
                 border: '1.5px solid var(--cream-dark)',
                 overflow: 'hidden', boxShadow: '0 4px 20px var(--shadow)',
@@ -2466,9 +2466,106 @@ export default function AdminPanelPage() {
       <Footer />
 
       <style>{`
+        .admin-panel-page,
+        .admin-panel-page * { box-sizing: border-box; }
+        .admin-panel-page { width: 100%; overflow-x: hidden; }
+        .admin-view-switcher,
+        .admin-status-tabs {
+          max-width: 100%;
+          overflow-x: auto;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+        }
+        .admin-view-switcher::-webkit-scrollbar,
+        .admin-status-tabs::-webkit-scrollbar { display: none; }
+
+        @media (max-width: 900px) {
+          .admin-panel-container {
+            width: 100% !important;
+            padding-left: 16px !important;
+            padding-right: 16px !important;
+          }
+        }
+
         @media (max-width: 640px) {
           .admin-table-header { display: none !important; }
           .refresh-label, .logout-label, .btn-label-temple, .btn-label-festival { display: none; }
+          .admin-panel-hero { padding: 28px 14px 24px !important; }
+          .admin-panel-hero .container { padding-left: 0 !important; padding-right: 0 !important; }
+          .admin-summary-grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 9px !important;
+          }
+          .admin-summary-card {
+            min-width: 0;
+            padding: 10px 12px !important;
+          }
+          .admin-panel-container {
+            margin-top: 18px !important;
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+          }
+          .admin-view-switcher {
+            width: 100% !important;
+            justify-content: flex-start;
+            border-radius: 14px !important;
+            margin-bottom: 18px !important;
+          }
+          .admin-view-switcher > button {
+            flex: 0 0 auto;
+            padding: 9px 16px !important;
+            white-space: nowrap;
+          }
+          .admin-temple-controls > div {
+            flex-basis: 100% !important;
+          }
+          .admin-status-tabs { margin-bottom: 14px !important; }
+          .admin-temple-list {
+            overflow: visible !important;
+            border: none !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+          }
+          .temple-row-mobile {
+            display: block !important;
+            margin-bottom: 10px;
+            padding: 14px !important;
+            border: 1.5px solid var(--cream-dark) !important;
+            border-radius: 13px;
+            background: white;
+            box-shadow: 0 3px 12px rgba(61, 31, 0, .06);
+          }
+          .mobile-temple-meta {
+            display: grid !important;
+            grid-template-columns: 1fr !important;
+            gap: 7px !important;
+            padding: 9px 0;
+            margin-bottom: 8px !important;
+            border-top: 1px solid var(--cream-dark);
+            border-bottom: 1px solid var(--cream-dark);
+          }
+          .mobile-temple-meta > span {
+            min-width: 0;
+            overflow-wrap: anywhere;
+          }
+          .temple-row-actions {
+            display: grid !important;
+            grid-template-columns: repeat(5, minmax(40px, 1fr)) !important;
+            width: 100%;
+            gap: 7px !important;
+          }
+          .temple-row-action-button {
+            width: 100% !important;
+            min-width: 40px;
+            height: 40px !important;
+            border-radius: 9px !important;
+          }
+        }
+        @media (max-width: 380px) {
+          .admin-summary-grid { grid-template-columns: 1fr !important; }
+          .temple-row-actions { grid-template-columns: repeat(3, minmax(44px, 1fr)) !important; }
         }
         @media (min-width: 641px) {
           .refresh-label, .logout-label, .btn-label-temple, .btn-label-festival { display: inline; }
@@ -2513,7 +2610,7 @@ function TempleRow({ t, i, total, actionLoading, onReview, onEdit, onDelete, onQ
         onMouseLeave={e => e.currentTarget.style.background = 'white'}
         onClick={onReview}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+        <div className="mobile-temple-card-head" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
           <TempleThumb t={t} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--brown)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
@@ -2524,7 +2621,7 @@ function TempleRow({ t, i, total, actionLoading, onReview, onEdit, onDelete, onQ
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+        <div className="mobile-temple-meta" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
           {(t.city || t.state) && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-mid)' }}>
               <MapPin size={11} color="var(--text-light)" />
@@ -2576,7 +2673,7 @@ function TempleNameCell({ t }) {
 
 function RowActions({ t, actionLoading, onReview, onEdit, onDelete, onQuickAction, justify }) {
   return (
-    <div style={{ display: 'flex', gap: 5, justifyContent: justify }}>
+    <div className="temple-row-actions" style={{ display: 'flex', gap: 5, justifyContent: justify }}>
       {t.status !== 'published' && (
         <QuickBtn icon={<CheckCircle2 size={14} />} color="#15803d" title="Approve → Published"
           loading={actionLoading === `${t.id}-published`} onClick={e => onQuickAction(t, 'published', e)} />
@@ -2597,7 +2694,7 @@ function RowActions({ t, actionLoading, onReview, onEdit, onDelete, onQuickActio
 
 function QuickBtn({ icon, color, title, loading, onClick, hoverBg }) {
   return (
-    <button title={title} onClick={onClick} disabled={loading} style={{
+    <button className="temple-row-action-button" title={title} onClick={onClick} disabled={loading} style={{
       width: 32, height: 32, borderRadius: 8,
       border: '1.5px solid var(--cream-dark)',
       background: 'white', color,

@@ -112,7 +112,8 @@ export default function AdminLibraryPage() {
       </div>
     </main>
     <style>{`
-      .admin-library{min-height:100vh;background:#faf5ed;padding-bottom:70px}
+      .admin-library{min-height:100vh;width:100%;overflow-x:hidden;background:#faf5ed;padding-bottom:70px}
+      .admin-library,.admin-library *{box-sizing:border-box}
       .library-admin-head{background:linear-gradient(135deg, #3D1F00 0%, #572207 55%, #7a3208 100%);padding:48px 20px;display:flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box}
       .library-admin-head-inner{max-width:720px;margin:0 auto;display:flex;flex-direction:column;align-items:center}
       .library-back-link{align-self:flex-start;color:#ffd59d;text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-bottom:18px}
@@ -130,7 +131,9 @@ export default function AdminLibraryPage() {
       .drop input{border:0}
       .drop em{font-weight:400}
       .upload-card>button{width:100%;display:flex;justify-content:center;gap:8px;border:0;border-radius:10px;padding:12px;background:#9b4515;color:white;font-weight:800;cursor:pointer}
-      .admin-book{display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:center;border-bottom:1px solid #eee2d5;padding:15px 0}
+      .admin-book{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:12px;align-items:center;border-bottom:1px solid #eee2d5;padding:15px 0}
+      .admin-book>div{min-width:0}
+      .admin-book strong,.admin-book small{overflow-wrap:anywhere}
       .admin-book small{display:block;color:#947c69;margin-top:5px}
       .admin-book .progress-copy{color:#9b570d;font-weight:700}
       .admin-book button{border:0;background:#fff1ed;color:#a52a1a;padding:8px;border-radius:8px;cursor:pointer}
@@ -142,7 +145,43 @@ export default function AdminLibraryPage() {
       .message{font-size:13px;color:#80400f}
       .spin{animation:spin 1s linear infinite}
       @keyframes spin{to{transform:rotate(360deg)}}
-      @media(max-width:800px){.admin-library-grid{grid-template-columns:1fr}}
+      @media(max-width:800px){
+        .library-admin-head{padding:38px 18px}
+        .admin-library-grid{grid-template-columns:1fr;margin:22px auto;gap:18px}
+      }
+      @media(max-width:520px){
+        .library-admin-head{padding:30px 14px}
+        .library-admin-head-inner{width:100%}
+        .library-back-link{margin-bottom:14px}
+        .library-admin-head h1{font-size:clamp(27px,10vw,36px);text-align:center}
+        .library-admin-head p{font-size:13px;line-height:1.55}
+        .admin-library-grid{padding:0 10px;margin:16px auto}
+        .upload-card,.processing-card{padding:16px 14px;border-radius:13px}
+        .upload-card h2,.processing-card h2{font-size:22px}
+        .upload-card input,.upload-card textarea{font-size:16px}
+        .drop{padding:16px 10px!important}
+        .drop input{max-width:100%;padding-left:0;padding-right:0;font-size:12px}
+        .admin-book{
+          grid-template-columns:minmax(0,1fr) auto auto;
+          gap:8px;
+          padding:14px 0;
+          align-items:start;
+        }
+        .admin-book .status{
+          grid-column:1/-1;
+          grid-row:2;
+          width:fit-content;
+        }
+        .admin-book button{
+          width:38px;
+          height:38px;
+          display:grid;
+          place-items:center;
+          padding:0;
+        }
+        .failure{grid-row:3}
+        .message{overflow-wrap:anywhere}
+      }
     `}</style>
   </>;
 }
