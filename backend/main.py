@@ -179,9 +179,15 @@ async def friendly_http_exception_handler(
             "Please try again in a few moments."
         )
     elif error.status_code == 401:
-        detail = (
-            "Your session has ended. Please sign in again to continue."
-        )
+        if request.url.path.rstrip("/").endswith("/login"):
+            detail = (
+                "The email or password you entered is incorrect. "
+                "Please check your details and try again."
+            )
+        else:
+            detail = (
+                "Your session has ended. Please sign in again to continue."
+            )
     elif error.status_code == 403:
         detail = (
             "You don't have access to this area. "
@@ -402,6 +408,6 @@ def health_check():
     except Exception as error:
         return {
             "status": "unhealthy",
-            "database": "disconnected",
+            "database": "discoannected",
             "error": str(error),
         }
