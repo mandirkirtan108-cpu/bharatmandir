@@ -12,104 +12,129 @@ import {
   volunteerApi,
 } from '../services/volunteerApi';
 
+import {
+  friendlyError,
+  UI_MESSAGES,
+} from '../utils/uiMessages';
+
 export function useVolunteerAuth() {
-  const [volunteer, setVolunteer] = useState(
-    () => getStoredVolunteer()
-  );
+  const [volunteer, setVolunteer] =
+    useState(
+      () => getStoredVolunteer()
+    );
 
-  const [loading, setLoading] = useState(
-    () =>
-      Boolean(getVolunteerAccessToken()) &&
-      !getStoredVolunteer()
-  );
+  const [loading, setLoading] =
+    useState(
+      () =>
+        Boolean(
+          getVolunteerAccessToken()
+        ) &&
+        !getStoredVolunteer()
+    );
 
-  const [error, setError] = useState('');
+  const [error, setError] =
+    useState('');
 
-  const updateVolunteerState = useCallback(
-    (volunteerData) => {
-      setVolunteer(volunteerData || null);
+  const updateVolunteerState =
+    useCallback(
+      (volunteerData) => {
+        setVolunteer(
+          volunteerData || null
+        );
 
-      window.dispatchEvent(
-        new CustomEvent(
-          'bharatmandir-volunteer-auth-change',
-          {
-            detail: {
-              volunteer: volunteerData || null,
-            },
-          }
-        )
-      );
-    },
-    []
-  );
+        window.dispatchEvent(
+          new CustomEvent(
+            'bharatmandir-volunteer-auth-change',
+            {
+              detail: {
+                volunteer:
+                  volunteerData || null,
+              },
+            }
+          )
+        );
+      },
+      []
+    );
 
-  const logout = useCallback(async () => {
-    try {
-      if (getVolunteerAccessToken()) {
-        await volunteerApi.logout();
+  const logout =
+    useCallback(async () => {
+      try {
+        if (
+          getVolunteerAccessToken()
+        ) {
+          await volunteerApi.logout();
+        }
+      } catch {
+        // Always clear the local
+        // session when logout fails.
+      } finally {
+        clearVolunteerSession();
+        setVolunteer(null);
+        setError('');
+
+        window.dispatchEvent(
+          new CustomEvent(
+            'bharatmandir-volunteer-auth-change',
+            {
+              detail: {
+                volunteer: null,
+              },
+            }
+          )
+        );
       }
-    } catch {
-      // Backend logout fail hone par bhi local
-      // Clear the local session when the stored session is invalid.
-    } finally {
-      clearVolunteerSession();
-      setVolunteer(null);
+    }, []);
+
+  const refreshProfile =
+    useCallback(async () => {
+      const accessToken =
+        getVolunteerAccessToken();
+
+      if (!accessToken) {
+        clearVolunteerSession();
+        setVolunteer(null);
+        setLoading(false);
+
+        return null;
+      }
+
+      setLoading(true);
       setError('');
 
-      window.dispatchEvent(
-        new CustomEvent(
-          'bharatmandir-volunteer-auth-change',
-          {
-            detail: {
-              volunteer: null,
-            },
-          }
-        )
-      );
-    }
-  }, []);
+      try {
+        const response =
+          await volunteerApi.me();
 
-  const refreshProfile = useCallback(async () => {
-    const accessToken =
-      getVolunteerAccessToken();
+        const volunteerData =
+          response.data;
 
-    if (!accessToken) {
-      clearVolunteerSession();
-      setVolunteer(null);
-      setLoading(false);
-      return null;
-    }
+        saveVolunteerSession({
+          volunteer:
+            volunteerData,
+        });
 
-    setLoading(true);
-    setError('');
+        updateVolunteerState(
+          volunteerData
+        );
 
-    try {
-      const response =
-        await volunteerApi.me();
+        return volunteerData;
+      } catch (requestError) {
+        clearVolunteerSession();
+        setVolunteer(null);
 
-      const volunteerData = response.data;
+        setError(
+          friendlyError(
+            requestError,
+            UI_MESSAGES.error.session
+          )
+        );
 
-      saveVolunteerSession({
-        volunteer: volunteerData,
-      });
-
-      updateVolunteerState(volunteerData);
-
-      return volunteerData;
-    } catch (requestError) {
-      clearVolunteerSession();
-      setVolunteer(null);
-
-      setError(
-        requestError.response?.data?.detail ||
-          'Your volunteer session has expired. Please sign in again.'
-      );
-
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [updateVolunteerState]);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    }, [updateVolunteerState]);
 
   const login = useCallback(
     async (email, password) => {
@@ -119,18 +144,23 @@ export function useVolunteerAuth() {
       try {
         const response =
           await volunteerApi.login({
-            email: email.trim().toLowerCase(),
+            email:
+              email
+                .trim()
+                .toLowerCase(),
+
             password,
           });
 
-        const sessionData = response.data;
+        const sessionData =
+          response.data;
 
         if (
           !sessionData?.access_token ||
           !sessionData?.volunteer
         ) {
           throw new Error(
-            'Login response incomplete hai.'
+            'The sign-in response was incomplete.'
           );
         }
 
@@ -155,9 +185,10 @@ export function useVolunteerAuth() {
         setVolunteer(null);
 
         setError(
-          requestError.response?.data?.detail ||
-            requestError.message ||
-          'Unable to sign in to the volunteer account.'
+          friendlyError(
+            requestError,
+            UI_MESSAGES.error.auth
+          )
         );
 
         return false;
@@ -186,9 +217,11 @@ export function useVolunteerAuth() {
         };
       } catch (requestError) {
         const signupError =
-          requestError.response?.data?.detail ||
-          requestError.message ||
-          'Unable to create the volunteer account.';
+          friendlyError(
+            requestError,
+
+            "We couldn't create your volunteer account right now. Please review your details and try again."
+          );
 
         setError(signupError);
 
@@ -204,73 +237,82 @@ export function useVolunteerAuth() {
     []
   );
 
-  const updateProfile = useCallback(
-    async (profileData) => {
-      setLoading(true);
-      setError('');
+  const updateProfile =
+    useCallback(
+      async (profileData) => {
+        setLoading(true);
+        setError('');
 
-      try {
-        const response =
-          await volunteerApi.updateProfile(
-            profileData
+        try {
+          const response =
+            await volunteerApi
+              .updateProfile(
+                profileData
+              );
+
+          const updatedVolunteer =
+            response.data;
+
+          saveVolunteerSession({
+            volunteer:
+              updatedVolunteer,
+          });
+
+          updateVolunteerState(
+            updatedVolunteer
           );
 
-        const updatedVolunteer =
-          response.data;
+          return {
+            success: true,
+            data:
+              updatedVolunteer,
+            error: '',
+          };
+        } catch (requestError) {
+          const profileError =
+            friendlyError(
+              requestError,
+              UI_MESSAGES.error.save
+            );
 
-        saveVolunteerSession({
-          volunteer: updatedVolunteer,
-        });
+          setError(profileError);
 
-        updateVolunteerState(
-          updatedVolunteer
-        );
+          return {
+            success: false,
+            data: null,
+            error: profileError,
+          };
+        } finally {
+          setLoading(false);
+        }
+      },
+      [updateVolunteerState]
+    );
 
-        return {
-          success: true,
-          data: updatedVolunteer,
-          error: '',
-        };
-      } catch (requestError) {
-        const profileError =
-          requestError.response?.data?.detail ||
-          requestError.message ||
-          'Unable to update the volunteer profile.';
-
-        setError(profileError);
-
-        return {
-          success: false,
-          data: null,
-          error: profileError,
-        };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [updateVolunteerState]
-  );
-
-  const clearError = useCallback(() => {
-    setError('');
-  }, []);
+  const clearError =
+    useCallback(() => {
+      setError('');
+    }, []);
 
   useEffect(() => {
-    const handleAuthChange = (event) => {
-      setVolunteer(
-        event.detail?.volunteer || null
-      );
-    };
+    const handleAuthChange =
+      (event) => {
+        setVolunteer(
+          event.detail?.volunteer ||
+          null
+        );
+      };
 
-    const handleSessionExpired = () => {
-      clearVolunteerSession();
-      setVolunteer(null);
-      setLoading(false);
+    const handleSessionExpired =
+      () => {
+        clearVolunteerSession();
+        setVolunteer(null);
+        setLoading(false);
 
-      setError(
-          'Your volunteer session has expired. Please sign in again.'
-      );
-    };
+        setError(
+          UI_MESSAGES.error.session
+        );
+      };
 
     window.addEventListener(
       'bharatmandir-volunteer-auth-change',
@@ -312,7 +354,7 @@ export function useVolunteerAuth() {
 
     isLoggedIn: Boolean(
       volunteer &&
-        getVolunteerAccessToken()
+      getVolunteerAccessToken()
     ),
 
     loading,

@@ -48,7 +48,7 @@
   "results_for": "Results for",
   "filtered": "Filtered Temples",
   "all_sacred": "All Sacred Temples",
-  "loading": "Loading temples...",
+  "loading": "Bringing temple information to you...",
   "no_temples": "No temples found",
   "try_different": "Try a different search or filter",
   "try_again": "Try Again",
@@ -56,7 +56,7 @@
   "temples_count_plural": "temples",
   "error": {
     "title": "Could not load temples",
-    "backend": "Unable to connect to the backend. Make sure FastAPI is running on port 8000."
+    "backend": "We couldn't connect right now. Please check your internet connection and try again."
   },
   "badge": {
     "jyotirlinga": "Jyotirlinga",
@@ -75,10 +75,10 @@
     "temples": "Temples"
   },
   "detail": {
-    "loading": "Loading temple details...",
+    "loading": "Preparing the temple details...",
     "not_found": "Temple not found",
     "not_found_msg": "Temple not found. It may have been removed or the link is incorrect.",
-    "load_error": "Failed to load temple data. Make sure the backend is running.",
+    "load_error": "We couldn't prepare these temple details right now. Please try again in a few moments.",
     "back_to_all": "Back to All Temples",
     "history_title": "History & Significance",
     "why_visit": "Why Devotees Visit",
@@ -250,7 +250,7 @@
     "title": "Divine Wisdom & Stories",
     "subtitle": "Explore spiritual insights, temple stories, and sacred knowledge curated by our team.",
     "search_placeholder": "Search blogs by title, author...",
-    "loading": "Loading divine content...",
+    "loading": "Arranging sacred content...",
     "no_match": "No blogs match your search",
     "empty_title": "No Blog Posts Yet",
     "try_keywords": "Try different keywords.",
@@ -288,7 +288,7 @@
     "hide": "Hide"
   },
   "qr": {
-    "loading": "Loading QR Code...",
+    "loading": "Preparing the temple QR code...",
     "back_home": "Back to Home",
     "back_to_temple": "Back to Temple",
     "platform": "BHARATMANDIR · TEMPLE DISCOVERY PLATFORM",
@@ -487,7 +487,7 @@
     "back_library": "Back to Library", "reader": "Reader", "bookmarks": "Bookmarks ({{count}})", "search": "Search",
     "back_to": "Back to {{category}}", "chapters_one": "{{count}} chapter", "chapters_other": "{{count}} chapters",
     "verses_one": "{{count}} verse", "verses_other": "{{count}} verses", "continue_chapter": "Continue from Chapter {{chapter}}",
-    "select_chapter": "Select a chapter to begin reading", "loading_verses": "Loading verses...", "search_in": "Search in {{title}}...",
+    "select_chapter": "Select a chapter to begin reading", "loading_verses": "Opening the sacred verses...", "search_in": "Search in {{title}}...",
     "your_bookmarks": "Your Bookmarks ({{count}})", "search_results": "Search Results", "back_reader": "Back to Reader"
   },
   "route_page": {
@@ -543,7 +543,7 @@
     "finding": "Finding muhurat…",
     "result_title": "Panchang Results",
     "muhurat_result": "Muhurat Result",
-    "error": "Unable to fetch Panchang. Please try again.",
+    "error": "We couldn't prepare the Panchang right now. Please try again in a few moments.",
     "tithi": "Tithi",
     "nakshatra": "Nakshatra",
     "yoga": "Yoga",

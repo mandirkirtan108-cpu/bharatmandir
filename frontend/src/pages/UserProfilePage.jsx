@@ -177,7 +177,7 @@ export default function UserProfilePage() {
     const res = await updateProfile(payload);
     setSaving(false);
     if (res.success) { setSuccess('Profile updated successfully!'); setEditing(false); }
-    else { setErr(res.error || 'Something went wrong.'); }
+    else { setErr(res.error || "We couldn't complete this right now. Please try again in a few moments."); }
   };
 
   const handleCancel = () => {

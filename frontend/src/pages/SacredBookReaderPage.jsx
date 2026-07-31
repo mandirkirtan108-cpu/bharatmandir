@@ -329,7 +329,7 @@ export default function SacredBookReaderPage() {
         <header className="reader-toolbar">
           <button className="back" onClick={() => navigate('/sacred-books')}><X size={16} /> Close book</button>
           <div className="titleblock">
-            <h1>{book?.title || 'Loading…'}</h1>
+            <h1>{book?.title || 'Almost ready…'}</h1>
             {book?.author && <p>{book.author}</p>}
           </div>
           <div className="toolbar-actions">
@@ -340,7 +340,7 @@ export default function SacredBookReaderPage() {
               title={currentBookmark ? 'Remove bookmark from this page' : 'Bookmark this page'}
             >
               <Bookmark size={15} fill={currentBookmark ? 'currentColor' : 'none'} />
-              {currentBookmark ? 'Bookmarked' : 'Bookmark'}
+              {currentBookmark ? 'This page has been saved for your spiritual journey.' : 'Bookmark'}
             </button>
             <button className="index-btn" onClick={() => setShowSections(s => !s)}>
               <List size={15} /> Index
@@ -438,7 +438,7 @@ export default function SacredBookReaderPage() {
                   disabled={voiceLoading || !current || !displayText.trim()}
                   title="Read this page aloud"
                 >
-                  <Play size={14} /> {voiceLoading ? 'Loading…' : 'Listen'}
+                  <Play size={14} /> {voiceLoading ? 'Almost ready…' : 'Listen'}
                 </button>
               ) : (
                 <>

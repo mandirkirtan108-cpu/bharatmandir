@@ -20,7 +20,7 @@ async function request(path, options = {}) {
     const detail = Array.isArray(data.detail)
       ? data.detail.map((item) => item.msg).join(', ')
       : data.detail;
-    throw new Error(detail || `Request failed with HTTP ${response.status}`);
+    throw new Error(detail || "We couldn't complete this review right now. Please try again in a few moments.");
   }
   return data;
 }
@@ -143,7 +143,7 @@ export default function AdminApprovalWorkflow() {
       {success && <div style={styles.success}>{success}</div>}
 
       {loading ? (
-        <p style={styles.empty}>Loading verification queue...</p>
+        <p style={styles.empty}>Preparing the review requests...</p>
       ) : items.length === 0 ? (
         <p style={styles.empty}>No pending items.</p>
       ) : (
@@ -205,7 +205,7 @@ export default function AdminApprovalWorkflow() {
 function ActionButton({ busy, disabled, icon, label, onClick, style }) {
   return (
     <button disabled={disabled} onClick={onClick} style={{ ...style, ...(disabled ? styles.disabled : {}) }}>
-      {icon}{busy ? 'Processing...' : label}
+      {icon}{busy ? 'Completing this with care...' : label}
     </button>
   );
 }

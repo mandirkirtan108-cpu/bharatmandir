@@ -1,111 +1,270 @@
-// hooks/useAdminAuth.js
-// JWT-based admin authentication hook
-// Replaces the old env-key based approach
+import {
+  useCallback,
+  useState,
+} from 'react';
 
-import { useState, useEffect, useCallback } from 'react';
+import {
+  friendlyError,
+  UI_MESSAGES,
+} from '../utils/uiMessages';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const ACCESS_KEY  = 'bm_access_token';
-const REFRESH_KEY = 'bm_refresh_token';
-const ADMIN_KEY   = 'bm_admin_user';
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:8000';
+
+const ACCESS_KEY =
+  'bm_access_token';
+
+const REFRESH_KEY =
+  'bm_refresh_token';
+
+const ADMIN_KEY =
+  'bm_admin_user';
 
 export function useAdminAuth() {
-  const [admin, setAdmin]       = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem(ADMIN_KEY)); }
-    catch { return null; }
-  });
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
-
-  const isLoggedIn = !!admin;
-  const isSuperAdmin = admin?.role === 'super_admin';
-  const isEditor     = admin?.role === 'super_admin' || admin?.role === 'editor';
-
-  // ── Login ────────────────────────────────────────────────────────
-  const login = useCallback(async (email, password) => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Login failed');
-
-      sessionStorage.setItem(ACCESS_KEY,  data.access_token);
-      sessionStorage.setItem(REFRESH_KEY, data.refresh_token);
-      sessionStorage.setItem(ADMIN_KEY,   JSON.stringify(data.admin));
-      setAdmin(data.admin);
-      return { success: true };
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // ── Logout ───────────────────────────────────────────────────────
-  const logout = useCallback(async () => {
-    try {
-      const token = sessionStorage.getItem(ACCESS_KEY);
-      if (token) {
-        await fetch(`${API_BASE}/api/admin/auth/logout`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        });
+  const [admin, setAdmin] =
+    useState(() => {
+      try {
+        return JSON.parse(
+          sessionStorage.getItem(
+            ADMIN_KEY
+          )
+        );
+      } catch {
+        return null;
       }
-    } catch (_) { /* ignore */ }
-    sessionStorage.removeItem(ACCESS_KEY);
-    sessionStorage.removeItem(REFRESH_KEY);
-    sessionStorage.removeItem(ADMIN_KEY);
-    setAdmin(null);
-  }, []);
-
-  // ── Authenticated fetch helper ───────────────────────────────────
-  const authFetch = useCallback(async (url, options = {}) => {
-    let token = sessionStorage.getItem(ACCESS_KEY);
-
-    const doFetch = (t) => fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-        Authorization: `Bearer ${t}`,
-      },
     });
 
-    let res = await doFetch(token);
+  const [loading, setLoading] =
+    useState(false);
 
-    // Token expired? Try refresh
-    if (res.status === 401) {
-      const refreshToken = sessionStorage.getItem(REFRESH_KEY);
-      if (refreshToken) {
-        const rRes = await fetch(`${API_BASE}/api/admin/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-        if (rRes.ok) {
-          const rData = await rRes.json();
-          token = rData.access_token;
-          sessionStorage.setItem(ACCESS_KEY, token);
-          res = await doFetch(token);
-        } else {
-          logout();
-          throw new Error('Session expired. Please log in again.');
+  const [error, setError] =
+    useState('');
+
+  const isLoggedIn =
+    Boolean(admin);
+
+  const isSuperAdmin =
+    admin?.role === 'super_admin';
+
+  const isEditor =
+    admin?.role === 'super_admin' ||
+    admin?.role === 'editor';
+
+  const login = useCallback(
+    async (email, password) => {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response = await fetch(
+          `${API_BASE}/api/admin/auth/login`,
+          {
+            method: 'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body: JSON.stringify({
+              email,
+              password,
+            }),
+          }
+        );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw Object.assign(
+            new Error(
+              data.detail ||
+              UI_MESSAGES.error.auth
+            ),
+            {
+              status: response.status,
+            }
+          );
         }
-      } else {
-        logout();
-        throw new Error('Session expired. Please log in again.');
+
+        sessionStorage.setItem(
+          ACCESS_KEY,
+          data.access_token
+        );
+
+        sessionStorage.setItem(
+          REFRESH_KEY,
+          data.refresh_token
+        );
+
+        sessionStorage.setItem(
+          ADMIN_KEY,
+          JSON.stringify(data.admin)
+        );
+
+        setAdmin(data.admin);
+
+        return {
+          success: true,
+        };
+      } catch (requestError) {
+        const message = friendlyError(
+          requestError,
+          UI_MESSAGES.error.auth
+        );
+
+        setError(message);
+
+        return {
+          success: false,
+          error: message,
+        };
+      } finally {
+        setLoading(false);
       }
-    }
+    },
+    []
+  );
 
-    return res;
-  }, [logout]);
+  const logout =
+    useCallback(async () => {
+      try {
+        const token =
+          sessionStorage.getItem(
+            ACCESS_KEY
+          );
 
-  return { admin, isLoggedIn, isSuperAdmin, isEditor, loading, error, login, logout, authFetch };
+        if (token) {
+          await fetch(
+            `${API_BASE}/api/admin/auth/logout`,
+            {
+              method: 'POST',
+
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+              },
+            }
+          );
+        }
+      } catch {
+        // Always clear the local session,
+        // even if the server is unavailable.
+      }
+
+      sessionStorage.removeItem(
+        ACCESS_KEY
+      );
+
+      sessionStorage.removeItem(
+        REFRESH_KEY
+      );
+
+      sessionStorage.removeItem(
+        ADMIN_KEY
+      );
+
+      setAdmin(null);
+      setError('');
+    }, []);
+
+  const authFetch = useCallback(
+    async (url, options = {}) => {
+      let token =
+        sessionStorage.getItem(
+          ACCESS_KEY
+        );
+
+      const doFetch =
+        (accessToken) =>
+          fetch(url, {
+            ...options,
+
+            headers: {
+              'Content-Type':
+                'application/json',
+
+              ...options.headers,
+
+              Authorization:
+                `Bearer ${accessToken}`,
+            },
+          });
+
+      let response =
+        await doFetch(token);
+
+      if (response.status === 401) {
+        const refreshToken =
+          sessionStorage.getItem(
+            REFRESH_KEY
+          );
+
+        if (!refreshToken) {
+          await logout();
+
+          throw new Error(
+            UI_MESSAGES.error.session
+          );
+        }
+
+        const refreshResponse =
+          await fetch(
+            `${API_BASE}/api/admin/auth/refresh`,
+            {
+              method: 'POST',
+
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+
+              body: JSON.stringify({
+                refresh_token:
+                  refreshToken,
+              }),
+            }
+          );
+
+        if (!refreshResponse.ok) {
+          await logout();
+
+          throw new Error(
+            UI_MESSAGES.error.session
+          );
+        }
+
+        const refreshData =
+          await refreshResponse.json();
+
+        token =
+          refreshData.access_token;
+
+        sessionStorage.setItem(
+          ACCESS_KEY,
+          token
+        );
+
+        response =
+          await doFetch(token);
+      }
+
+      return response;
+    },
+    [logout]
+  );
+
+  return {
+    admin,
+    isLoggedIn,
+    isSuperAdmin,
+    isEditor,
+    loading,
+    error,
+    login,
+    logout,
+    authFetch,
+  };
 }

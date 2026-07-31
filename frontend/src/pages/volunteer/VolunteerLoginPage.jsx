@@ -147,7 +147,7 @@ export default function VolunteerLoginPage() {
     } catch (submitFailure) {
       setSubmitError(
         submitFailure?.message ||
-          'Unable to sign in. Please try again.'
+          "We couldn't sign you in right now. Please check your details and try again."
       );
     }
   };

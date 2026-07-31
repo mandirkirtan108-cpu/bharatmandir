@@ -31,7 +31,7 @@ export default function VolunteerAddTemplePage() {
       setError(
         requestError.response?.data?.detail ||
           requestError.message ||
-        'Unable to submit the temple. Please try again.'
+        "We couldn't send the temple details right now. Please review them and try again."
       );
     } finally {
       setBusy(false);

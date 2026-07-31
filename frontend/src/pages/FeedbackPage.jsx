@@ -46,13 +46,13 @@ export default function FeedbackPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Something went wrong. Please try again.');
+        throw new Error(err.detail || "We couldn't complete this right now. Please try again in a few moments.");
       }
 
       setSubmitted(true);
       setName(''); setEmail(''); setRating(0); setMessage('');
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+      setError(err.message || "We couldn't complete this right now. Please try again in a few moments.");
     } finally {
       setSubmitting(false);
     }

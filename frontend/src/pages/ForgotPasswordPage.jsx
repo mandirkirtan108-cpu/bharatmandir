@@ -120,7 +120,7 @@ function StepEmail({ onNext }) {
         body: JSON.stringify({ email: email.toLowerCase() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Something went wrong');
+      if (!res.ok) throw new Error(data.detail || "We couldn't complete this right now. Please try again in a few moments.");
       onNext(email.toLowerCase());
     } catch (e) {
       setApiErr(e.message);
@@ -199,7 +199,7 @@ function StepOTP({ email, onNext }) {
       onNext(otp);
     } catch (e) {
       if (e.message === 'Failed to fetch') {
-        setApiErr('Unable to connect. Please check your internet and try again.');
+        setApiErr("We couldn't connect right now. Please check your internet connection and try again.");
       } else {
         setApiErr(e.message);
       }
@@ -217,14 +217,14 @@ function StepOTP({ email, onNext }) {
         body: JSON.stringify({ email }),
       });
       if (!res.ok) {
-        let msg = 'Failed to resend code. Please try again.';
+        let msg = "We couldn't resend the code right now. Please wait a moment and try again.";
         try { const d = await res.json(); if (d.detail) msg = d.detail; } catch {}
         throw new Error(msg);
       }
       setResend('A new code has been sent to your email.');
     } catch (e) {
       if (e.message === 'Failed to fetch') {
-        setApiErr('Unable to connect. Please check your internet and try again.');
+        setApiErr("We couldn't connect right now. Please check your internet connection and try again.");
       } else {
         setApiErr(e.message);
       }

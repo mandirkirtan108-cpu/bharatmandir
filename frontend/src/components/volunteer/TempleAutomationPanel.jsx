@@ -306,7 +306,7 @@ export default function TempleAutomationPanel({ form, onApply, onSuggestion, onP
 
       <div className="automation-review-row">
         <button type="button" onClick={checkDuplicates} disabled={busy === 'duplicates'}><ShieldAlert size={16} /> {busy === 'duplicates' ? 'Checking...' : 'Check Duplicates'}</button>
-        <button type="button" onClick={requestSuggestions} disabled={busy === 'ai'}><Bot size={16} /> {busy === 'ai' ? 'Generating...' : 'Suggest Temple Details'}</button>
+        <button type="button" onClick={requestSuggestions} disabled={busy === 'ai'}><Bot size={16} /> {busy === 'ai' ? 'Gathering thoughtful suggestions...' : 'Suggest Temple Details'}</button>
         {message && <p>{message}</p>}
       </div>
 

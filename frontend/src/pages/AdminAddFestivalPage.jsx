@@ -307,7 +307,7 @@ export default function AdminAddFestivalPage() {
 
       setResult({ name: form.name, templeSlug: tSeleted?.slug });
     } catch (err) {
-      setApiError(err.message || 'Failed to save. Please try again.');
+      setApiError(err.message || "We couldn't save this right now. Please review the details and try again.");
     } finally {
       setSubmitting(false);
     }

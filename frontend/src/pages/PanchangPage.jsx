@@ -1207,7 +1207,7 @@ export default function PanchangPage() {
       // instead of silently generating Panchang for a wrong fallback city.
       // `!res.ok` already surfaces that message here — no change needed on
       // this side beyond making sure city text isn't trusted blindly.
-      if (!res.ok) throw new Error(data.detail || 'Failed to load Panchang');
+      if (!res.ok) throw new Error(data.detail || "We couldn't prepare the Panchang right now. Please try again in a few moments.");
       setDailyResult(data);
     } catch (e) {
       setDailyError(e.message || 'Could not load Panchang');
@@ -1240,7 +1240,7 @@ export default function PanchangPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to get Muhurat');
+      if (!res.ok) throw new Error(data.detail || "We couldn't gather the Muhurat details right now. Please try again in a few moments.");
       setResult(data);
     } catch (e) {
       setMuhuratError(`Could not get Muhurat: ${e.message}`);
@@ -1426,7 +1426,7 @@ export default function PanchangPage() {
                 <button className="btn-primary panchang-submit-button" onClick={fetchDailyPanchang} disabled={dailyLoading || !city.trim()} style={{ padding: '0 22px', height: 44, borderRadius: 9, background: '#EA580C', border: 'none', fontFamily: UI_FONT, fontWeight: 800 }}>
                   {dailyLoading ? (
                     <>
-                      <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Loading...
+                      <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Just a moment while we prepare everything...
                     </>
                   ) : (
                     <>
@@ -1457,7 +1457,7 @@ export default function PanchangPage() {
               </div>
             )}
 
-            {dailyLoading && <LoadingState message="Loading Panchang..." />}
+            {dailyLoading && <LoadingState message="Gathering today's Panchang..." />}
             {dailyResult && !dailyLoading && <PanchangDailyResult dailyResult={dailyResult} />}
           </Card>
 

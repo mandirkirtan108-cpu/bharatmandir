@@ -314,12 +314,12 @@ export default function RoutePlannerPage() {
       const data = await res.json();
       if (!res.ok) {
         const detail = typeof data.detail === 'string' ? data.detail : data.detail?.message;
-        throw new Error(detail || 'Failed to plan route');
+        throw new Error(detail || "We couldn't prepare this route right now. Please check both places and try again.");
       }
       setResult(data);
       setShowMap(true);
     } catch (e) {
-      setError(e.message || 'Something went wrong. Please try again.');
+      setError(e.message || "We couldn't complete this right now. Please try again in a few moments.");
     } finally {
       setLoading(false);
     }
@@ -359,7 +359,7 @@ export default function RoutePlannerPage() {
       const data = await res.json();
       if (!res.ok) {
         const detail = typeof data.detail === 'string' ? data.detail : data.detail?.message;
-        throw new Error(detail || 'Failed to load nearby temples');
+        throw new Error(detail || "We couldn't find nearby temples right now. Please try again in a few moments.");
       }
       setNearbyTempleData((prev) => ({ ...prev, [key]: data.nearby_temples || [] }));
     } catch (e) {
