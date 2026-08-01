@@ -11,6 +11,7 @@ import os
 import re
 import tempfile
 import threading
+import time
 import uuid
 import wave
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,6 +23,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from pypdf import PdfReader
 
 try:
@@ -53,10 +55,13 @@ TRANSLATION_MODEL = os.getenv(
     "LIBRARY_TRANSLATION_MODEL",
     "qwen/qwen3.5-flash-02-23",
 )
+OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
 PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
+OCR_RETRY_DPI = max(PAGE_IMAGE_DPI, int(os.getenv("LIBRARY_OCR_RETRY_DPI", "400")))
+AI_MAX_ATTEMPTS = max(1, min(int(os.getenv("LIBRARY_AI_MAX_ATTEMPTS", "3")), 5))
 # Minimum extracted-text length below which a page is treated as having no
 # usable text layer (i.e. a scanned image) and is sent through OCR instead.
 OCR_MIN_TEXT_CHARS = max(1, int(os.getenv("LIBRARY_OCR_MIN_TEXT_CHARS", "20")))
@@ -420,6 +425,56 @@ def _render_page_images(pdf_path: Path, book_id: int | None = None) -> list[byte
     return images
 
 
+def _render_single_page(pdf_path: Path, page_index: int, dpi: int) -> bytes | None:
+    """Re-render one difficult page at a higher resolution for OCR retry."""
+    if fitz is None:
+        return None
+    doc = fitz.open(str(pdf_path))
+    try:
+        if page_index < 0 or page_index >= len(doc):
+            return None
+        zoom = dpi / 72
+        pix = doc[page_index].get_pixmap(
+            matrix=fitz.Matrix(zoom, zoom), alpha=False
+        )
+        return pix.tobytes("png")
+    except Exception:
+        return None
+    finally:
+        doc.close()
+
+
+def _enhance_scan(image_bytes: bytes) -> bytes:
+    """Improve scan contrast and sharpness without altering its content."""
+    with Image.open(io.BytesIO(image_bytes)) as image:
+        image = ImageOps.exif_transpose(image).convert("L")
+        image = ImageOps.autocontrast(image, cutoff=1)
+        image = ImageEnhance.Contrast(image).enhance(1.7)
+        image = image.filter(ImageFilter.MedianFilter(size=3))
+        image = image.filter(ImageFilter.SHARPEN)
+        output = io.BytesIO()
+        image.save(output, format="PNG", optimize=True)
+        return output.getvalue()
+
+
+def _chat_with_retries(**kwargs) -> dict:
+    """Retry temporary, empty, and malformed OpenRouter responses."""
+    last_error: Exception | None = None
+    for attempt in range(1, AI_MAX_ATTEMPTS + 1):
+        try:
+            response = chat(**kwargs)
+            if not content(response):
+                raise RuntimeError("The language service returned an empty response.")
+            return response
+        except Exception as exc:
+            last_error = exc
+            if attempt < AI_MAX_ATTEMPTS:
+                time.sleep(min(2 ** (attempt - 1), 4))
+    raise RuntimeError(
+        "The language service is temporarily unavailable after several attempts."
+    ) from last_error
+
+
 def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
     """Transcribes a scanned page image via vision when the PDF has no
     extractable text layer (e.g. Gita Press-style scans where every page is
@@ -441,8 +496,8 @@ def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
         f"no preface, no code fence."
     )
     with _translation_slots:
-        response = chat(
-            model=TRANSLATION_MODEL,
+        response = _chat_with_retries(
+            model=OCR_MODEL,
             messages=[{
                 "role": "user",
                 "content": [
@@ -491,7 +546,7 @@ RULES:
 SOURCE TEXT:
 {text}"""
     with _translation_slots:
-        response = chat(
+        response = _chat_with_retries(
             model=TRANSLATION_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
@@ -539,7 +594,7 @@ PAGES:
 {chr(10).join(lines)}"""
 
     with _translation_slots:
-        response = chat(
+        response = _chat_with_retries(
             model=TRANSLATION_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
@@ -622,11 +677,26 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                 page_number = index + 1
                 try:
                     text = _ocr_page_image(page_images[index], source_language)
+                    if len(text.strip()) < OCR_MIN_TEXT_CHARS:
+                        retry_image = _render_single_page(pdf_path, index, OCR_RETRY_DPI)
+                        if retry_image:
+                            text = _ocr_page_image(
+                                _enhance_scan(retry_image), source_language
+                            )
                     print(f"[library] book {book_id}: OCR page {page_number}/{len(pages)} — {len(text)} chars")
                     return index, text
                 except Exception as exc:
                     print(f"[library] book {book_id}: OCR FAILED on page {page_number}/{len(pages)} — {type(exc).__name__}: {exc}")
-                    return index, ""
+                    try:
+                        retry_image = _render_single_page(pdf_path, index, OCR_RETRY_DPI)
+                        retry_text = (
+                            _ocr_page_image(_enhance_scan(retry_image), source_language)
+                            if retry_image
+                            else ""
+                        )
+                        return index, retry_text
+                    except Exception:
+                        return index, ""
 
             with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
                 jobs = [executor.submit(_ocr_one, index) for index in needs_ocr]
@@ -670,7 +740,10 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                     f"[library] book {book_id}: page {page_number} FAILED after {elapsed:.1f}s "
                     f"— {type(exc).__name__}: {exc}"
                 )
-                raise RuntimeError(f"Translation stopped on PDF page {page_number}: {exc}") from exc
+                raise RuntimeError(
+                    f"We couldn't prepare page {page_number} after several attempts. "
+                    "Please upload the book again in a few moments."
+                ) from exc
 
         page_text_en: dict[int, str] = {}
         with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:

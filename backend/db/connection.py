@@ -12,6 +12,7 @@ Fixes applied:
 """
 
 import os
+import threading
 import psycopg2
 from psycopg2 import pool, extras, OperationalError, InterfaceError
 from dotenv import load_dotenv
@@ -28,6 +29,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 # maxconn=10 → never open more than 10 at once
 
 _pool = None  # Global pool instance
+_pool_lock = threading.Lock()
 
 
 def _create_pool():
@@ -49,12 +51,14 @@ def _create_pool():
 def get_pool():
     global _pool
     if _pool is None or _pool.closed:
-        try:
-            _pool = _create_pool()
-            print("✅ Connected to Neon DB successfully")
-        except OperationalError as e:
-            print(f"❌ Failed to connect: {e}")
-            raise
+        with _pool_lock:
+            if _pool is None or _pool.closed:
+                try:
+                    _pool = _create_pool()
+                    print("✅ Connected to Neon DB successfully")
+                except OperationalError as e:
+                    print(f"❌ Failed to connect: {e}")
+                    raise
     return _pool
 
 
@@ -64,7 +68,10 @@ def _is_connection_alive(conn) -> bool:
     Returns False if the connection is stale/closed.
     """
     try:
-        conn.cursor().execute("SELECT 1")
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        conn.rollback()
         return True
     except (OperationalError, InterfaceError):
         return False
@@ -100,24 +107,33 @@ def get_db_connection():
     - Returns connection to pool
     """
     p = get_pool()
-    conn = p.getconn()
+    conn = None
 
-    # ── Stale connection check ──────────────────────────────────────────
-    # Neon DB (serverless Postgres) aggressively closes idle SSL connections.
-    # If the pooled connection is dead, discard it and get a fresh one.
-    if not _is_connection_alive(conn):
+    # Neon may close several idle pooled SSL connections at once. Validate
+    # every replacement instead of assuming that the next pooled item is live.
+    for _ in range(10):
+        candidate = p.getconn()
+        if _is_connection_alive(candidate):
+            conn = candidate
+            break
         print("⚠️  Stale connection detected, replacing...")
         try:
-            p.putconn(conn, close=True)  # Discard the dead connection
+            p.putconn(candidate, close=True)
         except Exception:
-            pass
-        conn = p.getconn()              # Get a fresh one
-    # ───────────────────────────────────────────────────────────────────
+            try:
+                candidate.close()
+            except Exception:
+                pass
 
+    if conn is None:
+        raise OperationalError("Could not obtain a healthy database connection")
+
+    broken = False
     try:
         yield conn
         conn.commit()       # Auto-commit on success
     except Exception as e:
+        broken = isinstance(e, (OperationalError, InterfaceError)) or bool(conn.closed)
         # ── Safe rollback ───────────────────────────────────────────────
         # The connection may have dropped mid-request (e.g. Neon SSL drop).
         # Attempting rollback on a closed connection raises InterfaceError,
@@ -132,7 +148,7 @@ def get_db_connection():
     finally:
         # Return connection to pool. If it's broken, close it outright.
         try:
-            p.putconn(conn)
+            p.putconn(conn, close=broken or bool(conn.closed))
         except Exception:
             try:
                 p.putconn(conn, close=True)
