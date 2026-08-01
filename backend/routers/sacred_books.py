@@ -531,35 +531,77 @@ def _split_text(text: str) -> list[str]:
     return chunks
 
 
-def _translate_chunk(text: str, source_language: str, code: str) -> str:
+def _parse_translation_json(raw: str) -> dict[str, str]:
+    """Extract the three translations from a structured model response."""
+    cleaned = re.sub(
+        r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE
+    ).strip()
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        if start < 0 or end <= start:
+            raise ValueError("The translation response was incomplete.")
+        payload = json.loads(cleaned[start:end + 1])
+    if not isinstance(payload, dict):
+        raise ValueError("The translation response was incomplete.")
+    translated = {
+        code: str(payload.get(code) or "").strip()
+        for code in TARGET_LANGUAGES
+    }
+    if any(not value for value in translated.values()):
+        raise ValueError("One or more translations were missing.")
+    return translated
+
+
+def _translate_chunk_all(text: str, source_language: str) -> dict[str, str]:
+    """Produce all reader languages with one model call instead of three."""
     if not text.strip():
-        return ""
-    prompt = f"""Translate this document text from {source_language} to {TARGET_LANGUAGES[code]}.
+        return {code: "" for code in TARGET_LANGUAGES}
+    prompt = f"""Translate this document text from {source_language} into all three requested versions:
+- en: English
+- hi: Hindi in Devanagari
+- sa: Sanskrit in Devanagari
 
 RULES:
 - Translate every heading, sentence, caption, footnote, list item, verse and repetition.
 - Never summarize, omit, shorten, explain, censor, modernize, or add commentary.
 - Preserve paragraphs, headings, numbering, lists, names and citations.
 - Mark only genuinely unreadable fragments as [illegible].
-- Return only translated document text without a preface or code fence.
+- If a requested language is already the source language, reproduce that text faithfully.
+- Return only one JSON object with exactly these string keys: "en", "hi", "sa".
 
 SOURCE TEXT:
 {text}"""
-    with _translation_slots:
-        response = _chat_with_retries(
-            model=TRANSLATION_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            timeout=TRANSLATION_TIMEOUT,
-        )
-    return content(response)
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            with _translation_slots:
+                response = _chat_with_retries(
+                    model=TRANSLATION_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                    response_format={"type": "json_object"},
+                    timeout=TRANSLATION_TIMEOUT,
+                )
+            return _parse_translation_json(content(response))
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(1)
+    raise RuntimeError("The combined translation response was incomplete.") from last_error
 
 
-def _translate(text: str, source_language: str, code: str) -> str:
-    return "\n\n".join(
-        _translate_chunk(chunk, source_language, code)
-        for chunk in _split_text(text)
-    )
+def _translate_all(text: str, source_language: str) -> dict[str, str]:
+    combined = {code: [] for code in TARGET_LANGUAGES}
+    for chunk in _split_text(text):
+        translated_chunk = _translate_chunk_all(chunk, source_language)
+        for code in TARGET_LANGUAGES:
+            combined[code].append(translated_chunk[code])
+    return {
+        code: "\n\n".join(parts)
+        for code, parts in combined.items()
+    }
 
 
 def _generate_sections(book_id: int, page_texts: dict[int, str]) -> None:
@@ -721,10 +763,7 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for en/hi/sa")
             page_started = datetime.utcnow()
             try:
-                translated = {
-                    code: _translate(source_text, source_language, code)
-                    for code in TARGET_LANGUAGES
-                }
+                translated = _translate_all(source_text, source_language)
                 elapsed = (datetime.utcnow() - page_started).total_seconds()
                 print(f"[library] book {book_id}: page {page_number} — translated in {elapsed:.1f}s")
                 image_url = None
