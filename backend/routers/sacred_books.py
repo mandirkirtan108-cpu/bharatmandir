@@ -59,6 +59,13 @@ OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
+COMBINED_TRANSLATION_CHUNK_CHARS = max(
+    2000,
+    min(
+        int(os.getenv("LIBRARY_COMBINED_TRANSLATION_CHUNK_CHARS", "5000")),
+        TRANSLATION_CHUNK_CHARS,
+    ),
+)
 PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
 OCR_RETRY_DPI = max(PAGE_IMAGE_DPI, int(os.getenv("LIBRARY_OCR_RETRY_DPI", "400")))
 AI_MAX_ATTEMPTS = max(1, min(int(os.getenv("LIBRARY_AI_MAX_ATTEMPTS", "3")), 5))
@@ -511,21 +518,21 @@ def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
     return content(response)
 
 
-def _split_text(text: str) -> list[str]:
-    if len(text) <= TRANSLATION_CHUNK_CHARS:
+def _split_text(text: str, chunk_chars: int = TRANSLATION_CHUNK_CHARS) -> list[str]:
+    if len(text) <= chunk_chars:
         return [text]
     chunks, remaining = [], text
     while remaining:
-        if len(remaining) <= TRANSLATION_CHUNK_CHARS:
+        if len(remaining) <= chunk_chars:
             chunks.append(remaining)
             break
-        boundary = remaining.rfind("\n\n", 0, TRANSLATION_CHUNK_CHARS)
-        if boundary < TRANSLATION_CHUNK_CHARS // 2:
-            boundary = remaining.rfind("\n", 0, TRANSLATION_CHUNK_CHARS)
-        if boundary < TRANSLATION_CHUNK_CHARS // 2:
-            boundary = remaining.rfind(" ", 0, TRANSLATION_CHUNK_CHARS)
+        boundary = remaining.rfind("\n\n", 0, chunk_chars)
+        if boundary < chunk_chars // 2:
+            boundary = remaining.rfind("\n", 0, chunk_chars)
+        if boundary < chunk_chars // 2:
+            boundary = remaining.rfind(" ", 0, chunk_chars)
         if boundary < 1:
-            boundary = TRANSLATION_CHUNK_CHARS
+            boundary = chunk_chars
         chunks.append(remaining[:boundary])
         remaining = remaining[boundary:].lstrip("\n")
     return chunks
@@ -594,7 +601,7 @@ SOURCE TEXT:
 
 def _translate_all(text: str, source_language: str) -> dict[str, str]:
     combined = {code: [] for code in TARGET_LANGUAGES}
-    for chunk in _split_text(text):
+    for chunk in _split_text(text, COMBINED_TRANSLATION_CHUNK_CHARS):
         translated_chunk = _translate_chunk_all(chunk, source_language)
         for code in TARGET_LANGUAGES:
             combined[code].append(translated_chunk[code])
@@ -602,6 +609,36 @@ def _translate_all(text: str, source_language: str) -> dict[str, str]:
         code: "\n\n".join(parts)
         for code, parts in combined.items()
     }
+
+
+def _translate_chunk_single(text: str, source_language: str, code: str) -> str:
+    """Reliable fallback used only when a combined JSON response fails."""
+    prompt = f"""Translate this document text from {source_language} to {TARGET_LANGUAGES[code]}.
+
+Translate every visible heading, sentence, caption, footnote, list item and verse.
+Never summarize, omit, shorten, explain, modernize, or add commentary.
+Preserve paragraphs, numbering, names and punctuation.
+Return only the translated text without a preface or code fence.
+
+SOURCE TEXT:
+{text}"""
+    with _translation_slots:
+        response = _chat_with_retries(
+            model=TRANSLATION_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            timeout=TRANSLATION_TIMEOUT,
+        )
+    return content(response)
+
+
+def _translate_separately(text: str, source_language: str) -> dict[str, str]:
+    """Fallback for an unusually long page or incomplete combined response."""
+    result = {code: [] for code in TARGET_LANGUAGES}
+    for chunk in _split_text(text):
+        for code in TARGET_LANGUAGES:
+            result[code].append(_translate_chunk_single(chunk, source_language, code))
+    return {code: "\n\n".join(parts) for code, parts in result.items()}
 
 
 def _generate_sections(book_id: int, page_texts: dict[int, str]) -> None:
@@ -779,10 +816,44 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                     f"[library] book {book_id}: page {page_number} FAILED after {elapsed:.1f}s "
                     f"— {type(exc).__name__}: {exc}"
                 )
-                raise RuntimeError(
-                    f"We couldn't prepare page {page_number} after several attempts. "
-                    "Please upload the book again in a few moments."
-                ) from exc
+                try:
+                    print(
+                        f"[library] book {book_id}: page {page_number} — "
+                        "retrying with separate language requests"
+                    )
+                    translated = _translate_separately(source_text, source_language)
+                    image_url = None
+                    if image_bytes:
+                        try:
+                            image_url = _upload_page_image(
+                                image_bytes, slug, page_number
+                            )
+                        except Exception:
+                            image_url = None
+                    return page_number, source_text, translated, image_url
+                except Exception as fallback_exc:
+                    print(
+                        f"[library] book {book_id}: page {page_number} skipped "
+                        f"after all translation attempts: {type(fallback_exc).__name__}"
+                    )
+                    # Preserve the page number, original OCR text, and scan so
+                    # one difficult page never discards an otherwise complete
+                    # book. Empty translated fields clearly mean unavailable;
+                    # they must not be filled with misleading copied text.
+                    image_url = None
+                    if image_bytes:
+                        try:
+                            image_url = _upload_page_image(
+                                image_bytes, slug, page_number
+                            )
+                        except Exception:
+                            image_url = None
+                    return (
+                        page_number,
+                        source_text,
+                        {code: "" for code in TARGET_LANGUAGES},
+                        image_url,
+                    )
 
         page_text_en: dict[int, str] = {}
         with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
