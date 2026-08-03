@@ -324,8 +324,24 @@ def _pcm_to_wav(pcm_bytes: bytes, *, sample_rate: int, channels: int = 1, sample
     return buffer.getvalue()
 
 
+# Base per-attempt timeout for a single TTS synthesis call. Longer page
+# text takes longer for the provider to generate, so this needs headroom
+# beyond a typical short-request timeout — see _synthesize_tts_audio()
+# below, which also retries the correct format with a longer timeout
+# before giving up, rather than switching to an incompatible format.
+TTS_TIMEOUT_SECONDS = max(30, int(os.getenv("LIBRARY_TTS_TIMEOUT_SECONDS", "90")))
+
+
 def _synthesize_tts_audio(text: str, model: str, voice: str, preferred_format: str) -> tuple[bytes, str, str]:
-    """Try a few OpenRouter TTS output formats because provider support varies."""
+    """Try a few OpenRouter TTS output formats because provider support varies.
+
+    Timeouts are handled differently from format-rejection errors: a
+    timeout just means the provider was still generating (longer page text
+    takes longer), so the SAME (already-correct) format is retried with a
+    longer timeout instead of cycling through other formats — trying a
+    format the provider has already told us it doesn't support wastes a
+    round trip without addressing the actual problem.
+    """
     formats: list[str | None] = []
     for candidate in (preferred_format, "mp3", "wav", "pcm", None):
         if candidate not in formats:
@@ -333,24 +349,40 @@ def _synthesize_tts_audio(text: str, model: str, voice: str, preferred_format: s
 
     last_error: Exception | None = None
     for audio_format in formats:
-        try:
-            audio = speech(
-                input=text,
-                model=model,
-                voice=voice,
-                response_format=audio_format,
-            )
-            if audio_format == "pcm":
-                return _pcm_to_wav(audio, sample_rate=TTS_PCM_SAMPLE_RATE), "wav", "audio/wav"
-            if audio_format == "wav":
-                return audio, "wav", "audio/wav"
-            return audio, "mp3", "audio/mpeg"
-        except Exception as exc:
-            last_error = exc
-            print(
-                f"[library] TTS attempt failed "
-                f"(model={model}, voice={voice}, format={audio_format or 'default'}): {exc}"
-            )
+        # Give the preferred (correct) format more than one shot, with an
+        # increasing timeout, before falling through to a different format.
+        attempt_timeouts = (
+            [TTS_TIMEOUT_SECONDS, TTS_TIMEOUT_SECONDS * 2]
+            if audio_format == preferred_format
+            else [TTS_TIMEOUT_SECONDS]
+        )
+        for attempt_timeout in attempt_timeouts:
+            try:
+                audio = speech(
+                    input=text,
+                    model=model,
+                    voice=voice,
+                    response_format=audio_format,
+                    timeout=attempt_timeout,
+                )
+                if audio_format == "pcm":
+                    return _pcm_to_wav(audio, sample_rate=TTS_PCM_SAMPLE_RATE), "wav", "audio/wav"
+                if audio_format == "wav":
+                    return audio, "wav", "audio/wav"
+                return audio, "mp3", "audio/mpeg"
+            except Exception as exc:
+                last_error = exc
+                print(
+                    f"[library] TTS attempt failed "
+                    f"(model={model}, voice={voice}, format={audio_format or 'default'}, "
+                    f"timeout={attempt_timeout}s): {exc}"
+                )
+                # Only a genuine timeout is worth retrying with more time on
+                # this same format. Any other error (e.g. the provider
+                # explicitly rejecting the format) won't be fixed by waiting
+                # longer, so move on to the next candidate format instead.
+                if not isinstance(exc, httpx.TimeoutException):
+                    break
 
     raise RuntimeError(str(last_error or "Voice reading is temporarily unavailable."))
 
