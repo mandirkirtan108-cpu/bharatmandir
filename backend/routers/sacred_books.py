@@ -76,9 +76,9 @@ TTS_MODELS = {
     "sa": os.getenv("LIBRARY_TTS_MODEL_SA", "google/gemini-3.1-flash-tts-preview"),
 }
 TTS_VOICES = {
-    "en": os.getenv("LIBRARY_TTS_VOICE_EN", "alloy"),
-    "hi": os.getenv("LIBRARY_TTS_VOICE_HI", "alloy"),
-    "sa": os.getenv("LIBRARY_TTS_VOICE_SA", "alloy"),
+    "en": os.getenv("LIBRARY_TTS_VOICE_EN", "Kore"),
+    "hi": os.getenv("LIBRARY_TTS_VOICE_HI", "Kore"),
+    "sa": os.getenv("LIBRARY_TTS_VOICE_SA", "Kore"),
 }
 # Not every TTS model supports every response_format — Gemini's TTS models
 # only support "pcm" (OpenRouter rejects "mp3" for them with a 400), while
