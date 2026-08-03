@@ -405,24 +405,44 @@ def _render_page_images(pdf_path: Path, book_id: int | None = None) -> list[byte
     diagrams, and layout are preserved exactly as printed — not just the text.
     Returns one entry per page; entries are None only if rendering is
     unavailable, in which case the rest of the book still processes normally.
+
+    Rendered in parallel across pages. Each worker opens its own
+    fitz.Document via _render_single_page() — PyMuPDF Document objects
+    aren't safe to share/read concurrently across threads, so every page
+    gets its own open/close rather than reusing one shared doc.
     """
     if fitz is None:
         return []
-    images: list[bytes | None] = []
-    doc = fitz.open(str(pdf_path))
-    try:
-        zoom = PAGE_IMAGE_DPI / 72
-        matrix = fitz.Matrix(zoom, zoom)
-        for index, page in enumerate(doc, 1):
-            try:
-                pix = page.get_pixmap(matrix=matrix, alpha=False)
-                images.append(pix.tobytes("png"))
-                print(f"[library] book {book_id}: rendered page image {index}/{len(doc)} ({len(images[-1])} bytes)")
-            except Exception as exc:
-                print(f"[library] book {book_id}: page image {index}/{len(doc)} render FAILED — {type(exc).__name__}: {exc}")
-                images.append(None)
-    finally:
-        doc.close()
+
+    with fitz.open(str(pdf_path)) as doc:
+        page_count = len(doc)
+
+    if page_count == 0:
+        return []
+
+    images: list[bytes | None] = [None] * page_count
+
+    def _render_one(index: int) -> tuple[int, bytes | None]:
+        try:
+            img = _render_single_page(pdf_path, index, PAGE_IMAGE_DPI)
+            if img:
+                print(f"[library] book {book_id}: rendered page image {index + 1}/{page_count} ({len(img)} bytes)")
+            else:
+                print(f"[library] book {book_id}: page image {index + 1}/{page_count} render returned nothing")
+            return index, img
+        except Exception as exc:
+            print(f"[library] book {book_id}: page image {index + 1}/{page_count} render FAILED — {type(exc).__name__}: {exc}")
+            return index, None
+
+    # This is CPU/IO-bound rendering work, not an OpenRouter call, so it
+    # doesn't share _translation_slots — give it its own worker budget.
+    render_workers = max(1, min(TRANSLATION_WORKERS * 2, 8))
+    with ThreadPoolExecutor(max_workers=render_workers) as executor:
+        futures = [executor.submit(_render_one, i) for i in range(page_count)]
+        for future in as_completed(futures):
+            index, img = future.result()
+            images[index] = img
+
     return images
 
 
@@ -722,10 +742,21 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for en/hi/sa")
             page_started = datetime.utcnow()
             try:
-                translated = {
-                    code: _translate(source_text, source_language, code)
-                    for code in TARGET_LANGUAGES
-                }
+                # Run all 3 target languages concurrently instead of one at a
+                # time — each still queues through the global
+                # _translation_slots semaphore, so overall API concurrency
+                # is unchanged; this just removes the artificial en->hi->sa
+                # serialization within a single page.
+                translated: dict[str, str] = {}
+                with ThreadPoolExecutor(max_workers=len(TARGET_LANGUAGES)) as lang_executor:
+                    lang_futures = {
+                        lang_executor.submit(_translate, source_text, source_language, code): code
+                        for code in TARGET_LANGUAGES
+                    }
+                    for lang_future in as_completed(lang_futures):
+                        code = lang_futures[lang_future]
+                        translated[code] = lang_future.result()
+
                 elapsed = (datetime.utcnow() - page_started).total_seconds()
                 print(f"[library] book {book_id}: page {page_number} — translated in {elapsed:.1f}s")
                 image_url = None
