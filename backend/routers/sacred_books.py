@@ -400,6 +400,43 @@ def _extract_pages(pdf_path: Path) -> list[str]:
     return pages
 
 
+_DEVANAGARI_RANGE = (0x0900, 0x097F)
+
+
+def _extraction_looks_valid(text: str, source_language: str) -> bool:
+    """Detects legacy 8-bit Hindi fonts (Kruti Dev / DevLys / Chanakya-style)
+    whose embedded text layer decodes to non-Devanagari glyph bytes.
+
+    These fonts render as correct-looking Devanagari on screen (the font's
+    glyph table maps ASCII/Latin byte codes to Devanagari shapes), but the
+    underlying text layer pypdf extracts is NOT real Unicode Devanagari —
+    it's mojibake like "üÊË„UÁ⁄U—H". Because this text is non-empty and
+    often long, it passes the OCR_MIN_TEXT_CHARS length check and looks like
+    a "native text layer" page, so it never gets routed through the OCR
+    fallback. It then goes straight to the translation model as if it were
+    real Hindi, which has no choice but to hallucinate a "translation" of
+    text that carries no actual linguistic content (this is what produces
+    unrelated output or endless [illegible] repeats).
+
+    We guard against this by checking what fraction of a Devanagari-source
+    page's non-whitespace characters actually fall in the Devanagari Unicode
+    block. A real Devanagari page should be overwhelmingly Devanagari
+    codepoints; legacy-font mojibake is typically close to 0%.
+    """
+    stripped = re.sub(r"\s+", "", text)
+    if not stripped:
+        return False
+    is_devanagari_source = source_language.strip().lower() in {
+        "hindi", "hi", "sanskrit", "sa", "devanagari",
+    }
+    if not is_devanagari_source:
+        return True  # this guard only applies to Devanagari-script sources
+    devanagari_chars = sum(
+        1 for ch in stripped if _DEVANAGARI_RANGE[0] <= ord(ch) <= _DEVANAGARI_RANGE[1]
+    )
+    return (devanagari_chars / len(stripped)) > 0.3
+
+
 def _render_page_images(pdf_path: Path, book_id: int | None = None) -> list[bytes | None]:
     """Render every PDF page to a PNG at PAGE_IMAGE_DPI so embedded pictures,
     diagrams, and layout are preserved exactly as printed — not just the text.
@@ -583,6 +620,67 @@ def _translate(text: str, source_language: str, code: str) -> str:
     )
 
 
+def _translate_chunk_all_languages(text: str, source_language: str) -> dict[str, str]:
+    """Translates one chunk into ALL target languages in a single model
+    call, instead of one call per language. This is the main cost lever:
+    the (often large) source chunk is sent to the model once instead of
+    three times, cutting input-token spend roughly 3x for the same output.
+    """
+    if not text.strip():
+        return {code: "" for code in TARGET_LANGUAGES}
+
+    language_lines = "\n".join(f'- "{code}": {name}' for code, name in TARGET_LANGUAGES.items())
+    prompt = f"""Translate this document text from {source_language} into THREE languages at once:
+{language_lines}
+
+RULES:
+- Translate every heading, sentence, caption, footnote, list item, verse and repetition, separately and completely into EACH of the three languages.
+- Never summarize, omit, shorten, explain, censor, modernize, or add commentary.
+- Preserve paragraphs, headings, numbering, lists, names and citations in every language's version.
+- Mark only genuinely unreadable fragments as [illegible].
+- Respond with ONLY a single JSON object, no prose, no code fence, in exactly this shape:
+{{"en": "<complete English translation>", "hi": "<complete Hindi translation>", "sa": "<complete Sanskrit translation>"}}
+
+SOURCE TEXT:
+{text}"""
+    with _translation_slots:
+        response = _chat_with_retries(
+            model=TRANSLATION_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            timeout=TRANSLATION_TIMEOUT,
+        )
+    raw = content(response)
+    raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("not a JSON object")
+    except Exception:
+        # A single malformed JSON response for this chunk falls back to the
+        # old one-call-per-language path — costs more, but only for the
+        # chunk that actually failed, not the whole page/book.
+        print("[library] combined translation JSON parse failed for one chunk — falling back per-language")
+        return {code: _translate_chunk(text, source_language, code) for code in TARGET_LANGUAGES}
+    return {code: str(parsed.get(code) or "") for code in TARGET_LANGUAGES}
+
+
+def _translate_all_languages(text: str, source_language: str) -> dict[str, str]:
+    """Translates one page's full text into en/hi/sa, chunk by chunk, using
+    one combined-JSON model call per chunk (see _translate_chunk_all_languages)
+    instead of three separate per-language calls. Chunks are still processed
+    sequentially per page since a page's chunks must stay in order; pages
+    themselves are already parallelized by the caller.
+    """
+    chunks = _split_text(text)
+    merged: dict[str, list[str]] = {code: [] for code in TARGET_LANGUAGES}
+    for chunk in chunks:
+        result = _translate_chunk_all_languages(chunk, source_language)
+        for code in TARGET_LANGUAGES:
+            merged[code].append(result[code])
+    return {code: "\n\n".join(parts) for code, parts in merged.items()}
+
+
 def _generate_sections(book_id: int, page_texts: dict[int, str]) -> None:
     """Ask the model to read through the (English) page text and propose a
     table of contents — chapter/canto/part boundaries with the page each one
@@ -661,8 +759,11 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
     print(f"[library] book {book_id}: processing started (file={pdf_path.name})")
     try:
         pages = _extract_pages(pdf_path)
-        native_count = sum(1 for p in pages if len(p) >= OCR_MIN_TEXT_CHARS)
-        print(f"[library] book {book_id}: {len(pages)} pages total, {native_count} with a native text layer")
+        native_count = sum(
+            1 for p in pages
+            if len(p) >= OCR_MIN_TEXT_CHARS and _extraction_looks_valid(p, source_language)
+        )
+        print(f"[library] book {book_id}: {len(pages)} pages total, {native_count} with a native, valid-script text layer")
 
         key = _api_key()
         if not key:
@@ -689,10 +790,17 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
         # untouched to avoid unnecessary AI calls.
         needs_ocr = [
             i for i, text in enumerate(pages)
-            if len(text) < OCR_MIN_TEXT_CHARS and page_images[i]
+            if (
+                len(text) < OCR_MIN_TEXT_CHARS
+                or not _extraction_looks_valid(text, source_language)
+            )
+            and page_images[i]
         ]
         if needs_ocr:
-            print(f"[library] book {book_id}: {len(needs_ocr)}/{len(pages)} pages have no text layer — running OCR")
+            print(
+                f"[library] book {book_id}: {len(needs_ocr)}/{len(pages)} pages have "
+                f"no usable native text layer (missing or legacy-font mojibake) — running OCR"
+            )
 
             def _ocr_one(index: int):
                 page_number = index + 1
@@ -739,23 +847,12 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             """, (len(pages), book_id))
 
         def translate_page(page_number: int, source_text: str, image_bytes: bytes | None):
-            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for en/hi/sa")
+            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for en/hi/sa (combined call)")
             page_started = datetime.utcnow()
             try:
-                # Run all 3 target languages concurrently instead of one at a
-                # time — each still queues through the global
-                # _translation_slots semaphore, so overall API concurrency
-                # is unchanged; this just removes the artificial en->hi->sa
-                # serialization within a single page.
-                translated: dict[str, str] = {}
-                with ThreadPoolExecutor(max_workers=len(TARGET_LANGUAGES)) as lang_executor:
-                    lang_futures = {
-                        lang_executor.submit(_translate, source_text, source_language, code): code
-                        for code in TARGET_LANGUAGES
-                    }
-                    for lang_future in as_completed(lang_futures):
-                        code = lang_futures[lang_future]
-                        translated[code] = lang_future.result()
+                # One combined call per chunk instead of three separate
+                # per-language calls — see _translate_all_languages().
+                translated = _translate_all_languages(source_text, source_language)
 
                 elapsed = (datetime.utcnow() - page_started).total_seconds()
                 print(f"[library] book {book_id}: page {page_number} — translated in {elapsed:.1f}s")
