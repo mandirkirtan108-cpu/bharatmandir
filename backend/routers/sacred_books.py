@@ -85,9 +85,9 @@ TTS_VOICES = {
 # OpenAI's TTS models support "mp3" directly. This must match whatever
 # model each language above is actually using.
 TTS_FORMATS = {
-    "en": os.getenv("LIBRARY_TTS_FORMAT_EN", "mp3"),
-    "hi": os.getenv("LIBRARY_TTS_FORMAT_HI", "mp3"),
-    "sa": os.getenv("LIBRARY_TTS_FORMAT_SA", "mp3"),
+    "en": os.getenv("LIBRARY_TTS_FORMAT_EN", "pcm"),
+    "hi": os.getenv("LIBRARY_TTS_FORMAT_HI", "pcm"),
+    "sa": os.getenv("LIBRARY_TTS_FORMAT_SA", "pcm"),
 }
 # Sample rate of the raw PCM Gemini's TTS returns (24kHz/16-bit mono), used
 # to wrap it in a playable WAV container — see _pcm_to_wav() below.
