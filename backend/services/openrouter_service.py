@@ -88,7 +88,7 @@ def speech(
     input: str,
     model: str,
     voice: str,
-    response_format: str = "mp3",
+    response_format: str | None = "mp3",
     speed: float | None = None,
     instructions: str | None = None,
     timeout: float = 60,
@@ -107,8 +107,9 @@ def speech(
         "model": model,
         "input": input,
         "voice": voice,
-        "response_format": response_format,
     }
+    if response_format:
+        payload["response_format"] = response_format
     if speed is not None:
         payload["speed"] = speed
     if instructions:
@@ -117,7 +118,7 @@ def speech(
         payload["provider"] = {"options": {"openai": {"instructions": instructions}}}
 
     response = httpx.post(
-        OPENROUTER_TTS_URL, 
+        OPENROUTER_TTS_URL,
         headers=_tts_headers(key),
         json=payload,
         timeout=timeout,

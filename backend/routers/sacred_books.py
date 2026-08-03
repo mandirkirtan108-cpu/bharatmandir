@@ -51,21 +51,11 @@ TARGET_LANGUAGES = {
     "sa": "Sanskrit (Devanagari)",
 }
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
-TRANSLATION_MODEL = os.getenv(
-    "LIBRARY_TRANSLATION_MODEL",
-    "qwen/qwen3.5-flash-02-23",
-)
+TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
 OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
-COMBINED_TRANSLATION_CHUNK_CHARS = max(
-    2000,
-    min(
-        int(os.getenv("LIBRARY_COMBINED_TRANSLATION_CHUNK_CHARS", "5000")),
-        TRANSLATION_CHUNK_CHARS,
-    ),
-)
 PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
 OCR_RETRY_DPI = max(PAGE_IMAGE_DPI, int(os.getenv("LIBRARY_OCR_RETRY_DPI", "400")))
 AI_MAX_ATTEMPTS = max(1, min(int(os.getenv("LIBRARY_AI_MAX_ATTEMPTS", "3")), 5))
@@ -81,50 +71,23 @@ _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
 # both (mirroring the old browser fallback of reading Sanskrit with a Hindi
 # voice, but with a model actually trained on it).
 TTS_MODELS = {
-    "en": os.getenv(
-        "LIBRARY_TTS_MODEL_EN",
-        "openai/gpt-4o-mini-tts-2025-12-15",
-    ),
-    "hi": os.getenv(
-        "LIBRARY_TTS_MODEL_HI",
-        "openai/gpt-4o-mini-tts-2025-12-15",
-    ),
-    "sa": os.getenv(
-        "LIBRARY_TTS_MODEL_SA",
-        "openai/gpt-4o-mini-tts-2025-12-15",
-    ),
+    "en": os.getenv("LIBRARY_TTS_MODEL_EN", "google/gemini-3.1-flash-tts-preview"),
+    "hi": os.getenv("LIBRARY_TTS_MODEL_HI", "google/gemini-3.1-flash-tts-preview"),
+    "sa": os.getenv("LIBRARY_TTS_MODEL_SA", "google/gemini-3.1-flash-tts-preview"),
 }
 TTS_VOICES = {
-    "en": os.getenv(
-        "LIBRARY_TTS_VOICE_EN",
-        "alloy",
-    ),
-    "hi": os.getenv(
-        "LIBRARY_TTS_VOICE_HI",
-        "alloy",
-    ),
-    "sa": os.getenv(
-        "LIBRARY_TTS_VOICE_SA",
-        "alloy",
-    ),
+    "en": os.getenv("LIBRARY_TTS_VOICE_EN", "alloy"),
+    "hi": os.getenv("LIBRARY_TTS_VOICE_HI", "alloy"),
+    "sa": os.getenv("LIBRARY_TTS_VOICE_SA", "alloy"),
 }
 # Not every TTS model supports every response_format — Gemini's TTS models
 # only support "pcm" (OpenRouter rejects "mp3" for them with a 400), while
 # OpenAI's TTS models support "mp3" directly. This must match whatever
 # model each language above is actually using.
 TTS_FORMATS = {
-    "en": os.getenv(
-        "LIBRARY_TTS_FORMAT_EN",
-        "mp3",
-    ),
-    "hi": os.getenv(
-        "LIBRARY_TTS_FORMAT_HI",
-        "mp3",
-    ),
-    "sa": os.getenv(
-        "LIBRARY_TTS_FORMAT_SA",
-        "mp3",
-    ),
+    "en": os.getenv("LIBRARY_TTS_FORMAT_EN", "mp3"),
+    "hi": os.getenv("LIBRARY_TTS_FORMAT_HI", "mp3"),
+    "sa": os.getenv("LIBRARY_TTS_FORMAT_SA", "mp3"),
 }
 # Sample rate of the raw PCM Gemini's TTS returns (24kHz/16-bit mono), used
 # to wrap it in a playable WAV container — see _pcm_to_wav() below.
@@ -361,6 +324,37 @@ def _pcm_to_wav(pcm_bytes: bytes, *, sample_rate: int, channels: int = 1, sample
     return buffer.getvalue()
 
 
+def _synthesize_tts_audio(text: str, model: str, voice: str, preferred_format: str) -> tuple[bytes, str, str]:
+    """Try a few OpenRouter TTS output formats because provider support varies."""
+    formats: list[str | None] = []
+    for candidate in (preferred_format, "mp3", "wav", "pcm", None):
+        if candidate not in formats:
+            formats.append(candidate)
+
+    last_error: Exception | None = None
+    for audio_format in formats:
+        try:
+            audio = speech(
+                input=text,
+                model=model,
+                voice=voice,
+                response_format=audio_format,
+            )
+            if audio_format == "pcm":
+                return _pcm_to_wav(audio, sample_rate=TTS_PCM_SAMPLE_RATE), "wav", "audio/wav"
+            if audio_format == "wav":
+                return audio, "wav", "audio/wav"
+            return audio, "mp3", "audio/mpeg"
+        except Exception as exc:
+            last_error = exc
+            print(
+                f"[library] TTS attempt failed "
+                f"(model={model}, voice={voice}, format={audio_format or 'default'}): {exc}"
+            )
+
+    raise RuntimeError(str(last_error or "Voice reading is temporarily unavailable."))
+
+
 def _quick_page_count(pdf_path: Path) -> int:
     """Fast upload-time check: is this a readable, non-empty, non-password
     -protected PDF? Only opens the PDF and counts pages — does NOT call
@@ -433,7 +427,7 @@ def _render_page_images(pdf_path: Path, book_id: int | None = None) -> list[byte
 
 
 def _render_single_page(pdf_path: Path, page_index: int, dpi: int) -> bytes | None:
-    """Re-render one difficult page at a higher resolution for OCR retry."""
+    """Re-render one difficult scan at a higher resolution for OCR retry."""
     if fitz is None:
         return None
     doc = fitz.open(str(pdf_path))
@@ -518,107 +512,37 @@ def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
     return content(response)
 
 
-def _split_text(text: str, chunk_chars: int = TRANSLATION_CHUNK_CHARS) -> list[str]:
-    if len(text) <= chunk_chars:
+def _split_text(text: str) -> list[str]:
+    if len(text) <= TRANSLATION_CHUNK_CHARS:
         return [text]
     chunks, remaining = [], text
     while remaining:
-        if len(remaining) <= chunk_chars:
+        if len(remaining) <= TRANSLATION_CHUNK_CHARS:
             chunks.append(remaining)
             break
-        boundary = remaining.rfind("\n\n", 0, chunk_chars)
-        if boundary < chunk_chars // 2:
-            boundary = remaining.rfind("\n", 0, chunk_chars)
-        if boundary < chunk_chars // 2:
-            boundary = remaining.rfind(" ", 0, chunk_chars)
+        boundary = remaining.rfind("\n\n", 0, TRANSLATION_CHUNK_CHARS)
+        if boundary < TRANSLATION_CHUNK_CHARS // 2:
+            boundary = remaining.rfind("\n", 0, TRANSLATION_CHUNK_CHARS)
+        if boundary < TRANSLATION_CHUNK_CHARS // 2:
+            boundary = remaining.rfind(" ", 0, TRANSLATION_CHUNK_CHARS)
         if boundary < 1:
-            boundary = chunk_chars
+            boundary = TRANSLATION_CHUNK_CHARS
         chunks.append(remaining[:boundary])
         remaining = remaining[boundary:].lstrip("\n")
     return chunks
 
 
-def _parse_translation_json(raw: str) -> dict[str, str]:
-    """Extract the three translations from a structured model response."""
-    cleaned = re.sub(
-        r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE
-    ).strip()
-    try:
-        payload = json.loads(cleaned)
-    except json.JSONDecodeError:
-        start, end = cleaned.find("{"), cleaned.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("The translation response was incomplete.")
-        payload = json.loads(cleaned[start:end + 1])
-    if not isinstance(payload, dict):
-        raise ValueError("The translation response was incomplete.")
-    translated = {
-        code: str(payload.get(code) or "").strip()
-        for code in TARGET_LANGUAGES
-    }
-    if any(not value for value in translated.values()):
-        raise ValueError("One or more translations were missing.")
-    return translated
-
-
-def _translate_chunk_all(text: str, source_language: str) -> dict[str, str]:
-    """Produce all reader languages with one model call instead of three."""
+def _translate_chunk(text: str, source_language: str, code: str) -> str:
     if not text.strip():
-        return {code: "" for code in TARGET_LANGUAGES}
-    prompt = f"""Translate this document text from {source_language} into all three requested versions:
-- en: English
-- hi: Hindi in Devanagari
-- sa: Sanskrit in Devanagari
+        return ""
+    prompt = f"""Translate this document text from {source_language} to {TARGET_LANGUAGES[code]}.
 
 RULES:
 - Translate every heading, sentence, caption, footnote, list item, verse and repetition.
 - Never summarize, omit, shorten, explain, censor, modernize, or add commentary.
 - Preserve paragraphs, headings, numbering, lists, names and citations.
 - Mark only genuinely unreadable fragments as [illegible].
-- If a requested language is already the source language, reproduce that text faithfully.
-- Return only one JSON object with exactly these string keys: "en", "hi", "sa".
-
-SOURCE TEXT:
-{text}"""
-    last_error: Exception | None = None
-    for attempt in range(2):
-        try:
-            with _translation_slots:
-                response = _chat_with_retries(
-                    model=TRANSLATION_MODEL,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0,
-                    response_format={"type": "json_object"},
-                    timeout=TRANSLATION_TIMEOUT,
-                )
-            return _parse_translation_json(content(response))
-        except Exception as exc:
-            last_error = exc
-            if attempt == 0:
-                time.sleep(1)
-    raise RuntimeError("The combined translation response was incomplete.") from last_error
-
-
-def _translate_all(text: str, source_language: str) -> dict[str, str]:
-    combined = {code: [] for code in TARGET_LANGUAGES}
-    for chunk in _split_text(text, COMBINED_TRANSLATION_CHUNK_CHARS):
-        translated_chunk = _translate_chunk_all(chunk, source_language)
-        for code in TARGET_LANGUAGES:
-            combined[code].append(translated_chunk[code])
-    return {
-        code: "\n\n".join(parts)
-        for code, parts in combined.items()
-    }
-
-
-def _translate_chunk_single(text: str, source_language: str, code: str) -> str:
-    """Reliable fallback used only when a combined JSON response fails."""
-    prompt = f"""Translate this document text from {source_language} to {TARGET_LANGUAGES[code]}.
-
-Translate every visible heading, sentence, caption, footnote, list item and verse.
-Never summarize, omit, shorten, explain, modernize, or add commentary.
-Preserve paragraphs, numbering, names and punctuation.
-Return only the translated text without a preface or code fence.
+- Return only translated document text without a preface or code fence.
 
 SOURCE TEXT:
 {text}"""
@@ -632,13 +556,11 @@ SOURCE TEXT:
     return content(response)
 
 
-def _translate_separately(text: str, source_language: str) -> dict[str, str]:
-    """Fallback for an unusually long page or incomplete combined response."""
-    result = {code: [] for code in TARGET_LANGUAGES}
-    for chunk in _split_text(text):
-        for code in TARGET_LANGUAGES:
-            result[code].append(_translate_chunk_single(chunk, source_language, code))
-    return {code: "\n\n".join(parts) for code, parts in result.items()}
+def _translate(text: str, source_language: str, code: str) -> str:
+    return "\n\n".join(
+        _translate_chunk(chunk, source_language, code)
+        for chunk in _split_text(text)
+    )
 
 
 def _generate_sections(book_id: int, page_texts: dict[int, str]) -> None:
@@ -800,7 +722,10 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for en/hi/sa")
             page_started = datetime.utcnow()
             try:
-                translated = _translate_all(source_text, source_language)
+                translated = {
+                    code: _translate(source_text, source_language, code)
+                    for code in TARGET_LANGUAGES
+                }
                 elapsed = (datetime.utcnow() - page_started).total_seconds()
                 print(f"[library] book {book_id}: page {page_number} — translated in {elapsed:.1f}s")
                 image_url = None
@@ -816,44 +741,10 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                     f"[library] book {book_id}: page {page_number} FAILED after {elapsed:.1f}s "
                     f"— {type(exc).__name__}: {exc}"
                 )
-                try:
-                    print(
-                        f"[library] book {book_id}: page {page_number} — "
-                        "retrying with separate language requests"
-                    )
-                    translated = _translate_separately(source_text, source_language)
-                    image_url = None
-                    if image_bytes:
-                        try:
-                            image_url = _upload_page_image(
-                                image_bytes, slug, page_number
-                            )
-                        except Exception:
-                            image_url = None
-                    return page_number, source_text, translated, image_url
-                except Exception as fallback_exc:
-                    print(
-                        f"[library] book {book_id}: page {page_number} skipped "
-                        f"after all translation attempts: {type(fallback_exc).__name__}"
-                    )
-                    # Preserve the page number, original OCR text, and scan so
-                    # one difficult page never discards an otherwise complete
-                    # book. Empty translated fields clearly mean unavailable;
-                    # they must not be filled with misleading copied text.
-                    image_url = None
-                    if image_bytes:
-                        try:
-                            image_url = _upload_page_image(
-                                image_bytes, slug, page_number
-                            )
-                        except Exception:
-                            image_url = None
-                    return (
-                        page_number,
-                        source_text,
-                        {code: "" for code in TARGET_LANGUAGES},
-                        image_url,
-                    )
+                raise RuntimeError(
+                    f"We couldn't prepare page {page_number} after several attempts. "
+                    "Please upload the book again in a few moments."
+                ) from exc
 
         page_text_en: dict[int, str] = {}
         with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
@@ -1258,22 +1149,17 @@ def synthesize_speech(payload: dict = Body(...)):
 
     model = TTS_MODELS[language]
     voice = TTS_VOICES[language]
-    audio_format = TTS_FORMATS[language]  # "mp3" or "pcm", per what this language's model supports
+    audio_format = TTS_FORMATS[language]  # preferred format; fallbacks are tried below
 
     try:
-        audio = speech(input=text, model=model, voice=voice, response_format=audio_format)
-    except RuntimeError as exc:
-        raise HTTPException(502, str(exc)) from exc
+        audio, upload_format, media_type = _synthesize_tts_audio(text, model, voice, audio_format)
+    except Exception as exc:
+        print(f"[library] TTS failed for {slug or 'one-off'} page {page_number or '-'} ({language}): {exc}")
+        raise HTTPException(
+            502,
+            "We couldn't prepare the sacred reading right now. Please try again in a few moments.",
+        ) from exc
 
-    if audio_format == "pcm":
-        # Raw PCM has no container — wrap it in a WAV header so it's an
-        # actual playable/uploadable file, then treat it as "wav" from here on.
-        audio = _pcm_to_wav(audio, sample_rate=TTS_PCM_SAMPLE_RATE)
-        upload_format = "wav"
-        media_type = "audio/wav"
-    else:
-        upload_format = "mp3"
-        media_type = "audio/mpeg"
 
     if book_id is not None:
         try:
