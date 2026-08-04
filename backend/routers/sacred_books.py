@@ -25,6 +25,7 @@ from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from pypdf import PdfReader
+import pytesseract
 
 try:
     import fitz  # PyMuPDF — used to render each page to an image so embedded
@@ -53,7 +54,14 @@ TARGET_LANGUAGES = {
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
 TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
 OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
+# Local Tesseract OCR has no per-page API charge. It is used only for pages
+# without a valid embedded text layer; ordinary text PDFs still use PyPDF.
+OCR_PROVIDER = os.getenv("LIBRARY_OCR_PROVIDER", "tesseract").strip().lower()
+TESSERACT_TIMEOUT = max(15, int(os.getenv("LIBRARY_TESSERACT_TIMEOUT_SECONDS", "120")))
+TESSERACT_PSM = os.getenv("LIBRARY_TESSERACT_PSM", "6").strip()
+OCR_FALLBACK_TO_OPENROUTER = os.getenv("LIBRARY_OCR_FALLBACK_TO_OPENROUTER", "false").strip().lower() in {"1", "true", "yes"}
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
+OCR_WORKERS = max(1, min(int(os.getenv("LIBRARY_OCR_WORKERS", "2")), 4))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
 PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
@@ -565,7 +573,46 @@ def _chat_with_retries(**kwargs) -> dict:
     ) from last_error
 
 
-def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
+def _source_language_code(source_language: str) -> str | None:
+    """Map the upload form's language code to the matching reader tab."""
+    value = (source_language or "").strip().lower()
+    return {
+        "en": "en", "english": "en",
+        "hi": "hi", "hindi": "hi", "devanagari": "hi",
+        "sa": "sa", "sanskrit": "sa",
+    }.get(value)
+
+
+def _tesseract_language(source_language: str) -> str:
+    """Return the trained-data package installed for the upload language."""
+    return {"en": "eng", "hi": "hin", "sa": "san"}.get(
+        _source_language_code(source_language) or "", "eng"
+    )
+
+
+def _ocr_page_with_tesseract(image_bytes: bytes, source_language: str) -> str:
+    """Run free, local OCR for one rendered PDF page."""
+    if not image_bytes:
+        return ""
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            # A clean grayscale image with stronger contrast gives Tesseract
+            # a better chance on old or lightly faded book scans.
+            prepared = ImageOps.autocontrast(image.convert("L"))
+            prepared = ImageEnhance.Contrast(prepared).enhance(1.35)
+            return pytesseract.image_to_string(
+                prepared,
+                lang=_tesseract_language(source_language),
+                config=f"--oem 1 --psm {TESSERACT_PSM}",
+                timeout=TESSERACT_TIMEOUT,
+            ).strip()
+    except pytesseract.TesseractNotFoundError as exc:
+        raise RuntimeError("Local OCR is not installed in this deployment.") from exc
+    except RuntimeError as exc:
+        raise RuntimeError("Local OCR took too long to read this page.") from exc
+
+
+def _ocr_page_with_openrouter(image_bytes: bytes, source_language: str) -> str:
     """Transcribes a scanned page image via vision when the PDF has no
     extractable text layer (e.g. Gita Press-style scans where every page is
     a printed photo, not real text). Used only as a fallback for pages
@@ -599,6 +646,23 @@ def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
             timeout=TRANSLATION_TIMEOUT,
         )
     return content(response)
+
+
+def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
+    """Use free local OCR by default, with an optional paid fallback."""
+    if not image_bytes:
+        return ""
+    if OCR_PROVIDER == "tesseract":
+        try:
+            text = _ocr_page_with_tesseract(image_bytes, source_language)
+            if len(text) >= OCR_MIN_TEXT_CHARS:
+                return text
+            print("[library] local OCR returned too little text")
+        except Exception as exc:
+            print(f"[library] local OCR failed: {type(exc).__name__}: {exc}")
+        if not OCR_FALLBACK_TO_OPENROUTER:
+            return ""
+    return _ocr_page_with_openrouter(image_bytes, source_language)
 
 
 def _split_text(text: str) -> list[str]:
@@ -652,26 +716,25 @@ def _translate(text: str, source_language: str, code: str) -> str:
     )
 
 
-def _translate_chunk_all_languages(text: str, source_language: str) -> dict[str, str]:
-    """Translates one chunk into ALL target languages in a single model
-    call, instead of one call per language. This is the main cost lever:
-    the (often large) source chunk is sent to the model once instead of
-    three times, cutting input-token spend roughly 3x for the same output.
-    """
+def _translate_chunk_all_languages(
+    text: str, source_language: str, target_codes: tuple[str, ...]
+) -> dict[str, str]:
+    """Translate one chunk into only the language tabs that are needed."""
     if not text.strip():
-        return {code: "" for code in TARGET_LANGUAGES}
+        return {code: "" for code in target_codes}
 
-    language_lines = "\n".join(f'- "{code}": {name}' for code, name in TARGET_LANGUAGES.items())
-    prompt = f"""Translate this document text from {source_language} into THREE languages at once:
+    language_lines = "\n".join(f'- "{code}": {TARGET_LANGUAGES[code]}' for code in target_codes)
+    json_shape = ", ".join(f'"{code}": "<complete translation>"' for code in target_codes)
+    prompt = f"""Translate this document text from {source_language} into these languages:
 {language_lines}
 
 RULES:
-- Translate every heading, sentence, caption, footnote, list item, verse and repetition, separately and completely into EACH of the three languages.
+- Translate every heading, sentence, caption, footnote, list item, verse and repetition, separately and completely into each requested language.
 - Never summarize, omit, shorten, explain, censor, modernize, or add commentary.
 - Preserve paragraphs, headings, numbering, lists, names and citations in every language's version.
 - Mark only genuinely unreadable fragments as [illegible].
-- Respond with ONLY a single JSON object, no prose, no code fence, in exactly this shape:
-{{"en": "<complete English translation>", "hi": "<complete Hindi translation>", "sa": "<complete Sanskrit translation>"}}
+- Respond with ONLY a single JSON object, no prose or code fence, in exactly this shape:
+{{{json_shape}}}
 
 SOURCE TEXT:
 {text}"""
@@ -693,24 +756,27 @@ SOURCE TEXT:
         # old one-call-per-language path — costs more, but only for the
         # chunk that actually failed, not the whole page/book.
         print("[library] combined translation JSON parse failed for one chunk — falling back per-language")
-        return {code: _translate_chunk(text, source_language, code) for code in TARGET_LANGUAGES}
-    return {code: str(parsed.get(code) or "") for code in TARGET_LANGUAGES}
+        return {code: _translate_chunk(text, source_language, code) for code in target_codes}
+    return {code: str(parsed.get(code) or "") for code in target_codes}
 
 
 def _translate_all_languages(text: str, source_language: str) -> dict[str, str]:
-    """Translates one page's full text into en/hi/sa, chunk by chunk, using
-    one combined-JSON model call per chunk (see _translate_chunk_all_languages)
-    instead of three separate per-language calls. Chunks are still processed
-    sequentially per page since a page's chunks must stay in order; pages
-    themselves are already parallelized by the caller.
-    """
+    """Preserve the original tab exactly and translate only the other tabs."""
+    source_code = _source_language_code(source_language)
+    target_codes = tuple(code for code in TARGET_LANGUAGES if code != source_code)
+    if not target_codes:
+        return {code: text for code in TARGET_LANGUAGES}
+
     chunks = _split_text(text)
-    merged: dict[str, list[str]] = {code: [] for code in TARGET_LANGUAGES}
+    merged: dict[str, list[str]] = {code: [] for code in target_codes}
     for chunk in chunks:
-        result = _translate_chunk_all_languages(chunk, source_language)
-        for code in TARGET_LANGUAGES:
+        result = _translate_chunk_all_languages(chunk, source_language, target_codes)
+        for code in target_codes:
             merged[code].append(result[code])
-    return {code: "\n\n".join(parts) for code, parts in merged.items()}
+    translated = {code: "\n\n".join(parts) for code, parts in merged.items()}
+    if source_code:
+        translated[source_code] = text
+    return {code: translated.get(code, "") for code in TARGET_LANGUAGES}
 
 
 def _generate_sections(book_id: int, page_texts: dict[int, str]) -> None:
@@ -859,7 +925,9 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                     except Exception:
                         return index, ""
 
-            with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
+            # Tesseract is CPU-intensive. Keep a separate small worker pool so
+            # OCR cannot starve the web server or translation workers.
+            with ThreadPoolExecutor(max_workers=OCR_WORKERS) as executor:
                 jobs = [executor.submit(_ocr_one, index) for index in needs_ocr]
                 for job in as_completed(jobs):
                     index, text = job.result()
