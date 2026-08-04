@@ -25,6 +25,7 @@ from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from pypdf import PdfReader
+import pytesseract
 
 try:
     import fitz  # PyMuPDF — used to render each page to an image so embedded
@@ -53,7 +54,14 @@ TARGET_LANGUAGES = {
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
 TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
 OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
+# Local Tesseract OCR has no per-page API charge. It is used only for pages
+# without a valid embedded text layer; ordinary text PDFs still use PyPDF.
+OCR_PROVIDER = os.getenv("LIBRARY_OCR_PROVIDER", "tesseract").strip().lower()
+TESSERACT_TIMEOUT = max(15, int(os.getenv("LIBRARY_TESSERACT_TIMEOUT_SECONDS", "120")))
+TESSERACT_PSM = os.getenv("LIBRARY_TESSERACT_PSM", "6").strip()
+OCR_FALLBACK_TO_OPENROUTER = os.getenv("LIBRARY_OCR_FALLBACK_TO_OPENROUTER", "false").strip().lower() in {"1", "true", "yes"}
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
+OCR_WORKERS = max(1, min(int(os.getenv("LIBRARY_OCR_WORKERS", "2")), 4))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
 PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
@@ -108,6 +116,13 @@ _tts_cache_order: list[str] = []
 # on Railway's local (ephemeral) container disk and every file in it is
 # deleted the moment processing finishes, whether it succeeds or fails.
 LIBRARY_TMP_DIR = Path(os.getenv("LIBRARY_TMP_DIR") or tempfile.gettempdir()) / "bharatmandir-library"
+
+# Rough characters-per-token estimate used only to size max_tokens for the
+# combined multi-language translation call below — doesn't need to be exact,
+# just needs to keep us from truncating a large combined JSON response.
+_CHARS_PER_TOKEN_ESTIMATE = 2.5
+_COMBINED_TRANSLATION_MIN_TOKENS = 2000
+_COMBINED_TRANSLATION_MAX_TOKENS = 16000
 
 
 def _api_key() -> str:
@@ -565,7 +580,46 @@ def _chat_with_retries(**kwargs) -> dict:
     ) from last_error
 
 
-def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
+def _source_language_code(source_language: str) -> str | None:
+    """Map the upload form's language code to the matching reader tab."""
+    value = (source_language or "").strip().lower()
+    return {
+        "en": "en", "english": "en",
+        "hi": "hi", "hindi": "hi", "devanagari": "hi",
+        "sa": "sa", "sanskrit": "sa",
+    }.get(value)
+
+
+def _tesseract_language(source_language: str) -> str:
+    """Return the trained-data package installed for the upload language."""
+    return {"en": "eng", "hi": "hin", "sa": "san"}.get(
+        _source_language_code(source_language) or "", "eng"
+    )
+
+
+def _ocr_page_with_tesseract(image_bytes: bytes, source_language: str) -> str:
+    """Run free, local OCR for one rendered PDF page."""
+    if not image_bytes:
+        return ""
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            # A clean grayscale image with stronger contrast gives Tesseract
+            # a better chance on old or lightly faded book scans.
+            prepared = ImageOps.autocontrast(image.convert("L"))
+            prepared = ImageEnhance.Contrast(prepared).enhance(1.35)
+            return pytesseract.image_to_string(
+                prepared,
+                lang=_tesseract_language(source_language),
+                config=f"--oem 1 --psm {TESSERACT_PSM}",
+                timeout=TESSERACT_TIMEOUT,
+            ).strip()
+    except pytesseract.TesseractNotFoundError as exc:
+        raise RuntimeError("Local OCR is not installed in this deployment.") from exc
+    except RuntimeError as exc:
+        raise RuntimeError("Local OCR took too long to read this page.") from exc
+
+
+def _ocr_page_with_openrouter(image_bytes: bytes, source_language: str) -> str:
     """Transcribes a scanned page image via vision when the PDF has no
     extractable text layer (e.g. Gita Press-style scans where every page is
     a printed photo, not real text). Used only as a fallback for pages
@@ -599,6 +653,41 @@ def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
             timeout=TRANSLATION_TIMEOUT,
         )
     return content(response)
+
+
+def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
+    """Use free local OCR by default, with an optional paid fallback.
+
+    Every branch below prints exactly which path was taken (tesseract
+    success, tesseract failure, tesseract-too-short, OpenRouter fallback,
+    or fallback disabled) — previously all of these logged the same
+    "OCR page X/5 — N chars" line regardless of which path actually ran,
+    so there was no way to tell from the logs whether Tesseract was
+    working at all or every page was silently paying for OpenRouter vision
+    (or getting nothing back because the fallback was disabled).
+    """
+    if not image_bytes:
+        return ""
+    if OCR_PROVIDER == "tesseract":
+        try:
+            text = _ocr_page_with_tesseract(image_bytes, source_language)
+            if len(text) >= OCR_MIN_TEXT_CHARS:
+                print(f"[library] OCR via tesseract succeeded — {len(text)} chars")
+                return text
+            print(
+                f"[library] local OCR returned too little text "
+                f"({len(text)} chars, need >= {OCR_MIN_TEXT_CHARS})"
+            )
+        except Exception as exc:
+            print(f"[library] local OCR failed: {type(exc).__name__}: {exc}")
+        if not OCR_FALLBACK_TO_OPENROUTER:
+            print(
+                "[library] OCR_FALLBACK_TO_OPENROUTER=false — "
+                "returning empty text rather than calling OpenRouter"
+            )
+            return ""
+        print("[library] falling back to OpenRouter vision OCR for this page")
+    return _ocr_page_with_openrouter(image_bytes, source_language)
 
 
 def _split_text(text: str) -> list[str]:
@@ -652,65 +741,133 @@ def _translate(text: str, source_language: str, code: str) -> str:
     )
 
 
-def _translate_chunk_all_languages(text: str, source_language: str) -> dict[str, str]:
-    """Translates one chunk into ALL target languages in a single model
-    call, instead of one call per language. This is the main cost lever:
-    the (often large) source chunk is sent to the model once instead of
-    three times, cutting input-token spend roughly 3x for the same output.
+def _estimate_combined_max_tokens(text: str, target_codes: tuple[str, ...]) -> int:
+    """Size max_tokens for the combined multi-language JSON call so a
+    response covering several full-length translations in one payload
+    never gets silently truncated mid-JSON — the most common cause of the
+    combined call's JSON parse failing. Scales with input length and the
+    number of languages being generated in this one call."""
+    per_language_tokens = int(len(text) / _CHARS_PER_TOKEN_ESTIMATE)
+    estimated = per_language_tokens * max(1, len(target_codes)) + 1000
+    return max(_COMBINED_TRANSLATION_MIN_TOKENS, min(estimated, _COMBINED_TRANSLATION_MAX_TOKENS))
+
+
+def _extract_json_object(raw: str) -> dict | None:
+    """Best-effort repair for a combined-translation response that has stray
+    preamble/postamble text wrapped around otherwise-valid JSON, by pulling
+    out the outermost {...} block before giving up and falling back to
+    per-language calls."""
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _translate_chunk_all_languages(
+    text: str, source_language: str, target_codes: tuple[str, ...]
+) -> dict[str, str]:
+    """Translate one chunk into only the language tabs that are needed, in a
+    single combined call rather than one call per language — this is what
+    keeps a Hindi-source book down to one call for (en, sa) instead of two,
+    and an English-source book to one call for (hi, sa) instead of two.
     """
     if not text.strip():
-        return {code: "" for code in TARGET_LANGUAGES}
+        return {code: "" for code in target_codes}
 
-    language_lines = "\n".join(f'- "{code}": {name}' for code, name in TARGET_LANGUAGES.items())
-    prompt = f"""Translate this document text from {source_language} into THREE languages at once:
+    language_lines = "\n".join(f'- "{code}": {TARGET_LANGUAGES[code]}' for code in target_codes)
+    json_shape = ", ".join(f'"{code}": "<complete translation>"' for code in target_codes)
+    prompt = f"""Translate this document text from {source_language} into these languages:
 {language_lines}
 
 RULES:
-- Translate every heading, sentence, caption, footnote, list item, verse and repetition, separately and completely into EACH of the three languages.
+- Translate every heading, sentence, caption, footnote, list item, verse and repetition, separately and completely into each requested language.
 - Never summarize, omit, shorten, explain, censor, modernize, or add commentary.
 - Preserve paragraphs, headings, numbering, lists, names and citations in every language's version.
 - Mark only genuinely unreadable fragments as [illegible].
-- Respond with ONLY a single JSON object, no prose, no code fence, in exactly this shape:
-{{"en": "<complete English translation>", "hi": "<complete Hindi translation>", "sa": "<complete Sanskrit translation>"}}
+- Respond with ONLY a single JSON object, no prose or code fence, in exactly this shape:
+{{{json_shape}}}
 
 SOURCE TEXT:
 {text}"""
+
+    # max_tokens sized to the input — a combined en+hi+sa (or en+sa)
+    # response is much longer than a single-language one, and an
+    # unset/too-small max_tokens was the most likely cause of the response
+    # getting cut off mid-JSON, which is what the parse failures traced
+    # back to.
+    #
+    # Note: response_format={"type":"json_object"} was tried here too, but
+    # qwen3.5-flash occasionally returned a degenerate non-object JSON
+    # value (e.g. a bare "-1.0000000000000002e+77") when that was set —
+    # technically valid JSON, so it didn't even raise, it just silently
+    # wasn't a dict and forced a fallback anyway. Since it didn't fix
+    # anything response_format was supposed to help with and introduced
+    # this new failure mode, it's left out — the prompt's own "respond
+    # with ONLY a JSON object" instruction plus a correctly-sized
+    # max_tokens does the job without it.
+    max_tokens = _estimate_combined_max_tokens(text, target_codes)
     with _translation_slots:
         response = _chat_with_retries(
             model=TRANSLATION_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
+            max_tokens=max_tokens,
         )
+
     raw = content(response)
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
     try:
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
-            raise ValueError("not a JSON object")
-    except Exception:
-        # A single malformed JSON response for this chunk falls back to the
-        # old one-call-per-language path — costs more, but only for the
-        # chunk that actually failed, not the whole page/book.
+            raise ValueError(f"parsed to {type(parsed).__name__}, not a JSON object")
+    except Exception as parse_err:
+        # Log exactly what broke — head/tail of the raw output — instead of
+        # failing blind. This tells us truncation vs. stray text vs. bad
+        # escaping vs. degenerate non-object output the next time this
+        # happens, instead of just a generic "falling back" line with no
+        # diagnostic value.
+        print(f"[library] combined translation JSON parse failed: {type(parse_err).__name__}: {parse_err}")
+        print(f"[library] raw response length={len(raw)} head={raw[:300]!r}")
+        print(f"[library] raw response tail={raw[-150:]!r}")
+
+        repaired = _extract_json_object(raw)
+        if repaired is not None:
+            print("[library] recovered JSON object from surrounding text — no per-language fallback needed")
+            return {code: str(repaired.get(code) or "") for code in target_codes}
+
         print("[library] combined translation JSON parse failed for one chunk — falling back per-language")
-        return {code: _translate_chunk(text, source_language, code) for code in TARGET_LANGUAGES}
-    return {code: str(parsed.get(code) or "") for code in TARGET_LANGUAGES}
+        return {code: _translate_chunk(text, source_language, code) for code in target_codes}
+    return {code: str(parsed.get(code) or "") for code in target_codes}
 
 
 def _translate_all_languages(text: str, source_language: str) -> dict[str, str]:
-    """Translates one page's full text into en/hi/sa, chunk by chunk, using
-    one combined-JSON model call per chunk (see _translate_chunk_all_languages)
-    instead of three separate per-language calls. Chunks are still processed
-    sequentially per page since a page's chunks must stay in order; pages
-    themselves are already parallelized by the caller.
+    """Preserve the original tab exactly and translate only the other tabs.
+
+    If the book's source language is Hindi, target_codes is just (en, sa) —
+    Hindi is reused verbatim from the source, never re-translated — so this
+    already costs one combined call for two languages, not three separate
+    calls. Same for an English or Sanskrit source.
     """
+    source_code = _source_language_code(source_language)
+    target_codes = tuple(code for code in TARGET_LANGUAGES if code != source_code)
+    if not target_codes:
+        return {code: text for code in TARGET_LANGUAGES}
+
     chunks = _split_text(text)
-    merged: dict[str, list[str]] = {code: [] for code in TARGET_LANGUAGES}
+    merged: dict[str, list[str]] = {code: [] for code in target_codes}
     for chunk in chunks:
-        result = _translate_chunk_all_languages(chunk, source_language)
-        for code in TARGET_LANGUAGES:
+        result = _translate_chunk_all_languages(chunk, source_language, target_codes)
+        for code in target_codes:
             merged[code].append(result[code])
-    return {code: "\n\n".join(parts) for code, parts in merged.items()}
+    translated = {code: "\n\n".join(parts) for code, parts in merged.items()}
+    if source_code:
+        translated[source_code] = text
+    return {code: translated.get(code, "") for code in TARGET_LANGUAGES}
 
 
 def _generate_sections(book_id: int, page_texts: dict[int, str]) -> None:
@@ -859,7 +1016,9 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                     except Exception:
                         return index, ""
 
-            with ThreadPoolExecutor(max_workers=TRANSLATION_WORKERS) as executor:
+            # Tesseract is CPU-intensive. Keep a separate small worker pool so
+            # OCR cannot starve the web server or translation workers.
+            with ThreadPoolExecutor(max_workers=OCR_WORKERS) as executor:
                 jobs = [executor.submit(_ocr_one, index) for index in needs_ocr]
                 for job in as_completed(jobs):
                     index, text = job.result()
@@ -879,11 +1038,12 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             """, (len(pages), book_id))
 
         def translate_page(page_number: int, source_text: str, image_bytes: bytes | None):
-            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for en/hi/sa (combined call)")
+            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for combined translation")
             page_started = datetime.utcnow()
             try:
-                # One combined call per chunk instead of three separate
-                # per-language calls — see _translate_all_languages().
+                # One combined call per chunk covering only the languages
+                # that actually need translating (the source language is
+                # reused verbatim) — see _translate_all_languages().
                 translated = _translate_all_languages(source_text, source_language)
 
                 elapsed = (datetime.utcnow() - page_started).total_seconds()
