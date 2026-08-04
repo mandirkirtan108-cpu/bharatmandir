@@ -25,7 +25,6 @@ from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from pypdf import PdfReader
-import pytesseract
 
 try:
     import fitz  # PyMuPDF — used to render each page to an image so embedded
@@ -54,12 +53,8 @@ TARGET_LANGUAGES = {
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
 TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
 OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
-# Local Tesseract OCR has no per-page API charge. It is used only for pages
-# without a valid embedded text layer; ordinary text PDFs still use PyPDF.
-OCR_PROVIDER = os.getenv("LIBRARY_OCR_PROVIDER", "tesseract").strip().lower()
-TESSERACT_TIMEOUT = max(15, int(os.getenv("LIBRARY_TESSERACT_TIMEOUT_SECONDS", "120")))
-TESSERACT_PSM = os.getenv("LIBRARY_TESSERACT_PSM", "6").strip()
-OCR_FALLBACK_TO_OPENROUTER = os.getenv("LIBRARY_OCR_FALLBACK_TO_OPENROUTER", "false").strip().lower() in {"1", "true", "yes"}
+# OpenRouter vision OCR is used only for pages without usable embedded text.
+# It is more reliable than local Tesseract for low-quality devotional scans.
 TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
 OCR_WORKERS = max(1, min(int(os.getenv("LIBRARY_OCR_WORKERS", "2")), 4))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
@@ -67,6 +62,10 @@ TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHA
 PAGE_IMAGE_DPI = max(72, int(os.getenv("LIBRARY_PAGE_IMAGE_DPI", "150")))
 OCR_RETRY_DPI = max(PAGE_IMAGE_DPI, int(os.getenv("LIBRARY_OCR_RETRY_DPI", "400")))
 AI_MAX_ATTEMPTS = max(1, min(int(os.getenv("LIBRARY_AI_MAX_ATTEMPTS", "3")), 5))
+# Qwen can otherwise put a long "Thinking Process" in the normal content.
+# Disabling it makes OCR/translation faster, cheaper, and keeps JSON clean.
+LIBRARY_DISABLE_REASONING = os.getenv("LIBRARY_DISABLE_REASONING", "true").strip().lower() in {"1", "true", "yes"}
+LIBRARY_REASONING = {"effort": "none", "exclude": True} if LIBRARY_DISABLE_REASONING else None
 # Minimum extracted-text length below which a page is treated as having no
 # usable text layer (i.e. a scanned image) and is sent through OCR instead.
 OCR_MIN_TEXT_CHARS = max(1, int(os.getenv("LIBRARY_OCR_MIN_TEXT_CHARS", "20")))
@@ -590,35 +589,6 @@ def _source_language_code(source_language: str) -> str | None:
     }.get(value)
 
 
-def _tesseract_language(source_language: str) -> str:
-    """Return the trained-data package installed for the upload language."""
-    return {"en": "eng", "hi": "hin", "sa": "san"}.get(
-        _source_language_code(source_language) or "", "eng"
-    )
-
-
-def _ocr_page_with_tesseract(image_bytes: bytes, source_language: str) -> str:
-    """Run free, local OCR for one rendered PDF page."""
-    if not image_bytes:
-        return ""
-    try:
-        with Image.open(io.BytesIO(image_bytes)) as image:
-            # A clean grayscale image with stronger contrast gives Tesseract
-            # a better chance on old or lightly faded book scans.
-            prepared = ImageOps.autocontrast(image.convert("L"))
-            prepared = ImageEnhance.Contrast(prepared).enhance(1.35)
-            return pytesseract.image_to_string(
-                prepared,
-                lang=_tesseract_language(source_language),
-                config=f"--oem 1 --psm {TESSERACT_PSM}",
-                timeout=TESSERACT_TIMEOUT,
-            ).strip()
-    except pytesseract.TesseractNotFoundError as exc:
-        raise RuntimeError("Local OCR is not installed in this deployment.") from exc
-    except RuntimeError as exc:
-        raise RuntimeError("Local OCR took too long to read this page.") from exc
-
-
 def _ocr_page_with_openrouter(image_bytes: bytes, source_language: str) -> str:
     """Transcribes a scanned page image via vision when the PDF has no
     extractable text layer (e.g. Gita Press-style scans where every page is
@@ -651,44 +621,17 @@ def _ocr_page_with_openrouter(image_bytes: bytes, source_language: str) -> str:
             }],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
+            reasoning=LIBRARY_REASONING,
         )
     return content(response)
 
 
 def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
-    """Use free local OCR by default, with an optional paid fallback.
-
-    Every branch below prints exactly which path was taken (tesseract
-    success, tesseract failure, tesseract-too-short, OpenRouter fallback,
-    or fallback disabled) — previously all of these logged the same
-    "OCR page X/5 — N chars" line regardless of which path actually ran,
-    so there was no way to tell from the logs whether Tesseract was
-    working at all or every page was silently paying for OpenRouter vision
-    (or getting nothing back because the fallback was disabled).
-    """
+    """OCR a scanned page through OpenRouter vision."""
     if not image_bytes:
         return ""
-    if OCR_PROVIDER == "tesseract":
-        try:
-            text = _ocr_page_with_tesseract(image_bytes, source_language)
-            if len(text) >= OCR_MIN_TEXT_CHARS:
-                print(f"[library] OCR via tesseract succeeded — {len(text)} chars")
-                return text
-            print(
-                f"[library] local OCR returned too little text "
-                f"({len(text)} chars, need >= {OCR_MIN_TEXT_CHARS})"
-            )
-        except Exception as exc:
-            print(f"[library] local OCR failed: {type(exc).__name__}: {exc}")
-        if not OCR_FALLBACK_TO_OPENROUTER:
-            print(
-                "[library] OCR_FALLBACK_TO_OPENROUTER=false — "
-                "returning empty text rather than calling OpenRouter"
-            )
-            return ""
-        print("[library] falling back to OpenRouter vision OCR for this page")
+    print(f"[library] OCR via OpenRouter vision ({OCR_MODEL})")
     return _ocr_page_with_openrouter(image_bytes, source_language)
-
 
 def _split_text(text: str) -> list[str]:
     if len(text) <= TRANSLATION_CHUNK_CHARS:
@@ -730,6 +673,7 @@ SOURCE TEXT:
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
+            reasoning=LIBRARY_REASONING,
         )
     return content(response)
 
@@ -817,6 +761,7 @@ SOURCE TEXT:
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
             max_tokens=max_tokens,
+            reasoning=LIBRARY_REASONING,
         )
 
     raw = content(response)
@@ -907,6 +852,7 @@ PAGES:
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
+            reasoning=LIBRARY_REASONING,
         )
     raw = content(response)
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
