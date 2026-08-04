@@ -794,54 +794,43 @@ RULES:
 SOURCE TEXT:
 {text}"""
 
-    # Two fixes for the JSON-parse failures that were forcing a fallback to
-    # per-language calls (defeating the whole point of the combined call):
-    #   1. response_format={"type":"json_object"} — asks the provider to
-    #      constrain output to valid JSON instead of hoping the model
-    #      follows the "no prose" instruction on its own.
-    #   2. max_tokens sized to the input — a combined en+hi+sa (or en+sa)
-    #      response is much longer than a single-language one, and an
-    #      unset/too-small max_tokens was the most likely cause of the
-    #      response getting cut off mid-JSON.
+    # max_tokens sized to the input — a combined en+hi+sa (or en+sa)
+    # response is much longer than a single-language one, and an
+    # unset/too-small max_tokens was the most likely cause of the response
+    # getting cut off mid-JSON, which is what the parse failures traced
+    # back to.
+    #
+    # Note: response_format={"type":"json_object"} was tried here too, but
+    # qwen3.5-flash occasionally returned a degenerate non-object JSON
+    # value (e.g. a bare "-1.0000000000000002e+77") when that was set —
+    # technically valid JSON, so it didn't even raise, it just silently
+    # wasn't a dict and forced a fallback anyway. Since it didn't fix
+    # anything response_format was supposed to help with and introduced
+    # this new failure mode, it's left out — the prompt's own "respond
+    # with ONLY a JSON object" instruction plus a correctly-sized
+    # max_tokens does the job without it.
     max_tokens = _estimate_combined_max_tokens(text, target_codes)
     with _translation_slots:
-        try:
-            response = _chat_with_retries(
-                model=TRANSLATION_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                timeout=TRANSLATION_TIMEOUT,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"},
-            )
-        except Exception as exc:
-            # Some OpenRouter-routed models reject an unsupported
-            # response_format outright (as opposed to just ignoring it).
-            # If that's what happened, retry once without it rather than
-            # losing the combined call entirely for the rest of the book.
-            print(
-                f"[library] combined call with response_format failed "
-                f"({type(exc).__name__}: {exc}) — retrying without response_format"
-            )
-            response = _chat_with_retries(
-                model=TRANSLATION_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                timeout=TRANSLATION_TIMEOUT,
-                max_tokens=max_tokens,
-            )
+        response = _chat_with_retries(
+            model=TRANSLATION_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            timeout=TRANSLATION_TIMEOUT,
+            max_tokens=max_tokens,
+        )
 
     raw = content(response)
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
     try:
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
-            raise ValueError("not a JSON object")
+            raise ValueError(f"parsed to {type(parsed).__name__}, not a JSON object")
     except Exception as parse_err:
         # Log exactly what broke — head/tail of the raw output — instead of
         # failing blind. This tells us truncation vs. stray text vs. bad
-        # escaping the next time this happens, instead of just a generic
-        # "falling back" line with no diagnostic value.
+        # escaping vs. degenerate non-object output the next time this
+        # happens, instead of just a generic "falling back" line with no
+        # diagnostic value.
         print(f"[library] combined translation JSON parse failed: {type(parse_err).__name__}: {parse_err}")
         print(f"[library] raw response length={len(raw)} head={raw[:300]!r}")
         print(f"[library] raw response tail={raw[-150:]!r}")
