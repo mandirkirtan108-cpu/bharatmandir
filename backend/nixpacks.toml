@@ -1,4 +1,0 @@
-# Railway uses Nixpacks for this project. Install the local Tesseract binary
-# and the language data required for English, Hindi, and Sanskrit book scans.
-[phases.setup]
-aptPkgs = ["tesseract-ocr", "tesseract-ocr-eng", "tesseract-ocr-hin", "tesseract-ocr-san"]
