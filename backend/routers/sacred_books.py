@@ -117,6 +117,13 @@ _tts_cache_order: list[str] = []
 # deleted the moment processing finishes, whether it succeeds or fails.
 LIBRARY_TMP_DIR = Path(os.getenv("LIBRARY_TMP_DIR") or tempfile.gettempdir()) / "bharatmandir-library"
 
+# Rough characters-per-token estimate used only to size max_tokens for the
+# combined multi-language translation call below — doesn't need to be exact,
+# just needs to keep us from truncating a large combined JSON response.
+_CHARS_PER_TOKEN_ESTIMATE = 2.5
+_COMBINED_TRANSLATION_MIN_TOKENS = 2000
+_COMBINED_TRANSLATION_MAX_TOKENS = 16000
+
 
 def _api_key() -> str:
     return api_key()
@@ -649,19 +656,37 @@ def _ocr_page_with_openrouter(image_bytes: bytes, source_language: str) -> str:
 
 
 def _ocr_page_image(image_bytes: bytes, source_language: str) -> str:
-    """Use free local OCR by default, with an optional paid fallback."""
+    """Use free local OCR by default, with an optional paid fallback.
+
+    Every branch below prints exactly which path was taken (tesseract
+    success, tesseract failure, tesseract-too-short, OpenRouter fallback,
+    or fallback disabled) — previously all of these logged the same
+    "OCR page X/5 — N chars" line regardless of which path actually ran,
+    so there was no way to tell from the logs whether Tesseract was
+    working at all or every page was silently paying for OpenRouter vision
+    (or getting nothing back because the fallback was disabled).
+    """
     if not image_bytes:
         return ""
     if OCR_PROVIDER == "tesseract":
         try:
             text = _ocr_page_with_tesseract(image_bytes, source_language)
             if len(text) >= OCR_MIN_TEXT_CHARS:
+                print(f"[library] OCR via tesseract succeeded — {len(text)} chars")
                 return text
-            print("[library] local OCR returned too little text")
+            print(
+                f"[library] local OCR returned too little text "
+                f"({len(text)} chars, need >= {OCR_MIN_TEXT_CHARS})"
+            )
         except Exception as exc:
             print(f"[library] local OCR failed: {type(exc).__name__}: {exc}")
         if not OCR_FALLBACK_TO_OPENROUTER:
+            print(
+                "[library] OCR_FALLBACK_TO_OPENROUTER=false — "
+                "returning empty text rather than calling OpenRouter"
+            )
             return ""
+        print("[library] falling back to OpenRouter vision OCR for this page")
     return _ocr_page_with_openrouter(image_bytes, source_language)
 
 
@@ -716,10 +741,40 @@ def _translate(text: str, source_language: str, code: str) -> str:
     )
 
 
+def _estimate_combined_max_tokens(text: str, target_codes: tuple[str, ...]) -> int:
+    """Size max_tokens for the combined multi-language JSON call so a
+    response covering several full-length translations in one payload
+    never gets silently truncated mid-JSON — the most common cause of the
+    combined call's JSON parse failing. Scales with input length and the
+    number of languages being generated in this one call."""
+    per_language_tokens = int(len(text) / _CHARS_PER_TOKEN_ESTIMATE)
+    estimated = per_language_tokens * max(1, len(target_codes)) + 1000
+    return max(_COMBINED_TRANSLATION_MIN_TOKENS, min(estimated, _COMBINED_TRANSLATION_MAX_TOKENS))
+
+
+def _extract_json_object(raw: str) -> dict | None:
+    """Best-effort repair for a combined-translation response that has stray
+    preamble/postamble text wrapped around otherwise-valid JSON, by pulling
+    out the outermost {...} block before giving up and falling back to
+    per-language calls."""
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _translate_chunk_all_languages(
     text: str, source_language: str, target_codes: tuple[str, ...]
 ) -> dict[str, str]:
-    """Translate one chunk into only the language tabs that are needed."""
+    """Translate one chunk into only the language tabs that are needed, in a
+    single combined call rather than one call per language — this is what
+    keeps a Hindi-source book down to one call for (en, sa) instead of two,
+    and an English-source book to one call for (hi, sa) instead of two.
+    """
     if not text.strip():
         return {code: "" for code in target_codes}
 
@@ -738,30 +793,77 @@ RULES:
 
 SOURCE TEXT:
 {text}"""
+
+    # Two fixes for the JSON-parse failures that were forcing a fallback to
+    # per-language calls (defeating the whole point of the combined call):
+    #   1. response_format={"type":"json_object"} — asks the provider to
+    #      constrain output to valid JSON instead of hoping the model
+    #      follows the "no prose" instruction on its own.
+    #   2. max_tokens sized to the input — a combined en+hi+sa (or en+sa)
+    #      response is much longer than a single-language one, and an
+    #      unset/too-small max_tokens was the most likely cause of the
+    #      response getting cut off mid-JSON.
+    max_tokens = _estimate_combined_max_tokens(text, target_codes)
     with _translation_slots:
-        response = _chat_with_retries(
-            model=TRANSLATION_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            timeout=TRANSLATION_TIMEOUT,
-        )
+        try:
+            response = _chat_with_retries(
+                model=TRANSLATION_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                timeout=TRANSLATION_TIMEOUT,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"},
+            )
+        except Exception as exc:
+            # Some OpenRouter-routed models reject an unsupported
+            # response_format outright (as opposed to just ignoring it).
+            # If that's what happened, retry once without it rather than
+            # losing the combined call entirely for the rest of the book.
+            print(
+                f"[library] combined call with response_format failed "
+                f"({type(exc).__name__}: {exc}) — retrying without response_format"
+            )
+            response = _chat_with_retries(
+                model=TRANSLATION_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                timeout=TRANSLATION_TIMEOUT,
+                max_tokens=max_tokens,
+            )
+
     raw = content(response)
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
     try:
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
             raise ValueError("not a JSON object")
-    except Exception:
-        # A single malformed JSON response for this chunk falls back to the
-        # old one-call-per-language path — costs more, but only for the
-        # chunk that actually failed, not the whole page/book.
+    except Exception as parse_err:
+        # Log exactly what broke — head/tail of the raw output — instead of
+        # failing blind. This tells us truncation vs. stray text vs. bad
+        # escaping the next time this happens, instead of just a generic
+        # "falling back" line with no diagnostic value.
+        print(f"[library] combined translation JSON parse failed: {type(parse_err).__name__}: {parse_err}")
+        print(f"[library] raw response length={len(raw)} head={raw[:300]!r}")
+        print(f"[library] raw response tail={raw[-150:]!r}")
+
+        repaired = _extract_json_object(raw)
+        if repaired is not None:
+            print("[library] recovered JSON object from surrounding text — no per-language fallback needed")
+            return {code: str(repaired.get(code) or "") for code in target_codes}
+
         print("[library] combined translation JSON parse failed for one chunk — falling back per-language")
         return {code: _translate_chunk(text, source_language, code) for code in target_codes}
     return {code: str(parsed.get(code) or "") for code in target_codes}
 
 
 def _translate_all_languages(text: str, source_language: str) -> dict[str, str]:
-    """Preserve the original tab exactly and translate only the other tabs."""
+    """Preserve the original tab exactly and translate only the other tabs.
+
+    If the book's source language is Hindi, target_codes is just (en, sa) —
+    Hindi is reused verbatim from the source, never re-translated — so this
+    already costs one combined call for two languages, not three separate
+    calls. Same for an English or Sanskrit source.
+    """
     source_code = _source_language_code(source_language)
     target_codes = tuple(code for code in TARGET_LANGUAGES if code != source_code)
     if not target_codes:
@@ -947,11 +1049,12 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             """, (len(pages), book_id))
 
         def translate_page(page_number: int, source_text: str, image_bytes: bytes | None):
-            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for en/hi/sa (combined call)")
+            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for combined translation")
             page_started = datetime.utcnow()
             try:
-                # One combined call per chunk instead of three separate
-                # per-language calls — see _translate_all_languages().
+                # One combined call per chunk covering only the languages
+                # that actually need translating (the source language is
+                # reused verbatim) — see _translate_all_languages().
                 translated = _translate_all_languages(source_text, source_language)
 
                 elapsed = (datetime.utcnow() - page_started).total_seconds()
