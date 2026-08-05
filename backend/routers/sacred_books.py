@@ -36,6 +36,7 @@ from db.connection import get_db_cursor
 from routers.admin_auth import get_current_admin
 from routers.user_auth import decode_token, get_current_user, get_user_by_id
 from services.cloudinary_service import _ensure_configured
+from services.library_audio_storage import delete_audio, upload_audio
 from services.openrouter_service import api_key, chat, content, speech
 
 load_dotenv(
@@ -51,6 +52,7 @@ TARGET_LANGUAGES = {
     "sa": "Sanskrit (Devanagari)",
 }
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
+MAX_AUDIO_BYTES = int(os.getenv("LIBRARY_MAX_AUDIO_MB", "100")) * 1024 * 1024
 TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
 OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
 # OpenRouter vision OCR is used only for pages without usable embedded text.
@@ -252,6 +254,35 @@ def ensure_library_schema() -> None:
             CREATE INDEX IF NOT EXISTS idx_library_bookmarks_user
             ON library_bookmarks(user_id, book_id)
         """)
+        # Uploaded bhajans, kirtans and other devotional audio. The storage
+        # provider/path are retained so an admin deletion can remove the
+        # Cloudinary file as well as its database record.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS library_audio (
+                id BIGSERIAL PRIMARY KEY,
+                slug TEXT UNIQUE NOT NULL,
+                title TEXT NOT NULL,
+                artist TEXT,
+                description TEXT,
+                category TEXT NOT NULL DEFAULT 'bhajan'
+                    CHECK (category IN ('bhajan','kirtan','chalisa','mantra','aarti','other')),
+                language TEXT,
+                audio_url TEXT NOT NULL,
+                storage_provider TEXT NOT NULL DEFAULT 'cloudinary'
+                    CHECK (storage_provider = 'cloudinary'),
+                storage_path TEXT,
+                original_filename TEXT NOT NULL,
+                file_size_bytes BIGINT NOT NULL DEFAULT 0,
+                is_published BOOLEAN NOT NULL DEFAULT TRUE,
+                created_by BIGINT REFERENCES admin_users(id),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_library_audio_published
+            ON library_audio(is_published, created_at DESC)
+        """)
 
 
 def _slugify(value: str) -> str:
@@ -262,6 +293,20 @@ def _unique_slug(title: str) -> str:
     base = _slugify(title)
     with get_db_cursor() as cur:
         cur.execute("SELECT slug FROM library_books WHERE slug LIKE %s", (f"{base}%",))
+        existing = {row["slug"] for row in cur.fetchall()}
+    if base not in existing:
+        return base
+    number = 2
+    while f"{base}-{number}" in existing:
+        number += 1
+    return f"{base}-{number}"
+
+
+def _unique_audio_slug(title: str) -> str:
+    """Generate a stable, readable unique slug for devotional audio."""
+    base = _slugify(title)
+    with get_db_cursor() as cur:
+        cur.execute("SELECT slug FROM library_audio WHERE slug LIKE %s", (f"{base}%",))
         existing = {row["slug"] for row in cur.fetchall()}
     if base not in existing:
         return base
@@ -1099,6 +1144,20 @@ def list_books():
         return {"books": [dict(row) for row in cur.fetchall()]}
 
 
+@router.get("/api/library-audio")
+def list_library_audio():
+    """Public devotional-audio shelf. Only published recordings are shown."""
+    with get_db_cursor() as cur:
+        cur.execute("""
+            SELECT id,slug,title,artist,description,category,language,audio_url,
+                   original_filename,file_size_bytes,created_at
+            FROM library_audio
+            WHERE is_published=TRUE
+            ORDER BY created_at DESC
+        """)
+        return {"audio": [dict(row) for row in cur.fetchall()]}
+
+
 @router.get("/api/books/{slug}")
 def get_book(slug: str):
     with get_db_cursor() as cur:
@@ -1526,6 +1585,97 @@ def admin_list_books(admin: dict = Depends(get_current_admin)):
     with get_db_cursor() as cur:
         cur.execute(BOOK_SELECT + " WHERE status<>'archived' ORDER BY created_at DESC")
         return {"books": [dict(row) for row in cur.fetchall()]}
+
+
+@router.get("/api/admin/library-audio")
+def admin_list_library_audio(admin: dict = Depends(get_current_admin)):
+    with get_db_cursor() as cur:
+        cur.execute("""
+            SELECT id,slug,title,artist,description,category,language,audio_url,
+                   storage_provider,original_filename,file_size_bytes,is_published,
+                   created_at,updated_at
+            FROM library_audio
+            ORDER BY created_at DESC
+        """)
+        return {"audio": [dict(row) for row in cur.fetchall()]}
+
+
+@router.post("/api/admin/library-audio", status_code=201)
+async def upload_library_audio(
+    title: str = Form(...),
+    artist: str = Form(""),
+    description: str = Form(""),
+    category: str = Form("bhajan"),
+    language: str = Form(""),
+    audio_file: UploadFile = File(...),
+    admin: dict = Depends(get_current_admin),
+):
+    allowed_categories = {"bhajan", "kirtan", "chalisa", "mantra", "aarti", "other"}
+    allowed_extensions = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".webm"}
+    filename = audio_file.filename or ""
+    extension = Path(filename).suffix.lower()
+    if category not in allowed_categories:
+        raise HTTPException(422, "Please choose a valid devotional-audio category.")
+    if not filename or (not (audio_file.content_type or "").startswith("audio/") and extension not in allowed_extensions):
+        raise HTTPException(415, "Please choose an audio file in MP3, WAV, M4A, AAC, OGG, FLAC, or WebM format.")
+
+    audio_bytes = await audio_file.read(MAX_AUDIO_BYTES + 1)
+    if not audio_bytes:
+        raise HTTPException(422, "The selected audio file is empty. Please choose another recording.")
+    if len(audio_bytes) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, f"Please choose an audio file smaller than {MAX_AUDIO_BYTES // 1024 // 1024} MB.")
+
+    slug = _unique_audio_slug(title.strip())
+    try:
+        audio_url, provider, storage_path = await asyncio.to_thread(
+            upload_audio, audio_bytes, filename, audio_file.content_type, slug
+        )
+    except Exception as exc:
+        print(f"[library-audio] upload failed: {type(exc).__name__}: {exc}")
+        raise HTTPException(502, "We couldn't place this sacred audio in the library right now. Please try again in a few moments.") from exc
+
+    with get_db_cursor() as cur:
+        cur.execute("""
+            INSERT INTO library_audio
+                (slug,title,artist,description,category,language,audio_url,
+                 storage_provider,storage_path,original_filename,file_size_bytes,created_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id,slug,title,artist,description,category,language,audio_url,
+                      storage_provider,original_filename,file_size_bytes,is_published,created_at
+        """, (
+            slug, title.strip(), artist.strip() or None, description.strip() or None,
+            category, language.strip() or None, audio_url, provider, storage_path,
+            filename, len(audio_bytes), admin["id"],
+        ))
+        return {"audio": dict(cur.fetchone())}
+
+
+@router.patch("/api/admin/library-audio/{audio_id}")
+def update_library_audio(audio_id: int, payload: dict = Body(...), admin: dict = Depends(get_current_admin)):
+    if "is_published" not in payload or not isinstance(payload["is_published"], bool):
+        raise HTTPException(422, "Please provide the publishing status for this audio.")
+    with get_db_cursor() as cur:
+        cur.execute("""
+            UPDATE library_audio SET is_published=%s, updated_at=NOW()
+            WHERE id=%s
+            RETURNING id,is_published
+        """, (payload["is_published"], audio_id))
+        audio = cur.fetchone()
+    if not audio:
+        raise HTTPException(404, "This audio recording could not be found.")
+    return {"audio": dict(audio)}
+
+
+@router.delete("/api/admin/library-audio/{audio_id}")
+def delete_library_audio(audio_id: int, admin: dict = Depends(get_current_admin)):
+    with get_db_cursor() as cur:
+        cur.execute("SELECT storage_provider,storage_path FROM library_audio WHERE id=%s", (audio_id,))
+        audio = cur.fetchone()
+        if not audio:
+            raise HTTPException(404, "This audio recording could not be found.")
+        cur.execute("DELETE FROM library_audio WHERE id=%s", (audio_id,))
+    delete_audio(audio["storage_provider"], audio["storage_path"])
+    return {"status": "deleted"}
 
 
 @router.delete("/api/admin/books/{book_id}")

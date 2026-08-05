@@ -1,187 +1,139 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, BookOpen, FileUp, Loader2, RefreshCw, Trash2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import AdminNavbar from '../components/admin/AdminNavbar';
+import { BookOpen, Loader2, Music2, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const auth = () => ({ Authorization: `Bearer ${sessionStorage.getItem('bm_access_token') || ''}` });
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const CATEGORIES = ['bhajan', 'kirtan', 'chalisa', 'mantra', 'aarti', 'other'];
+
+function adminHeaders() {
+  const token = sessionStorage.getItem('bm_access_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(`${BASE}${path}`, { ...options, headers: { ...adminHeaders(), ...(options.headers || {}) } });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || "We couldn't complete this request right now. Please try again in a few moments.");
+  }
+  return response.json();
+}
+
+const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '11px 13px', border: '1px solid #dfc9a8', borderRadius: 9, background: '#fffdf8', color: '#40210f', fontSize: 14 };
+const labelStyle = { display: 'block', marginBottom: 6, color: '#6f4729', fontWeight: 700, fontSize: 13 };
 
 export default function AdminLibraryPage() {
+  const [tab, setTab] = useState('books');
   const [books, setBooks] = useState([]);
-  const [form, setForm] = useState({ title: '', author: '', description: '', source_language: 'Hindi' });
-  const [file, setFile] = useState(null);
+  const [audio, setAudio] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [bookForm, setBookForm] = useState({ title: '', author: '', description: '', source_language: 'Hindi', file: null });
+  const [audioForm, setAudioForm] = useState({ title: '', artist: '', description: '', category: 'bhajan', language: 'Hindi', audio_file: null });
 
   const load = useCallback(async () => {
-    const res = await fetch(`${API_BASE}/api/admin/books`, { headers: auth() });
-    if (res.ok) setBooks((await res.json()).books || []);
+    setLoading(true);
+    try {
+      const [bookData, audioData] = await Promise.all([api('/api/admin/books'), api('/api/admin/library-audio')]);
+      setBooks(bookData.books || []);
+      setAudio(audioData.audio || []);
+      setError('');
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    if (!books.some(b => b.status === 'processing')) return;
-    const timer = setInterval(load, 5000);
-    return () => clearInterval(timer);
-  }, [books, load]);
 
-  const submit = async e => {
-    e.preventDefault();
-    if (!file) return setMessage('Please select a PDF.');
-    setBusy(true); setMessage('');
-    const data = new FormData();
-    Object.entries(form).forEach(([key, value]) => data.append(key, value));
-    data.append('file', file);
+  const uploadBook = async (event) => {
+    event.preventDefault();
+    if (!bookForm.file) return setError('Please choose a PDF before uploading.');
+    setBusy(true); setError(''); setMessage('');
+    const form = new FormData();
+    Object.entries(bookForm).forEach(([key, value]) => value && form.append(key, value));
     try {
-      const res = await fetch(`${API_BASE}/api/admin/books`, { method: 'POST', headers: auth(), body: data });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detail = Array.isArray(body.detail)
-          ? body.detail.map(item => item.msg || JSON.stringify(item)).join(', ')
-          : body.detail;
-        throw new Error(detail || `Upload failed (HTTP ${res.status})`);
-      }
-      setMessage('PDF uploaded. Full translations are now processing.');
-      setForm({ title: '', author: '', description: '', source_language: 'Hindi' });
-      setFile(null);
-      document.getElementById('book-pdf').value = '';
+      await api('/api/admin/books', { method: 'POST', body: form });
+      setBookForm({ title: '', author: '', description: '', source_language: 'Hindi', file: null });
+      setMessage('The book has been accepted and its sacred pages are now being prepared.');
       load();
-    } catch (err) {
-      setMessage(
-        err instanceof TypeError
-          ? 'The backend could not be reached. Check the Railway deployment and CORS configuration.'
-          : err.message
-      );
-    } finally { setBusy(false); }
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
   };
 
-  const remove = async book => {
-    if (!window.confirm(`Remove "${book.title}" from the library?`)) return;
-    await fetch(`${API_BASE}/api/admin/books/${book.id}`, { method: 'DELETE', headers: auth() });
-    load();
+  const uploadAudio = async (event) => {
+    event.preventDefault();
+    if (!audioForm.audio_file) return setError('Please choose an audio file before uploading.');
+    setBusy(true); setError(''); setMessage('');
+    const form = new FormData();
+    Object.entries(audioForm).forEach(([key, value]) => value && form.append(key, value));
+    try {
+      await api('/api/admin/library-audio', { method: 'POST', body: form });
+      setAudioForm({ title: '', artist: '', description: '', category: 'bhajan', language: 'Hindi', audio_file: null });
+      setMessage('The devotional audio has been safely added to the library.');
+      load();
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
   };
 
-  const retry = async book => {
-    setMessage('');
-    const res = await fetch(`${API_BASE}/api/admin/books/${book.id}/retry`, {
-      method: 'POST', headers: auth(),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return setMessage(body.detail || 'Retry failed');
-    setMessage(`Retrying "${book.title}".`);
-    load();
+  const toggleAudio = async (item) => {
+    try { await api(`/api/admin/library-audio/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_published: !item.is_published }) }); load(); }
+    catch (err) { setError(err.message); }
+  };
+  const removeAudio = async (item) => {
+    if (!window.confirm(`Remove “${item.title}” from the audio library?`)) return;
+    try { await api(`/api/admin/library-audio/${item.id}`, { method: 'DELETE' }); setMessage('The audio recording has been removed from the library.'); load(); }
+    catch (err) { setError(err.message); }
+  };
+  const removeBook = async (item) => {
+    if (!window.confirm(`Remove “${item.title}” from the book library?`)) return;
+    try { await api(`/api/admin/books/${item.id}`, { method: 'DELETE' }); load(); }
+    catch (err) { setError(err.message); }
   };
 
-  return <>
-    <AdminNavbar />
-    <main className="admin-library">
-      <section className="library-admin-head">
-        <div className="library-admin-head-inner">
-          <Link to="/admin/panel" className="library-back-link"><ArrowLeft size={15}/> Admin panel</Link>
-          <div className="library-admin-badge"><BookOpen size={13}/> Library</div>
-          <h1><BookOpen/> Library publishing</h1>
-          <p>Upload one text PDF and create complete Sanskrit, Hindi, and English reading editions.</p>
-        </div>
-      </section>
-      <div className="admin-library-grid">
-        <form className="upload-card" onSubmit={submit}>
-          <h2>Add a book PDF</h2>
-          <label>Book title<input required value={form.title} onChange={e => setForm({...form,title:e.target.value})}/></label>
-          <label>Author / source<input value={form.author} onChange={e => setForm({...form,author:e.target.value})}/></label>
-          <label>Original language<input required value={form.source_language} onChange={e => setForm({...form,source_language:e.target.value})} placeholder="e.g. Hindi, Sanskrit, Bengali"/></label>
-          <label>Description<textarea rows="4" value={form.description} onChange={e => setForm({...form,description:e.target.value})}/></label>
-          <label className="drop"><FileUp size={30}/><strong>Choose text-based PDF</strong><span>Maximum 200 MB. Scanned PDFs require OCR first.</span><input id="book-pdf" type="file" accept=".pdf,application/pdf" onChange={e => setFile(e.target.files[0])}/>{file && <em>{file.name}</em>}</label>
-          <button disabled={busy}>{busy ? <><Loader2 className="spin"/> Uploading…</> : 'Upload and translate'}</button>
-          {message && <p className="message">{message}</p>}
-        </form>
-        <section className="processing-card">
-          <h2>Library books</h2>
-          {books.length === 0 && <p>No uploaded books.</p>}
-          {books.map(book => <div className="admin-book" key={book.id}>
-            <div><strong>{book.title}</strong><small>{book.original_filename}</small>
-              {book.status === 'processing' && book.page_count > 0 && <small className="progress-copy">
-                Translated {book.processed_pages || 0} of {book.page_count} pages
-              </small>}
-            </div>
-            <span className={`status ${book.status}`}>{book.status === 'processing' && <Loader2 className="spin"/>}{book.status}</span>
-            {book.status === 'failed' && <button title="Retry translation" onClick={() => retry(book)}><RefreshCw size={17}/></button>}
-            <button title="Remove" onClick={() => remove(book)}><Trash2 size={17}/></button>
-            {book.processing_error && <p className="failure">{book.processing_error}</p>}
-          </div>)}
-        </section>
-      </div>
-    </main>
-    <style>{`
-      .admin-library{min-height:100vh;width:100%;overflow-x:hidden;background:#faf5ed;padding-bottom:70px}
-      .admin-library,.admin-library *{box-sizing:border-box}
-      .library-admin-head{background:linear-gradient(135deg, #3D1F00 0%, #572207 55%, #7a3208 100%);padding:48px 20px;display:flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box}
-      .library-admin-head-inner{max-width:720px;margin:0 auto;display:flex;flex-direction:column;align-items:center}
-      .library-back-link{align-self:flex-start;color:#ffd59d;text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-bottom:18px}
-      .library-admin-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,213,128,0.3);border-radius:50px;padding:5px 16px;margin-bottom:14px;color:#FFD580;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600}
-      .library-admin-head h1{display:flex;gap:10px;align-items:center;justify-content:center;margin:0;font-family:var(--font-display);font-weight:900;font-size:clamp(26px,4.5vw,42px);color:white;line-height:1.15}
-      .library-admin-head p{margin:12px auto 0;color:rgba(255,255,255,0.72);font-size:15px;line-height:1.7;max-width:520px}
-      .admin-library-grid{max-width:1100px;margin:30px auto;display:grid;grid-template-columns:minmax(320px,440px) 1fr;gap:25px;padding:0 20px}
-      .upload-card,.processing-card{background:white;border:1px solid #e6d8c9;border-radius:17px;padding:25px;box-shadow:0 5px 25px #64280a0c}
-      .upload-card h2,.processing-card h2{margin-top:0}
-      .upload-card label{font-size:13px;font-weight:700;display:block;margin:14px 0}
-      .upload-card input,.upload-card textarea{display:block;width:100%;box-sizing:border-box;border:1px solid #d9c7b5;border-radius:9px;padding:10px;margin-top:6px;font:inherit}
-      .drop{text-align:center!important;border:2px dashed #cda986;border-radius:12px;padding:20px!important;color:#7e4b2c}
-      .drop>*{display:block;margin:4px auto}
-      .drop span{font-weight:400;font-size:12px}
-      .drop input{border:0}
-      .drop em{font-weight:400}
-      .upload-card>button{width:100%;display:flex;justify-content:center;gap:8px;border:0;border-radius:10px;padding:12px;background:#9b4515;color:white;font-weight:800;cursor:pointer}
-      .admin-book{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:12px;align-items:center;border-bottom:1px solid #eee2d5;padding:15px 0}
-      .admin-book>div{min-width:0}
-      .admin-book strong,.admin-book small{overflow-wrap:anywhere}
-      .admin-book small{display:block;color:#947c69;margin-top:5px}
-      .admin-book .progress-copy{color:#9b570d;font-weight:700}
-      .admin-book button{border:0;background:#fff1ed;color:#a52a1a;padding:8px;border-radius:8px;cursor:pointer}
-      .status{display:flex;align-items:center;gap:5px;border-radius:99px;padding:5px 10px;font-size:11px;text-transform:uppercase}
-      .status.ready{background:#e9f8ed;color:#176b31}
-      .status.processing{background:#fff4d7;color:#8d5a00}
-      .status.failed{background:#ffeded;color:#a11}
-      .failure{grid-column:1/-1;color:#a11;font-size:12px}
-      .message{font-size:13px;color:#80400f}
-      .spin{animation:spin 1s linear infinite}
-      @keyframes spin{to{transform:rotate(360deg)}}
-      @media(max-width:800px){
-        .library-admin-head{padding:38px 18px}
-        .admin-library-grid{grid-template-columns:1fr;margin:22px auto;gap:18px}
-      }
-      @media(max-width:520px){
-        .library-admin-head{padding:30px 14px}
-        .library-admin-head-inner{width:100%}
-        .library-back-link{margin-bottom:14px}
-        .library-admin-head h1{font-size:clamp(27px,10vw,36px);text-align:center}
-        .library-admin-head p{font-size:13px;line-height:1.55}
-        .admin-library-grid{padding:0 10px;margin:16px auto}
-        .upload-card,.processing-card{padding:16px 14px;border-radius:13px}
-        .upload-card h2,.processing-card h2{font-size:22px}
-        .upload-card input,.upload-card textarea{font-size:16px}
-        .drop{padding:16px 10px!important}
-        .drop input{max-width:100%;padding-left:0;padding-right:0;font-size:12px}
-        .admin-book{
-          grid-template-columns:minmax(0,1fr) auto auto;
-          gap:8px;
-          padding:14px 0;
-          align-items:start;
-        }
-        .admin-book .status{
-          grid-column:1/-1;
-          grid-row:2;
-          width:fit-content;
-        }
-        .admin-book button{
-          width:38px;
-          height:38px;
-          display:grid;
-          place-items:center;
-          padding:0;
-        }
-        .failure{grid-row:3}
-        .message{overflow-wrap:anywhere}
-      }
-    `}</style>
-  </>;
+  const update = (setForm, key) => (event) => setForm(form => ({ ...form, [key]: event.target.type === 'file' ? event.target.files?.[0] || null : event.target.value }));
+  const isBooks = tab === 'books';
+
+  return <main style={{ maxWidth: 1120, margin: '0 auto', padding: '34px 20px 70px', color: '#40210f' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 26 }}>
+      <div><p style={{ color: '#a05a21', fontWeight: 700, margin: 0 }}>ADMIN LIBRARY</p><h1 style={{ margin: '5px 0 0', fontFamily: 'var(--font-display)', fontSize: 32 }}>Sacred library publishing</h1></div>
+      <button onClick={load} disabled={loading} style={{ border: '1px solid #dfc9a8', background: '#fffaf0', borderRadius: 99, padding: '10px 16px', display: 'inline-flex', gap: 7, alignItems: 'center', cursor: 'pointer', color: '#704324' }}><RefreshCw size={16} /> Refresh</button>
+    </div>
+    <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e5d4b9', marginBottom: 24 }}>
+      <button onClick={() => setTab('books')} style={tabStyle(isBooks)}><BookOpen size={17} /> Books</button>
+      <button onClick={() => setTab('audio')} style={tabStyle(!isBooks)}><Music2 size={17} /> Bhajans & kirtans</button>
+    </div>
+    {error && <Notice color="#9e2d18">{error}</Notice>}
+    {message && <Notice color="#2b6e3b">{message}</Notice>}
+    {isBooks ? <>
+      <UploadPanel title="Add a book PDF" onSubmit={uploadBook} busy={busy} submit="Upload and translate">
+        <Field label="Book title *"><input required value={bookForm.title} onChange={update(setBookForm, 'title')} style={inputStyle} /></Field>
+        <Field label="Author / source"><input value={bookForm.author} onChange={update(setBookForm, 'author')} style={inputStyle} /></Field>
+        <Field label="Original language"><select value={bookForm.source_language} onChange={update(setBookForm, 'source_language')} style={inputStyle}><option>Hindi</option><option>Sanskrit</option><option>English</option></select></Field>
+        <Field label="PDF file *"><input required type="file" accept="application/pdf,.pdf" onChange={update(setBookForm, 'file')} style={inputStyle} /></Field>
+        <Field label="Description" full><textarea value={bookForm.description} onChange={update(setBookForm, 'description')} style={{ ...inputStyle, minHeight: 75 }} /></Field>
+      </UploadPanel>
+      <BookList books={books} loading={loading} onRemove={removeBook} />
+    </> : <>
+      <UploadPanel title="Add devotional audio" onSubmit={uploadAudio} busy={busy} submit="Add audio to library">
+        <Field label="Title *"><input required value={audioForm.title} onChange={update(setAudioForm, 'title')} style={inputStyle} placeholder="e.g. Hanuman Chalisa" /></Field>
+        <Field label="Singer / artist"><input value={audioForm.artist} onChange={update(setAudioForm, 'artist')} style={inputStyle} /></Field>
+        <Field label="Type"><select value={audioForm.category} onChange={update(setAudioForm, 'category')} style={inputStyle}>{CATEGORIES.map(category => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select></Field>
+        <Field label="Language"><input value={audioForm.language} onChange={update(setAudioForm, 'language')} style={inputStyle} placeholder="Hindi, Sanskrit..." /></Field>
+        <Field label="Audio file *"><input required type="file" accept="audio/*,.m4a,.aac,.ogg,.flac,.webm" onChange={update(setAudioForm, 'audio_file')} style={inputStyle} /></Field>
+        <Field label="Description" full><textarea value={audioForm.description} onChange={update(setAudioForm, 'description')} style={{ ...inputStyle, minHeight: 75 }} /></Field>
+      </UploadPanel>
+      <AudioList audio={audio} loading={loading} onToggle={toggleAudio} onRemove={removeAudio} />
+    </>}
+  </main>;
 }
+
+function tabStyle(active) { return { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 16px', border: 0, borderBottom: active ? '3px solid #d66213' : '3px solid transparent', background: 'transparent', color: active ? '#8d3d12' : '#806450', fontWeight: 700, cursor: 'pointer' }; }
+function Notice({ color, children }) { return <div style={{ padding: '12px 15px', borderRadius: 10, color, background: `${color}12`, border: `1px solid ${color}40`, marginBottom: 18 }}>{children}</div>; }
+function Field({ label, children, full }) { return <label style={{ gridColumn: full ? '1 / -1' : undefined, display: 'block' }}><span style={labelStyle}>{label}</span>{children}</label>; }
+function UploadPanel({ title, onSubmit, busy, submit, children }) { return <form onSubmit={onSubmit} style={{ background: '#fff', border: '1px solid #e5d4b9', borderRadius: 16, padding: 22, marginBottom: 30, boxShadow: '0 8px 24px #5c270b0c' }}><h2 style={{ fontFamily: 'var(--font-display)', margin: '0 0 18px', fontSize: 22 }}>{title}</h2><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16 }}>{children}</div><button disabled={busy} style={{ marginTop: 20, border: 0, borderRadius: 99, background: busy ? '#c8b9a1' : 'linear-gradient(135deg,#e87513,#ae4508)', color: '#fff', padding: '12px 20px', cursor: busy ? 'wait' : 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{busy ? <Loader2 className="spin" size={17} /> : <UploadCloud size={17} />}{busy ? 'Preparing your upload…' : submit}</button></form>; }
+function BookList({ books, loading, onRemove }) { return <section><h2 style={{ fontFamily: 'var(--font-display)' }}>Library books</h2>{loading ? <p>Arranging the library…</p> : books.length === 0 ? <p>No books have been uploaded yet.</p> : <div style={{ display: 'grid', gap: 10 }}>{books.map(book => <div key={book.id} style={rowStyle}><BookOpen color="#9b511d" /><div style={{ flex: 1 }}><b>{book.title}</b><div style={small}>{book.author || 'Sacred text'} · {book.status} · {book.processed_pages || 0}/{book.page_count || 0} pages</div></div><button onClick={() => onRemove(book)} style={deleteStyle}><Trash2 size={16} /></button></div>)}</div>}</section>; }
+function AudioList({ audio, loading, onToggle, onRemove }) { return <section><h2 style={{ fontFamily: 'var(--font-display)' }}>Devotional audio</h2>{loading ? <p>Arranging the devotional recordings…</p> : audio.length === 0 ? <p>No audio has been uploaded yet.</p> : <div style={{ display: 'grid', gap: 12 }}>{audio.map(item => <div key={item.id} style={rowStyle}><Music2 color="#9b511d" /><div style={{ flex: 1, minWidth: 180 }}><b>{item.title}</b><div style={small}>{item.artist || 'Devotional recording'} · {item.category} · stored on {item.storage_provider}</div><audio controls preload="metadata" src={item.audio_url} style={{ width: '100%', marginTop: 8 }} /></div><button onClick={() => onToggle(item)} style={publishStyle(item.is_published)}>{item.is_published ? 'Published' : 'Hidden'}</button><button onClick={() => onRemove(item)} style={deleteStyle}><Trash2 size={16} /></button></div>)}</div>}</section>; }
+const rowStyle = { display: 'flex', alignItems: 'flex-start', gap: 13, padding: 15, background: '#fffdf8', border: '1px solid #e5d4b9', borderRadius: 12, flexWrap: 'wrap' };
+const small = { fontSize: 12, color: '#806450', marginTop: 4 };
+const deleteStyle = { border: 0, background: 'transparent', color: '#b72e18', cursor: 'pointer', padding: 7 };
+const publishStyle = (published) => ({ border: `1px solid ${published ? '#6aaa70' : '#dfc9a8'}`, background: published ? '#edfaef' : '#fff', color: published ? '#25723a' : '#806450', borderRadius: 99, padding: '7px 10px', fontWeight: 700, cursor: 'pointer' });

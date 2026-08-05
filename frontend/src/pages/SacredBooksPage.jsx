@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Search } from 'lucide-react';
+import { BookOpen, Music2, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { fetchAllProgress, fetchBooks, isLoggedIn } from '../services/sacredBooksApi';
+import { fetchAllProgress, fetchBooks, fetchLibraryAudio, isLoggedIn } from '../services/sacredBooksApi';
 
 // A handful of cover tones, all within the site's warm orange/gold family
 // so the shelf reads as one cohesive theme instead of a mixed color wheel.
@@ -75,13 +75,21 @@ function BookCover({ book, dark, light }) {
 export default function SacredBooksPage() {
   const navigate = useNavigate();
   const [books, setBooks] = useState([]);
+  const [audio, setAudio] = useState([]);
+  const [activeTab, setActiveTab] = useState('books');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [progressMap, setProgressMap] = useState({});
 
   useEffect(() => {
-    fetchBooks().then(r => setBooks(r.books || [])).catch(e => setError(e.message)).finally(() => setLoading(false));
+    Promise.all([fetchBooks(), fetchLibraryAudio()])
+      .then(([bookResult, audioResult]) => {
+        setBooks(bookResult.books || []);
+        setAudio(audioResult.audio || []);
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
 
   // "Continue reading" progress, per book, for whoever is signed in right
@@ -106,8 +114,9 @@ export default function SacredBooksPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? books.filter(b => `${b.title} ${b.author || ''} ${b.description || ''}`.toLowerCase().includes(q)) : books;
-  }, [books, query]);
+    const items = activeTab === 'books' ? books : audio;
+    return q ? items.filter(item => `${item.title} ${item.author || item.artist || ''} ${item.description || ''} ${item.category || ''}`.toLowerCase().includes(q)) : items;
+  }, [books, audio, activeTab, query]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -162,7 +171,7 @@ export default function SacredBooksPage() {
             color: '#ffffff',
             width: '100%',
           }}>
-            A quiet place to read the scriptures
+            A quiet place for sacred reading and listening
           </h1>
 
           {/* Subtitle */}
@@ -203,7 +212,7 @@ export default function SacredBooksPage() {
               name="library-search-query"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search books, authors, or subjects"
+              placeholder={activeTab === 'books' ? 'Search books, authors, or subjects' : 'Search bhajans, kirtans, or artists'}
               autoFocus
               style={{
                 flex: 1,
@@ -247,11 +256,15 @@ export default function SacredBooksPage() {
       {/* ════════════════════════════════════ */}
 
       <section className="library-content">
-        {loading && <div className="library-state">Bringing the volumes to the table…</div>}
+        <div className="library-tabs" role="tablist" aria-label="Library content">
+          <button type="button" role="tab" aria-selected={activeTab === 'books'} className={activeTab === 'books' ? 'active' : ''} onClick={() => setActiveTab('books')}><BookOpen size={16} /> Sacred books</button>
+          <button type="button" role="tab" aria-selected={activeTab === 'audio'} className={activeTab === 'audio' ? 'active' : ''} onClick={() => setActiveTab('audio')}><Music2 size={16} /> Bhajans & kirtans</button>
+        </div>
+        {loading && <div className="library-state">Preparing the sacred library…</div>}
         {error && <div className="library-state error">{error}</div>}
-        {!loading && !error && visible.length === 0 && <div className="library-state">No books have been published yet.</div>}
+        {!loading && !error && visible.length === 0 && <div className="library-state">{activeTab === 'books' ? 'No books have been published yet.' : 'No devotional audio has been shared yet. Please return soon.'}</div>}
 
-        <div className="shelf">
+        {activeTab === 'books' ? <div className="shelf">
           {visible.map((book) => {
             const [dark, light] = coverColors(book);
             const progress = progressMap[book.slug];
@@ -272,7 +285,20 @@ export default function SacredBooksPage() {
               </article>
             );
           })}
-        </div>
+        </div> : <div className="audio-shelf">
+          {visible.map((item) => (
+            <article className="audio-card" key={item.id}>
+              <div className="audio-emblem"><Music2 size={28} /></div>
+              <div className="audio-detail">
+                <span className="audio-category">{item.category}</span>
+                <h2>{item.title}</h2>
+                {item.artist && <p className="audio-artist">{item.artist}</p>}
+                {item.description && <p className="audio-description">{item.description}</p>}
+                <audio controls preload="metadata" src={item.audio_url}>Your browser cannot play this audio.</audio>
+              </div>
+            </article>
+          ))}
+        </div>}
       </section>
     </main>
     <Footer />
@@ -282,6 +308,9 @@ export default function SacredBooksPage() {
       .library{position:relative;min-height:100vh;background:#f8f2e4}
 
       .library-content{position:relative;z-index:1;max-width:1160px;margin:auto;padding:44px 20px 80px}
+      .library-tabs{display:flex;justify-content:center;gap:10px;margin:0 0 30px;flex-wrap:wrap}
+      .library-tabs button{display:inline-flex;align-items:center;gap:8px;border:1px solid #dfc89d;border-radius:99px;padding:10px 18px;background:#fffaf0;color:#704324;font-family:'EB Garamond',serif;font-size:15px;font-weight:700;cursor:pointer}
+      .library-tabs button.active{background:linear-gradient(135deg,#e07016,#a8450a);border-color:#a8450a;color:#fff}
 
       .shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:28px}
       .book-card{
@@ -336,6 +365,10 @@ export default function SacredBooksPage() {
 
       .library-state{position:relative;z-index:1;text-align:center;padding:50px;color:#806957;font-family:'Crimson Pro',serif}
       .library-state.error{color:#a11}
+      .audio-shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:22px}
+      .audio-card{display:flex;gap:16px;padding:20px;border:1px solid #e9dcc6;border-radius:14px;background:linear-gradient(165deg,#fffefb,#fdf1dc);box-shadow:0 10px 26px #5c270b14}
+      .audio-emblem{width:52px;height:52px;flex:0 0 52px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#8f3d0f,#4b1d04);color:#f6d58d}
+      .audio-detail{min-width:0;flex:1}.audio-category{text-transform:uppercase;font-size:10px;letter-spacing:.12em;color:#a45c24;font-weight:700}.audio-detail h2{margin:5px 0 2px;color:#4b250f;font:700 22px 'Cormorant Garamond',Georgia,serif}.audio-artist{margin:0;color:#866957;font:15px 'Crimson Pro',serif}.audio-description{margin:10px 0;color:#775e4c;font:15px/1.5 'Crimson Pro',serif}.audio-detail audio{width:100%;height:36px;margin-top:10px}
     `}</style>
   </>;
 }
