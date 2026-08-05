@@ -19,6 +19,16 @@ const LANGUAGES = [
   ['en', 'English'], ['hi', 'हिन्दी'], ['sa', 'संस्कृतम्'], ['original', 'Original'],
 ];
 
+const PLAYBACK_SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+
+// OCR/translation can leave invisible characters or a space before a
+// Devanagari combining mark. That makes browsers draw a dotted circle.
+const cleanIndicText = (text = '') => text
+  .normalize('NFC')
+  .replace(/[\u200B\u200C\uFEFF]/g, '')
+  .replace(/\u094D[ \t]+/g, '\u094D')
+  .replace(/[ \t]+(?=[\u093A-\u094F\u0951-\u0957\u0962\u0963])/g, '');
+
 function TempleArch() {
   return (
     <svg className="temple-arch" viewBox="0 0 900 500" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
@@ -74,6 +84,8 @@ export default function SacredBookReaderPage() {
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
   const [voiceLoading, setVoiceLoading] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [activeLine, setActiveLine] = useState(-1);
   const audioRef = useRef(null);
   const audioUrlRef = useRef(null);
 
@@ -157,13 +169,15 @@ export default function SacredBookReaderPage() {
   // (keeping real paragraph breaks) so centering looks natural instead of ragged.
   const displayText = current
     ? (isVerseLanguage
-        ? current.text
+        ? cleanIndicText(current.text)
         : current.text
             .split(/\n\s*\n/)
             .map(p => p.replace(/\s*\n\s*/g, ' ').trim())
             .filter(Boolean)
             .join('\n\n'))
     : '';
+
+  const displayLines = displayText.split('\n');
 
   // Save progress for logged-in users whenever the visible page settles.
   useEffect(() => {
@@ -278,6 +292,7 @@ export default function SacredBookReaderPage() {
     setSpeaking(false);
     setPaused(false);
     setVoiceLoading(false);
+    setActiveLine(-1);
   };
 
   const speak = async () => {
@@ -289,7 +304,20 @@ export default function SacredBookReaderPage() {
       const url = URL.createObjectURL(blob);
       audioUrlRef.current = url;
       const audio = new Audio(url);
-      audio.onended = () => { setSpeaking(false); setPaused(false); };
+      audio.playbackRate = playbackSpeed;
+      audio.onloadedmetadata = () => setActiveLine(0);
+      audio.ontimeupdate = () => {
+        if (!audio.duration || !Number.isFinite(audio.duration)) return;
+        const readableLines = displayLines
+          .map((text, index) => ({ index, weight: Math.max(1, text.trim().length) }))
+          .filter(line => displayLines[line.index].trim());
+        const totalWeight = readableLines.reduce((sum, line) => sum + line.weight, 0);
+        const target = (audio.currentTime / audio.duration) * totalWeight;
+        let cursor = 0;
+        const match = readableLines.find(line => ((cursor += line.weight) >= target));
+        setActiveLine(match?.index ?? readableLines.at(-1)?.index ?? -1);
+      };
+      audio.onended = () => { setSpeaking(false); setPaused(false); setActiveLine(-1); };
       audio.onerror = () => { setSpeaking(false); setPaused(false); setError('Voice reading failed. Please try again.'); };
       audioRef.current = audio;
       await audio.play();
@@ -306,6 +334,12 @@ export default function SacredBookReaderPage() {
     if (!audioRef.current || !speaking) return;
     if (paused) { audioRef.current.play(); setPaused(false); }
     else { audioRef.current.pause(); setPaused(true); }
+  };
+
+  const changePlaybackSpeed = (event) => {
+    const speed = Number(event.target.value);
+    setPlaybackSpeed(speed);
+    if (audioRef.current) audioRef.current.playbackRate = speed;
   };
 
   // Stop reading whenever the page or language changes, and on unmount —
@@ -450,6 +484,12 @@ export default function SacredBookReaderPage() {
                   </button>
                 </>
               )}
+              <label className="speed-control" title="Audio speed">
+                <span>Speed</span>
+                <select value={playbackSpeed} onChange={changePlaybackSpeed} aria-label="Audio playback speed">
+                  {PLAYBACK_SPEEDS.map(speed => <option key={speed} value={speed}>{speed}×</option>)}
+                </select>
+              </label>
             </div>
           )}
         </nav>
@@ -479,7 +519,19 @@ export default function SacredBookReaderPage() {
                     <img src={current.page_image_url} alt={`Page ${current.page_number} — original scan`} />
                   </div>
                 ) : (
-                  <div className="page-text-wrap" ref={textWrapRef}><div className="page-text">{displayText}</div></div>
+                  <div className="page-text-wrap" ref={textWrapRef}>
+                    <div className="page-text">
+                      {displayLines.map((line, index) => (
+                        <span
+                          key={`${index}-${line}`}
+                          className={index === activeLine ? 'reading-line active' : 'reading-line'}
+                          ref={node => {
+                            if (node && index === activeLine) node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                          }}
+                        >{line || '\u00A0'}</span>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
                 {!showingScan && showScrollHint && (
@@ -610,6 +662,8 @@ export default function SacredBookReaderPage() {
       }
       .voice-btn:hover:not(:disabled){border-color:#c9932f}
       .voice-btn:disabled{opacity:.35;cursor:default}
+      .speed-control{display:flex;align-items:center;gap:6px;color:#d3af7b;font-family:'EB Garamond',serif;font-size:13px}
+      .speed-control select{border:1px solid #ad7f4880;border-radius:99px;background:#1c0d05;color:#f0d29d;padding:7px 8px;cursor:pointer}
 
       .book-stage{position:relative;margin-top:14px}
       .book-frame{position:relative;display:flex;justify-content:center;touch-action:pan-y}
@@ -658,9 +712,11 @@ export default function SacredBookReaderPage() {
       .page-text-wrap::-webkit-scrollbar-thumb{background:#c9932f66;border-radius:99px}
       .page-text-wrap::-webkit-scrollbar-track{background:transparent}
 
-      .page-text{position:relative;white-space:pre-line;font-family:'Crimson Pro',Georgia,serif;font-size:19px;line-height:1.95;color:#2c1c0e;text-align:center;max-width:560px;margin:0 auto}
+      .page-text{position:relative;font-family:'Crimson Pro',Georgia,serif;font-size:19px;line-height:1.95;color:#2c1c0e;text-align:center;max-width:560px;margin:0 auto}
+      .reading-line{display:block;border-radius:6px;padding:0 6px;transition:background-color .22s ease,color .22s ease,box-shadow .22s ease}
+      .reading-line.active{background:#f3c85b66;color:#6d2509;box-shadow:0 0 0 1px #c98a2b55 inset}
       .page-text::first-letter{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.7em;color:#8b3a15;font-weight:700}
-      .page-leaf.devanagari .page-text{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:19px;line-height:2.1}
+      .page-leaf.devanagari .page-text{font-family:var(--font-hindi,'Noto Sans Devanagari'),sans-serif;font-size:19px;line-height:2.1;font-variant-ligatures:normal;text-rendering:optimizeLegibility}
       .page-leaf.devanagari .page-text::first-letter{font-size:1em;color:inherit;font-weight:inherit;font-family:inherit}
 
       /* Scroll hint — fades in over the bottom of the text when there's more to read,
