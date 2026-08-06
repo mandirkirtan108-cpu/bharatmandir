@@ -3,7 +3,7 @@ import { BookOpen, Music2, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { fetchAllProgress, fetchBooks, fetchLibraryAudio, isLoggedIn } from '../services/sacredBooksApi';
+import { fetchAllProgress, fetchBooks, fetchLibraryAudio, isLoggedIn, searchSpotifyAudio } from '../services/sacredBooksApi';
 
 // A handful of cover tones, all within the site's warm orange/gold family
 // so the shelf reads as one cohesive theme instead of a mixed color wheel.
@@ -78,6 +78,9 @@ export default function SacredBooksPage() {
   const [audio, setAudio] = useState([]);
   const [activeTab, setActiveTab] = useState('books');
   const [query, setQuery] = useState('');
+  const [spotifyResults, setSpotifyResults] = useState([]);
+  const [spotifyLoading, setSpotifyLoading] = useState(false);
+  const [spotifyError, setSpotifyError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [progressMap, setProgressMap] = useState({});
@@ -118,8 +121,26 @@ export default function SacredBooksPage() {
     return q ? items.filter(item => `${item.title} ${item.author || item.artist || ''} ${item.description || ''} ${item.category || ''}`.toLowerCase().includes(q)) : items;
   }, [books, audio, activeTab, query]);
 
-  const handleSearch = (e) => {
+  const handleSearch = async (e) => {
     e.preventDefault();
+    if (activeTab !== 'audio') return;
+    const searchQuery = query.trim();
+    if (searchQuery.length < 2) {
+      setSpotifyResults([]);
+      setSpotifyError('Please enter at least two letters to search Spotify devotional audio.');
+      return;
+    }
+    setSpotifyLoading(true);
+    setSpotifyError('');
+    try {
+      const data = await searchSpotifyAudio(searchQuery);
+      setSpotifyResults(data.results || []);
+    } catch (err) {
+      setSpotifyResults([]);
+      setSpotifyError(err.message || "We couldn't bring Spotify devotional results right now. Please try again in a few moments.");
+    } finally {
+      setSpotifyLoading(false);
+    }
   };
 
   return <>
@@ -262,7 +283,7 @@ export default function SacredBooksPage() {
         </div>
         {loading && <div className="library-state">Preparing the sacred library…</div>}
         {error && <div className="library-state error">{error}</div>}
-        {!loading && !error && visible.length === 0 && <div className="library-state">{activeTab === 'books' ? 'No books have been published yet.' : 'No devotional audio has been shared yet. Please return soon.'}</div>}
+        {!loading && !error && visible.length === 0 && (activeTab === 'books' || !query.trim()) && <div className="library-state">{activeTab === 'books' ? 'No books have been published yet.' : 'No devotional audio has been shared yet. Please return soon.'}</div>}
 
         {activeTab === 'books' ? <div className="shelf">
           {visible.map((book) => {
@@ -285,20 +306,36 @@ export default function SacredBooksPage() {
               </article>
             );
           })}
-        </div> : <div className="audio-shelf">
-          {visible.map((item) => (
-            <article className="audio-card" key={item.id}>
-              <div className="audio-emblem"><Music2 size={28} /></div>
-              <div className="audio-detail">
-                <span className="audio-category">{item.category}</span>
-                <h2>{item.title}</h2>
-                {item.artist && <p className="audio-artist">{item.artist}</p>}
-                {item.description && <p className="audio-description">{item.description}</p>}
-                <audio controls preload="metadata" src={item.audio_url}>Your browser cannot play this audio.</audio>
-              </div>
-            </article>
-          ))}
-        </div>}
+        </div> : <>
+          {visible.length > 0 && <div className="audio-shelf">
+            {visible.map((item) => (
+              <article className="audio-card" key={item.id}>
+                <div className="audio-emblem"><Music2 size={28} /></div>
+                <div className="audio-detail">
+                  <span className="audio-category">{item.category}</span>
+                  <h2>{item.title}</h2>
+                  {item.artist && <p className="audio-artist">{item.artist}</p>}
+                  {item.description && <p className="audio-description">{item.description}</p>}
+                  <audio controls preload="metadata" src={item.audio_url}>Your browser cannot play this audio.</audio>
+                </div>
+              </article>
+            ))}
+          </div>}
+          {query.trim().length >= 2 && <section className="spotify-discovery" aria-live="polite">
+            <div className="spotify-heading"><div><span>DISCOVER ON SPOTIFY</span><h2>More devotional offerings</h2></div>{spotifyLoading && <p>Gathering Spotify devotional results…</p>}</div>
+            {spotifyError && <p className="spotify-error">{spotifyError}</p>}
+            {!spotifyLoading && !spotifyError && spotifyResults.length === 0 && <p className="spotify-help">Press Search to discover official Spotify results for “{query.trim()}”.</p>}
+            {spotifyResults.length > 0 && <div className="spotify-grid">
+              {spotifyResults.map((item) => <article className="spotify-card" key={`${item.kind}-${item.id}`}>
+                <iframe src={item.embed_url} title={item.title} loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" />
+                <span>{item.kind}</span>
+                <h3>{item.title}</h3>
+                {item.artist && <p>{item.artist}</p>}
+                <a href={item.open_url} target="_blank" rel="noreferrer">Open on Spotify ↗</a>
+              </article>)}
+            </div>}
+          </section>}
+        </>}
       </section>
     </main>
     <Footer />
@@ -369,6 +406,7 @@ export default function SacredBooksPage() {
       .audio-card{display:flex;gap:16px;padding:20px;border:1px solid #e9dcc6;border-radius:14px;background:linear-gradient(165deg,#fffefb,#fdf1dc);box-shadow:0 10px 26px #5c270b14}
       .audio-emblem{width:52px;height:52px;flex:0 0 52px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#8f3d0f,#4b1d04);color:#f6d58d}
       .audio-detail{min-width:0;flex:1}.audio-category{text-transform:uppercase;font-size:10px;letter-spacing:.12em;color:#a45c24;font-weight:700}.audio-detail h2{margin:5px 0 2px;color:#4b250f;font:700 22px 'Cormorant Garamond',Georgia,serif}.audio-artist{margin:0;color:#866957;font:15px 'Crimson Pro',serif}.audio-description{margin:10px 0;color:#775e4c;font:15px/1.5 'Crimson Pro',serif}.audio-detail audio{width:100%;height:36px;margin-top:10px}
+      .spotify-discovery{margin-top:42px;padding-top:28px;border-top:1px solid #e2cfaf}.spotify-heading{display:flex;justify-content:space-between;gap:15px;align-items:end;flex-wrap:wrap}.spotify-heading span{font-size:10px;letter-spacing:.14em;font-weight:700;color:#a45c24}.spotify-heading h2{font:700 28px 'Cormorant Garamond',Georgia,serif;color:#4b250f;margin:4px 0 0}.spotify-heading p,.spotify-help{color:#806957;font:15px 'Crimson Pro',serif}.spotify-error{color:#a11;font:15px 'Crimson Pro',serif}.spotify-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;margin-top:18px}.spotify-card{overflow:hidden;border:1px solid #e9dcc6;border-radius:12px;background:#fffaf0;box-shadow:0 7px 20px #5c270b12}.spotify-card iframe{display:block;width:100%;height:152px;border:0}.spotify-card span{display:inline-block;margin:12px 15px 0;text-transform:uppercase;font-size:10px;letter-spacing:.12em;font-weight:700;color:#a45c24}.spotify-card h3{margin:5px 15px 3px;color:#4b250f;font:700 19px/1.2 'Cormorant Garamond',Georgia,serif}.spotify-card p{margin:0 15px 10px;color:#806957;font:14px 'Crimson Pro',serif}.spotify-card a{display:inline-block;margin:0 15px 15px;color:#9d4714;font-weight:700;font:14px 'EB Garamond',serif}
     `}</style>
   </>;
 }

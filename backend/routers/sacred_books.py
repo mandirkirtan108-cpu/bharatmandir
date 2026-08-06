@@ -53,6 +53,9 @@ TARGET_LANGUAGES = {
 }
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
 MAX_AUDIO_BYTES = int(os.getenv("LIBRARY_MAX_AUDIO_MB", "100")) * 1024 * 1024
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
+YOUTUBE_SEARCH_CACHE_SECONDS = max(60, int(os.getenv("YOUTUBE_SEARCH_CACHE_SECONDS", "86400")))
+YOUTUBE_SEARCH_MAX_RESULTS = max(1, min(int(os.getenv("YOUTUBE_SEARCH_MAX_RESULTS", "10")), 20))
 TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
 OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
 # OpenRouter vision OCR is used only for pages without usable embedded text.
@@ -72,6 +75,10 @@ LIBRARY_REASONING = {"effort": "none", "exclude": True} if LIBRARY_DISABLE_REASO
 # usable text layer (i.e. a scanned image) and is sent through OCR instead.
 OCR_MIN_TEXT_CHARS = max(1, int(os.getenv("LIBRARY_OCR_MIN_TEXT_CHARS", "20")))
 _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
+# Live YouTube searches are cached to preserve the project's daily API quota.
+# It is intentionally process-local: Railway can safely discard it on deploy.
+_youtube_search_cache: dict[str, tuple[float, list[dict]]] = {}
+_youtube_search_cache_lock = threading.Lock()
 
 # ── Voice reading (OpenRouter text-to-speech) ───────────────────────────────
 # One model/voice pair per reader language. English uses OpenAI's TTS voices;
@@ -128,6 +135,72 @@ _COMBINED_TRANSLATION_MAX_TOKENS = 16000
 
 def _api_key() -> str:
     return api_key()
+
+
+def _search_youtube_devotional_audio(query: str) -> list[dict]:
+    """Find embeddable devotional YouTube videos without downloading them.
+
+    The returned data is only metadata plus the official player URL. Playback
+    continues to happen on YouTube, never through BharatMandir or Cloudinary.
+    """
+    normalized = " ".join(query.lower().split())
+    now = time.time()
+    with _youtube_search_cache_lock:
+        cached = _youtube_search_cache.get(normalized)
+        if cached and now - cached[0] < YOUTUBE_SEARCH_CACHE_SECONDS:
+            return cached[1]
+
+    if not YOUTUBE_API_KEY:
+        raise RuntimeError("YouTube search is not configured")
+
+    try:
+        response = httpx.get(
+            "https://www.googleapis.com/youtube/v3/search",
+            params={
+                "key": YOUTUBE_API_KEY,
+                "part": "snippet",
+                "q": query,
+                "type": "video",
+                "videoEmbeddable": "true",
+                "safeSearch": "strict",
+                "regionCode": "IN",
+                "relevanceLanguage": "hi",
+                "maxResults": YOUTUBE_SEARCH_MAX_RESULTS,
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        items = response.json().get("items") or []
+    except httpx.HTTPStatusError as exc:
+        print(f"[library-audio] YouTube search rejected: {exc.response.status_code}")
+        raise RuntimeError("YouTube search is temporarily unavailable") from exc
+    except httpx.HTTPError as exc:
+        print(f"[library-audio] YouTube search failed: {exc}")
+        raise RuntimeError("YouTube search is temporarily unavailable") from exc
+
+    results = []
+    for item in items:
+        video_id = (item.get("id") or {}).get("videoId")
+        snippet = item.get("snippet") or {}
+        if not video_id:
+            continue
+        thumbnails = snippet.get("thumbnails") or {}
+        thumbnail = (thumbnails.get("medium") or thumbnails.get("high") or thumbnails.get("default") or {}).get("url")
+        results.append({
+            "id": video_id,
+            "title": snippet.get("title") or "Devotional video",
+            "channel_title": snippet.get("channelTitle") or "",
+            "description": snippet.get("description") or "",
+            "thumbnail_url": thumbnail,
+            "watch_url": f"https://www.youtube.com/watch?v={video_id}",
+            "embed_url": f"https://www.youtube-nocookie.com/embed/{video_id}?rel=0",
+        })
+
+    with _youtube_search_cache_lock:
+        if len(_youtube_search_cache) >= 200:
+            _youtube_search_cache.pop(next(iter(_youtube_search_cache)))
+        _youtube_search_cache[normalized] = (now, results)
+    return results
 
 
 def ensure_library_schema() -> None:
@@ -1156,6 +1229,22 @@ def list_library_audio():
             ORDER BY created_at DESC
         """)
         return {"audio": [dict(row) for row in cur.fetchall()]}
+
+
+@router.get("/api/library-audio/youtube-search")
+def search_youtube_library_audio(q: str = Query(..., min_length=2, max_length=120)):
+    """Search official, embeddable YouTube devotional content for visitors."""
+    query = " ".join(q.split())
+    if len(query) < 2:
+        raise HTTPException(422, "Please enter at least two letters to search devotional audio.")
+    try:
+        results = _search_youtube_devotional_audio(query)
+    except RuntimeError as exc:
+        message = str(exc)
+        if message == "YouTube search is not configured":
+            raise HTTPException(503, "YouTube discovery is being prepared. Please enjoy our library recordings for now.") from exc
+        raise HTTPException(503, "We couldn't bring YouTube devotional results right now. Please try again in a few moments.") from exc
+    return {"query": query, "results": results}
 
 
 @router.get("/api/books/{slug}")
