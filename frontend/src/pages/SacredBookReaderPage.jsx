@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bookmark, ChevronLeft, ChevronRight, Languages, List, Pause, Play, Square, Trash2, X } from 'lucide-react';
+import { Bookmark, ChevronLeft, ChevronRight, FastForward, Languages, List, Pause, Play, Rewind, Square, Trash2, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import {
@@ -20,6 +20,12 @@ const LANGUAGES = [
 ];
 
 const PLAYBACK_SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+
+const formatAudioTime = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const wholeSeconds = Math.floor(seconds);
+  return `${Math.floor(wholeSeconds / 60)}:${String(wholeSeconds % 60).padStart(2, '0')}`;
+};
 
 // OCR/translation can leave invisible characters or a space before a
 // Devanagari combining mark. That makes browsers draw a dotted circle.
@@ -86,6 +92,8 @@ export default function SacredBookReaderPage() {
   const [voiceLoading, setVoiceLoading] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [activeLine, setActiveLine] = useState(-1);
+  const [audioTime, setAudioTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef(null);
   const audioUrlRef = useRef(null);
 
@@ -293,6 +301,8 @@ export default function SacredBookReaderPage() {
     setPaused(false);
     setVoiceLoading(false);
     setActiveLine(-1);
+    setAudioTime(0);
+    setAudioDuration(0);
   };
 
   const speak = async () => {
@@ -305,8 +315,12 @@ export default function SacredBookReaderPage() {
       audioUrlRef.current = url;
       const audio = new Audio(url);
       audio.playbackRate = playbackSpeed;
-      audio.onloadedmetadata = () => setActiveLine(0);
+      audio.onloadedmetadata = () => {
+        setAudioDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+        setActiveLine(0);
+      };
       audio.ontimeupdate = () => {
+        setAudioTime(audio.currentTime);
         if (!audio.duration || !Number.isFinite(audio.duration)) return;
         const readableLines = displayLines
           .map((text, index) => ({ index, weight: Math.max(1, text.trim().length) }))
@@ -340,6 +354,20 @@ export default function SacredBookReaderPage() {
     const speed = Number(event.target.value);
     setPlaybackSpeed(speed);
     if (audioRef.current) audioRef.current.playbackRate = speed;
+  };
+
+  const skipAudio = (seconds) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = Math.min(Math.max(0, audio.currentTime + seconds), audio.duration || 0);
+    setAudioTime(audio.currentTime);
+  };
+
+  const seekAudio = (event) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = Number(event.target.value);
+    setAudioTime(audio.currentTime);
   };
 
   // Stop reading whenever the page or language changes, and on unmount —
@@ -493,6 +521,36 @@ export default function SacredBookReaderPage() {
             </div>
           )}
         </nav>
+
+        {speaking && (
+          <div className="audio-player" aria-label="Audio player">
+            <div className="audio-player-buttons">
+              <button className="audio-skip-btn" onClick={() => skipAudio(-10)} title="Go back 10 seconds" aria-label="Go back 10 seconds">
+                <Rewind size={21} /> <span>10</span>
+              </button>
+              <button className="audio-main-btn" onClick={togglePause} title={paused ? 'Play' : 'Pause'} aria-label={paused ? 'Play' : 'Pause'}>
+                {paused ? <Play size={23} fill="currentColor" /> : <Pause size={23} fill="currentColor" />}
+              </button>
+              <button className="audio-skip-btn" onClick={() => skipAudio(10)} title="Go forward 10 seconds" aria-label="Go forward 10 seconds">
+                <FastForward size={21} /> <span>10</span>
+              </button>
+            </div>
+            <div className="audio-timeline">
+              <span>{formatAudioTime(audioTime)}</span>
+              <input
+                type="range"
+                min="0"
+                max={audioDuration || 0}
+                step="0.1"
+                value={Math.min(audioTime, audioDuration || 0)}
+                onChange={seekAudio}
+                aria-label="Audio position"
+                style={{ '--audio-progress': `${audioDuration ? (audioTime / audioDuration) * 100 : 0}%` }}
+              />
+              <span>{formatAudioTime(audioDuration)}</span>
+            </div>
+          </div>
+        )}
 
         {error && <div className="reader-status error">{error}</div>}
 
@@ -664,6 +722,18 @@ export default function SacredBookReaderPage() {
       .voice-btn:disabled{opacity:.35;cursor:default}
       .speed-control{display:flex;align-items:center;gap:6px;color:#d3af7b;font-family:'EB Garamond',serif;font-size:13px}
       .speed-control select{border:1px solid #ad7f4880;border-radius:99px;background:#1c0d05;color:#f0d29d;padding:7px 8px;cursor:pointer}
+      .audio-player{max-width:760px;margin:10px auto 4px;padding:12px 18px 10px;border:1px solid #ad7f4845;border-radius:14px;background:#110905cc;box-shadow:0 10px 28px #00000035;color:#f5dfb8}
+      .audio-player-buttons{display:flex;align-items:center;justify-content:center;gap:20px;margin-bottom:8px}
+      .audio-player button{border:0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#f5dfb8;background:transparent}
+      .audio-main-btn{width:44px;height:44px;border-radius:50%!important;background:#f8ecd4!important;color:#2a1508!important;box-shadow:0 3px 12px #00000055}
+      .audio-skip-btn{position:relative;width:43px;height:36px}
+      .audio-skip-btn span{position:absolute;font:600 9px/1 'DM Sans',sans-serif}
+      .audio-player button:hover{transform:scale(1.06)}
+      .audio-timeline{display:grid;grid-template-columns:42px 1fr 42px;align-items:center;gap:8px;font:12px/1 'DM Sans',sans-serif;color:#e2bd86;font-variant-numeric:tabular-nums}
+      .audio-timeline span:last-child{text-align:right}
+      .audio-timeline input{width:100%;height:4px;margin:0;cursor:pointer;appearance:none;border-radius:99px;background:linear-gradient(90deg,#f7e6c6 var(--audio-progress),#ffffff2e var(--audio-progress))}
+      .audio-timeline input::-webkit-slider-thumb{appearance:none;width:13px;height:13px;border-radius:50%;background:#fff5df;box-shadow:0 1px 5px #0008}
+      .audio-timeline input::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:#fff5df;box-shadow:0 1px 5px #0008}
 
       .book-stage{position:relative;margin-top:14px}
       .book-frame{position:relative;display:flex;justify-content:center;touch-action:pan-y}
