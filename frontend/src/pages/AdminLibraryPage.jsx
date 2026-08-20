@@ -3,6 +3,11 @@ import { BookOpen, Loader2, Music2, RefreshCw, Trash2, UploadCloud } from 'lucid
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const CATEGORIES = ['bhajan', 'kirtan', 'chalisa', 'mantra', 'aarti', 'other'];
+const TRANSLATION_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'हिन्दी (Hindi)' },
+  { code: 'sa', label: 'संस्कृतम् (Sanskrit)' },
+];
 
 function adminHeaders() {
   const token = sessionStorage.getItem('bm_access_token');
@@ -30,6 +35,7 @@ export default function AdminLibraryPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [bookForm, setBookForm] = useState({ title: '', author: '', description: '', source_language: 'Hindi', file: null });
+  const [targetLanguages, setTargetLanguages] = useState([]);
   const [audioForm, setAudioForm] = useState({ title: '', artist: '', description: '', category: 'bhajan', language: 'Hindi', audio_file: null });
 
   const load = useCallback(async () => {
@@ -51,10 +57,14 @@ export default function AdminLibraryPage() {
     setBusy(true); setError(''); setMessage('');
     const form = new FormData();
     Object.entries(bookForm).forEach(([key, value]) => value && form.append(key, value));
+    form.append('target_languages', JSON.stringify(targetLanguages));
     try {
       await api('/api/admin/books', { method: 'POST', body: form });
       setBookForm({ title: '', author: '', description: '', source_language: 'Hindi', file: null });
-      setMessage('The book has been accepted and its sacred pages are now being prepared.');
+      setTargetLanguages([]);
+      setMessage(targetLanguages.length
+        ? `The book has been accepted. High-quality ${targetLanguages.length === 1 ? 'translation is' : 'translations are'} now being prepared.`
+        : 'The book has been accepted in its original language without translation.');
       load();
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
@@ -105,12 +115,36 @@ export default function AdminLibraryPage() {
     {error && <Notice color="#9e2d18">{error}</Notice>}
     {message && <Notice color="#2b6e3b">{message}</Notice>}
     {isBooks ? <>
-      <UploadPanel title="Add a book PDF" onSubmit={uploadBook} busy={busy} submit="Upload and translate">
+      <UploadPanel title="Add a book PDF" onSubmit={uploadBook} busy={busy} submit={targetLanguages.length ? 'Upload and translate' : 'Upload original only'}>
         <Field label="Book title *"><input required value={bookForm.title} onChange={update(setBookForm, 'title')} style={inputStyle} /></Field>
         <Field label="Author / source"><input value={bookForm.author} onChange={update(setBookForm, 'author')} style={inputStyle} /></Field>
         <Field label="Original language"><select value={bookForm.source_language} onChange={update(setBookForm, 'source_language')} style={inputStyle}><option>Hindi</option><option>Sanskrit</option><option>English</option></select></Field>
         <Field label="PDF file *"><input required type="file" accept="application/pdf,.pdf" onChange={update(setBookForm, 'file')} style={inputStyle} /></Field>
         <Field label="Description" full><textarea value={bookForm.description} onChange={update(setBookForm, 'description')} style={{ ...inputStyle, minHeight: 75 }} /></Field>
+        <fieldset style={translationBoxStyle}>
+          <legend style={{ ...labelStyle, padding: '0 7px' }}>Translate this book?</legend>
+          <p style={{ margin: '0 0 10px', color: '#806450', fontSize: 13, lineHeight: 1.5 }}>
+            Tick only the languages you need. Leave every option unticked to publish the original edition without translation.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {TRANSLATION_LANGUAGES.map(({ code, label }) => <label key={code} style={languageTickStyle}>
+              <input
+                type="checkbox"
+                checked={targetLanguages.includes(code)}
+                onChange={() => setTargetLanguages(current => current.includes(code)
+                  ? current.filter(item => item !== code)
+                  : [...current, code])}
+                style={{ width: 18, height: 18, accentColor: '#d66213' }}
+              />
+              {label}
+            </label>)}
+          </div>
+          <strong style={{ display: 'block', marginTop: 11, color: '#8d3d12', fontSize: 12 }}>
+            {targetLanguages.length
+              ? `Will translate into: ${targetLanguages.map(code => TRANSLATION_LANGUAGES.find(item => item.code === code)?.label).join(', ')}`
+              : 'No translation selected — original edition only'}
+          </strong>
+        </fieldset>
       </UploadPanel>
       <BookList books={books} loading={loading} onRemove={removeBook} />
     </> : <>
@@ -131,8 +165,10 @@ function tabStyle(active) { return { display: 'inline-flex', alignItems: 'center
 function Notice({ color, children }) { return <div style={{ padding: '12px 15px', borderRadius: 10, color, background: `${color}12`, border: `1px solid ${color}40`, marginBottom: 18 }}>{children}</div>; }
 function Field({ label, children, full }) { return <label style={{ gridColumn: full ? '1 / -1' : undefined, display: 'block' }}><span style={labelStyle}>{label}</span>{children}</label>; }
 function UploadPanel({ title, onSubmit, busy, submit, children }) { return <form onSubmit={onSubmit} style={{ background: '#fff', border: '1px solid #e5d4b9', borderRadius: 16, padding: 22, marginBottom: 30, boxShadow: '0 8px 24px #5c270b0c' }}><h2 style={{ fontFamily: 'var(--font-display)', margin: '0 0 18px', fontSize: 22 }}>{title}</h2><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16 }}>{children}</div><button disabled={busy} style={{ marginTop: 20, border: 0, borderRadius: 99, background: busy ? '#c8b9a1' : 'linear-gradient(135deg,#e87513,#ae4508)', color: '#fff', padding: '12px 20px', cursor: busy ? 'wait' : 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{busy ? <Loader2 className="spin" size={17} /> : <UploadCloud size={17} />}{busy ? 'Preparing your upload…' : submit}</button></form>; }
-function BookList({ books, loading, onRemove }) { return <section><h2 style={{ fontFamily: 'var(--font-display)' }}>Library books</h2>{loading ? <p>Arranging the library…</p> : books.length === 0 ? <p>No books have been uploaded yet.</p> : <div style={{ display: 'grid', gap: 10 }}>{books.map(book => <div key={book.id} style={rowStyle}><BookOpen color="#9b511d" /><div style={{ flex: 1 }}><b>{book.title}</b><div style={small}>{book.author || 'Sacred text'} · {book.status} · {book.processed_pages || 0}/{book.page_count || 0} pages</div></div><button onClick={() => onRemove(book)} style={deleteStyle}><Trash2 size={16} /></button></div>)}</div>}</section>; }
+function BookList({ books, loading, onRemove }) { return <section><h2 style={{ fontFamily: 'var(--font-display)' }}>Library books</h2>{loading ? <p>Arranging the library…</p> : books.length === 0 ? <p>No books have been uploaded yet.</p> : <div style={{ display: 'grid', gap: 10 }}>{books.map(book => <div key={book.id} style={rowStyle}><BookOpen color="#9b511d" /><div style={{ flex: 1 }}><b>{book.title}</b><div style={small}>{book.author || 'Sacred text'} · {book.status} · {book.processed_pages || 0}/{book.page_count || 0} pages</div><div style={small}>{book.target_languages?.length ? `Translations: ${book.target_languages.map(code => TRANSLATION_LANGUAGES.find(item => item.code === code)?.label || code).join(', ')}` : 'Original edition only'}</div></div><button onClick={() => onRemove(book)} style={deleteStyle}><Trash2 size={16} /></button></div>)}</div>}</section>; }
 function AudioList({ audio, loading, onToggle, onRemove }) { return <section><h2 style={{ fontFamily: 'var(--font-display)' }}>Devotional audio</h2>{loading ? <p>Arranging the devotional recordings…</p> : audio.length === 0 ? <p>No audio has been uploaded yet.</p> : <div style={{ display: 'grid', gap: 12 }}>{audio.map(item => <div key={item.id} style={rowStyle}><Music2 color="#9b511d" /><div style={{ flex: 1, minWidth: 180 }}><b>{item.title}</b><div style={small}>{item.artist || 'Devotional recording'} · {item.category} · stored on {item.storage_provider}</div><audio controls preload="metadata" src={item.audio_url} style={{ width: '100%', marginTop: 8 }} /></div><button onClick={() => onToggle(item)} style={publishStyle(item.is_published)}>{item.is_published ? 'Published' : 'Hidden'}</button><button onClick={() => onRemove(item)} style={deleteStyle}><Trash2 size={16} /></button></div>)}</div>}</section>; }
+const translationBoxStyle = { gridColumn: '1 / -1', border: '1px solid #dfc9a8', borderRadius: 12, background: '#fffaf0', padding: 16 };
+const languageTickStyle = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 12px', border: '1px solid #e5d4b9', borderRadius: 9, background: '#fff', color: '#5f371e', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 const rowStyle = { display: 'flex', alignItems: 'flex-start', gap: 13, padding: 15, background: '#fffdf8', border: '1px solid #e5d4b9', borderRadius: 12, flexWrap: 'wrap' };
 const small = { fontSize: 12, color: '#806450', marginTop: 4 };
 const deleteStyle = { border: 0, background: 'transparent', color: '#b72e18', cursor: 'pointer', padding: 7 };

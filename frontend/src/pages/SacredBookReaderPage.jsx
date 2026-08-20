@@ -16,7 +16,7 @@ import {
 } from '../services/sacredBooksApi';
 
 const LANGUAGES = [
-  ['en', 'English'], ['hi', 'हिन्दी'], ['sa', 'संस्कृतम्'], ['original', 'Original'],
+  ['original', 'Original'], ['hi', 'हिन्दी'], ['sa', 'संस्कृतम्'], ['en', 'English'],
 ];
 
 const PLAYBACK_SPEEDS = [0.75, 1, 1.25, 1.5, 2];
@@ -62,7 +62,7 @@ export default function SacredBookReaderPage() {
   const navigate = useNavigate();
   const [book, setBook] = useState(null);
   const [pages, setPages] = useState([]);
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguage] = useState('original');
   const [batch, setBatch] = useState(1);
   const [leaf, setLeaf] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -104,10 +104,27 @@ export default function SacredBookReaderPage() {
   const [showScrollHint, setShowScrollHint] = useState(false);
 
   useEffect(() => {
-    fetchBook(slug).then(setBook).catch(e => setError(e.message));
+    fetchBook(slug).then(data => {
+      setBook(data);
+      setLanguage(current => (
+        current === 'original' || data.target_languages?.includes(current)
+          ? current
+          : data.target_languages?.[0] || 'original'
+      ));
+    }).catch(e => setError(e.message));
     fetchBookSections(slug).then(r => setSections(r.sections || [])).catch(() => setSections([]));
     fetchBookmarks(slug).then(r => setBookmarks(r.bookmarks || [])).catch(() => setBookmarks([]));
   }, [slug]);
+
+  useEffect(() => {
+    if (!book) return;
+    const available = book.target_languages || [];
+    if (language !== 'original' && !available.includes(language)) {
+      setLanguage(available[0] || 'original');
+      setBatch(1);
+      setLeaf(0);
+    }
+  }, [book, language]);
 
   // Look up this user's saved progress (if logged in) before the first page
   // batch loads, so we land straight on their page instead of flashing page 1.
@@ -483,7 +500,9 @@ export default function SacredBookReaderPage() {
 
         <nav className="tab-rail" aria-label="Choose translation">
           <Languages size={15} className="tab-rail-icon" />
-          {LANGUAGES.map(([code, label]) => (
+          {LANGUAGES.filter(([code]) => (
+            code === 'original' || book?.target_languages?.includes(code)
+          )).map(([code, label]) => (
             <button
               key={code}
               className={language === code ? 'tab active' : 'tab'}

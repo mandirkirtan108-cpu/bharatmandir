@@ -140,6 +140,7 @@ def ensure_library_schema() -> None:
                 author TEXT,
                 description TEXT,
                 source_language TEXT NOT NULL,
+                target_languages TEXT[] NOT NULL DEFAULT ARRAY['en','hi','sa']::TEXT[],
                 original_filename TEXT NOT NULL,
                 original_pdf_url TEXT,
                 storage_public_id TEXT,
@@ -170,6 +171,11 @@ def ensure_library_schema() -> None:
         cur.execute("""
             ALTER TABLE library_books
             ADD COLUMN IF NOT EXISTS processed_pages INTEGER NOT NULL DEFAULT 0
+        """)
+        cur.execute("""
+            ALTER TABLE library_books
+            ADD COLUMN IF NOT EXISTS target_languages TEXT[]
+            NOT NULL DEFAULT ARRAY['en','hi','sa']::TEXT[]
         """)
         # The original PDF is no longer stored permanently (see LIBRARY_TMP_DIR
         # below), so this column is no longer always populated. Relax the
@@ -707,6 +713,12 @@ RULES:
 - Translate every heading, sentence, caption, footnote, list item, verse and repetition.
 - Never summarize, omit, shorten, explain, censor, modernize, or add commentary.
 - Preserve paragraphs, headings, numbering, lists, names and citations.
+- Preserve the exact meaning, devotional tone, nuance, and relationship between ideas.
+- Use clear, natural, easy-to-understand language without sacrificing accuracy.
+- Keep names, sacred terms, titles, and repeated terminology consistent throughout.
+- Transliterate proper names and sacred terms when literal translation would distort them.
+- Use correct native script, grammar, spelling, and punctuation.
+- Silently review for omissions, mistranslations, awkward wording, and mixed-language fragments.
 - Mark only genuinely unreadable fragments as [illegible].
 - Return only translated document text without a preface or code fence.
 
@@ -776,6 +788,12 @@ RULES:
 - Translate every heading, sentence, caption, footnote, list item, verse and repetition, separately and completely into each requested language.
 - Never summarize, omit, shorten, explain, censor, modernize, or add commentary.
 - Preserve paragraphs, headings, numbering, lists, names and citations in every language's version.
+- Preserve the exact meaning, devotional tone, nuance, and relationship between ideas.
+- Use clear, natural, easy-to-understand wording without sacrificing accuracy.
+- Keep names, sacred terms, titles, and repeated terminology consistent in every edition.
+- Transliterate proper names and sacred terms when literal translation would distort them.
+- Use correct native script, grammar, spelling, and punctuation for each language.
+- Silently review every edition for omissions, mistranslations, awkward wording, and mixed-language fragments.
 - Mark only genuinely unreadable fragments as [illegible].
 - Respond with ONLY a single JSON object, no prose or code fence, in exactly this shape:
 {{{json_shape}}}
@@ -835,29 +853,30 @@ SOURCE TEXT:
     return {code: str(parsed.get(code) or "") for code in target_codes}
 
 
-def _translate_all_languages(text: str, source_language: str) -> dict[str, str]:
-    """Preserve the original tab exactly and translate only the other tabs.
-
-    If the book's source language is Hindi, target_codes is just (en, sa) —
-    Hindi is reused verbatim from the source, never re-translated — so this
-    already costs one combined call for two languages, not three separate
-    calls. Same for an English or Sanskrit source.
-    """
+def _translate_selected_languages(
+    text: str,
+    source_language: str,
+    selected_languages: list[str],
+) -> dict[str, str]:
+    """Create only the editions explicitly selected during upload."""
     source_code = _source_language_code(source_language)
-    target_codes = tuple(code for code in TARGET_LANGUAGES if code != source_code)
-    if not target_codes:
-        return {code: text for code in TARGET_LANGUAGES}
-
-    chunks = _split_text(text)
-    merged: dict[str, list[str]] = {code: [] for code in target_codes}
-    for chunk in chunks:
-        result = _translate_chunk_all_languages(chunk, source_language, target_codes)
-        for code in target_codes:
-            merged[code].append(result[code])
-    translated = {code: "\n\n".join(parts) for code, parts in merged.items()}
-    if source_code:
+    selected_codes = tuple(
+        code for code in dict.fromkeys(selected_languages)
+        if code in TARGET_LANGUAGES
+    )
+    target_codes = tuple(code for code in selected_codes if code != source_code)
+    translated: dict[str, str] = {}
+    if target_codes:
+        chunks = _split_text(text)
+        merged: dict[str, list[str]] = {code: [] for code in target_codes}
+        for chunk in chunks:
+            result = _translate_chunk_all_languages(chunk, source_language, target_codes)
+            for code in target_codes:
+                merged[code].append(result[code])
+        translated.update({code: "\n\n".join(parts) for code, parts in merged.items()})
+    if source_code and source_code in selected_codes:
         translated[source_code] = text
-    return {code: translated.get(code, "") for code in TARGET_LANGUAGES}
+    return {code: translated.get(code, "") for code in selected_codes}
 
 
 def _generate_sections(book_id: int, page_texts: dict[int, str]) -> None:
@@ -935,7 +954,13 @@ PAGES:
             """, (book_id, title, page_number, order_index))
 
 
-def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str) -> None:
+def _process_book(
+    book_id: int,
+    slug: str,
+    pdf_path: Path,
+    source_language: str,
+    target_languages: list[str],
+) -> None:
     print(f"[library] book {book_id}: processing started (file={pdf_path.name})")
     try:
         pages = _extract_pages(pdf_path)
@@ -946,7 +971,9 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
         print(f"[library] book {book_id}: {len(pages)} pages total, {native_count} with a native, valid-script text layer")
 
         key = _api_key()
-        if not key:
+        source_code = _source_language_code(source_language)
+        needs_translation_api = any(code != source_code for code in target_languages)
+        if needs_translation_api and not key:
             raise RuntimeError(
                 "OPENROUTER_API_KEY is unavailable to the backend. Add it and restart the backend."
             )
@@ -1032,10 +1059,9 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for combined translation")
             page_started = datetime.utcnow()
             try:
-                # One combined call per chunk covering only the languages
-                # that actually need translating (the source language is
-                # reused verbatim) — see _translate_all_languages().
-                translated = _translate_all_languages(source_text, source_language)
+                translated = _translate_selected_languages(
+                    source_text, source_language, target_languages
+                )
 
                 elapsed = (datetime.utcnow() - page_started).total_seconds()
                 print(f"[library] book {book_id}: page {page_number} — translated in {elapsed:.1f}s")
@@ -1065,7 +1091,7 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             ]
             for job in as_completed(jobs):
                 page_number, source_text, translated, image_url = job.result()
-                page_text_en[page_number] = translated["en"]
+                page_text_en[page_number] = translated.get("en") or source_text
                 with get_db_cursor() as cur:
                     cur.execute("""
                         INSERT INTO library_book_pages
@@ -1081,8 +1107,8 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
                             audio_hi_url=NULL,
                             audio_sa_url=NULL
                     """, (
-                        book_id, page_number, source_text, translated["en"],
-                        translated["hi"], translated["sa"], image_url,
+                        book_id, page_number, source_text, translated.get("en"),
+                        translated.get("hi"), translated.get("sa"), image_url,
                     ))
                     cur.execute("""
                         UPDATE library_books SET processed_pages=processed_pages+1,
@@ -1112,7 +1138,13 @@ def _process_book(book_id: int, slug: str, pdf_path: Path, source_language: str)
             """, (str(exc)[:2000], book_id))
 
 
-def _process_and_cleanup(book_id: int, slug: str, pdf_path: Path, source_language: str) -> None:
+def _process_and_cleanup(
+    book_id: int,
+    slug: str,
+    pdf_path: Path,
+    source_language: str,
+    target_languages: list[str],
+) -> None:
     """Runs entirely in a background thread, off the request/response cycle.
 
     The PDF is no longer uploaded to Cloudinary or kept anywhere permanent —
@@ -1123,7 +1155,7 @@ def _process_and_cleanup(book_id: int, slug: str, pdf_path: Path, source_languag
     extraction + translation run.
     """
     try:
-        _process_book(book_id, slug, pdf_path, source_language)
+        _process_book(book_id, slug, pdf_path, source_language, target_languages)
     finally:
         _cleanup_temp_pdf(pdf_path)
         print(f"[library] book {book_id}: temp file cleaned up ({pdf_path.name})")
@@ -1132,7 +1164,7 @@ def _process_and_cleanup(book_id: int, slug: str, pdf_path: Path, source_languag
 BOOK_SELECT = """
 SELECT id,slug,title,author,description,source_language,original_filename,
        original_pdf_url,page_count,processed_pages,status,processing_error,
-       created_at,updated_at
+       target_languages,created_at,updated_at
 FROM library_books
 """
 
@@ -1520,9 +1552,21 @@ async def upload_book(
     author: str = Form(""),
     description: str = Form(""),
     source_language: str = Form(...),
+    target_languages: str = Form("[]"),
     file: UploadFile = File(...),
     admin: dict = Depends(get_current_admin),
 ):
+    try:
+        selected_languages = json.loads(target_languages)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(422, "Translation languages must be a JSON list.") from exc
+    if not isinstance(selected_languages, list):
+        raise HTTPException(422, "Translation languages must be a list.")
+    selected_languages = list(dict.fromkeys(selected_languages))
+    unsupported = [code for code in selected_languages if code not in TARGET_LANGUAGES]
+    if unsupported:
+        raise HTTPException(422, f"Unsupported translation languages: {', '.join(unsupported)}")
+
     if file.content_type != "application/pdf" and not file.filename.lower().endswith(".pdf"):
         raise HTTPException(415, "Only PDF files are accepted")
     content = await file.read(MAX_PDF_BYTES + 1)
@@ -1561,23 +1605,29 @@ async def upload_book(
     with get_db_cursor() as cur:
         cur.execute("""
             INSERT INTO library_books
-                (slug,title,author,description,source_language,original_filename,
-                 original_pdf_url,storage_public_id,file_sha256,page_count,created_by)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                (slug,title,author,description,source_language,target_languages,
+                 original_filename,original_pdf_url,storage_public_id,file_sha256,
+                 page_count,created_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
         """, (
             slug, title.strip(), author.strip() or None, description.strip() or None,
-            source_language.strip(), file.filename, None, None,
-            file_sha256, page_count, admin["id"],
+            source_language.strip(), selected_languages, file.filename,
+            None, None, file_sha256, page_count, admin["id"],
         ))
         book_id = cur.fetchone()["id"]
 
     threading.Thread(
         target=_process_and_cleanup,
-        args=(book_id, slug, pdf_path, source_language),
+        args=(book_id, slug, pdf_path, source_language, selected_languages),
         daemon=True,
         name=f"library-book-{book_id}",
     ).start()
-    return {"id": book_id, "slug": slug, "status": "processing"}
+    return {
+        "id": book_id,
+        "slug": slug,
+        "status": "processing",
+        "target_languages": selected_languages,
+    }
 
 
 @router.get("/api/admin/books")
