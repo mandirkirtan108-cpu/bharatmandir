@@ -66,6 +66,7 @@ export default function Navbar() {
     { to: '/search',          label: '🛕 ' + t('nav.temples'),       icon: <Search size={16} /> },
     { to: '/route-planner',   label: t('nav.route'),                 icon: <Navigation size={16} /> },
     { to: '/panchang',        label: t('nav.panchang'),              icon: <CalendarDays size={16} /> },
+    { to: '/festivals',       label: '🎉 Festivals',                    icon: <CalendarDays size={16} /> },
     { to: '/blog',            label: '📖 ' + t('nav.blog'),          icon: <PenLine size={16} /> },
     { to: '/sacred-books',    label: '📚 ' + t('nav.library'),       icon: <BookOpen size={16} /> },
     { to: '/spiritual-guide', label: '🕉️ ' + t('nav.ai_guide'),     icon: null },
