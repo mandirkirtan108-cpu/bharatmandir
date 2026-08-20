@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import axios from 'axios';
 import { panchangAPI } from '../services/api';
 import { friendlyError } from '../utils/uiMessages';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", sans-serif';
 const DEFAULT_COORDINATES = '25.3176,82.9739';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -25,6 +27,34 @@ function toDateKey(date) {
 function parseDateKey(dateKey) {
   const [year, month, day] = dateKey.split('-').map(Number);
   return new Date(year, month - 1, day);
+}
+
+function festivalDateKey(festival, fallbackYear) {
+  const raw = festival.exact_date || festival.display_date || festival.typical_date;
+  if (!raw) return null;
+  const iso = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const monthDay = String(raw).match(/^(\d{1,2})[-/](\d{1,2})(?:[-/]\d{2,4})?$/);
+  if (monthDay) {
+    const first = Number(monthDay[1]);
+    const second = Number(monthDay[2]);
+    const month = first > 12 ? second : first;
+    const day = first > 12 ? first : second;
+    return `${fallbackYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return `${fallbackYear}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+}
+
+function mergeFestivals(...groups) {
+  const seen = new Set();
+  return groups.flat().filter((festival) => {
+    const key = (festival.name || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function classifyFestival(festival) {
@@ -59,6 +89,7 @@ export default function PanchangCalendar() {
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedKey, setSelectedKey] = useState(toDateKey(today));
   const [monthData, setMonthData] = useState(null);
+  const [allFestivals, setAllFestivals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -94,6 +125,33 @@ export default function PanchangCalendar() {
     return () => { active = false; };
   }, [year, month]);
 
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      axios.get(`${API_BASE}/api/festivals?limit=500`),
+      axios.get(`${API_BASE}/api/festivals/ai-cache`),
+    ]).then((results) => {
+      if (!active) return;
+      const regular = results[0].status === 'fulfilled' && Array.isArray(results[0].value.data)
+        ? results[0].value.data : [];
+      const aiPayload = results[1].status === 'fulfilled' ? results[1].value.data : null;
+      const ai = Array.isArray(aiPayload?.festivals) ? aiPayload.festivals : Array.isArray(aiPayload) ? aiPayload : [];
+      setAllFestivals([...regular, ...ai]);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const additionalFestivalsByKey = useMemo(() => {
+    const map = new Map();
+    allFestivals.forEach((festival) => {
+      const key = festivalDateKey(festival, year);
+      if (!key || !key.startsWith(`${year}-${String(month + 1).padStart(2, '0')}-`)) return;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push({ ...festival, tradition: festival.tradition || 'Hindu Festival' });
+    });
+    return map;
+  }, [allFestivals, year, month]);
+
   const daysByKey = useMemo(() => {
     const map = new Map();
     (monthData?.days || []).forEach((day) => map.set(day.date, day));
@@ -101,7 +159,7 @@ export default function PanchangCalendar() {
   }, [monthData]);
 
   const selectedDay = daysByKey.get(selectedKey);
-  const selectedFestivals = selectedDay?.festivals || [];
+  const selectedFestivals = mergeFestivals(selectedDay?.festivals || [], additionalFestivalsByKey.get(selectedKey) || []);
 
   const cells = useMemo(() => {
     const firstDay = new Date(year, month, 1).getDay();
@@ -112,9 +170,16 @@ export default function PanchangCalendar() {
     return result;
   }, [year, month]);
 
-  const monthFestivalDays = useMemo(() => (
-    (monthData?.days || []).filter((day) => (day.festivals || []).length > 0)
-  ), [monthData]);
+  const monthFestivalDays = useMemo(() => {
+    const keys = new Set([
+      ...(monthData?.days || []).filter((day) => (day.festivals || []).length > 0).map((day) => day.date),
+      ...additionalFestivalsByKey.keys(),
+    ]);
+    return Array.from(keys).sort().map((date) => ({
+      date,
+      festivals: mergeFestivals(daysByKey.get(date)?.festivals || [], additionalFestivalsByKey.get(date) || []),
+    }));
+  }, [monthData, daysByKey, additionalFestivalsByKey]);
 
   const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
@@ -169,7 +234,8 @@ export default function PanchangCalendar() {
               const isSaturday = date.getDay() === 6;
               const tithi = day?.tithi?.name || '';
               const paksha = day?.tithi?.paksha?.substring(0, 6) || '';
-              const { named, phaseBadges } = splitDayFestivals(day);
+              const mergedDay = { ...day, festivals: mergeFestivals(day?.festivals || [], additionalFestivalsByKey.get(key) || []) };
+              const { named, phaseBadges } = splitDayFestivals(mergedDay);
               const primaryNamed = named[0];
               const extraNamedCount = named.length - 1;
               const hasHighlight = Boolean(primaryNamed) || phaseBadges.length > 0;
@@ -180,7 +246,7 @@ export default function PanchangCalendar() {
                   key={key}
                   type="button"
                   onClick={() => setSelectedKey(key)}
-                  title={(day?.festivals || []).map((festival) => festival.name).join(', ') || undefined}
+                  title={mergedDay.festivals.map((festival) => festival.name).join(', ') || undefined}
                   style={{
                     border: selected ? '2px solid #E8650A' : isToday ? '2px solid rgba(232,101,10,0.35)' : '1px solid #f0e4d2',
                     borderRadius: 8,
@@ -300,8 +366,8 @@ export default function PanchangCalendar() {
                           {meta.isNamedFestival ? 'Festival' : 'Observance'}
                         </span>
                       </div>
-                      {festival.slug && <div style={festivalMetaStyle}> {festival.slug}</div>}
-                      {parana && <div style={festivalMetaStyle}>{parana}</div>}
+                      {festival.slug && <div style={festivalMetaStyle}>Slug: {festival.slug}</div>}
+                      {parana && <div style={festivalMetaStyle}>Parana: {parana}</div>}
                     </div>
                   );
                 })}
