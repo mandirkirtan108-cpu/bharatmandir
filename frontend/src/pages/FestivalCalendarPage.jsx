@@ -104,6 +104,17 @@ function festKey(f) {
   return `${(f.name || '').toLowerCase().trim()}::${f.month}`;
 }
 
+function getFestivalDay(festival, month) {
+  const raw = festival.exact_date || festival.display_date || festival.typical_date;
+  if (!raw) return null;
+  const isoMatch = String(raw).match(/^(?:\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return Number(isoMatch[1]) === month ? Number(isoMatch[2]) : null;
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime()) && parsed.getMonth() + 1 === month) return parsed.getDate();
+  const dayMatch = String(raw).match(/\b([1-9]|[12]\d|3[01])\b/);
+  return dayMatch ? Number(dayMatch[1]) : null;
+}
+
 const DEITY_FILTERS = ['All','Shiva','Vishnu','Ganesha','Durga','Lakshmi','Krishna','Rama','Saraswati'];
 const TYPE_FILTERS  = ['All','Major','With Temple'];
 
@@ -693,13 +704,7 @@ export default function FestivalCalendarPage() {
                   </div>
                 )
               ) : (
-                <section aria-label={`Festivals in ${GREGORIAN_MONTHS[selectedMonth - 1]}`}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: 24 }}>
-                    {currentMonthFestivals.map((f, i) => (
-                      <PremiumFestivalCard key={`${f.id || f.name}-${i}`} festival={f} index={i} onClick={() => setSelectedFestival(f)} />
-                    ))}
-                  </div>
-                </section>
+                <MonthCalendar month={selectedMonth} festivals={currentMonthFestivals} onFestivalClick={setSelectedFestival} />
               )}
             </>
           ) : (
@@ -759,6 +764,21 @@ export default function FestivalCalendarPage() {
         .fest-card-premium:focus-visible { outline: 3px solid #E8650A; outline-offset: 2px; }
         .fest-card-premium .card-glow { position:absolute; top:0; left:0; right:0; height:180px; opacity:0; transition:opacity .3s; pointer-events:none; }
         .fest-card-premium:hover .card-glow { opacity:1; }
+
+        .festival-calendar-scroll { overflow-x:auto; padding-bottom:4px; border-radius:20px; box-shadow:0 8px 32px rgba(61,31,0,.09); }
+        .festival-month-grid { min-width:760px; display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); background:#E8D5B8; gap:1px; border:1px solid #E8D5B8; }
+        .festival-weekday { background:#7a3208; color:#FFD580; padding:11px 8px; text-align:center; font-family:var(--font-display); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+        .festival-day-cell { min-height:132px; padding:10px; background:#fff; position:relative; }
+        .festival-day-cell.empty { background:#F8F1E7; }
+        .festival-day-cell.today { background:#FFF7E9; box-shadow:inset 0 0 0 2px #E8650A; }
+        .festival-day-number { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; color:#5C3D1E; font-family:var(--font-display); font-size:13px; font-weight:700; margin-bottom:7px; }
+        .festival-day-cell.today .festival-day-number { background:#E8650A; color:#fff; }
+        .festival-day-events { display:flex; flex-direction:column; gap:5px; }
+        .festival-calendar-event { width:100%; display:flex; align-items:center; gap:5px; padding:6px 7px; border:0; border-left:3px solid var(--festival-color); border-radius:6px; background:#FFF4E8; color:#3B210D; font-family:var(--font-body); font-size:11px; font-weight:600; text-align:left; cursor:pointer; transition:transform .15s,box-shadow .15s; }
+        .festival-calendar-event span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .festival-calendar-event:hover { transform:translateY(-1px); box-shadow:0 3px 9px rgba(61,31,0,.14); }
+        .festival-calendar-event:focus-visible,.festival-undated-event:focus-visible { outline:2px solid #E8650A; outline-offset:2px; }
+        .festival-undated-event { padding:8px 13px; border:1px solid #E8D5B8; border-radius:50px; background:#fff; color:#5C3D1E; font-family:var(--font-body); font-size:12px; font-weight:600; cursor:pointer; }
 
         /* FIX: mobile responsive styles */
         @media (max-width: 640px) {
@@ -849,6 +869,83 @@ function PremiumMonthNavigator({ selectedMonth, byMonth, onSelect, onPrev, onNex
         <div style={{ height: '100%', borderRadius: 99, background: 'linear-gradient(90deg, #E8650A, #FFB347)', width: `${(selectedMonth / 12) * 100}%`, transition: 'width .4s cubic-bezier(.34,1.2,.64,1)', boxShadow: '0 0 8px rgba(232,101,10,0.4)' }} />
       </div>
     </nav>
+  );
+}
+
+function MonthCalendar({ month, festivals, onFestivalClick }) {
+  const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const daysInMonth = new Date(CURRENT_YEAR, month, 0).getDate();
+  const firstWeekday = new Date(CURRENT_YEAR, month - 1, 1).getDay();
+  const today = new Date();
+  const isCurrentMonth = today.getFullYear() === CURRENT_YEAR && today.getMonth() + 1 === month;
+
+  const festivalsByDay = useMemo(() => {
+    const result = {};
+    festivals.forEach(festival => {
+      const day = getFestivalDay(festival, month);
+      if (!day || day > daysInMonth) return;
+      if (!result[day]) result[day] = [];
+      result[day].push(festival);
+    });
+    return result;
+  }, [festivals, month, daysInMonth]);
+
+  const undatedFestivals = festivals.filter(festival => !getFestivalDay(festival, month));
+  const cells = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+  while (cells.length % 7) cells.push(null);
+
+  return (
+    <section aria-label={`${GREGORIAN_MONTHS[month - 1]} ${CURRENT_YEAR} calendar`}>
+      <div className="festival-calendar-scroll">
+        <div className="festival-month-grid">
+          {weekdays.map(day => <div key={day} className="festival-weekday">{day.slice(0, 3)}</div>)}
+          {cells.map((day, index) => {
+            const dayFestivals = day ? festivalsByDay[day] || [] : [];
+            const isToday = isCurrentMonth && day === today.getDate();
+            return (
+              <div key={`${index}-${day || 'blank'}`} className={`festival-day-cell${day ? '' : ' empty'}${isToday ? ' today' : ''}`}>
+                {day && (
+                  <>
+                    <div className="festival-day-number" aria-label={isToday ? `${day}, today` : String(day)}>{day}</div>
+                    <div className="festival-day-events">
+                      {dayFestivals.map((festival, festivalIndex) => (
+                        <button
+                          key={`${festival.id || festival.name}-${festivalIndex}`}
+                          type="button"
+                          className="festival-calendar-event"
+                          style={{ '--festival-color': festival.color || '#E8650A' }}
+                          onClick={() => onFestivalClick(festival)}
+                          title={`View details: ${festival.name}`}
+                        >
+                          <span aria-hidden="true">{festival.emoji || '🛕'}</span>
+                          <span>{festival.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {undatedFestivals.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: '#5C3D1E', margin: '0 0 10px' }}>Date to be confirmed</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {undatedFestivals.map((festival, index) => (
+              <button key={`${festival.id || festival.name}-${index}`} type="button" className="festival-undated-event" onClick={() => onFestivalClick(festival)}>
+                {festival.emoji || '🛕'} {festival.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
