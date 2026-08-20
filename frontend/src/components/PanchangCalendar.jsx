@@ -300,8 +300,8 @@ export default function PanchangCalendar() {
                           {meta.isNamedFestival ? 'Festival' : 'Observance'}
                         </span>
                       </div>
-                      {festival.slug && <div style={festivalMetaStyle}>Slug: {festival.slug}</div>}
-                      {parana && <div style={festivalMetaStyle}>Parana: {parana}</div>}
+                      {festival.slug && <div style={festivalMetaStyle}> {festival.slug}</div>}
+                      {parana && <div style={festivalMetaStyle}>{parana}</div>}
                     </div>
                   );
                 })}
