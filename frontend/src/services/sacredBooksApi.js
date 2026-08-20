@@ -21,8 +21,6 @@ function authHeaders() {
 
 export const fetchBooks = () => request('/api/books');
 export const fetchLibraryAudio = () => request('/api/library-audio');
-export const searchSpotifyAudio = (query) =>
-  request(`/api/library-audio/spotify-search?q=${encodeURIComponent(query)}`);
 export const fetchBook = (slug) => request(`/api/books/${encodeURIComponent(slug)}`);
 export const fetchBookPages = (slug, language, page = 1, perPage = 10) =>
   request(`/api/books/${encodeURIComponent(slug)}/pages?language=${language}&page=${page}&per_page=${perPage}`);
