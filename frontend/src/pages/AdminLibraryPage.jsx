@@ -50,6 +50,11 @@ export default function AdminLibraryPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!books.some(book => book.status === 'processing')) return undefined;
+    const timer = window.setInterval(load, 4000);
+    return () => window.clearInterval(timer);
+  }, [books, load]);
 
   const uploadBook = async (event) => {
     event.preventDefault();
@@ -120,9 +125,9 @@ export default function AdminLibraryPage() {
         <Field label="Author / source"><input value={bookForm.author} onChange={update(setBookForm, 'author')} style={inputStyle} /></Field>
         <Field label="Original language"><select value={bookForm.source_language} onChange={update(setBookForm, 'source_language')} style={inputStyle}><option>Hindi</option><option>Sanskrit</option><option>English</option></select></Field>
         <Field label="PDF file *"><input required type="file" accept="application/pdf,.pdf" onChange={update(setBookForm, 'file')} style={inputStyle} /></Field>
-        <Field label="Description" full><textarea value={bookForm.description} onChange={update(setBookForm, 'description')} style={{ ...inputStyle, minHeight: 75 }} /></Field>
         <fieldset style={translationBoxStyle}>
-          <legend style={{ ...labelStyle, padding: '0 7px' }}>Translate this book?</legend>
+          <legend style={translationLegendStyle}>Translation languages</legend>
+          <div style={{ fontWeight: 800, color: '#55260d', marginBottom: 5 }}>Do you want to translate this book?</div>
           <p style={{ margin: '0 0 10px', color: '#806450', fontSize: 13, lineHeight: 1.5 }}>
             Tick only the languages you need. Leave every option unticked to publish the original edition without translation.
           </p>
@@ -145,6 +150,7 @@ export default function AdminLibraryPage() {
               : 'No translation selected — original edition only'}
           </strong>
         </fieldset>
+        <Field label="Description" full><textarea value={bookForm.description} onChange={update(setBookForm, 'description')} style={{ ...inputStyle, minHeight: 75 }} /></Field>
       </UploadPanel>
       <BookList books={books} loading={loading} onRemove={removeBook} />
     </> : <>
@@ -165,10 +171,46 @@ function tabStyle(active) { return { display: 'inline-flex', alignItems: 'center
 function Notice({ color, children }) { return <div style={{ padding: '12px 15px', borderRadius: 10, color, background: `${color}12`, border: `1px solid ${color}40`, marginBottom: 18 }}>{children}</div>; }
 function Field({ label, children, full }) { return <label style={{ gridColumn: full ? '1 / -1' : undefined, display: 'block' }}><span style={labelStyle}>{label}</span>{children}</label>; }
 function UploadPanel({ title, onSubmit, busy, submit, children }) { return <form onSubmit={onSubmit} style={{ background: '#fff', border: '1px solid #e5d4b9', borderRadius: 16, padding: 22, marginBottom: 30, boxShadow: '0 8px 24px #5c270b0c' }}><h2 style={{ fontFamily: 'var(--font-display)', margin: '0 0 18px', fontSize: 22 }}>{title}</h2><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16 }}>{children}</div><button disabled={busy} style={{ marginTop: 20, border: 0, borderRadius: 99, background: busy ? '#c8b9a1' : 'linear-gradient(135deg,#e87513,#ae4508)', color: '#fff', padding: '12px 20px', cursor: busy ? 'wait' : 'pointer', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 8 }}>{busy ? <Loader2 className="spin" size={17} /> : <UploadCloud size={17} />}{busy ? 'Preparing your upload…' : submit}</button></form>; }
-function BookList({ books, loading, onRemove }) { return <section><h2 style={{ fontFamily: 'var(--font-display)' }}>Library books</h2>{loading ? <p>Arranging the library…</p> : books.length === 0 ? <p>No books have been uploaded yet.</p> : <div style={{ display: 'grid', gap: 10 }}>{books.map(book => <div key={book.id} style={rowStyle}><BookOpen color="#9b511d" /><div style={{ flex: 1 }}><b>{book.title}</b><div style={small}>{book.author || 'Sacred text'} · {book.status} · {book.processed_pages || 0}/{book.page_count || 0} pages</div><div style={small}>{book.target_languages?.length ? `Translations: ${book.target_languages.map(code => TRANSLATION_LANGUAGES.find(item => item.code === code)?.label || code).join(', ')}` : 'Original edition only'}</div></div><button onClick={() => onRemove(book)} style={deleteStyle}><Trash2 size={16} /></button></div>)}</div>}</section>; }
+function BookList({ books, loading, onRemove }) {
+  return <section>
+    <h2 style={{ fontFamily: 'var(--font-display)' }}>Library books</h2>
+    {loading && books.length === 0 ? <p>Arranging the library…</p> : books.length === 0 ? <p>No books have been uploaded yet.</p> : <div style={{ display: 'grid', gap: 12 }}>
+      {books.map(book => {
+        const total = book.page_count || 0;
+        const completed = book.processed_pages || 0;
+        const percent = total ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+        const languages = book.target_languages || [];
+        return <div key={book.id} style={rowStyle}>
+          <BookOpen color="#9b511d" />
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+              <b>{book.title}</b>
+              <span style={statusStyle(book.status)}>{book.status === 'processing' && <Loader2 className="spin" size={12} />}{book.status}</span>
+            </div>
+            <div style={small}>{book.author || 'Sacred text'}</div>
+            <div style={small}>{languages.length ? `Translating: ${languages.map(code => TRANSLATION_LANGUAGES.find(item => item.code === code)?.label || code).join(', ')}` : 'Original edition only — no translation requested'}</div>
+            {book.status === 'processing' && <div style={{ marginTop: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#784016', fontSize: 12, fontWeight: 700, marginBottom: 5 }}>
+                <span>Translated {completed} of {total || '…'} pages</span><span>{percent}%</span>
+              </div>
+              <div style={progressTrack}><div style={{ ...progressFill, width: `${percent}%` }} /></div>
+            </div>}
+            {book.status === 'ready' && <div style={{ ...small, color: '#25723a', fontWeight: 700 }}>Translation complete · {completed}/{total} pages</div>}
+            {book.status === 'failed' && <div style={{ ...small, color: '#a42d1b' }}>{book.processing_error || 'Translation failed. Please upload the book again.'}</div>}
+          </div>
+          <button onClick={() => onRemove(book)} style={deleteStyle} title="Remove book"><Trash2 size={16} /></button>
+        </div>;
+      })}
+    </div>}
+  </section>;
+}
 function AudioList({ audio, loading, onToggle, onRemove }) { return <section><h2 style={{ fontFamily: 'var(--font-display)' }}>Devotional audio</h2>{loading ? <p>Arranging the devotional recordings…</p> : audio.length === 0 ? <p>No audio has been uploaded yet.</p> : <div style={{ display: 'grid', gap: 12 }}>{audio.map(item => <div key={item.id} style={rowStyle}><Music2 color="#9b511d" /><div style={{ flex: 1, minWidth: 180 }}><b>{item.title}</b><div style={small}>{item.artist || 'Devotional recording'} · {item.category} · stored on {item.storage_provider}</div><audio controls preload="metadata" src={item.audio_url} style={{ width: '100%', marginTop: 8 }} /></div><button onClick={() => onToggle(item)} style={publishStyle(item.is_published)}>{item.is_published ? 'Published' : 'Hidden'}</button><button onClick={() => onRemove(item)} style={deleteStyle}><Trash2 size={16} /></button></div>)}</div>}</section>; }
 const translationBoxStyle = { gridColumn: '1 / -1', border: '1px solid #dfc9a8', borderRadius: 12, background: '#fffaf0', padding: 16 };
+const translationLegendStyle = { padding: '5px 11px', borderRadius: 99, background: '#9b511d', color: '#fff', fontWeight: 800, fontSize: 13 };
 const languageTickStyle = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 12px', border: '1px solid #e5d4b9', borderRadius: 9, background: '#fff', color: '#5f371e', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
+const progressTrack = { height: 8, borderRadius: 99, overflow: 'hidden', background: '#eadbc7' };
+const progressFill = { height: '100%', borderRadius: 99, background: 'linear-gradient(90deg,#e87513,#9f3f08)', transition: 'width .35s ease' };
+const statusStyle = (status) => ({ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 99, textTransform: 'uppercase', fontSize: 10, fontWeight: 800, background: status === 'ready' ? '#edfaef' : status === 'failed' ? '#fff0ed' : '#fff4dd', color: status === 'ready' ? '#25723a' : status === 'failed' ? '#a42d1b' : '#92500e' });
 const rowStyle = { display: 'flex', alignItems: 'flex-start', gap: 13, padding: 15, background: '#fffdf8', border: '1px solid #e5d4b9', borderRadius: 12, flexWrap: 'wrap' };
 const small = { fontSize: 12, color: '#806450', marginTop: 4 };
 const deleteStyle = { border: 0, background: 'transparent', color: '#b72e18', cursor: 'pointer', padding: 7 };
