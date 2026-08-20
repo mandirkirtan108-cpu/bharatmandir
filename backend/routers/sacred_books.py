@@ -53,7 +53,10 @@ TARGET_LANGUAGES = {
 }
 MAX_PDF_BYTES = int(os.getenv("LIBRARY_MAX_PDF_MB", "40")) * 1024 * 1024
 MAX_AUDIO_BYTES = int(os.getenv("LIBRARY_MAX_AUDIO_MB", "100")) * 1024 * 1024
-TRANSLATION_MODEL = os.getenv("LIBRARY_TRANSLATION_MODEL", "openrouter/auto")
+TRANSLATION_MODEL = os.getenv(
+    "LIBRARY_TRANSLATION_MODEL",
+    "google/gemini-3.1-pro-preview",
+)
 OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
 # OpenRouter vision OCR is used only for pages without usable embedded text.
 # It is more reliable than local Tesseract for low-quality devotional scans.
