@@ -17,7 +17,24 @@ const userHeaders = () => {
 
 export const isLoggedIn = () => Boolean(userToken());
 
+// Kept for compatibility with the older category page. Account-backed
+// progress no longer depends on this anonymous session id.
+export function getSessionId() {
+  let sessionId = localStorage.getItem('bm_session_id');
+  if (!sessionId) {
+    sessionId = `bm_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    localStorage.setItem('bm_session_id', sessionId);
+  }
+  return sessionId;
+}
+
 export const fetchBooks = () => request('/api/books');
+export const fetchLibraryAudio = () => request('/api/library-audio');
+
+export const fetchAllProgress = () => {
+  if (!isLoggedIn()) return Promise.resolve({ progress: [] });
+  return request('/api/library/progress', { headers: userHeaders() });
+};
 export const fetchBook = (slug) => request(`/api/books/${encodeURIComponent(slug)}`);
 export const fetchBookPages = (slug, language, page = 1, perPage = 10) =>
   request(`/api/books/${encodeURIComponent(slug)}/pages?language=${language}&page=${page}&per_page=${perPage}`);
