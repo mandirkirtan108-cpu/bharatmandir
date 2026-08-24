@@ -1198,9 +1198,28 @@ def get_book(slug: str):
     with get_db_cursor() as cur:
         cur.execute(BOOK_SELECT + " WHERE slug=%s AND status='ready'", (slug,))
         book = cur.fetchone()
+        if book:
+            cur.execute("""
+                SELECT
+                    COALESCE(BOOL_OR(NULLIF(BTRIM(text_hi), '') IS NOT NULL), FALSE) AS has_hi,
+                    COALESCE(BOOL_OR(NULLIF(BTRIM(text_sa), '') IS NOT NULL), FALSE) AS has_sa,
+                    COALESCE(BOOL_OR(NULLIF(BTRIM(text_en), '') IS NOT NULL), FALSE) AS has_en
+                FROM library_book_pages
+                WHERE book_id=%s
+            """, (book["id"],))
+            availability = cur.fetchone()
     if not book:
         raise HTTPException(404, "Book not found")
-    return dict(book)
+    result = dict(book)
+    result["available_languages"] = [
+        code for code, flag in (
+            ("hi", availability["has_hi"]),
+            ("sa", availability["has_sa"]),
+            ("en", availability["has_en"]),
+        )
+        if flag
+    ]
+    return result
 
 
 @router.get("/api/books/{slug}/pages")

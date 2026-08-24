@@ -89,4 +89,4 @@ export async function synthesizeSpeech(text, language, slug, pageNumber) {
     throw new Error(body.detail || 'Voice reading failed.');
   }
   return response.blob();
-}
+} 
