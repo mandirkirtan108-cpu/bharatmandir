@@ -62,7 +62,10 @@ function parseTags(tags) {
   if (!tags) return [];
   if (Array.isArray(tags)) return tags.filter(Boolean);
   const s = String(tags).trim();
-  if (s.startsWith('[')) { try { return JSON.parse(s).filter(Boolean); } catch (_) {} }
+  if (s.startsWith('[')) {
+    try { return JSON.parse(s).filter(Boolean); }
+    catch { return s.split(',').map(t => t.trim()).filter(Boolean); }
+  }
   return s.split(',').map(t => t.trim()).filter(Boolean);
 }
 function v(x) { return x && String(x).trim() !== '' && String(x) !== 'null' && String(x) !== 'false'; }
@@ -263,45 +266,56 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:#FAF6EE;color:#1A0D00
 .lightbox-thumb.on{border-color:#FFD580;opacity:1;}
 .lightbox-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
 
+/* PREMIUM EDITORIAL TEMPLE LAYOUT */
+body{background:#fbf6ed;color:#2a1708;}
+.hero{height:560px;min-height:520px;max-height:none;background:#241004;justify-content:center;overflow:hidden;}
+.hero-img{opacity:.34;filter:saturate(.8) sepia(.12);}
+.hero-grad{background:linear-gradient(180deg,rgba(35,13,2,.52),rgba(28,10,1,.78) 58%,#1d0901 100%);}
+.hero-body{padding:52px 24px 36px;max-width:920px;margin:0 auto;text-align:center;}
+.hero-bc{margin-bottom:18px;color:rgba(255,228,192,.55);font-size:9px;letter-spacing:.16em;}
+.badges{margin-bottom:14px;}
+.badge{font-size:9px;padding:5px 11px;border-radius:999px;letter-spacing:.09em;text-transform:uppercase;}
+.hero-h1{font-family:'Cormorant Garamond',serif;font-size:clamp(43px,7vw,72px);font-weight:700;line-height:.98;letter-spacing:-.025em;text-shadow:0 8px 28px rgba(0,0,0,.35);}
+.hero-hindi{font-size:clamp(24px,3vw,35px);color:#e7bd62;margin-top:8px;}
+.hero-address{justify-content:center;margin-top:15px;color:rgba(255,244,227,.76);font-size:12px;}
+.hero-tagline{max-width:680px;margin:14px auto 0;color:rgba(255,244,227,.72);font-family:'Cormorant Garamond',serif;font-size:17px;line-height:1.55;}
+.hero-actions{display:flex;justify-content:center;gap:10px;margin-top:22px;flex-wrap:wrap;}
+.hero-action{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 18px;border-radius:8px;font-size:11px;font-weight:800;text-decoration:none;cursor:pointer;transition:.18s;border:1px solid rgba(255,255,255,.28);}
+.hero-action.primary{background:linear-gradient(135deg,#db621d,#ac3e08);border-color:transparent;color:#fff;box-shadow:0 9px 24px rgba(190,73,12,.3);}
+.hero-action.secondary{background:rgba(255,255,255,.08);color:#fff;backdrop-filter:blur(8px);}
+.hero-action:hover{transform:translateY(-2px);}
+.hero-stats{position:relative;z-index:8;width:min(1080px,calc(100% - 40px));margin:-29px auto 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden;border:1px solid #ead7ba;border-radius:13px;background:#fff;box-shadow:0 16px 36px rgba(64,32,7,.13);}
+.hero-stat{min-width:0;padding:16px 12px;text-align:center;border-right:1px solid #ead7ba;}
+.hero-stat:last-child{border-right:0;}.hero-stat strong{display:block;color:#b84910;font-family:'Cormorant Garamond',serif;font-size:20px;line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.hero-stat span{display:block;margin-top:5px;color:#8d6a4b;font-size:8px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;}
+.snav{top:0;margin-top:20px;background:rgba(251,246,237,.94);border-color:#eadcc8;backdrop-filter:blur(14px);}
+.snav-item{font-size:11px;padding:15px 14px;}.snav-item.on{color:#b84910;}
+.wrap{max-width:1080px;padding:44px 24px 80px;display:flex;flex-direction:column;}
+.wrap>*{order:50}.wrap>.tags{order:0}#history{order:1}#gallery{order:2}#overview{order:3}#puja{order:4}#mantras{order:5}#festivals{order:6}#sevas{order:7}#facilities{order:8}#priests{order:9}#contact{order:90}
+.tags{justify-content:center;margin-bottom:22px;}
+.sec,.card{margin-bottom:26px;padding:30px;border:1px solid #eadbc6;border-radius:14px;background:rgba(255,255,255,.84);box-shadow:0 8px 24px rgba(76,40,10,.055);}
+.sec-h,.card-h{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:700;color:#311b0c;margin-bottom:20px;letter-spacing:-.01em;}
+.sec-icon{width:34px;height:34px;border-radius:9px;background:#fff0dc;font-size:17px;}
+.tstrip{border:1px solid #ead9c1;border-radius:12px;background:#fff;box-shadow:0 7px 18px rgba(76,40,10,.05);}
+.tval{color:#321b0b;font-family:'Cormorant Garamond',serif;font-size:18px;}.tlbl{color:#a16c42;font-size:8px;letter-spacing:.11em;}
+.ig{gap:0;border:1px solid #ead8be;border-radius:11px;overflow:hidden;background:#fff;}.ii{padding:14px;border-right:1px solid #ead8be;border-bottom:1px solid #ead8be;}.il{font-size:8px;letter-spacing:.12em;color:#a16338}.iv{font-family:'Cormorant Garamond',serif;font-size:16px;color:#301b0c;}
+.prose{font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.9;color:#604a38;}.prose:first-letter{float:left;margin:6px 6px 0 0;color:#c35416;font-family:'Cormorant Garamond',serif;font-size:50px;line-height:.7;}
+.puranic{border-left:3px solid #e4a647;background:#fff7ea;border-radius:10px;padding:18px;}.significance{background:#f4fbf7;border-color:#cfe7d9;border-radius:12px;}
+.history-layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(240px,.75fr);gap:28px;align-items:start}.history-main .prose{margin-bottom:16px}.history-aside{display:grid;gap:12px}.history-quote{padding:20px;border-left:3px solid #dc8a24;border-radius:11px;background:#fff8ec;color:#765339;font-family:'Cormorant Garamond',serif;font-size:18px;font-style:italic;line-height:1.55;box-shadow:0 7px 18px rgba(65,35,10,.07)}.history-card{padding:18px;border:1px solid #ead9c1;border-radius:11px;background:#fff;box-shadow:0 6px 16px rgba(65,35,10,.06)}.history-card-label{margin-bottom:7px;color:#c05216;font-size:8px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.history-card p{font-size:12px;line-height:1.7;color:#6d5947}.section-kicker{margin-bottom:7px;color:#c05216;font-size:8px;font-weight:900;letter-spacing:.15em;text-transform:uppercase}.section-subtitle{margin:-12px 0 20px;color:#80634b;font-size:12px;line-height:1.6}
+.gallery-grid{grid-template-columns:2fr 1fr 1fr;grid-auto-rows:170px;gap:10px;}.gallery-item{aspect-ratio:auto;border-radius:12px;box-shadow:0 6px 15px rgba(67,35,9,.08);}.gallery-item:first-child{grid-row:span 2;}.gallery-item:nth-child(4){grid-column:span 2;}
+.chip{border-radius:999px;padding:8px 12px;font-size:11px;}.prow,.fest,.seva,.priest{border:1px solid #eadbc6;border-radius:11px;margin-bottom:9px;background:#fff;box-shadow:0 4px 12px rgba(69,37,10,.04);}
+.map-ph{height:90px;border-radius:12px;background:linear-gradient(135deg,#f2e4cc,#fff7e9);font-size:35px;}.map-row{padding:10px 12px;border-radius:9px;background:#fff;border:1px solid #eee0cc;margin-bottom:7px;}
+.abtn{background:linear-gradient(135deg,#c95616,#9f3607);border-radius:8px;box-shadow:0 7px 17px rgba(181,65,10,.2);}
+#contact{background:radial-gradient(circle at 90% 15%,rgba(219,128,59,.22),transparent 35%),linear-gradient(135deg,#3b1908,#1e0c03);border:0;color:#fff;box-shadow:0 20px 45px rgba(47,20,5,.24);}
+#contact .sec-h{color:#fff;}#contact .sec-icon{background:rgba(255,255,255,.12);}#contact .crow{border-color:rgba(255,255,255,.12);}#contact .clbl{color:#e0b681;}#contact .clink,#contact .cval{color:#fff;}
+.verified{justify-content:center;}
+
 @media(max-width:1024px){.wrap{padding:20px 20px 60px;}.snav{padding:0 20px;justify-content:flex-start;}.hero-body{padding-left:20px;padding-right:20px;}}
-@media(max-width:640px){.hero{height:auto;min-height:380px;}.hero-h1{font-size:clamp(22px,7vw,36px)}.hero-hindi{font-size:clamp(22px,7vw,36px)}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:14px 14px 60px;}.sec{padding:17px 15px;}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}.lightbox{padding:12px;}.lightbox-stage{height:calc(100vh - 24px);}.lightbox-arrow{width:38px;height:48px;font-size:26px;}.lightbox-arrow.left{left:6px;}.lightbox-arrow.right{right:6px;}.lightbox-close{top:4px;right:4px;}}
+@media(max-width:640px){.hero{height:auto;min-height:500px;}.hero-h1{font-size:clamp(38px,11vw,54px)}.hero-hindi{font-size:clamp(22px,7vw,32px)}.hero-stats{grid-template-columns:1fr 1fr;margin-top:-18px}.hero-stat:nth-child(2){border-right:0}.hero-stat:nth-child(-n+2){border-bottom:1px solid #ead7ba}.ig{grid-template-columns:1fr 1fr;}.ii.full{grid-column:1/-1;}.wrap{padding:30px 13px 60px;}.sec,.card{padding:22px 17px}.sec-h,.card-h{font-size:26px}.history-layout{grid-template-columns:1fr;gap:16px}.tstrip{flex-wrap:wrap;}.tblock{min-width:50%;}.tblock+.tblock::before{display:none;}.gallery-grid{grid-template-columns:1fr 1fr;grid-auto-rows:140px}.gallery-item:first-child{grid-row:span 2}.gallery-item:nth-child(4){grid-column:span 2}.lightbox{padding:12px;}.lightbox-stage{height:calc(100vh - 24px);}.lightbox-arrow{width:38px;height:48px;font-size:26px;}.lightbox-arrow.left{left:6px;}.lightbox-arrow.right{right:6px;}.lightbox-close{top:4px;right:4px;}}
 `;
 
 function HeroImage({ src, alt }) {
   if (!src) return null;
   return <img src={src} alt={alt} className="hero-img" onError={e => e.currentTarget.style.display='none'} />;
-}
-
-function HeroCarousel({ images, activeIndex, onSelect, alt }) {
-  if (!images.length) return <div className="hero-diya">🪔</div>;
-  return (
-    <>
-      {images.map((img, index) => (
-        <img
-          key={img.id || img.file_url || index}
-          src={img.file_url}
-          alt={img.caption || alt}
-          className={`hero-img hero-slide${index === activeIndex ? ' on' : ''}`}
-          onError={e => { e.currentTarget.style.display = 'none'; }}
-        />
-      ))}
-      {images.length > 1 && (
-        <div className="hero-gallery-nav" aria-label="Temple hero photos">
-          {images.map((img, index) => (
-            <button
-              key={img.id || img.file_url || index}
-              type="button"
-              className={`hero-dot${index === activeIndex ? ' on' : ''}`}
-              onClick={() => onSelect(index)}
-              aria-label={`Show temple photo ${index + 1}`}
-            >
-              <img src={img.file_url} alt="" />
-            </button>
-          ))}
-        </div>
-      )}
-    </>
-  );
 }
 
 function GalleryLightbox({ images, activeIndex, onSelect, onClose, title }) {
@@ -499,7 +513,7 @@ export default function TempleDetailPage() {
     };
     load();
     window.scrollTo(0, 0);
-  }, [slug, navigate]);
+  }, [slug, navigate, t]);
 
   if (loading) return (<><style>{CSS}</style><Navbar/><div className="loading"><div className="spinner"/><span style={{color:'#A07050',fontSize:14}}>{t('detail.loading_temple')}</span></div></>);
   if (error)   return (<><style>{CSS}</style><Navbar/><div className="err"><div style={{fontSize:60}}>🛕</div><h2 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28}}>{t('detail.temple_not_found')}</h2><p style={{color:'#A07050'}}>{error}</p><button style={{marginTop:16,padding:'10px 22px',background:'#C8520A',color:'#fff',border:'none',borderRadius:9,cursor:'pointer',fontSize:14}} onClick={()=>navigate('/')}>{t('detail.back_home')}</button></div></>);
@@ -634,7 +648,22 @@ export default function TempleDetailPage() {
           <h1 className="hero-h1">{T.name}</h1>
           {v(T.name_hindi) && <div className="hero-hindi">{T.name_hindi}</div>}
           <div className="hero-address"><span>📍</span><span>{addressLine}</span></div>
+          {(v(T.significance) || v(T.history)) && (
+            <p className="hero-tagline">{String(T.significance || T.history).split('.').slice(0, 1).join('.')}.</p>
+          )}
+          <div className="hero-actions">
+            <button type="button" className="hero-action primary" onClick={() => scrollTo('overview')}>🗓️ Plan Your Visit</button>
+            {v(T.history) && <button type="button" className="hero-action secondary" onClick={() => scrollTo('history')}>📖 Read the Story</button>}
+            {mapsUrl && <a className="hero-action secondary" href={mapsUrl} target="_blank" rel="noopener noreferrer">📍 Directions</a>}
+          </div>
         </div>
+      </div>
+
+      <div className="hero-stats" aria-label="Temple highlights">
+        <div className="hero-stat"><strong>{T.primary_deity || T.sect || '🙏'}</strong><span>{t('detail.primary_deity')}</span></div>
+        <div className="hero-stat"><strong>{openTime || '—'}</strong><span>{t('detail.opens')}</span></div>
+        <div className="hero-stat"><strong>{fee || t('detail.free_entry')}</strong><span>{t('detail.entry')}</span></div>
+        <div className="hero-stat"><strong>{T.estimated_year_built || T.temple_type || '🛕'}</strong><span>{t('detail.established')}</span></div>
       </div>
 
       {/* ══ STICKY NAV ══ */}
@@ -651,7 +680,9 @@ export default function TempleDetailPage() {
 
         {/* ── OVERVIEW ── */}
         <div className="sec" id="overview">
-          <div className="sec-h"><div className="sec-icon">🛕</div>{t('detail.info_title')}</div>
+          <div className="section-kicker">Plan your visit</div>
+          <div className="sec-h"><div className="sec-icon">🛕</div>Everything you need before you go</div>
+          <p className="section-subtitle">Timings, entry information, traditions and essential visitor details for a peaceful darshan.</p>
 
           {(openTime || fee || acStart) && (
             <div className="tstrip">
@@ -720,7 +751,8 @@ export default function TempleDetailPage() {
         {/* ── GALLERY ── */}
         {gallery.length > 0 && (
           <div className="sec" id="gallery">
-            <div className="sec-h"><div className="sec-icon">📷</div>{t('detail.gallery_title', { defaultValue: 'Photo Gallery' })}</div>
+            <div className="section-kicker">Photo gallery</div>
+            <div className="sec-h"><div className="sec-icon">📷</div>{t('detail.gallery_title', { defaultValue: 'A glimpse of the sacred temple' })}</div>
             <div className="gallery-grid">
               {gallery.map((img, index) => (
                 <button
@@ -745,17 +777,23 @@ export default function TempleDetailPage() {
         {/* ── HISTORY & SIGNIFICANCE ── */}
         {(v(T.history)||v(T.significance)||v(T.sthala_purana)||v(T.puranic_stories)||v(T.history_hindi)) && (
           <div className="sec" id="history">
-            <div className="sec-h"><div className="sec-icon">📜</div>{t('detail.history_title')}</div>
-            {v(T.history) && (
-              <p className="prose" style={{display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden',marginBottom:0}}>{T.history}</p>
-            )}
-            <ReadMore label={t('detail.read_full_history')} showLessLabel={showLess}>
-              {v(T.history)         && <p className="prose">{T.history}</p>}
-              {v(T.sthala_purana)   && <p className="prose prose-sm" style={{fontStyle:'italic',marginBottom:14}}>{T.sthala_purana}</p>}
-              {v(T.puranic_stories) && (<div className="puranic"><div className="puranic-lbl">{t('detail.puranic_story')}</div><p className="prose-sm" style={{fontStyle:'italic'}}>{T.puranic_stories}</p></div>)}
-              {v(T.significance)    && (<div className="significance"><div className="sig-lbl">✨ {t('detail.why_visit')}</div><p style={{fontSize:14,lineHeight:1.8,color:'#7A5538'}}>{T.significance}</p></div>)}
-              {v(T.history_hindi)   && (<div className="hindi-block"><div className="hindi-lbl">{t('detail.hindi_history_label')}</div><p style={{fontFamily:"'Noto Sans Devanagari',sans-serif",fontSize:14,lineHeight:1.9,color:'#7A5538'}}>{T.history_hindi}</p></div>)}
-            </ReadMore>
+            <div className="section-kicker">History & significance</div>
+            <div className="sec-h"><div className="sec-icon">📜</div>{T.history_heading || t('detail.history_title')}</div>
+            <div className="history-layout">
+              <div className="history-main">
+                {v(T.history) && <p className="prose">{T.history}</p>}
+                {v(T.sthala_purana) && <p className="prose prose-sm" style={{fontStyle:'italic'}}>{T.sthala_purana}</p>}
+                {v(T.history_hindi) && (
+                  <div className="hindi-block"><div className="hindi-lbl">{t('detail.hindi_history_label')}</div><p style={{fontFamily:"'Noto Sans Devanagari',sans-serif",fontSize:14,lineHeight:1.9,color:'#7A5538'}}>{T.history_hindi}</p></div>
+                )}
+              </div>
+              <aside className="history-aside">
+                {v(T.significance) && <blockquote className="history-quote">“{T.significance}”</blockquote>}
+                {v(T.puranic_stories) && (
+                  <div className="history-card"><div className="history-card-label">📜 {t('detail.puranic_story')}</div><p>{T.puranic_stories}</p></div>
+                )}
+              </aside>
+            </div>
           </div>
         )}
 
