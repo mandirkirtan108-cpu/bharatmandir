@@ -1,374 +1,119 @@
-import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Music2, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BookOpen, ChevronRight, Grid3X3, Headphones, List, Pause, Play, Search, SlidersHorizontal, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { fetchAllProgress, fetchBooks, fetchLibraryAudio, isLoggedIn } from '../services/sacredBooksApi';
+import { fetchBooks, fetchLibraryAudio } from '../services/sacredBooksApi';
 
-// A handful of cover tones, all within the site's warm orange/gold family
-// so the shelf reads as one cohesive theme instead of a mixed color wheel.
-const COVERS = [
-  ['#4b1d04', '#7a3208'],
-  ['#5c2508', '#8f3d0f'],
-  ['#3a2410', '#6b4720'],
-  ['#6b2d0a', '#a14a0b'],
-  ['#452008', '#7a4315'],
+const FACETS = [
+  { key: 'media', label: 'Type — Read / Listen', open: true },
+  { key: 'category', label: 'Category', open: true },
+  { key: 'language', label: 'Language' },
 ];
-
-// Hand-picked tones for well-known scriptures, so their covers stay
-// consistent (e.g. Hanuman Chalisa always the same deep rust) instead of
-// whatever the shelf order lands on — still within the same theme family.
-const CURATED_COVERS = {
-  'hanuman-chalisa': ['#4b1d04', '#7a3208'],
-  'bhagavad-gita': ['#5c2508', '#8f3d0f'],
-  'vishnu-purana': ['#3a2410', '#6b4720'],
-  'manusmriti': ['#452008', '#7a4315'],
-};
-
-// Simple deterministic hash so any book without a curated color still always
-// gets the *same* cover, regardless of search filters or list order.
-function hashKey(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
-  }
-  return hash;
-}
-
-function coverColors(book) {
-  const key = (book.slug || book.title || String(book.id) || '').toLowerCase();
-  if (CURATED_COVERS[key]) return CURATED_COVERS[key];
-  return COVERS[hashKey(key) % COVERS.length];
-}
-
-function CornerFlourish({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 44 44" aria-hidden="true">
-      <path d="M3 30V10a7 7 0 0 1 7-7h20" fill="none" stroke="currentColor" strokeWidth="1.1" />
-      <path d="M3 18v-8a7 7 0 0 1 7-7h8" fill="none" stroke="currentColor" strokeWidth="1.1" opacity=".65" />
-      <path d="M3 30c6 0 8-3 8-8" fill="none" stroke="currentColor" strokeWidth="1.1" opacity=".8" />
-      <circle cx="3" cy="3" r="2.4" fill="currentColor" />
-    </svg>
-  );
-}
-
-function BookCover({ book, dark, light }) {
-  return (
-    <div className="book-cover" style={{ '--cover-dark': dark, '--cover-light': light }}>
-      <div className="cover-vignette" aria-hidden="true" />
-      <CornerFlourish className="corner corner-tl" />
-      <CornerFlourish className="corner corner-tr" />
-      <CornerFlourish className="corner corner-bl" />
-      <CornerFlourish className="corner corner-br" />
-      <div className="cover-frame">
-        <div className="cover-emblem" aria-hidden="true"><span>ॐ</span></div>
-        <div className="cover-rule" />
-        <h2 className="cover-title">{book.title}</h2>
-        {book.author && <p className="cover-author">{book.author}</p>}
-        <div className="cover-rule diamond" />
-      </div>
-      <span className="cover-pages">{book.page_count} pages</span>
-    </div>
-  );
-}
+const languageLabel = code => ({ en: 'English', hi: 'Hindi', sa: 'Sanskrit' }[code] || code);
+const titleCase = value => String(value || 'Devotional').replace(/[-_]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
 export default function SacredBooksPage() {
   const navigate = useNavigate();
+  const audioRef = useRef(null);
   const [books, setBooks] = useState([]);
   const [audio, setAudio] = useState([]);
-  const [activeTab, setActiveTab] = useState('books');
   const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState({ media: [], category: [], language: [] });
+  const [view, setView] = useState('grid');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [currentAudio, setCurrentAudio] = useState(null);
+  const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [progressMap, setProgressMap] = useState({});
 
   useEffect(() => {
     Promise.all([fetchBooks(), fetchLibraryAudio()])
-      .then(([bookResult, audioResult]) => {
-        setBooks(bookResult.books || []);
-        setAudio(audioResult.audio || []);
-      })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+      .then(([bookResult, audioResult]) => { setBooks(bookResult.books || []); setAudio(audioResult.audio || []); })
+      .catch(err => setError(err.message)).finally(() => setLoading(false));
   }, []);
 
-  // "Continue reading" progress, per book, for whoever is signed in right
-  // now. Pulled from the account's saved progress in the database — not
-  // this browser's storage — so it's the same shelf whether this is Rohit
-  // opening it on his laptop or his phone, and never mixes with Tanisha's.
   useEffect(() => {
-    if (!isLoggedIn()) { setProgressMap({}); return; }
-    let cancelled = false;
-    fetchAllProgress()
-      .then((r) => {
-        if (cancelled) return;
-        const map = {};
-        for (const p of r.progress || []) {
-          map[p.slug] = { pageNumber: p.page_number, percent: p.percent || 0 };
-        }
-        setProgressMap(map);
-      })
-      .catch(() => { if (!cancelled) setProgressMap({}); });
-    return () => { cancelled = true; };
-  }, [books]);
+    const player = audioRef.current;
+    if (!player) return undefined;
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    player.addEventListener('play', onPlay); player.addEventListener('pause', onPause); player.addEventListener('ended', onPause);
+    return () => { player.removeEventListener('play', onPlay); player.removeEventListener('pause', onPause); player.removeEventListener('ended', onPause); };
+  }, [currentAudio]);
+
+  const items = useMemo(() => [
+    ...books.map(book => ({ ...book, key: `book-${book.id}`, media: 'Text', category: 'Sacred Text', language: [book.source_language, ...(book.target_languages || []).map(languageLabel)].filter(Boolean).join(' + '), subtitle: book.description || 'A sacred scripture for prayer, reflection and daily reading.', creator: book.author || 'Traditional sacred text' })),
+    ...audio.map(track => ({ ...track, key: `audio-${track.id}`, media: 'Audio', category: titleCase(track.category || 'Bhajan & Kirtan'), language: track.language || 'Devotional', subtitle: track.description || 'A devotional recording for prayer and contemplation.', creator: track.artist || 'Temple devotional recording' })),
+  ], [books, audio]);
+
+  const facetOptions = useMemo(() => Object.fromEntries(FACETS.map(facet => {
+    const counts = {}; items.forEach(item => { counts[item[facet.key]] = (counts[item[facet.key]] || 0) + 1; });
+    return [facet.key, Object.entries(counts).sort(([a], [b]) => a.localeCompare(b))];
+  })), [items]);
 
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const items = activeTab === 'books' ? books : audio;
-    return q ? items.filter(item => `${item.title} ${item.author || item.artist || ''} ${item.description || ''} ${item.category || ''}`.toLowerCase().includes(q)) : items;
-  }, [books, audio, activeTab, query]);
+    const needle = query.trim().toLowerCase();
+    return items.filter(item => {
+      if (FACETS.some(facet => filters[facet.key].length && !filters[facet.key].includes(item[facet.key]))) return false;
+      return !needle || `${item.title} ${item.creator} ${item.subtitle} ${item.category} ${item.language}`.toLowerCase().includes(needle);
+    });
+  }, [items, filters, query]);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
+  const grouped = useMemo(() => visible.reduce((groups, item) => { (groups[item.category] ||= []).push(item); return groups; }, {}), [visible]);
+  const toggleFilter = (key, value) => setFilters(current => ({ ...current, [key]: current[key].includes(value) ? current[key].filter(item => item !== value) : [...current[key], value] }));
+  const playTrack = item => {
+    if (!item.audio_url) return;
+    if (currentAudio?.key === item.key) { if (audioRef.current?.paused) audioRef.current.play().catch(() => {}); else audioRef.current?.pause(); return; }
+    setCurrentAudio(item); setPlaying(true);
   };
+  const openItem = item => item.media === 'Text' ? navigate(`/sacred-books/library/${item.slug}`) : playTrack(item);
 
   return <>
     <Navbar />
-    <main className="library">
-
-      {/* ══════════════ HERO (matches Search page hero) ══════════════ */}
-      <section style={{
-        position: 'relative',
-        overflow: 'hidden',
-        background: 'linear-gradient(135deg, #4b1d04 0%, #7a3208 55%, #a14a0b 100%)',
-        padding: '40px 8px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '100%',
-        boxSizing: 'border-box',
-      }}>
-        <div style={{
-          position: 'relative', zIndex: 1,
-          width: '100%', maxWidth: 700,
-          padding: '0 24px',
-          boxSizing: 'border-box',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center',
-        }}>
-
-          {/* Badge */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,213,128,0.3)',
-            borderRadius: 50, padding: '5px 16px', marginBottom: 14,
-            color: 'rgba(255,213,128,0.85)', fontSize: 11, letterSpacing: '.1em',
-            textTransform: 'uppercase', fontWeight: 500,
-            backdropFilter: 'blur(8px)',
-            whiteSpace: 'nowrap',
-          }}><BookOpen size={13} style={{ marginRight: 2 }} /> Digital scripture library</div>
-
-          {/* Title */}
-          <h1 style={{
-            fontFamily: 'var(--font-display)', fontWeight: 900,
-            fontSize: 'clamp(28px, 5vw, 52px)', lineHeight: 1.1,
-            marginBottom: 10, marginTop: 0,
-            textShadow: '0 4px 40px rgba(0,0,0,0.3)',
-            color: '#ffffff',
-            width: '100%',
-          }}>
-            A quiet place for sacred reading and listening
-          </h1>
-
-          {/* Subtitle */}
-          <p style={{
-            color: 'rgba(255,255,255,0.7)', fontSize: 14,
-            width: '100%', maxWidth: 520,
-            margin: '0 0 10px 0',
-            fontWeight: 300, lineHeight: 1.7,
-            textAlign: 'center',
-          }}>
-            Every page kept exactly as it was written — Sanskrit, Hindi, English, and the original, side by side. Open a book, not a webpage.
-          </p>
-
-          <div style={{
-            fontFamily: 'var(--font-hindi, "Noto Serif Devanagari", serif)',
-            fontSize: 14, color: 'rgba(233,199,149,0.8)',
-            marginBottom: 22, letterSpacing: '.02em',
-          }}>
-            सुस्वागतम् — welcome, devotee
+    <main className="temple-library">
+      <header className="catalog-hero">
+        <div className="catalog-om">ॐ</div><h1>Temple Library</h1>
+        <p>Sacred texts, stotras, kirtans, bhajans and discourses — search, filter, read and listen</p>
+        <label className="catalog-search"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search titles, author, singer, speaker, keyword…" /><Search size={19} /></label>
+      </header>
+      <div className="catalog-layout">
+        <aside className={filtersOpen ? 'catalog-filters open' : 'catalog-filters'}>
+          <button className="mobile-filter-toggle" onClick={() => setFiltersOpen(value => !value)}><SlidersHorizontal size={16} /> Filters</button>
+          <div className="filter-content">
+            <div className="filter-heading"><b>Filter</b><button onClick={() => setFilters({ media: [], category: [], language: [] })}>Clear all</button></div>
+            {FACETS.map(facet => <details className="catalog-facet" open={facet.open} key={facet.key}>
+              <summary>{facet.label}<ChevronRight size={13} /></summary>
+              <div className="facet-options">{(facetOptions[facet.key] || []).map(([value, count]) => <label key={value}><input type="checkbox" checked={filters[facet.key].includes(value)} onChange={() => toggleFilter(facet.key, value)} /><span>{value}</span><small>{count}</small></label>)}</div>
+            </details>)}
           </div>
-
-          {/* Search bar — same shape/behavior as the Search page */}
-          <form
-            onSubmit={handleSearch}
-            style={{
-              display: 'flex',
-              width: '100%',
-              maxWidth: 580,
-              background: 'rgba(255,255,255,0.97)',
-              borderRadius: 16,
-              overflow: 'hidden',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-              border: '1px solid rgba(255,213,128,0.25)',
-            }}
-          >
-            <input
-              id="library-search-input"
-              name="library-search-query"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder={activeTab === 'books' ? 'Search books, authors, or subjects' : 'Search bhajans, kirtans, or artists'}
-              autoFocus
-              style={{
-                flex: 1,
-                border: 'none',
-                outline: 'none',
-                padding: '15px 18px',
-                fontSize: 15,
-                fontFamily: 'var(--font-body)',
-                color: '#1A0A00',
-                background: 'transparent',
-              }}
-            />
-            <button
-              type="submit"
-              style={{
-                padding: '15px 24px',
-                background: 'linear-gradient(135deg, #E8650A 0%, #B84D00 100%)',
-                color: 'white',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 14,
-                fontWeight: 700,
-                fontFamily: 'var(--font-display)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                letterSpacing: '.04em',
-                whiteSpace: 'nowrap',
-                transition: 'opacity .2s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            >
-              <Search size={15} />
-              Search
-            </button>
-          </form>
-
-        </div>
-      </section>
-      {/* ════════════════════════════════════ */}
-
-      <section className="library-content">
-        <div className="library-tabs" role="tablist" aria-label="Library content">
-          <button type="button" role="tab" aria-selected={activeTab === 'books'} className={activeTab === 'books' ? 'active' : ''} onClick={() => setActiveTab('books')}><BookOpen size={16} /> Sacred books</button>
-          <button type="button" role="tab" aria-selected={activeTab === 'audio'} className={activeTab === 'audio' ? 'active' : ''} onClick={() => setActiveTab('audio')}><Music2 size={16} /> Bhajans & kirtans</button>
-        </div>
-        {loading && <div className="library-state">Preparing the sacred library…</div>}
-        {error && <div className="library-state error">{error}</div>}
-        {!loading && !error && visible.length === 0 && <div className="library-state">{activeTab === 'books' ? 'No books have been published yet.' : 'No devotional audio has been shared yet. Please return soon.'}</div>}
-
-        {activeTab === 'books' ? <div className="shelf">
-          {visible.map((book) => {
-            const [dark, light] = coverColors(book);
-            const progress = progressMap[book.slug];
-            const openHref = `/sacred-books/library/${book.slug}`;
-            return (
-              <article className="book-card" key={book.id} onClick={() => navigate(openHref)}>
-                <BookCover book={book} dark={dark} light={light} />
-                <div className="book-face">
-                  <p className="book-desc">{book.description || 'Available in three complete translations and the original edition.'}</p>
-                  {progress && (
-                    <div className="book-progress">
-                      <div className="book-progress-rail"><div className="book-progress-fill" style={{ width: `${progress.percent || 0}%` }} /></div>
-                      <span>{progress.percent || 0}% read</span>
-                    </div>
-                  )}
-                  <button>{progress ? 'Continue reading' : 'Open book'} <span>→</span></button>
-                </div>
-              </article>
-            );
-          })}
-        </div> : <div className="audio-shelf">
-          {visible.map((item) => (
-            <article className="audio-card" key={item.id}>
-              <div className="audio-emblem"><Music2 size={28} /></div>
-              <div className="audio-detail">
-                <span className="audio-category">{item.category}</span>
-                <h2>{item.title}</h2>
-                {item.artist && <p className="audio-artist">{item.artist}</p>}
-                {item.description && <p className="audio-description">{item.description}</p>}
-                <audio controls preload="metadata" src={item.audio_url}>Your browser cannot play this audio.</audio>
-              </div>
-            </article>
-          ))}
-        </div>}
-      </section>
+        </aside>
+        <section className="catalog-results">
+          <div className="catalog-toolbar"><p>Showing <b>{visible.length}</b> of {items.length} items</p><div className="view-toggle"><button className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')}><Grid3X3 size={13} /> Grid</button><button className={view === 'series' ? 'active' : ''} onClick={() => setView('series')}><List size={13} /> By series / album</button></div></div>
+          {loading && <div className="catalog-state">Arranging the temple library…</div>}
+          {error && <div className="catalog-state error">{error}</div>}
+          {!loading && !error && visible.length === 0 && <div className="catalog-state">No matching books or recordings were found.</div>}
+          {!loading && !error && view === 'grid' && <div className="catalog-grid">{visible.map(item => <CatalogCard key={item.key} item={item} active={currentAudio?.key === item.key && playing} onOpen={openItem} />)}</div>}
+          {!loading && !error && view === 'series' && <div>{Object.entries(grouped).map(([name, group]) => <section className="catalog-series" key={name}><h2>{name}<small>{group.length} {group.length === 1 ? 'item' : 'items'}</small></h2>{group.map((item, index) => <button className={`series-row ${item.media === 'Audio' ? 'audio' : ''}`} key={item.key} onClick={() => openItem(item)}><span className="series-index">{String(index + 1).padStart(2, '0')}</span><span className="series-copy"><b>{item.title}</b><small>{item.creator} · {item.language}</small></span><span className="series-action">{item.media === 'Text' ? 'Read' : 'Listen'}</span></button>)}</section>)}</div>}
+        </section>
+      </div>
+      <div className="catalog-blessing">Temple Library · ॥ ॐ नमः शिवाय ॥</div>
     </main>
-    <Footer />
-    <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Crimson+Pro:wght@400;500&family=EB+Garamond:wght@500;600&display=swap');
-
-      .library{position:relative;min-height:100vh;background:#f8f2e4}
-
-      .library-content{position:relative;z-index:1;max-width:1160px;margin:auto;padding:44px 20px 80px}
-      .library-tabs{display:flex;justify-content:center;gap:10px;margin:0 0 30px;flex-wrap:wrap}
-      .library-tabs button{display:inline-flex;align-items:center;gap:8px;border:1px solid #dfc89d;border-radius:99px;padding:10px 18px;background:#fffaf0;color:#704324;font-family:'EB Garamond',serif;font-size:15px;font-weight:700;cursor:pointer}
-      .library-tabs button.active{background:linear-gradient(135deg,#e07016,#a8450a);border-color:#a8450a;color:#fff}
-
-      .shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:28px}
-      .book-card{
-        display:flex;flex-direction:column;height:100%;border-radius:12px;overflow:hidden;cursor:pointer;
-        background:linear-gradient(165deg, #fffefb 0%, #fdf1dc 60%, #fbe6c4 100%);
-        box-shadow:0 10px 26px #5c270b1a;transition:transform .2s ease, box-shadow .2s ease;border:1px solid #e9dcc6;
-      }
-      .book-card:hover{transform:translateY(-6px);box-shadow:0 22px 44px #5c270b33}
-      .book-card:hover .book-cover{box-shadow:inset 0 0 0 1px #f2d795aa, inset 0 -3px 14px #00000035}
-
-      /* Cover: gold frame + radiating emblem + corner filigree, styled after
-         classic embossed scripture covers — reads well even with short titles. */
-      .book-cover{
-        position:relative;padding:28px 20px 36px;min-height:216px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-        background:
-          radial-gradient(ellipse 260px 180px at 15% -10%, #ffdca355, transparent 65%),
-          repeating-linear-gradient(115deg, #ffffff08 0 2px, transparent 2px 6px),
-          linear-gradient(135deg,var(--cover-light),var(--cover-dark));
-        box-shadow:inset 0 -3px 10px #00000030;
-        transition:box-shadow .2s ease;
-      }
-      .cover-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center, transparent 45%, #00000040 100%);pointer-events:none}
-      .cover-frame{position:relative;width:100%;text-align:center;padding:16px 16px;border:1px solid #f1e0b855;border-radius:2px;box-shadow:0 0 0 4px #00000018, inset 0 0 0 1px #ffffff12}
-      .cover-emblem{position:relative;display:flex;align-items:center;justify-content:center;height:36px;margin-bottom:2px;color:#f1e0b8}
-      .cover-emblem span{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:30px;color:#f1e0b8dd;line-height:1}
-      .cover-rule{height:1px;width:36px;margin:8px auto;background:#f1e0b866}
-      .cover-rule.diamond{position:relative}
-      .cover-rule.diamond::after{content:'';position:absolute;left:50%;top:50%;width:5px;height:5px;transform:translate(-50%,-50%) rotate(45deg);background:#f1e0b899}
-      .cover-title{
-        margin:0;font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;color:#fbecc8;
-        font-size:clamp(17px,2.6vw,22px);line-height:1.25;letter-spacing:.01em;
-        display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
-      }
-      .cover-author{margin:6px 0 0;font-family:'EB Garamond',serif;font-size:12px;letter-spacing:.06em;color:#e9c79599;text-transform:uppercase;
-        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .cover-pages{position:relative;z-index:1;margin-top:14px;font-family:'EB Garamond',serif;font-size:10.5px;letter-spacing:.1em;color:#f1e0b0b0;text-transform:uppercase}
-      .corner{position:absolute;width:24px;height:24px;color:#f1e0b877;z-index:1}
-      .corner-tl{top:10px;left:10px}
-      .corner-tr{top:10px;right:10px;transform:scaleX(-1)}
-      .corner-bl{bottom:10px;left:10px;transform:scaleY(-1)}
-      .corner-br{bottom:10px;right:10px;transform:scale(-1,-1)}
-
-      .book-face{padding:18px 22px 22px;flex:1;min-width:0;display:flex;flex-direction:column}
-      .book-desc{color:#775e4c;line-height:1.65;font-size:13.5px;font-family:'Crimson Pro',serif;margin:0 0 16px;flex:1;
-        display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-      .book-face button{align-self:flex-start;border:0;background:none;color:#8b3a15;font-weight:700;padding:0;cursor:pointer;font-family:'EB Garamond',serif;font-size:14px;letter-spacing:.02em}
-
-      .book-progress{display:flex;align-items:center;gap:8px;margin:0 0 12px}
-      .book-progress-rail{flex:1;height:4px;border-radius:99px;background:#e9dcc6;overflow:hidden}
-      .book-progress-fill{height:100%;background:linear-gradient(90deg,#c9932f,#f2a545);transition:width .3s ease}
-      .book-progress span{flex-shrink:0;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:.05em;color:#a9752f;text-transform:uppercase}
-
-      .library-state{position:relative;z-index:1;text-align:center;padding:50px;color:#806957;font-family:'Crimson Pro',serif}
-      .library-state.error{color:#a11}
-      .audio-shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:22px}
-      .audio-card{display:flex;gap:16px;padding:20px;border:1px solid #e9dcc6;border-radius:14px;background:linear-gradient(165deg,#fffefb,#fdf1dc);box-shadow:0 10px 26px #5c270b14}
-      .audio-emblem{width:52px;height:52px;flex:0 0 52px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#8f3d0f,#4b1d04);color:#f6d58d}
-      .audio-detail{min-width:0;flex:1}.audio-category{text-transform:uppercase;font-size:10px;letter-spacing:.12em;color:#a45c24;font-weight:700}.audio-detail h2{margin:5px 0 2px;color:#4b250f;font:700 22px 'Cormorant Garamond',Georgia,serif}.audio-artist{margin:0;color:#866957;font:15px 'Crimson Pro',serif}.audio-description{margin:10px 0;color:#775e4c;font:15px/1.5 'Crimson Pro',serif}.audio-detail audio{width:100%;height:36px;margin-top:10px}
-    `}</style>
+    {currentAudio && <div className="now-playing"><button className="round-player" onClick={() => playTrack(currentAudio)}>{playing ? <Pause size={18} /> : <Play size={18} />}</button><div><b>{currentAudio.title}</b><span>{currentAudio.creator}</span></div><audio ref={audioRef} src={currentAudio.audio_url} controls autoPlay /><button className="close-player" onClick={() => { audioRef.current?.pause(); setCurrentAudio(null); }}><X size={20} /></button></div>}
+    <Footer /><style>{catalogStyles}</style>
   </>;
 }
+
+function CatalogCard({ item, active, onOpen }) {
+  const isAudio = item.media === 'Audio';
+  return <article className={`catalog-card ${isAudio ? 'audio' : ''} ${active ? 'playing' : ''}`} onClick={() => onOpen(item)}><div className="card-top"><span>{item.category}</span><em>{isAudio ? <><Play size={9} /> Listen</> : 'Read'}</em></div><div className="card-symbol">{isAudio ? <Headphones size={22} /> : <BookOpen size={22} />}</div><h2>{item.title}</h2><p>{item.subtitle}</p><small className="creator">{item.creator}</small><div className="card-foot"><span>{item.language || 'Original'}</span>{!isAudio && <span>{item.page_count || 0} pages</span>}{isAudio && <button disabled={!item.audio_url}><Play size={10} /> Play</button>}</div></article>;
+}
+
+const catalogStyles = `
+.temple-library{--ink:#2b2118;--muted:#7a6a55;--gold:#c8873f;--deep:#7a3e12;--teal:#3f8a86;--cream:#fffdf9;--card:#fffefb;--line:#ecdcc0;--chip:#f4e8d5;min-height:100vh;background:var(--cream);color:var(--ink);font-family:"Noto Serif",Georgia,serif;padding-bottom:40px}.catalog-hero{text-align:center;padding:34px 20px 24px;background:radial-gradient(circle at 50% -40%,rgba(197,124,44,.22),transparent 62%),linear-gradient(#fff9ef,#fffdf9);border-bottom:1px solid var(--line)}.catalog-om{font-family:"Noto Serif Devanagari",serif;font-size:42px;line-height:1;color:#b5651d}.catalog-hero h1{margin:5px 0 2px;font-family:var(--font-display);font-size:clamp(28px,4vw,42px);color:var(--deep)}.catalog-hero p{margin:0;color:var(--muted);font-style:italic;font-size:14px}.catalog-search{max-width:640px;margin:18px auto 0;display:flex;align-items:center;border:1.5px solid var(--line);border-radius:99px;background:#fff;box-shadow:0 2px 7px rgba(120,80,20,.07);padding:0 16px;color:var(--gold)}.catalog-search:focus-within{border-color:var(--gold)}.catalog-search input{width:100%;border:0;outline:0;background:transparent;padding:12px 0;color:var(--ink);font:14px inherit}
+.catalog-layout{max-width:1200px;margin:0 auto;padding:24px 20px 48px;display:grid;grid-template-columns:245px minmax(0,1fr);gap:28px}.catalog-filters{align-self:start;position:sticky;top:18px}.filter-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.filter-heading b{text-transform:uppercase;letter-spacing:.14em;font-size:11px;color:#b5651d}.filter-heading button{border:0;background:none;color:var(--muted);text-decoration:underline;cursor:pointer;font:11px inherit}.catalog-facet{border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:11px;overflow:hidden}.catalog-facet summary{cursor:pointer;list-style:none;padding:11px 13px;display:flex;align-items:center;justify-content:space-between;color:var(--deep);font-size:13px;font-weight:700}.catalog-facet summary::-webkit-details-marker{display:none}.catalog-facet summary svg{color:var(--gold);transition:.2s}.catalog-facet[open] summary svg{transform:rotate(90deg)}.facet-options{padding:0 13px 11px}.facet-options label{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer}.facet-options input{accent-color:var(--gold)}.facet-options small{margin-left:auto;background:var(--chip);color:var(--muted);padding:1px 7px;border-radius:20px}.mobile-filter-toggle{display:none}
+.catalog-toolbar{min-height:34px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.catalog-toolbar p{margin:0;color:var(--muted);font-size:13px}.catalog-toolbar b{color:var(--deep)}.view-toggle{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.view-toggle button{display:flex;align-items:center;gap:5px;border:0;background:#fff;padding:7px 12px;color:var(--muted);font:11px inherit;cursor:pointer}.view-toggle button.active{background:var(--gold);color:#fff;font-weight:700}.catalog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}.catalog-card{position:relative;min-height:220px;border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:11px;background:var(--card);padding:15px;display:flex;flex-direction:column;cursor:pointer;transition:.2s}.catalog-card.audio{border-left-color:var(--teal)}.catalog-card:hover{transform:translateY(-3px);box-shadow:0 9px 22px rgba(115,65,18,.14)}.catalog-card.playing{box-shadow:0 0 0 2px var(--teal),0 8px 20px rgba(63,138,134,.18)}.card-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:13px}.card-top>span{color:#b5651d;font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:800}.audio .card-top>span{color:var(--teal)}.card-top em{display:flex;align-items:center;gap:3px;background:#f6ece2;color:#9a6b2f;border-radius:20px;padding:2px 8px;font-size:9px;text-transform:uppercase;font-style:normal;font-weight:700}.audio .card-top em{background:#e2f0ef;color:var(--teal)}.card-symbol{position:absolute;right:15px;top:48px;color:#dbc5a2;opacity:.5}.audio .card-symbol{color:#9ccbc8}.catalog-card h2{margin:0 34px 6px 0;font-family:"Noto Serif Devanagari",var(--font-display),serif;color:#5c2d0c;font-size:19px;line-height:1.35}.catalog-card p{color:var(--muted);font-size:11.5px;line-height:1.55;margin:0 0 8px}.creator{margin-top:auto;color:#8c765e;font-size:10.5px}.card-foot{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}.card-foot>span{background:var(--chip);color:#6a4a22;padding:2px 8px;border-radius:20px;font-size:9.5px}.card-foot button{margin-left:auto;display:flex;align-items:center;gap:4px;border:1px solid var(--teal);border-radius:20px;background:#fff;color:#2f6a66;padding:3px 9px;font:700 10px inherit;cursor:pointer}
+.catalog-series{margin-bottom:23px}.catalog-series h2{display:flex;align-items:baseline;gap:8px;margin:0 0 8px;padding-bottom:7px;border-bottom:2px solid #ead9b8;color:var(--deep);font-size:15px}.catalog-series h2 small{font-size:10px;color:var(--muted);font-style:italic;font-weight:400}.series-row{width:100%;display:flex;align-items:center;gap:12px;padding:10px 12px;margin-bottom:6px;border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:8px;background:var(--card);text-align:left;cursor:pointer;font-family:inherit}.series-row.audio{border-left-color:var(--teal)}.series-row:hover{background:#fff9ef}.series-index{color:#a99884;font-size:10px}.series-copy{flex:1;display:flex;flex-direction:column}.series-copy b{font-family:"Noto Serif Devanagari",serif;color:#5c2d0c}.series-copy small{color:var(--muted);font-size:10px}.series-action{text-transform:uppercase;font-size:9px;color:var(--deep);background:var(--chip);padding:3px 8px;border-radius:20px}.audio .series-action{color:var(--teal);background:#e2f0ef}.catalog-state{text-align:center;padding:65px 20px;color:var(--muted)}.catalog-state.error{color:#a11}.catalog-blessing{text-align:center;color:#90765c;font-size:11px;font-style:italic;padding:0 20px 25px}
+.now-playing{position:fixed;left:0;right:0;bottom:0;z-index:1000;display:flex;align-items:center;gap:13px;padding:10px max(18px,calc((100vw - 1160px)/2));background:linear-gradient(135deg,#103c39,#082c2a);color:#effaf8;box-shadow:0 -5px 22px rgba(0,0,0,.25)}.round-player,.close-player{border:0;border-radius:50%;width:38px;height:38px;display:grid;place-items:center;background:#effaf8;color:#174b47;cursor:pointer;flex-shrink:0}.now-playing>div{width:210px;min-width:0}.now-playing b,.now-playing span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.now-playing b{font-family:"Noto Serif Devanagari",serif;font-size:14px}.now-playing span{color:#a9d8d4;font-size:10px}.now-playing audio{flex:1;height:38px;min-width:160px}.close-player{background:transparent;color:#fff}
+@media(max-width:820px){.catalog-layout{grid-template-columns:1fr;padding-top:16px}.catalog-filters{position:static}.mobile-filter-toggle{display:flex;width:100%;align-items:center;justify-content:center;gap:7px;padding:10px;border:1px solid var(--gold);border-radius:9px;background:#fff;color:var(--deep);font-weight:700}.filter-content{display:none;margin-top:12px}.catalog-filters.open .filter-content{display:block}.catalog-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}.now-playing>div{width:125px}.now-playing audio{min-width:100px}}@media(max-width:520px){.catalog-toolbar{align-items:flex-start;flex-direction:column}.catalog-grid{grid-template-columns:1fr}.now-playing{flex-wrap:wrap}.now-playing>div{flex:1}.now-playing audio{order:4;width:100%;flex-basis:100%}}
+`;
