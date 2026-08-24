@@ -16,6 +16,7 @@ import uuid
 import wave
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import cloudinary.uploader
@@ -83,24 +84,22 @@ _translation_slots = threading.BoundedSemaphore(TRANSLATION_WORKERS)
 # both (mirroring the old browser fallback of reading Sanskrit with a Hindi
 # voice, but with a model actually trained on it).
 TTS_MODELS = {
-    "en": os.getenv("LIBRARY_TTS_MODEL_EN", "google/gemini-3.1-flash-tts-preview"),
-    "hi": os.getenv("LIBRARY_TTS_MODEL_HI", "google/gemini-3.1-flash-tts-preview"),
-    "sa": os.getenv("LIBRARY_TTS_MODEL_SA", "google/gemini-3.1-flash-tts-preview"),
+    "en": os.getenv("ELEVENLABS_TTS_MODEL_EN", "eleven_multilingual_v2"),
+    "hi": os.getenv("ELEVENLABS_TTS_MODEL_HI", "eleven_multilingual_v2"),
+    "sa": os.getenv("ELEVENLABS_TTS_MODEL_SA", "eleven_multilingual_v2"),
 }
 TTS_VOICES = {
-    "en": os.getenv("LIBRARY_TTS_VOICE_EN", "Kore"),
-    "hi": os.getenv("LIBRARY_TTS_VOICE_HI", "Kore"),
-    "sa": os.getenv("LIBRARY_TTS_VOICE_SA", "Kore"),
+    "en": os.getenv("ELEVENLABS_VOICE_ID_EN", "JBFqnCBsd6RMkjVDRZzb"),
+    "hi": os.getenv("ELEVENLABS_VOICE_ID_HI", "JBFqnCBsd6RMkjVDRZzb"),
+    "sa": os.getenv("ELEVENLABS_VOICE_ID_SA", "JBFqnCBsd6RMkjVDRZzb"),
 }
-# Not every TTS model supports every response_format — Gemini's TTS models
-# only support "pcm" (OpenRouter rejects "mp3" for them with a 400), while
-# OpenAI's TTS models support "mp3" directly. This must match whatever
-# model each language above is actually using.
 TTS_FORMATS = {
-    "en": os.getenv("LIBRARY_TTS_FORMAT_EN", "pcm"),
-    "hi": os.getenv("LIBRARY_TTS_FORMAT_HI", "pcm"),
-    "sa": os.getenv("LIBRARY_TTS_FORMAT_SA", "pcm"),
+    "en": "mp3",
+    "hi": "mp3",
+    "sa": "mp3",
 }
+ELEVENLABS_OUTPUT_FORMAT = os.getenv("ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_128")
+ELEVENLABS_API_URL = os.getenv("ELEVENLABS_API_URL", "https://api.elevenlabs.io/v1")
 # Sample rate of the raw PCM Gemini's TTS returns (24kHz/16-bit mono), used
 # to wrap it in a playable WAV container — see _pcm_to_wav() below.
 TTS_PCM_SAMPLE_RATE = int(os.getenv("LIBRARY_TTS_PCM_SAMPLE_RATE", "24000"))
@@ -207,6 +206,18 @@ def ensure_library_schema() -> None:
         cur.execute("""
             ALTER TABLE library_book_pages
             ADD COLUMN IF NOT EXISTS audio_sa_url TEXT
+        """)
+        cur.execute("""
+            ALTER TABLE library_book_pages
+            ADD COLUMN IF NOT EXISTS audio_en_signature TEXT
+        """)
+        cur.execute("""
+            ALTER TABLE library_book_pages
+            ADD COLUMN IF NOT EXISTS audio_hi_signature TEXT
+        """)
+        cur.execute("""
+            ALTER TABLE library_book_pages
+            ADD COLUMN IF NOT EXISTS audio_sa_signature TEXT
         """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_library_pages_book
@@ -465,62 +476,41 @@ def _synthesize_gemini_pcm(text: str, model: str, voice: str) -> bytes:
 
 
 def _synthesize_tts_audio(text: str, model: str, voice: str, preferred_format: str) -> tuple[bytes, str, str]:
-    """Try a few OpenRouter TTS output formats because provider support varies.
+    """Generate browser-ready MP3 directly through ElevenLabs."""
+    api_key_value = os.getenv("ELEVENLABS_API_KEY", "").strip()
+    if not api_key_value:
+        raise RuntimeError("ELEVENLABS_API_KEY is unavailable to the backend.")
 
-    Timeouts are handled differently from format-rejection errors: a
-    timeout just means the provider was still generating (longer page text
-    takes longer), so the SAME (already-correct) format is retried with a
-    longer timeout instead of cycling through other formats — trying a
-    format the provider has already told us it doesn't support wastes a
-    round trip without addressing the actual problem.
-    """
-    if model.startswith("google/gemini"):
-        pcm = _synthesize_gemini_pcm(text, model, voice)
-        return _pcm_to_wav(pcm, sample_rate=TTS_PCM_SAMPLE_RATE), "wav", "audio/wav"
-
-    formats: list[str | None] = []
-    for candidate in (preferred_format, "mp3", "wav", "pcm", None):
-        if candidate not in formats:
-            formats.append(candidate)
-
-    last_error: Exception | None = None
-    for audio_format in formats:
-        # Give the preferred (correct) format more than one shot, with an
-        # increasing timeout, before falling through to a different format.
-        attempt_timeouts = (
-            [TTS_TIMEOUT_SECONDS, TTS_TIMEOUT_SECONDS * 2]
-            if audio_format == preferred_format
-            else [TTS_TIMEOUT_SECONDS]
-        )
-        for attempt_timeout in attempt_timeouts:
-            try:
-                audio = speech(
-                    input=text,
-                    model=model,
-                    voice=voice,
-                    response_format=audio_format,
-                    timeout=attempt_timeout,
-                )
-                if audio_format == "pcm":
-                    return _pcm_to_wav(audio, sample_rate=TTS_PCM_SAMPLE_RATE), "wav", "audio/wav"
-                if audio_format == "wav":
-                    return audio, "wav", "audio/wav"
-                return audio, "mp3", "audio/mpeg"
-            except Exception as exc:
-                last_error = exc
-                print(
-                    f"[library] TTS attempt failed "
-                    f"(model={model}, voice={voice}, format={audio_format or 'default'}, "
-                    f"timeout={attempt_timeout}s): {exc}"
-                )
-                # Only a genuine timeout is worth retrying with more time on
-                # this same format. Any other error (e.g. the provider
-                # explicitly rejecting the format) won't be fixed by waiting
-                # longer, so move on to the next candidate format instead.
-                if not isinstance(exc, httpx.TimeoutException):
-                    break
-
-    raise RuntimeError(str(last_error or "Voice reading is temporarily unavailable."))
+    response = httpx.post(
+        f"{ELEVENLABS_API_URL}/text-to-speech/{voice}",
+        params={"output_format": ELEVENLABS_OUTPUT_FORMAT},
+        headers={
+            "xi-api-key": api_key_value,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        },
+        json={
+            "text": text,
+            "model_id": model,
+            "voice_settings": {
+                "stability": 0.65,
+                "similarity_boost": 0.8,
+                "style": 0.15,
+                "use_speaker_boost": True,
+            },
+        },
+        timeout=TTS_TIMEOUT_SECONDS,
+        follow_redirects=True,
+    )
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text[:500]
+        raise RuntimeError(f"ElevenLabs TTS {response.status_code}: {detail}")
+    if not response.content:
+        raise RuntimeError("ElevenLabs returned an empty audio stream.")
+    return response.content, "mp3", "audio/mpeg"
 
 
 def _quick_page_count(pdf_path: Path) -> int:
@@ -646,6 +636,12 @@ def _translation_quality_issues(source: str, translated: str, code: str) -> list
         issues.append("empty translation")
     elif len(clean_source) >= 80 and len(clean_translation) < len(clean_source) * 0.45:
         issues.append("translation is substantially shorter than the source")
+    if (
+        len(clean_source) >= 80
+        and clean_translation
+        and SequenceMatcher(None, clean_source, clean_translation).ratio() > 0.86
+    ):
+        issues.append("target edition appears to copy the source instead of translating it")
     if translated.lower().count("[illegible]") > max(1, len(source) // 1500):
         issues.append("too many illegible fragments")
     if code in {"hi", "sa"} and _has_broken_indic_text(translated):
@@ -860,6 +856,10 @@ RULES:
 - Keep names, sacred terms, titles, and repeated terminology consistent throughout.
 - Transliterate proper names and sacred terms when literal translation would distort them.
 - Use correct native script, grammar, spelling, and punctuation.
+- The declared source-language label may be inaccurate. Identify the actual language from the text itself, but always produce the requested target language.
+- Never copy the source unchanged into a different-language edition.
+- When the target is Hindi, translate Sanskrit verses and sentences into natural modern Hindi. Preserve only sacred names, short mantras, and terms that truly must remain Sanskrit; provide their Hindi meaning in the same place.
+- When the target is Sanskrit, produce genuine grammatical Sanskrit rather than Hindi written in Devanagari.
 - For Hindi and Sanskrit, output normalized Unicode Devanagari with every matra attached to its proper base letter; never output dotted circles, orphan combining marks, mojibake, or replacement characters.
 - Verify line by line that every meaningful source word, verse, refrain, name, and number is represented in the translation.
 - Silently review for omissions, mistranslations, awkward wording, and mixed-language fragments.
@@ -1027,14 +1027,17 @@ def _translate_selected_languages(
     )
     target_codes = tuple(code for code in selected_codes if code != source_code)
     translated: dict[str, str] = {}
-    if target_codes:
-        chunks = _split_text(text)
-        merged: dict[str, list[str]] = {code: [] for code in target_codes}
-        for chunk in chunks:
-            result = _translate_chunk_all_languages(chunk, source_language, target_codes)
-            for code in target_codes:
-                merged[code].append(result[code])
-        translated.update({code: "\n\n".join(parts) for code, parts in merged.items()})
+    for code in target_codes:
+        translated[code] = "\n\n".join(
+            _translate_chunk(chunk, source_language, code)
+            for chunk in _split_text(text)
+        )
+        translated[code] = _quality_checked_translations(
+            text,
+            source_language,
+            {code: translated[code]},
+            (code,),
+        )[code]
     if source_code and source_code in selected_codes:
         translated[source_code] = text
     return {code: translated.get(code, "") for code in selected_codes}
@@ -1285,7 +1288,10 @@ def _process_book(
                             page_image_url=EXCLUDED.page_image_url,
                             audio_en_url=NULL,
                             audio_hi_url=NULL,
-                            audio_sa_url=NULL
+                            audio_sa_url=NULL,
+                            audio_en_signature=NULL,
+                            audio_hi_signature=NULL,
+                            audio_sa_signature=NULL
                     """, (
                         book_id, page_number, source_text, translated.get("en"),
                         translated.get("hi"), translated.get("sa"), image_url,
@@ -1618,6 +1624,11 @@ def search_book(slug: str, q: str = Query(..., min_length=2), language: str = "e
 
 
 AUDIO_COLUMNS = {"en": "audio_en_url", "hi": "audio_hi_url", "sa": "audio_sa_url"}
+AUDIO_SIGNATURE_COLUMNS = {
+    "en": "audio_en_signature",
+    "hi": "audio_hi_signature",
+    "sa": "audio_sa_signature",
+}
 
 
 @router.post("/api/books/tts")
@@ -1651,13 +1662,19 @@ def synthesize_speech(payload: dict = Body(...)):
     slug = (payload.get("slug") or "").strip()
     page_number = payload.get("page_number")
     audio_column = AUDIO_COLUMNS[language]
+    signature_column = AUDIO_SIGNATURE_COLUMNS[language]
+    model = TTS_MODELS[language]
+    voice = TTS_VOICES[language]
+    audio_format = TTS_FORMATS[language]
+    expected_signature = f"elevenlabs:{model}:{voice}:{ELEVENLABS_OUTPUT_FORMAT}"
     book_id = None
 
     if slug and isinstance(page_number, int):
         with get_db_cursor() as cur:
             cur.execute(
                 f"""
-                SELECT b.id AS book_id, p.{audio_column} AS audio_url
+                SELECT b.id AS book_id, p.{audio_column} AS audio_url,
+                       p.{signature_column} AS audio_signature
                 FROM library_books b
                 JOIN library_book_pages p ON p.book_id = b.id
                 WHERE b.slug=%s AND p.page_number=%s AND b.status='ready'
@@ -1667,7 +1684,7 @@ def synthesize_speech(payload: dict = Body(...)):
             row = cur.fetchone()
         if row:
             book_id = row["book_id"]
-            if row["audio_url"]:
+            if row["audio_url"] and row["audio_signature"] == expected_signature:
                 # Do not redirect this POST request to Cloudinary. A 307 keeps
                 # the POST method, while a Cloudinary delivery URL expects GET;
                 # browser fetch can also be blocked by the CDN's CORS response.
@@ -1710,10 +1727,6 @@ def synthesize_speech(payload: dict = Body(...)):
                         f"{slug} page {page_number} ({language}): {exc}"
                     )
 
-    model = TTS_MODELS[language]
-    voice = TTS_VOICES[language]
-    audio_format = TTS_FORMATS[language]  # preferred format; fallbacks are tried below
-
     try:
         audio, upload_format, media_type = _synthesize_tts_audio(text, model, voice, audio_format)
     except Exception as exc:
@@ -1729,8 +1742,9 @@ def synthesize_speech(payload: dict = Body(...)):
             audio_url = _upload_page_audio(audio, slug, page_number, language, upload_format)
             with get_db_cursor() as cur:
                 cur.execute(
-                    f"UPDATE library_book_pages SET {audio_column}=%s WHERE book_id=%s AND page_number=%s",
-                    (audio_url, book_id, page_number),
+                    f"UPDATE library_book_pages SET {audio_column}=%s, "
+                    f"{signature_column}=%s WHERE book_id=%s AND page_number=%s",
+                    (audio_url, expected_signature, book_id, page_number),
                 )
         except Exception:
             # Storing is a bonus, not a requirement — a Cloudinary/DB hiccup
