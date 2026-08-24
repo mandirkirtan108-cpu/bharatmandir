@@ -8,7 +8,6 @@ import { fetchBooks, fetchLibraryAudio } from '../services/sacredBooksApi';
 const FACETS = [
   { key: 'media', label: 'Type — Read / Listen', open: true },
   { key: 'category', label: 'Category', open: true },
-  { key: 'language', label: 'Language' },
 ];
 const languageLabel = code => ({ en: 'English', hi: 'Hindi', sa: 'Sanskrit' }[code] || code);
 const titleCase = value => String(value || 'Devotional').replace(/[-_]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
@@ -19,7 +18,7 @@ export default function SacredBooksPage() {
   const [books, setBooks] = useState([]);
   const [audio, setAudio] = useState([]);
   const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState({ media: [], category: [], language: [] });
+  const [filters, setFilters] = useState({ media: [], category: [] });
   const [view, setView] = useState('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentAudio, setCurrentAudio] = useState(null);
@@ -81,7 +80,7 @@ export default function SacredBooksPage() {
         <aside className={filtersOpen ? 'catalog-filters open' : 'catalog-filters'}>
           <button className="mobile-filter-toggle" onClick={() => setFiltersOpen(value => !value)}><SlidersHorizontal size={16} /> Filters</button>
           <div className="filter-content">
-            <div className="filter-heading"><b>Filter</b><button onClick={() => setFilters({ media: [], category: [], language: [] })}>Clear all</button></div>
+            <div className="filter-heading"><b>Filter</b><button onClick={() => setFilters({ media: [], category: [] })}>Clear all</button></div>
             {FACETS.map(facet => <details className="catalog-facet" open={facet.open} key={facet.key}>
               <summary>{facet.label}<ChevronRight size={13} /></summary>
               <div className="facet-options">{(facetOptions[facet.key] || []).map(([value, count]) => <label key={value}><input type="checkbox" checked={filters[facet.key].includes(value)} onChange={() => toggleFilter(facet.key, value)} /><span>{value}</span><small>{count}</small></label>)}</div>
@@ -106,7 +105,7 @@ export default function SacredBooksPage() {
 
 function CatalogCard({ item, active, onOpen }) {
   const isAudio = item.media === 'Audio';
-  return <article className={`catalog-card ${isAudio ? 'audio' : ''} ${active ? 'playing' : ''}`} onClick={() => onOpen(item)}><div className="card-top"><span>{item.category}</span><em>{isAudio ? <><Play size={9} /> Listen</> : 'Read'}</em></div><div className="card-symbol">{isAudio ? <Headphones size={22} /> : <BookOpen size={22} />}</div><h2>{item.title}</h2><small className="creator">{item.creator}</small><div className="card-foot"><span>{item.language || 'Original'}</span>{!isAudio && <span>{item.page_count || 0} pages</span>}{isAudio && <button disabled={!item.audio_url}><Play size={10} /> Play</button>}</div></article>;
+  return <article className={`catalog-card ${isAudio ? 'audio' : ''} ${active ? 'playing' : ''}`} onClick={() => onOpen(item)}><div className="card-top"><span>{item.category}</span><em>{isAudio ? <><Play size={9} /> Listen</> : 'Read'}</em></div><div className="card-symbol">{isAudio ? <Headphones size={22} /> : <BookOpen size={22} />}</div><h2>{item.title}</h2><small className="creator">{item.creator}</small><div className="card-foot">{!isAudio && <span>{item.page_count || 0} pages</span>}{isAudio && <button disabled={!item.audio_url}><Play size={10} /> Play</button>}</div></article>;
 }
 
 const catalogStyles = `
