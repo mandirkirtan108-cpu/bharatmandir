@@ -602,7 +602,78 @@ def _extraction_looks_valid(text: str, source_language: str) -> bool:
     devanagari_chars = sum(
         1 for ch in stripped if _DEVANAGARI_RANGE[0] <= ord(ch) <= _DEVANAGARI_RANGE[1]
     )
-    return (devanagari_chars / len(stripped)) > 0.3
+    return (
+        (devanagari_chars / len(stripped)) > 0.3
+        and not _has_broken_indic_text(text)
+    )
+
+
+def _is_devanagari_mark(character: str) -> bool:
+    codepoint = ord(character)
+    return (
+        0x093A <= codepoint <= 0x094F
+        or 0x0951 <= codepoint <= 0x0957
+        or 0x0962 <= codepoint <= 0x0963
+    )
+
+
+def _has_broken_indic_text(text: str) -> bool:
+    """Detect dotted-circle-producing orphan matras and corrupted Unicode."""
+    if "\u25cc" in text or "�" in text:
+        return True
+    orphan_marks = 0
+    total_marks = 0
+    previous = ""
+    for character in text:
+        if _is_devanagari_mark(character):
+            total_marks += 1
+            previous_codepoint = ord(previous) if previous else 0
+            previous_is_devanagari = 0x0900 <= previous_codepoint <= 0x097F
+            if not previous_is_devanagari:
+                orphan_marks += 1
+        if not character.isspace():
+            previous = character
+    return orphan_marks > 0 and (
+        orphan_marks >= 2 or orphan_marks / max(1, total_marks) > 0.01
+    )
+
+
+def _translation_quality_issues(source: str, translated: str, code: str) -> list[str]:
+    issues: list[str] = []
+    clean_source = re.sub(r"\s+", "", source)
+    clean_translation = re.sub(r"\s+", "", translated)
+    if not clean_translation:
+        issues.append("empty translation")
+    elif len(clean_source) >= 80 and len(clean_translation) < len(clean_source) * 0.45:
+        issues.append("translation is substantially shorter than the source")
+    if translated.lower().count("[illegible]") > max(1, len(source) // 1500):
+        issues.append("too many illegible fragments")
+    if code in {"hi", "sa"} and _has_broken_indic_text(translated):
+        issues.append("broken Devanagari matras or orphan combining marks")
+    return issues
+
+
+def _quality_checked_translations(
+    source: str,
+    source_language: str,
+    translations: dict[str, str],
+    target_codes: tuple[str, ...],
+) -> dict[str, str]:
+    checked: dict[str, str] = {}
+    for code in target_codes:
+        translated = str(translations.get(code) or "").strip()
+        issues = _translation_quality_issues(source, translated, code)
+        if issues:
+            print(f"[library] {code} quality check failed ({', '.join(issues)}); retrying")
+            translated = _translate_chunk(source, source_language, code)
+            remaining_issues = _translation_quality_issues(source, translated, code)
+            if remaining_issues:
+                raise RuntimeError(
+                    f"{TARGET_LANGUAGES[code]} translation failed quality review: "
+                    f"{', '.join(remaining_issues)}"
+                )
+        checked[code] = translated
+    return checked
 
 
 def _render_page_images(pdf_path: Path, book_id: int | None = None) -> list[bytes | None]:
@@ -789,6 +860,8 @@ RULES:
 - Keep names, sacred terms, titles, and repeated terminology consistent throughout.
 - Transliterate proper names and sacred terms when literal translation would distort them.
 - Use correct native script, grammar, spelling, and punctuation.
+- For Hindi and Sanskrit, output normalized Unicode Devanagari with every matra attached to its proper base letter; never output dotted circles, orphan combining marks, mojibake, or replacement characters.
+- Verify line by line that every meaningful source word, verse, refrain, name, and number is represented in the translation.
 - Silently review for omissions, mistranslations, awkward wording, and mixed-language fragments.
 - Mark only genuinely unreadable fragments as [illegible].
 - Return only translated document text without a preface or code fence.
@@ -864,6 +937,8 @@ RULES:
 - Keep names, sacred terms, titles, and repeated terminology consistent in every edition.
 - Transliterate proper names and sacred terms when literal translation would distort them.
 - Use correct native script, grammar, spelling, and punctuation for each language.
+- For Hindi and Sanskrit, output normalized Unicode Devanagari with every matra attached to its proper base letter; never output dotted circles, orphan combining marks, mojibake, or replacement characters.
+- Compare line by line and ensure every meaningful source word, verse, refrain, name, and number appears in each requested edition.
 - Silently review every edition for omissions, mistranslations, awkward wording, and mixed-language fragments.
 - Mark only genuinely unreadable fragments as [illegible].
 - Respond with ONLY a single JSON object, no prose or code fence, in exactly this shape:
@@ -917,11 +992,26 @@ SOURCE TEXT:
         repaired = _extract_json_object(raw)
         if repaired is not None:
             print("[library] recovered JSON object from surrounding text — no per-language fallback needed")
-            return {code: str(repaired.get(code) or "") for code in target_codes}
+            return _quality_checked_translations(
+                text,
+                source_language,
+                {code: str(repaired.get(code) or "") for code in target_codes},
+                target_codes,
+            )
 
         print("[library] combined translation JSON parse failed for one chunk — falling back per-language")
-        return {code: _translate_chunk(text, source_language, code) for code in target_codes}
-    return {code: str(parsed.get(code) or "") for code in target_codes}
+        return _quality_checked_translations(
+            text,
+            source_language,
+            {code: _translate_chunk(text, source_language, code) for code in target_codes},
+            target_codes,
+        )
+    return _quality_checked_translations(
+        text,
+        source_language,
+        {code: str(parsed.get(code) or "") for code in target_codes},
+        target_codes,
+    )
 
 
 def _translate_selected_languages(
@@ -1084,12 +1174,17 @@ def _process_book(
                 page_number = index + 1
                 try:
                     text = _ocr_page_image(page_images[index], source_language)
-                    if len(text.strip()) < OCR_MIN_TEXT_CHARS:
+                    if (
+                        len(text.strip()) < OCR_MIN_TEXT_CHARS
+                        or not _extraction_looks_valid(text, source_language)
+                    ):
                         retry_image = _render_single_page(pdf_path, index, OCR_RETRY_DPI)
                         if retry_image:
                             text = _ocr_page_image(
                                 _enhance_scan(retry_image), source_language
                             )
+                    if not _extraction_looks_valid(text, source_language):
+                        text = ""
                     print(f"[library] book {book_id}: OCR page {page_number}/{len(pages)} — {len(text)} chars")
                     return index, text
                 except Exception as exc:
@@ -1111,8 +1206,22 @@ def _process_book(
                 jobs = [executor.submit(_ocr_one, index) for index in needs_ocr]
                 for job in as_completed(jobs):
                     index, text = job.result()
-                    if text:
-                        pages[index] = text
+                    pages[index] = text
+
+        unusable_pages = [
+            index + 1 for index, text in enumerate(pages)
+            if (
+                len(text.strip()) < OCR_MIN_TEXT_CHARS
+                or not _extraction_looks_valid(text, source_language)
+            )
+        ]
+        if unusable_pages:
+            preview = ", ".join(map(str, unusable_pages[:12]))
+            suffix = "…" if len(unusable_pages) > 12 else ""
+            raise ValueError(
+                "Some pages could not be read clearly enough for complete translation "
+                f"(pages {preview}{suffix}). Please upload a clearer PDF."
+            )
 
         if sum(map(len, pages)) < OCR_MIN_TEXT_CHARS:
             raise ValueError(
