@@ -82,7 +82,14 @@ AI_MAX_ATTEMPTS = max(1, min(int(os.getenv("LIBRARY_AI_MAX_ATTEMPTS", "3")), 5))
 # Qwen can otherwise put a long "Thinking Process" in the normal content.
 # Disabling it makes OCR/translation faster, cheaper, and keeps JSON clean.
 LIBRARY_DISABLE_REASONING = os.getenv("LIBRARY_DISABLE_REASONING", "true").strip().lower() in {"1", "true", "yes"}
-LIBRARY_REASONING = {"effort": "none", "exclude": True} if LIBRARY_DISABLE_REASONING else None
+# OCR does not benefit from thinking and Qwen supports disabling it. Gemini Pro
+# translation endpoints now require reasoning, so translation must use a real
+# effort level even when LIBRARY_DISABLE_REASONING remains enabled for OCR.
+OCR_REASONING = {"effort": "none", "exclude": True} if LIBRARY_DISABLE_REASONING else None
+TRANSLATION_REASONING = {
+    "effort": os.getenv("LIBRARY_TRANSLATION_REASONING_EFFORT", "low").strip() or "low",
+    "exclude": True,
+}
 # Minimum extracted-text length below which a page is treated as having no
 # usable text layer (i.e. a scanned image) and is sent through OCR instead.
 OCR_MIN_TEXT_CHARS = max(1, int(os.getenv("LIBRARY_OCR_MIN_TEXT_CHARS", "20")))
@@ -838,7 +845,7 @@ def _ocr_page_with_openrouter(image_bytes: bytes, source_language: str) -> str:
             }],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
-            reasoning=LIBRARY_REASONING,
+            reasoning=OCR_REASONING,
         )
     return content(response)
 
@@ -903,7 +910,7 @@ SOURCE TEXT:
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
-            reasoning=LIBRARY_REASONING,
+            reasoning=TRANSLATION_REASONING,
         )
     return content(response)
 
@@ -1000,7 +1007,7 @@ SOURCE TEXT:
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
             max_tokens=max_tokens,
-            reasoning=LIBRARY_REASONING,
+            reasoning=TRANSLATION_REASONING,
         )
 
     raw = content(response)
@@ -1110,7 +1117,7 @@ PAGES:
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
-            reasoning=LIBRARY_REASONING,
+            reasoning=TRANSLATION_REASONING,
         )
     raw = content(response)
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
