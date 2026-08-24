@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, Loader2, Music2, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, BookOpen, LayoutDashboard, Loader2, Music2, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
+import Navbar from '../components/Navbar';
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const CATEGORIES = ['bhajan', 'kirtan', 'chalisa', 'mantra', 'aarti', 'other'];
@@ -108,7 +110,21 @@ export default function AdminLibraryPage() {
   const update = (setForm, key) => (event) => setForm(form => ({ ...form, [key]: event.target.type === 'file' ? event.target.files?.[0] || null : event.target.value }));
   const isBooks = tab === 'books';
 
-  return <main style={{ maxWidth: 1120, margin: '0 auto', padding: '34px 20px 70px', color: '#40210f' }}>
+  return <div style={{ minHeight: '100vh', background: '#fdf8ef' }}>
+    <Navbar />
+    <nav aria-label="Admin library navigation" style={adminNavStyle}>
+      <div style={adminNavInnerStyle}>
+        <Link to="/admin/panel" style={adminBackStyle}>
+          <ArrowLeft size={17} />
+          <span>Back to Admin Panel</span>
+        </Link>
+        <div style={adminNavTitleStyle}>
+          <LayoutDashboard size={16} />
+          <span>Admin Library</span>
+        </div>
+      </div>
+    </nav>
+    <main style={{ maxWidth: 1120, margin: '0 auto', padding: '34px 20px 70px', color: '#40210f' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 26 }}>
       <div><p style={{ color: '#a05a21', fontWeight: 700, margin: 0 }}>ADMIN LIBRARY</p><h1 style={{ margin: '5px 0 0', fontFamily: 'var(--font-display)', fontSize: 32 }}>Sacred library publishing</h1></div>
       <button onClick={load} disabled={loading} style={{ border: '1px solid #dfc9a8', background: '#fffaf0', borderRadius: 99, padding: '10px 16px', display: 'inline-flex', gap: 7, alignItems: 'center', cursor: 'pointer', color: '#704324' }}><RefreshCw size={16} /> Refresh</button>
@@ -164,7 +180,8 @@ export default function AdminLibraryPage() {
       </UploadPanel>
       <AudioList audio={audio} loading={loading} onToggle={toggleAudio} onRemove={removeAudio} />
     </>}
-  </main>;
+    </main>
+  </div>;
 }
 
 function tabStyle(active) { return { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 16px', border: 0, borderBottom: active ? '3px solid #d66213' : '3px solid transparent', background: 'transparent', color: active ? '#8d3d12' : '#806450', fontWeight: 700, cursor: 'pointer' }; }
@@ -215,3 +232,7 @@ const rowStyle = { display: 'flex', alignItems: 'flex-start', gap: 13, padding: 
 const small = { fontSize: 12, color: '#806450', marginTop: 4 };
 const deleteStyle = { border: 0, background: 'transparent', color: '#b72e18', cursor: 'pointer', padding: 7 };
 const publishStyle = (published) => ({ border: `1px solid ${published ? '#6aaa70' : '#dfc9a8'}`, background: published ? '#edfaef' : '#fff', color: published ? '#25723a' : '#806450', borderRadius: 99, padding: '7px 10px', fontWeight: 700, cursor: 'pointer' });
+const adminNavStyle = { position: 'sticky', top: 0, zIndex: 100, background: 'linear-gradient(135deg,#291004,#542509)', borderBottom: '1px solid #8d4a1f', boxShadow: '0 5px 18px rgba(62,25,5,.18)' };
+const adminNavInnerStyle = { maxWidth: 1120, minHeight: 54, margin: '0 auto', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 };
+const adminBackStyle = { display: 'inline-flex', alignItems: 'center', gap: 8, color: '#fff5df', textDecoration: 'none', border: '1px solid rgba(255,225,174,.28)', background: 'rgba(255,255,255,.08)', padding: '8px 13px', borderRadius: 99, fontSize: 13, fontWeight: 750 };
+const adminNavTitleStyle = { display: 'inline-flex', alignItems: 'center', gap: 7, color: '#f4be68', fontSize: 13, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' };
