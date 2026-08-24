@@ -106,10 +106,13 @@ export default function SacredBookReaderPage() {
   useEffect(() => {
     fetchBook(slug).then(data => {
       setBook(data);
+      const available = data.available_languages?.length
+        ? data.available_languages
+        : data.target_languages || [];
       setLanguage(current => (
-        current === 'original' || data.target_languages?.includes(current)
+        current === 'original' || available.includes(current)
           ? current
-          : data.target_languages?.[0] || 'original'
+          : available[0] || 'original'
       ));
     }).catch(e => setError(e.message));
     fetchBookSections(slug).then(r => setSections(r.sections || [])).catch(() => setSections([]));
@@ -118,7 +121,9 @@ export default function SacredBookReaderPage() {
 
   useEffect(() => {
     if (!book) return;
-    const available = book.target_languages || [];
+    const available = book.available_languages?.length
+      ? book.available_languages
+      : book.target_languages || [];
     if (language !== 'original' && !available.includes(language)) {
       setLanguage(available[0] || 'original');
       setBatch(1);
@@ -501,7 +506,10 @@ export default function SacredBookReaderPage() {
         <nav className="tab-rail" aria-label="Choose translation">
           <Languages size={15} className="tab-rail-icon" />
           {LANGUAGES.filter(([code]) => (
-            code === 'original' || book?.target_languages?.includes(code)
+            code === 'original'
+            || (book?.available_languages?.length
+              ? book.available_languages.includes(code)
+              : book?.target_languages?.includes(code))
           )).map(([code, label]) => (
             <button
               key={code}
