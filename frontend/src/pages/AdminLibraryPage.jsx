@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, LayoutDashboard, Loader2, Music2, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
-import Navbar from '../components/Navbar';
+import { Link, useNavigate } from 'react-router-dom';
+import { BookOpen, CalendarPlus, FileText, LayoutDashboard, Loader2, LogOut, Music2, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
+import { useLang } from '../LangContext';
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const CATEGORIES = ['bhajan', 'kirtan', 'chalisa', 'mantra', 'aarti', 'other'];
@@ -29,6 +29,8 @@ const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '11px 13px
 const labelStyle = { display: 'block', marginBottom: 6, color: '#6f4729', fontWeight: 700, fontSize: 13 };
 
 export default function AdminLibraryPage() {
+  const navigate = useNavigate();
+  const { lang, changeLang } = useLang();
   const [tab, setTab] = useState('books');
   const [books, setBooks] = useState([]);
   const [audio, setAudio] = useState([]);
@@ -109,21 +111,21 @@ export default function AdminLibraryPage() {
 
   const update = (setForm, key) => (event) => setForm(form => ({ ...form, [key]: event.target.type === 'file' ? event.target.files?.[0] || null : event.target.value }));
   const isBooks = tab === 'books';
+  const handleLogout = () => {
+    sessionStorage.removeItem('bm_access_token');
+    sessionStorage.removeItem('bm_refresh_token');
+    sessionStorage.removeItem('bm_admin_user');
+    navigate('/admin/login', { replace: true });
+  };
 
   return <div style={{ minHeight: '100vh', background: '#fdf8ef' }}>
-    <Navbar />
-    <nav aria-label="Admin library navigation" style={adminNavStyle}>
-      <div style={adminNavInnerStyle}>
-        <Link to="/admin/panel" style={adminBackStyle}>
-          <ArrowLeft size={17} />
-          <span>Back to Admin Panel</span>
-        </Link>
-        <div style={adminNavTitleStyle}>
-          <LayoutDashboard size={16} />
-          <span>Admin Library</span>
-        </div>
-      </div>
-    </nav>
+    <AdminLibraryNavbar
+      lang={lang}
+      changeLang={changeLang}
+      onRefresh={load}
+      refreshing={loading}
+      onLogout={handleLogout}
+    />
     <main style={{ maxWidth: 1120, margin: '0 auto', padding: '34px 20px 70px', color: '#40210f' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 26 }}>
       <div><p style={{ color: '#a05a21', fontWeight: 700, margin: 0 }}>ADMIN LIBRARY</p><h1 style={{ margin: '5px 0 0', fontFamily: 'var(--font-display)', fontSize: 32 }}>Sacred library publishing</h1></div>
@@ -184,6 +186,45 @@ export default function AdminLibraryPage() {
   </div>;
 }
 
+function AdminLibraryNavbar({ lang, changeLang, onRefresh, refreshing, onLogout }) {
+  let admin = {};
+  try { admin = JSON.parse(sessionStorage.getItem('bm_admin_user') || '{}'); } catch { admin = {}; }
+  const initial = (admin.full_name || admin.name || admin.email || 'A').trim()[0]?.toUpperCase() || 'A';
+  const ticker = '· HAR HAR MAHADEV · JAI MATA DI · JAI GANESH · HARE KRISHNA HARE RAM · 🕉 OM NAMAH SHIVAYA · JAI SHRI RAM · ';
+  const navItem = (active = false) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 50,
+    color: active ? '#fff' : '#673816', background: active ? 'linear-gradient(135deg,#e66a0b,#b84405)' : 'transparent',
+    boxShadow: active ? '0 6px 17px rgba(184,68,5,.24)' : 'none', textDecoration: 'none',
+    fontWeight: 750, whiteSpace: 'nowrap', fontSize: 14,
+  });
+
+  return <>
+    <div style={{ overflow: 'hidden', background: 'linear-gradient(90deg,#a93d04,#7c2604)', color: '#fbe5d1', height: 36, display: 'flex', alignItems: 'center' }}>
+      <div style={{ whiteSpace: 'nowrap', fontWeight: 700, letterSpacing: '.13em', fontSize: 12 }}>{ticker.repeat(3)}</div>
+    </div>
+    <nav aria-label="Admin navigation" style={{ background: '#fff', borderBottom: '1px solid #eadcc8', boxShadow: '0 4px 18px rgba(69,31,8,.08)' }}>
+      <div style={{ maxWidth: 1650, margin: '0 auto', padding: '14px 28px', display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+        <Link to="/admin/panel" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', marginRight: 22 }}>
+          <span style={{ fontSize: 34, lineHeight: 1 }}>🛕</span>
+          <span><strong style={{ display: 'block', color: '#c65412', fontFamily: 'var(--font-display)', fontSize: 21 }}>BharatMandir</strong><small style={{ display: 'block', color: '#a76c48' }}>Temple Discovery Platform</small></span>
+        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flex: '1 1 620px', flexWrap: 'wrap' }}>
+          <Link to="/admin/panel" style={navItem()}><LayoutDashboard size={18} /> Dashboard</Link>
+          <Link to="/admin/add-festival" style={navItem()}><CalendarPlus size={18} /> Add Festival</Link>
+          <Link to="/admin/add-blog" style={navItem()}><FileText size={18} /> Add Blog</Link>
+          <Link to="/admin/library" style={navItem(true)}><BookOpen size={18} /> Library</Link>
+          <button onClick={onRefresh} disabled={refreshing} style={{ ...navItem(), border: '1px solid #e6cbae', cursor: refreshing ? 'wait' : 'pointer', fontFamily: 'inherit' }}><RefreshCw className={refreshing ? 'spin' : ''} size={17} /> Refresh</button>
+          <button onClick={onLogout} style={{ ...navItem(), border: '1px solid #f1b8b8', color: '#c62828', background: '#fffafa', cursor: 'pointer', fontFamily: 'inherit' }}><LogOut size={17} /> Logout</button>
+        </div>
+        <select aria-label="Language" value={lang} onChange={(event) => changeLang(event.target.value)} style={{ border: '1px solid #e6d2b5', borderRadius: 99, padding: '9px 13px', background: '#fffdf9', color: '#4d2a12', fontWeight: 650 }}>
+          <option value="en">🌐 English</option><option value="hi">🇮🇳 हिंदी</option><option value="mr">🟠 मराठी</option><option value="ta">🌺 தமிழ்</option>
+        </select>
+        <div title={admin.full_name || admin.email || 'Administrator'} style={{ width: 46, height: 46, borderRadius: '50%', background: 'linear-gradient(135deg,#e87513,#ad4006)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 800, boxShadow: '0 5px 14px rgba(173,64,6,.25)' }}>{initial}</div>
+      </div>
+    </nav>
+  </>;
+}
+
 function tabStyle(active) { return { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 16px', border: 0, borderBottom: active ? '3px solid #d66213' : '3px solid transparent', background: 'transparent', color: active ? '#8d3d12' : '#806450', fontWeight: 700, cursor: 'pointer' }; }
 function Notice({ color, children }) { return <div style={{ padding: '12px 15px', borderRadius: 10, color, background: `${color}12`, border: `1px solid ${color}40`, marginBottom: 18 }}>{children}</div>; }
 function Field({ label, children, full }) { return <label style={{ gridColumn: full ? '1 / -1' : undefined, display: 'block' }}><span style={labelStyle}>{label}</span>{children}</label>; }
@@ -232,7 +273,3 @@ const rowStyle = { display: 'flex', alignItems: 'flex-start', gap: 13, padding: 
 const small = { fontSize: 12, color: '#806450', marginTop: 4 };
 const deleteStyle = { border: 0, background: 'transparent', color: '#b72e18', cursor: 'pointer', padding: 7 };
 const publishStyle = (published) => ({ border: `1px solid ${published ? '#6aaa70' : '#dfc9a8'}`, background: published ? '#edfaef' : '#fff', color: published ? '#25723a' : '#806450', borderRadius: 99, padding: '7px 10px', fontWeight: 700, cursor: 'pointer' });
-const adminNavStyle = { position: 'sticky', top: 0, zIndex: 100, background: 'linear-gradient(135deg,#291004,#542509)', borderBottom: '1px solid #8d4a1f', boxShadow: '0 5px 18px rgba(62,25,5,.18)' };
-const adminNavInnerStyle = { maxWidth: 1120, minHeight: 54, margin: '0 auto', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 };
-const adminBackStyle = { display: 'inline-flex', alignItems: 'center', gap: 8, color: '#fff5df', textDecoration: 'none', border: '1px solid rgba(255,225,174,.28)', background: 'rgba(255,255,255,.08)', padding: '8px 13px', borderRadius: 99, fontSize: 13, fontWeight: 750 };
-const adminNavTitleStyle = { display: 'inline-flex', alignItems: 'center', gap: 7, color: '#f4be68', fontSize: 13, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' };
