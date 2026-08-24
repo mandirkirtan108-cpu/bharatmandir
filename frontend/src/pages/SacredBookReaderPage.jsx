@@ -96,6 +96,7 @@ export default function SacredBookReaderPage() {
   const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef(null);
   const audioUrlRef = useRef(null);
+  const voiceRequestRef = useRef(0);
 
   // Swipe + scroll-hint plumbing
   const touchStartX = useRef(null);
@@ -310,10 +311,12 @@ export default function SacredBookReaderPage() {
 
   // ── Voice reading ────────────────────────────────────────────────────────
   const stopSpeaking = () => {
+    voiceRequestRef.current += 1;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.onended = null;
       audioRef.current.onerror = null;
+      audioRef.current = null;
     }
     if (audioUrlRef.current) {
       URL.revokeObjectURL(audioUrlRef.current);
@@ -330,9 +333,11 @@ export default function SacredBookReaderPage() {
   const speak = async () => {
     if (!current || showingScan || !displayText.trim() || voiceLoading) return;
     stopSpeaking();
+    const requestId = voiceRequestRef.current;
     setVoiceLoading(true);
     try {
       const blob = await synthesizeSpeech(displayText, language === 'original' ? 'en' : language, slug, current.page_number);
+      if (requestId !== voiceRequestRef.current) return;
       const url = URL.createObjectURL(blob);
       audioUrlRef.current = url;
       const audio = new Audio(url);
@@ -357,12 +362,18 @@ export default function SacredBookReaderPage() {
       audio.onerror = () => { setSpeaking(false); setPaused(false); setError('Voice reading failed. Please try again.'); };
       audioRef.current = audio;
       await audio.play();
+      if (requestId !== voiceRequestRef.current) {
+        audio.pause();
+        return;
+      }
       setSpeaking(true);
       setPaused(false);
     } catch (e) {
-      setError(e.message || 'Voice reading failed. Please try again.');
+      if (requestId === voiceRequestRef.current) {
+        setError(e.message || 'Voice reading failed. Please try again.');
+      }
     } finally {
-      setVoiceLoading(false);
+      if (requestId === voiceRequestRef.current) setVoiceLoading(false);
     }
   };
 
@@ -411,7 +422,7 @@ export default function SacredBookReaderPage() {
 
       <div className="reader-inner">
         <header className="reader-toolbar">
-          <button className="back" onClick={() => navigate('/sacred-books')}><X size={16} /> Close book</button>
+          <button className="back" onClick={() => { stopSpeaking(); navigate('/sacred-books'); }}><X size={16} /> Close book</button>
           <div className="titleblock">
             <h1>{book?.title || 'Almost ready…'}</h1>
             {book?.author && <p>{book.author}</p>}
