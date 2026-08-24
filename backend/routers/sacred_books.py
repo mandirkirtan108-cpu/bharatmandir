@@ -58,10 +58,21 @@ TRANSLATION_MODEL = os.getenv(
     "LIBRARY_TRANSLATION_MODEL",
     "google/gemini-3.1-pro-preview",
 )
+TRANSLATION_FALLBACK_MODELS = tuple(
+    model.strip()
+    for model in os.getenv(
+        "LIBRARY_TRANSLATION_FALLBACK_MODELS",
+        "google/gemini-2.5-pro,qwen/qwen3.5-flash-02-23",
+    ).split(",")
+    if model.strip() and model.strip() != TRANSLATION_MODEL
+)
 OCR_MODEL = os.getenv("LIBRARY_OCR_MODEL", TRANSLATION_MODEL)
 # OpenRouter vision OCR is used only for pages without usable embedded text.
 # It is more reliable than local Tesseract for low-quality devotional scans.
-TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "4")), 8))
+# Translation providers commonly rate-limit bursts. Keeping this deliberately
+# small is faster in practice than launching every page at once and retrying a
+# wall of 429/provider errors.
+TRANSLATION_WORKERS = max(1, min(int(os.getenv("LIBRARY_TRANSLATION_WORKERS", "2")), 3))
 OCR_WORKERS = max(1, min(int(os.getenv("LIBRARY_OCR_WORKERS", "2")), 4))
 TRANSLATION_TIMEOUT = max(30, int(os.getenv("LIBRARY_TRANSLATION_TIMEOUT_SECONDS", "180")))
 TRANSLATION_CHUNK_CHARS = max(4000, int(os.getenv("LIBRARY_TRANSLATION_CHUNK_CHARS", "12000")))
@@ -71,7 +82,14 @@ AI_MAX_ATTEMPTS = max(1, min(int(os.getenv("LIBRARY_AI_MAX_ATTEMPTS", "3")), 5))
 # Qwen can otherwise put a long "Thinking Process" in the normal content.
 # Disabling it makes OCR/translation faster, cheaper, and keeps JSON clean.
 LIBRARY_DISABLE_REASONING = os.getenv("LIBRARY_DISABLE_REASONING", "true").strip().lower() in {"1", "true", "yes"}
-LIBRARY_REASONING = {"effort": "none", "exclude": True} if LIBRARY_DISABLE_REASONING else None
+# OCR does not benefit from thinking and Qwen supports disabling it. Gemini Pro
+# translation endpoints now require reasoning, so translation must use a real
+# effort level even when LIBRARY_DISABLE_REASONING remains enabled for OCR.
+OCR_REASONING = {"effort": "none", "exclude": True} if LIBRARY_DISABLE_REASONING else None
+TRANSLATION_REASONING = {
+    "effort": os.getenv("LIBRARY_TRANSLATION_REASONING_EFFORT", "low").strip() or "low",
+    "exclude": True,
+}
 # Minimum extracted-text length below which a page is treated as having no
 # usable text layer (i.e. a scanned image) and is sent through OCR instead.
 OCR_MIN_TEXT_CHARS = max(1, int(os.getenv("LIBRARY_OCR_MIN_TEXT_CHARS", "20")))
@@ -752,19 +770,36 @@ def _enhance_scan(image_bytes: bytes) -> bytes:
 
 def _chat_with_retries(**kwargs) -> dict:
     """Retry temporary, empty, and malformed OpenRouter responses."""
+    fallback_models = tuple(kwargs.pop("fallback_models", ()))
+    primary_model = str(kwargs.get("model") or "")
+    models = tuple(dict.fromkeys(model for model in (primary_model, *fallback_models) if model))
     last_error: Exception | None = None
-    for attempt in range(1, AI_MAX_ATTEMPTS + 1):
-        try:
-            response = chat(**kwargs)
-            if not content(response):
-                raise RuntimeError("The language service returned an empty response.")
-            return response
-        except Exception as exc:
-            last_error = exc
-            if attempt < AI_MAX_ATTEMPTS:
-                time.sleep(min(2 ** (attempt - 1), 4))
+    for model_index, model in enumerate(models):
+        model_kwargs = {**kwargs, "model": model}
+        for attempt in range(1, AI_MAX_ATTEMPTS + 1):
+            try:
+                response = chat(**model_kwargs)
+                if not content(response):
+                    raise RuntimeError("The language service returned an empty response.")
+                if model != primary_model:
+                    print(f"[library] translation recovered with fallback model {model}")
+                return response
+            except Exception as exc:
+                last_error = exc
+                # Log the provider's real response; the previous generic wrapper
+                # made invalid-model, credit and rate-limit failures indistinguishable.
+                detail = re.sub(r"\s+", " ", str(exc)).strip()[:700]
+                print(
+                    f"[library] OpenRouter attempt {attempt}/{AI_MAX_ATTEMPTS} "
+                    f"failed for {model}: {type(exc).__name__}: {detail}"
+                )
+                if attempt < AI_MAX_ATTEMPTS:
+                    time.sleep(min(2 ** (attempt - 1), 4))
+        if model_index < len(models) - 1:
+            print(f"[library] switching translation model from {model} to {models[model_index + 1]}")
     raise RuntimeError(
-        "The language service is temporarily unavailable after several attempts."
+        f"The language service rejected every configured model ({', '.join(models)}). "
+        "Check the OpenRouter logs, API credits, and model access."
     ) from last_error
 
 
@@ -810,7 +845,7 @@ def _ocr_page_with_openrouter(image_bytes: bytes, source_language: str) -> str:
             }],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
-            reasoning=LIBRARY_REASONING,
+            reasoning=OCR_REASONING,
         )
     return content(response)
 
@@ -871,10 +906,11 @@ SOURCE TEXT:
     with _translation_slots:
         response = _chat_with_retries(
             model=TRANSLATION_MODEL,
+            fallback_models=TRANSLATION_FALLBACK_MODELS,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
-            reasoning=LIBRARY_REASONING,
+            reasoning=TRANSLATION_REASONING,
         )
     return content(response)
 
@@ -966,11 +1002,12 @@ SOURCE TEXT:
     with _translation_slots:
         response = _chat_with_retries(
             model=TRANSLATION_MODEL,
+            fallback_models=TRANSLATION_FALLBACK_MODELS,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
             max_tokens=max_tokens,
-            reasoning=LIBRARY_REASONING,
+            reasoning=TRANSLATION_REASONING,
         )
 
     raw = content(response)
@@ -1080,7 +1117,7 @@ PAGES:
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             timeout=TRANSLATION_TIMEOUT,
-            reasoning=LIBRARY_REASONING,
+            reasoning=TRANSLATION_REASONING,
         )
     raw = content(response)
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
@@ -1239,7 +1276,7 @@ def _process_book(
             """, (len(pages), book_id))
 
         def translate_page(page_number: int, source_text: str, image_bytes: bytes | None):
-            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for combined translation")
+            print(f"[library] book {book_id}: page {page_number} — calling OpenRouter ({TRANSLATION_MODEL}) for selected-language translation")
             page_started = datetime.utcnow()
             try:
                 translated = _translate_selected_languages(
