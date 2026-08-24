@@ -254,7 +254,6 @@ export default function PanchangCalendar() {
               const mergedDay = { ...day, festivals: mergeFestivals(day?.festivals || [], additionalFestivalsByKey.get(key) || []) };
               const { named, phaseBadges } = splitDayFestivals(mergedDay);
               const primaryNamed = named[0];
-              const extraNamedCount = named.length - 1;
               const hasHighlight = Boolean(primaryNamed) || phaseBadges.length > 0;
 
               return (
@@ -295,19 +294,20 @@ export default function PanchangCalendar() {
                   {tithi && <span className="panchang-day-tithi" style={smallCellTextStyle}>{tithi}</span>}
                   {paksha && <span className="panchang-day-paksha" style={{ ...smallCellTextStyle, color: '#9A7150' }}>{paksha}</span>}
 
-                  {primaryNamed && (
-                    <div style={{ width: '100%', marginTop: 2, padding: '0 2px' }}>
-                      <button type="button" className="panchang-festival-badge" onClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedKey(key);
-                        setOpenFestival({ ...primaryNamed, date: key, tithi, paksha });
-                      }} style={{
-                        fontFamily: UI_FONT, fontSize: 8.5, fontWeight: 700, lineHeight: 1.2,
-                        color: '#15803d', background: `${primaryNamed.color}1a`, border: `1px solid ${primaryNamed.color}40`,
-                        borderRadius: 4, padding: '2px 4px', whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'center',
-                        width: '100%', cursor: 'pointer',
-                      }} aria-label={`Open details for ${primaryNamed.name}`}>{primaryNamed.name}</button>
-                      {extraNamedCount > 0 && <div style={{ fontFamily: UI_FONT, fontSize: 8, fontWeight: 700, color: '#9A7150', textAlign: 'center', marginTop: 2 }}>+{extraNamedCount} more</div>}
+                  {named.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%', marginTop: 2, padding: '0 2px' }}>
+                      {named.map((festival, festivalIndex) => (
+                        <button type="button" key={`${festival.slug || festival.id || festival.name}-${festivalIndex}`} className="panchang-festival-badge" onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedKey(key);
+                          setOpenFestival({ ...festival, date: key, tithi, paksha });
+                        }} style={{
+                          fontFamily: UI_FONT, fontSize: 8.5, fontWeight: 700, lineHeight: 1.2,
+                          color: '#15803d', background: `${festival.color}1a`, border: `1px solid ${festival.color}40`,
+                          borderRadius: 4, padding: '2px 4px', whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'center',
+                          width: '100%', cursor: 'pointer',
+                        }} aria-label={`Open details for ${festival.name}`}>{festival.name}</button>
+                      ))}
                     </div>
                   )}
 
