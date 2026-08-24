@@ -53,6 +53,7 @@ function PageWatermark() {
         <path d="M100 60c-4 22-18 38-36 44 6 16 24 26 36 22 12 4 30-6 36-22-18-6-32-22-36-44z" opacity=".7" />
         <path d="M100 60c14 12 22 30 20 48-16 2-32-8-38-22-6 14-22 24-38 22-2-18 6-36 20-48 12-8 24-8 36 0z" opacity=".45" />
       </g>
+      <text x="100" y="119" textAnchor="middle" className="watermark-om">ॐ</text>
     </svg>
   );
 }
@@ -424,6 +425,7 @@ export default function SacredBookReaderPage() {
         <header className="reader-toolbar">
           <button className="back" onClick={() => { stopSpeaking(); navigate('/sacred-books'); }}><X size={16} /> Close book</button>
           <div className="titleblock">
+            <span className="devotional-kicker">॥ श्री हरिः ॐ ॥</span>
             <h1>{book?.title || 'Almost ready…'}</h1>
             {book?.author && <p>{book.author}</p>}
           </div>
@@ -607,8 +609,13 @@ export default function SacredBookReaderPage() {
                 className={`page-leaf ${language === 'hi' || language === 'sa' ? 'devanagari' : ''} turn-${turnDir}`}
               >
                 <div className="ribbon" aria-hidden="true" />
+                <span className="page-corner corner-left" aria-hidden="true">❧</span>
+                <span className="page-corner corner-right" aria-hidden="true">❧</span>
                 {!showingScan && <PageWatermark />}
                 <div className="rule rule-top" />
+                {!showingScan && <div className="page-invocation">
+                  {language === 'en' ? 'A sacred reading' : '॥ ॐ श्री परमात्मने नमः ॥'}
+                </div>}
 
                 {showingScan ? (
                   <div className="page-scan">
@@ -674,16 +681,21 @@ export default function SacredBookReaderPage() {
         --page-height:660px;
         position:relative;min-height:100vh;padding-bottom:56px;overflow:hidden;
         background:
-          radial-gradient(ellipse at 50% -10%, #6a2c0c66, transparent 55%),
-          linear-gradient(#1c0d05, #150a05 40%, #100804);
+          radial-gradient(circle at 14% 24%,#d98a2b12 0 1px,transparent 2px),
+          radial-gradient(circle at 86% 19%,#d98a2b10 0 1px,transparent 2px),
+          radial-gradient(ellipse at 50% -10%, #8b3c106e, transparent 56%),
+          linear-gradient(145deg,#210e05,#140804 52%,#0d0502);
+        background-size:42px 42px,54px 54px,auto,auto;
       }
-      .reader-glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 900px 500px at 50% 30%, #ffdca340, transparent 70%)}
+      .reader-shell::before{content:'';position:absolute;inset:0;pointer-events:none;border:1px solid #d69a3b1c;box-shadow:inset 0 0 130px #00000080}
+      .reader-glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 900px 520px at 50% 29%,#ffdca33d,transparent 69%)}
       .temple-arch{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:min(900px,100%);height:520px;color:#c9932f;opacity:.09;pointer-events:none}
 
       .reader-inner{position:relative;z-index:2;max-width:var(--content-width);margin:0 auto;padding:0 20px}
 
-      .reader-toolbar{padding:26px 0 16px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:16px;color:#f1dcb8}
+      .reader-toolbar{padding:22px 0 15px;display:grid;grid-template-columns:1fr minmax(220px,auto) 1fr;align-items:center;gap:16px;color:#f1dcb8;border-bottom:1px solid #cf8c2d1f}
       .titleblock{text-align:center;min-width:0}
+      .devotional-kicker{display:block;margin-bottom:3px;color:#d7a64f;font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:12px;letter-spacing:.16em;text-shadow:0 0 18px #ffbd4e66}
       .titleblock h1{
         margin:0;font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;
         font-size:clamp(20px,3vw,30px);letter-spacing:.01em;
@@ -740,14 +752,14 @@ export default function SacredBookReaderPage() {
       .section-item-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .section-item-page{flex-shrink:0;font-size:12px;color:#a9825a;font-variant-numeric:tabular-nums}
 
-      .tab-rail{display:flex;justify-content:center;align-items:center;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+      .tab-rail{display:flex;justify-content:center;align-items:center;gap:7px;margin:13px auto 15px;flex-wrap:wrap;padding:7px 10px;max-width:max-content;border:1px solid #c9913526;border-radius:14px;background:#0e06039c;box-shadow:0 12px 32px #0005,inset 0 1px #fff1}
       .tab-rail-icon{color:#a97b45;margin-right:4px}
       .tab{
         font-family:'EB Garamond',serif;font-size:14px;letter-spacing:.03em;cursor:pointer;
-        background:linear-gradient(#ece0c4,#d9c69a);color:#5a3c1e;border:1px solid #b8975f;border-bottom:none;
-        border-radius:8px 8px 0 0;padding:8px 18px 9px;transform:translateY(4px);box-shadow:0 -2px 6px #00000020;
+        background:linear-gradient(#f1e5c9,#d8c08b);color:#5a3517;border:1px solid #b98c46;
+        border-radius:9px;padding:8px 18px;box-shadow:0 3px 9px #0004,inset 0 1px #fff9;
       }
-      .tab.active{background:linear-gradient(#fff8e6,#f3e3bd);color:#7a3b12;transform:translateY(0);box-shadow:0 -4px 10px #0000003a;border-color:#c9932f;font-weight:600}
+      .tab.active{background:linear-gradient(#fff9e9,#edcf8e);color:#792c0a;box-shadow:0 0 0 1px #e6b85c,0 5px 18px #e29b2945,inset 0 1px #fff;border-color:#e0ac4e;font-weight:700}
 
       .voice-controls{display:flex;align-items:center;gap:6px;margin-left:8px}
       .voice-btn{
@@ -792,11 +804,12 @@ export default function SacredBookReaderPage() {
         position:relative;z-index:1;width:100%;max-width:760px;height:var(--page-height);
         display:flex;flex-direction:column;
         background:
-          repeating-linear-gradient(0deg, #00000006 0 1px, transparent 1px 3px),
-          radial-gradient(ellipse at top left, #fffaf0, #f4e6c4 60%, #ecd9ac);
-        border-radius:2px 10px 10px 2px;
+          linear-gradient(90deg,#6d310b12 0 1px,transparent 1px calc(100% - 1px),#6d310b12 calc(100% - 1px)),
+          repeating-linear-gradient(0deg,#5c2b0705 0 1px,transparent 1px 3px),
+          radial-gradient(ellipse at 42% 20%,#fffdf5,#f7ebce 58%,#e9d29d);
+        border:1px solid #d0a45f;border-radius:4px 12px 12px 4px;
         padding:52px clamp(26px,6vw,68px) 32px;
-        box-shadow:0 24px 60px #00000070, 0 2px 0 #ffffffaa inset, -10px 0 18px -12px #00000055 inset;
+        box-shadow:0 28px 70px #00000085,0 2px 0 #ffffffc7 inset,-13px 0 22px -13px #0007 inset,0 0 0 5px #7c491018;
         overflow:hidden;
       }
       .page-leaf::after{
@@ -811,20 +824,23 @@ export default function SacredBookReaderPage() {
         box-shadow:0 4px 8px #00000040;
       }
       .page-watermark{position:absolute;top:50%;left:50%;width:260px;height:260px;transform:translate(-50%,-50%);color:#7a3b12;opacity:.05;pointer-events:none}
+      .watermark-om{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:54px;font-weight:600;fill:currentColor}
+      .page-corner{position:absolute;top:24px;color:#9c682d66;font-family:Georgia,serif;font-size:24px;line-height:1}.corner-left{left:28px}.corner-right{right:28px;transform:scaleX(-1)}
       .rule{height:1px;flex-shrink:0;margin:0 auto;max-width:180px;width:100%;background:linear-gradient(90deg,transparent,#a9752f,transparent)}
-      .rule-top{margin-bottom:22px}
+      .rule-top{margin-bottom:8px}
       .rule-bottom{margin-top:16px}
+      .page-invocation{position:relative;flex-shrink:0;margin:0 0 16px;text-align:center;color:#8a4b20;font-family:var(--font-hindi,'Noto Serif Devanagari'),'EB Garamond',serif;font-size:12px;letter-spacing:.09em}
 
       .page-text-wrap{flex:1;min-height:0;overflow-y:auto;padding-right:6px;margin-right:-6px}
       .page-text-wrap::-webkit-scrollbar{width:5px}
       .page-text-wrap::-webkit-scrollbar-thumb{background:#c9932f66;border-radius:99px}
       .page-text-wrap::-webkit-scrollbar-track{background:transparent}
 
-      .page-text{position:relative;font-family:'Crimson Pro',Georgia,serif;font-size:19px;line-height:1.95;color:#2c1c0e;text-align:center;max-width:560px;margin:0 auto}
+      .page-text{position:relative;font-family:'Crimson Pro',Georgia,serif;font-size:19px;line-height:1.95;color:#28190d;text-align:center;max-width:570px;margin:0 auto;text-shadow:0 1px #fff8}
       .reading-line{display:block;border-radius:6px;padding:0 6px;transition:background-color .22s ease,color .22s ease,box-shadow .22s ease}
       .reading-line.active{background:#f3c85b66;color:#6d2509;box-shadow:0 0 0 1px #c98a2b55 inset}
       .page-text::first-letter{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.7em;color:#8b3a15;font-weight:700}
-      .page-leaf.devanagari .page-text{font-family:var(--font-hindi,'Noto Sans Devanagari'),sans-serif;font-size:19px;line-height:2.1;font-variant-ligatures:normal;text-rendering:optimizeLegibility}
+      .page-leaf.devanagari .page-text{font-family:var(--font-hindi,'Noto Serif Devanagari'),serif;font-size:19px;line-height:2.12;font-variant-ligatures:normal;text-rendering:optimizeLegibility}
       .page-leaf.devanagari .page-text::first-letter{font-size:1em;color:inherit;font-weight:inherit;font-family:inherit}
 
       /* Scroll hint — fades in over the bottom of the text when there's more to read,
