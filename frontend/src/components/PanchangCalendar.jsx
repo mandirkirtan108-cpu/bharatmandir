@@ -506,6 +506,41 @@ export default function PanchangCalendar() {
         .panchang-list-body strong { color:#2f1c0d; font-size:14px; }
         .panchang-list-body small { color:#927050; font-size:11px; margin-top:3px; }
         .panchang-list-arrow { color:#c76620; font-size:26px; line-height:1; }
+        .panchang-rich-modal { width:min(760px,100%); background:#fbf7ef; }
+        .panchang-rich-hero { min-height:230px; padding:30px 60px 58px; color:#fff; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+        .panchang-rich-kicker { margin-bottom:14px; padding:5px 13px; border-radius:999px; background:#efc55c; color:#53370a; font-family:${UI_FONT}; font-size:9px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
+        .panchang-rich-icon { font-size:40px; line-height:1; margin-bottom:7px; filter:drop-shadow(0 5px 10px rgba(0,0,0,.24)); }
+        .panchang-rich-hero h2 { margin:0; font-family:Georgia,'Times New Roman',serif; font-size:clamp(34px,6vw,52px); line-height:1.02; letter-spacing:-.02em; }
+        .panchang-rich-hindi { margin-top:5px; color:#efc55c; font-family:Georgia,'Noto Serif Devanagari',serif; font-size:21px; font-weight:700; }
+        .panchang-rich-hero p { margin:14px 0 0; font-family:Georgia,'Times New Roman',serif; font-size:13px; opacity:.82; }
+        .panchang-rich-facts { position:relative; z-index:2; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:-28px 18px 0; overflow:hidden; border:1px solid #eadbc7; border-radius:14px; background:#fff; box-shadow:0 12px 28px rgba(55,30,10,.13); }
+        .panchang-rich-facts>div { min-width:0; padding:15px 9px; text-align:center; border-right:1px solid #eadbc7; }
+        .panchang-rich-facts>div:last-child { border-right:0; }
+        .panchang-rich-facts .fact-icon { display:block; font-size:16px; margin-bottom:5px; }
+        .panchang-rich-facts small { display:block; margin-bottom:4px; color:#9c8066; font-family:${UI_FONT}; font-size:8px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+        .panchang-rich-facts strong { display:block; color:var(--festival-accent); font-family:${UI_FONT}; font-size:10px; line-height:1.35; }
+        .panchang-rich-body { padding:0; }
+        .panchang-rich-significance,.panchang-rich-rituals { padding:38px 28px 32px; }
+        .panchang-rich-eyebrow { margin-bottom:6px; color:var(--festival-accent); font-family:${UI_FONT}; font-size:9px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+        .panchang-rich-body h3 { margin:0 0 18px; color:#2d271e; font-family:Georgia,'Times New Roman',serif; font-size:27px; font-weight:500; }
+        .panchang-rich-copy-grid { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(180px,.85fr); gap:28px; align-items:start; }
+        .panchang-rich-copy-grid p { margin:0 0 12px; color:#554c40; font-family:${UI_FONT}; font-size:13px; line-height:1.8; }
+        .panchang-rich-copy-grid p:first-child::first-letter { float:left; margin:3px 5px 0 0; color:var(--festival-accent); font-family:Georgia,serif; font-size:38px; line-height:.8; }
+        .panchang-rich-copy-grid blockquote { margin:0; padding:18px; border-left:3px solid #e9bd53; border-radius:11px; background:color-mix(in srgb,var(--festival-accent) 7%,#fff); color:#655040; font-family:Georgia,'Times New Roman',serif; font-size:14px; font-style:italic; line-height:1.55; box-shadow:0 7px 18px rgba(65,35,10,.07); }
+        .panchang-rich-date { margin-top:14px; color:#8a6d52; font-family:${UI_FONT}; font-size:11px; font-weight:600; }
+        .panchang-rich-rituals { border-top:1px solid #e7ded1; border-bottom:1px solid #e7ded1; background:color-mix(in srgb,var(--festival-accent) 7%,#eef8f4); }
+        .panchang-rich-ritual-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+        .panchang-rich-ritual-grid>div { min-width:0; padding:13px; border:1px solid rgba(80,52,25,.12); border-radius:11px; background:rgba(255,255,255,.92); display:flex; align-items:flex-start; gap:10px; box-shadow:0 4px 11px rgba(60,35,15,.06); }
+        .panchang-rich-ritual-grid>div>span { width:30px; height:30px; flex:0 0 30px; border-radius:9px; background:#fff4e7; display:flex; align-items:center; justify-content:center; }
+        .panchang-rich-ritual-grid strong,.panchang-rich-ritual-grid small { display:block; font-family:${UI_FONT}; }
+        .panchang-rich-ritual-grid strong { color:#32281e; font-size:11px; }
+        .panchang-rich-ritual-grid small { margin-top:3px; color:#827261; font-size:9px; line-height:1.45; }
+        .panchang-rich-meaning { margin:30px 28px 0; padding:25px; border-radius:14px; background:linear-gradient(135deg,#062c24,#163f34); color:#fff; text-align:center; box-shadow:inset -30px 0 50px rgba(239,197,92,.15); }
+        .panchang-rich-meaning small { display:block; margin-bottom:8px; color:#efc55c; font-family:${UI_FONT}; font-size:8px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+        .panchang-rich-meaning strong { font-family:Georgia,'Times New Roman',serif; font-size:17px; font-style:italic; line-height:1.55; }
+        .panchang-rich-body>.panchang-festival-temple { margin:22px 28px 0; }
+        .panchang-rich-body>.panchang-festival-back { width:calc(100% - 56px); margin:22px 28px 0; }
+        .panchang-rich-footer { padding:20px 28px 24px; color:#9a7a5e; font-family:${UI_FONT}; font-size:9px; text-align:center; }
         @media (max-width: 720px) {
           .festival-detail-grid { grid-template-columns: 1fr !important; }
           .panchang-calendar-section { padding-bottom: 36px !important; }
@@ -540,6 +575,16 @@ export default function PanchangCalendar() {
           .panchang-festival-icon { width:52px; height:52px; flex-basis:52px; font-size:27px; border-radius:15px; }
           .panchang-festival-modal-body { padding:20px 18px 24px; }
           .panchang-festival-facts { grid-template-columns:1fr; }
+          .panchang-rich-hero { min-height:210px; padding:28px 44px 50px; }
+          .panchang-rich-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+          .panchang-rich-facts>div:nth-child(2) { border-right:0; }
+          .panchang-rich-facts>div:nth-child(-n+2) { border-bottom:1px solid #eadbc7; }
+          .panchang-rich-significance,.panchang-rich-rituals { padding:34px 19px 26px; }
+          .panchang-rich-copy-grid { grid-template-columns:1fr; gap:15px; }
+          .panchang-rich-ritual-grid { grid-template-columns:1fr; }
+          .panchang-rich-meaning { margin:24px 18px 0; padding:22px 16px; }
+          .panchang-rich-body>.panchang-festival-temple { margin:18px 18px 0; }
+          .panchang-rich-body>.panchang-festival-back { width:calc(100% - 36px); margin:18px 18px 0; }
         }
         @media (max-width: 480px) {
           .panchang-calendar-container { padding-left: 8px !important; padding-right: 8px !important; }
@@ -581,6 +626,13 @@ function FestivalListModal({ data, onClose, onSelect }) {
   );
 }
 
+const FESTIVAL_HINDI_NAMES = {
+  'nag panchami': 'नाग पंचमी', 'raksha bandhan': 'रक्षा बंधन', 'ganesh chaturthi': 'गणेश चतुर्थी',
+  'hariyali teej': 'हरियाली तीज', 'janmashtami': 'जन्माष्टमी', 'diwali': 'दीपावली', 'holi': 'होली',
+  'navratri': 'नवरात्रि', 'dussehra': 'विजयादशमी', 'maha shivaratri': 'महाशिवरात्रि',
+  'ram navami': 'राम नवमी', 'hanuman jayanti': 'हनुमान जयंती', 'makar sankranti': 'मकर संक्रांति',
+};
+
 function FestivalDetailsModal({ festival, onClose }) {
   const meta = classifyFestival(festival);
   const parana = paranaText(festival.parana);
@@ -588,63 +640,91 @@ function FestivalDetailsModal({ festival, onClose }) {
     ? parseDateKey(festival.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : festival.display_date || festival.exact_date || festival.typical_date;
   const duration = Number(festival.duration_days || 1);
+  const hindiName = festival.name_hi || festival.hindi_name || FESTIVAL_HINDI_NAMES[(festival.name || '').toLowerCase()] || '';
+  const tithi = festival.hindu_tithi || festival.tithi || 'Traditional Hindu calendar date';
+  const month = festival.hindu_month || (displayDate ? new Date(festival.date || festival.exact_date || festival.typical_date).toLocaleDateString('en-IN', { month: 'long' }) : 'Hindu calendar');
+  const deity = festival.deity && festival.deity !== 'Other' ? festival.deity : 'Divine blessings';
+  const significance = festival.significance || festival.description || 'This sacred observance brings devotees together in prayer, gratitude and remembrance of India’s living spiritual traditions.';
+  const about = festival.description && festival.description !== festival.significance ? festival.description : '';
+  const suppliedRituals = Array.isArray(festival.rituals) ? festival.rituals : [];
+  const rituals = suppliedRituals.length > 0 ? suppliedRituals.slice(0, 4).map((ritual) => ({
+    title: typeof ritual === 'string' ? ritual : ritual?.title || ritual?.name || 'Sacred tradition',
+    detail: typeof ritual === 'object' ? ritual?.description || ritual?.detail || 'Observed with devotion according to regional tradition.' : 'Observed with devotion according to regional tradition.',
+  })) : [
+    { title: 'Prayer & worship', detail: 'Devotees offer prayers and seek divine blessings.' },
+    { title: 'Traditional offerings', detail: 'Sacred offerings are made according to family and regional customs.' },
+    { title: 'Family observance', detail: 'Families gather and preserve the traditions associated with the day.' },
+    { title: 'Charity & blessings', detail: 'Acts of kindness, gratitude and service are considered auspicious.' },
+  ];
+  const deeperMeaning = festival.deeper_meaning || festival.quote || 'Faith, gratitude and togetherness keep sacred traditions alive across generations.';
+  const facts = [
+    { icon: '📅', label: 'When', value: tithi },
+    { icon: '🙏', label: 'Dedicated to', value: deity },
+    { icon: '🌙', label: 'Sacred month', value: month },
+    { icon: '🪔', label: 'Observance', value: `${duration} day${duration === 1 ? '' : 's'}` },
+  ];
 
   return (
     <div className="panchang-festival-overlay" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <article className="panchang-festival-modal" role="dialog" aria-modal="true" aria-labelledby="panchang-festival-title">
-        <div className="panchang-festival-modal-hero" style={{ background: `linear-gradient(135deg, ${meta.color}, #3f220f)` }}>
+      <article className="panchang-festival-modal panchang-rich-modal" role="dialog" aria-modal="true" aria-labelledby="panchang-festival-title" style={{ '--festival-accent': meta.color }}>
+        <div className="panchang-rich-hero" style={{ background: `radial-gradient(circle at 80% 20%, ${meta.color}bb, transparent 42%), linear-gradient(145deg, #143e31, #061f19)` }}>
           <button type="button" className="panchang-festival-close" onClick={onClose} aria-label="Close festival details">
             <X size={20} />
           </button>
-          <div className="panchang-festival-icon" aria-hidden="true">{festival.emoji || '🌿'}</div>
-          <div>
-            <div className="panchang-festival-kicker">Hindu Festival</div>
-            <h2 id="panchang-festival-title">{festival.name}</h2>
-            {displayDate && <div className="panchang-festival-date">📅 {displayDate}</div>}
-          </div>
+          <div className="panchang-rich-kicker">{festival.hindu_month || 'Sacred Hindu Festival'} • {deity}</div>
+          <div className="panchang-rich-icon" aria-hidden="true">{festival.emoji || '🌿'}</div>
+          <h2 id="panchang-festival-title">{festival.name}</h2>
+          {hindiName && <div className="panchang-rich-hindi">{hindiName}</div>}
+          <p>{festival.tagline || `A sacred celebration of devotion, tradition and ${deity}`}</p>
         </div>
 
-        <div className="panchang-festival-modal-body">
-          <div className="panchang-festival-facts">
-            {(festival.hindu_tithi || festival.tithi) && <div><span>Tithi</span><strong>{festival.hindu_tithi || festival.tithi}</strong></div>}
-            {festival.hindu_month && <div><span>Hindu month</span><strong>{festival.hindu_month}</strong></div>}
-            {festival.deity && festival.deity !== 'Other' && <div><span>Dedicated to</span><strong>{festival.deity}</strong></div>}
-            <div><span>Duration</span><strong>{duration} day{duration === 1 ? '' : 's'}</strong></div>
-          </div>
+        <div className="panchang-rich-facts">
+          {facts.map((fact) => (
+            <div key={fact.label}><span className="fact-icon">{fact.icon}</span><small>{fact.label}</small><strong>{fact.value}</strong></div>
+          ))}
+        </div>
 
-          {festival.significance && (
-            <section className="panchang-festival-copy">
-              <h3>Significance</h3>
-              <p>{festival.significance}</p>
-            </section>
-          )}
-          {festival.description && festival.description !== festival.significance && (
-            <section className="panchang-festival-copy">
-              <h3>About the festival</h3>
-              <p>{festival.description}</p>
-            </section>
-          )}
-          {Array.isArray(festival.rituals) && festival.rituals.length > 0 && (
-            <section className="panchang-festival-copy">
-              <h3>Rituals and traditions</h3>
-              <ul>{festival.rituals.map((ritual, index) => <li key={index}>{typeof ritual === 'string' ? ritual : ritual?.title || ritual?.name}</li>)}</ul>
-            </section>
-          )}
+        <div className="panchang-rich-body">
+          <section className="panchang-rich-significance">
+            <div className="panchang-rich-eyebrow">Significance</div>
+            <h3>Why it matters</h3>
+            <div className="panchang-rich-copy-grid">
+              <div>
+                <p>{significance}</p>
+                {about && <p>{about}</p>}
+              </div>
+              <blockquote>“{festival.short_quote || deeperMeaning}”</blockquote>
+            </div>
+            {displayDate && <div className="panchang-rich-date">📅 {displayDate}{parana ? ` • Parana: ${parana}` : ''}</div>}
+          </section>
+
+          <section className="panchang-rich-rituals">
+            <div className="panchang-rich-eyebrow">Rituals & traditions</div>
+            <h3>How it is celebrated</h3>
+            <div className="panchang-rich-ritual-grid">
+              {rituals.map((ritual, index) => (
+                <div key={`${ritual.title}-${index}`}><span>{['🙏','🌺','🪔','✨'][index]}</span><div><strong>{ritual.title}</strong><small>{ritual.detail}</small></div></div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panchang-rich-meaning">
+            <small>The deeper meaning</small>
+            <strong>{deeperMeaning}</strong>
+          </section>
+
           {festival.temple_name && (
             <div className="panchang-festival-temple">
               <MapPin size={17} />
               <div><span>Celebrated at</span><strong>{festival.temple_name}{festival.temple_city ? `, ${festival.temple_city}` : ''}</strong></div>
             </div>
           )}
-          {parana && <div className="panchang-festival-parana"><strong>Parana:</strong> {parana}</div>}
-          {!festival.significance && !festival.description && (
-            <p className="panchang-festival-empty">Detailed information for this observance is not available yet.</p>
-          )}
           <button type="button" className="panchang-festival-back" onClick={onClose}>
             ← Back to Panchang Calendar
           </button>
+          <div className="panchang-rich-footer">Festivals of India • BharatMandir</div>
         </div>
       </article>
     </div>
