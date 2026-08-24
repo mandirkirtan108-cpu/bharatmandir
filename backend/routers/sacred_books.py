@@ -104,6 +104,7 @@ TTS_FORMATS = {
 # Sample rate of the raw PCM Gemini's TTS returns (24kHz/16-bit mono), used
 # to wrap it in a playable WAV container — see _pcm_to_wav() below.
 TTS_PCM_SAMPLE_RATE = int(os.getenv("LIBRARY_TTS_PCM_SAMPLE_RATE", "24000"))
+TTS_CHUNK_CHARS = max(400, int(os.getenv("LIBRARY_TTS_CHUNK_CHARS", "1200")))
 # A page's worth of prose comfortably fits under this; longer input is
 # truncated so one request can't blow past a TTS model's context window.
 TTS_MAX_CHARS = max(500, int(os.getenv("LIBRARY_TTS_MAX_CHARS", "4000")))
@@ -400,6 +401,69 @@ def _pcm_to_wav(pcm_bytes: bytes, *, sample_rate: int, channels: int = 1, sample
 TTS_TIMEOUT_SECONDS = max(30, int(os.getenv("LIBRARY_TTS_TIMEOUT_SECONDS", "90")))
 
 
+def _split_tts_input(text: str) -> list[str]:
+    """Split long pages at natural boundaries for reliable TTS generation."""
+    remaining = text.strip()
+    chunks: list[str] = []
+    while remaining:
+        if len(remaining) <= TTS_CHUNK_CHARS:
+            chunks.append(remaining)
+            break
+        boundary = max(
+            remaining.rfind("।", 0, TTS_CHUNK_CHARS),
+            remaining.rfind("॥", 0, TTS_CHUNK_CHARS),
+            remaining.rfind(". ", 0, TTS_CHUNK_CHARS),
+            remaining.rfind("\n", 0, TTS_CHUNK_CHARS),
+        )
+        if boundary < TTS_CHUNK_CHARS // 2:
+            boundary = remaining.rfind(" ", 0, TTS_CHUNK_CHARS)
+        if boundary < 1:
+            boundary = TTS_CHUNK_CHARS
+        else:
+            boundary += 1
+        chunks.append(remaining[:boundary].strip())
+        remaining = remaining[boundary:].strip()
+    return [chunk for chunk in chunks if chunk]
+
+
+def _synthesize_gemini_pcm(text: str, model: str, voice: str) -> bytes:
+    """Generate Gemini PCM in reliable chunks and combine the raw samples."""
+    pcm_parts: list[bytes] = []
+    for chunk_number, chunk in enumerate(_split_tts_input(text), 1):
+        last_error: Exception | None = None
+        for attempt, attempt_timeout in enumerate(
+            (TTS_TIMEOUT_SECONDS, TTS_TIMEOUT_SECONDS * 2, TTS_TIMEOUT_SECONDS * 3),
+            1,
+        ):
+            try:
+                pcm = speech(
+                    input=chunk,
+                    model=model,
+                    voice=voice,
+                    response_format="pcm",
+                    timeout=attempt_timeout,
+                )
+                if not pcm:
+                    raise RuntimeError("Provider returned an empty PCM audio stream.")
+                pcm_parts.append(pcm)
+                break
+            except Exception as exc:
+                last_error = exc
+                print(
+                    f"[library] Gemini TTS chunk {chunk_number} attempt {attempt} failed "
+                    f"(voice={voice}, timeout={attempt_timeout}s): {exc}"
+                )
+                if attempt < 3:
+                    time.sleep(attempt)
+        else:
+            raise RuntimeError(
+                f"Gemini TTS could not generate audio chunk {chunk_number}: {last_error}"
+            )
+    if not pcm_parts:
+        raise RuntimeError("Gemini TTS returned no audio.")
+    return b"".join(pcm_parts)
+
+
 def _synthesize_tts_audio(text: str, model: str, voice: str, preferred_format: str) -> tuple[bytes, str, str]:
     """Try a few OpenRouter TTS output formats because provider support varies.
 
@@ -410,6 +474,10 @@ def _synthesize_tts_audio(text: str, model: str, voice: str, preferred_format: s
     format the provider has already told us it doesn't support wastes a
     round trip without addressing the actual problem.
     """
+    if model.startswith("google/gemini"):
+        pcm = _synthesize_gemini_pcm(text, model, voice)
+        return _pcm_to_wav(pcm, sample_rate=TTS_PCM_SAMPLE_RATE), "wav", "audio/wav"
+
     formats: list[str | None] = []
     for candidate in (preferred_format, "mp3", "wav", "pcm", None):
         if candidate not in formats:
@@ -1502,6 +1570,13 @@ def synthesize_speech(payload: dict = Body(...)):
                         follow_redirects=True,
                     )
                     cached_response.raise_for_status()
+                    if (
+                        TTS_FORMATS[language] == "pcm"
+                        and not cached_response.content.startswith(b"RIFF")
+                    ):
+                        raise ValueError(
+                            "Cached Gemini audio is not a valid WAV file; regenerating it."
+                        )
                     cached_media_type = (
                         cached_response.headers.get("content-type", "")
                         .split(";", 1)[0]
@@ -1518,7 +1593,7 @@ def synthesize_speech(payload: dict = Body(...)):
                         media_type=cached_media_type,
                         headers={"Cache-Control": "public, max-age=31536000"},
                     )
-                except httpx.HTTPError as exc:
+                except (httpx.HTTPError, ValueError) as exc:
                     # If an old Cloudinary asset is missing or temporarily
                     # unavailable, continue below and regenerate the page audio.
                     print(
