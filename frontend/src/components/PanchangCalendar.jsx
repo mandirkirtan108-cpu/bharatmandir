@@ -91,6 +91,7 @@ export default function PanchangCalendar() {
   const [monthData, setMonthData] = useState(null);
   const [allFestivals, setAllFestivals] = useState([]);
   const [openFestival, setOpenFestival] = useState(null);
+  const [openFestivalList, setOpenFestivalList] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -146,8 +147,13 @@ export default function PanchangCalendar() {
 
   useEffect(() => {
     if (!openFestival) return undefined;
+    if (!openFestival && !openFestivalList) return undefined;
     const onKeyDown = (event) => {
       if (event.key === 'Escape') setOpenFestival(null);
+      if (event.key === 'Escape') {
+        setOpenFestival(null);
+        setOpenFestivalList(null);
+      }
     };
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -157,6 +163,7 @@ export default function PanchangCalendar() {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [openFestival]);
+  }, [openFestival, openFestivalList]);
 
   const additionalFestivalsByKey = useMemo(() => {
     const map = new Map();
@@ -204,6 +211,8 @@ export default function PanchangCalendar() {
   return (
     <section className="panchang-calendar-section" style={{ background: '#fff', padding: '0 0 60px 0', borderTop: '1px solid #f0e8da' }}>
       <div className="panchang-calendar-container" style={{ maxWidth: 960, margin: '0 auto', padding: '40px 20px 0' }}>
+    <section className="panchang-calendar-section" style={{ background: 'linear-gradient(180deg,#fffaf3 0%,#f8f1e8 100%)', padding: '0 0 70px 0', borderTop: '1px solid #f0e8da' }}>
+      <div className="panchang-calendar-container" style={{ maxWidth: 1180, margin: '0 auto', padding: '42px 20px 0' }}>
         <div style={{ fontFamily: UI_FONT, fontSize: 12, fontWeight: 600, color: '#9A7150', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
           Calendar grid - with festival names and observance highlights
         </div>
@@ -274,10 +283,14 @@ export default function PanchangCalendar() {
                     border: selected ? '2px solid #E8650A' : isToday ? '2px solid rgba(232,101,10,0.35)' : '1px solid #f0e4d2',
                     borderRadius: 8,
                     background: selected ? '#fff7f0' : primaryNamed ? '#f9fdf9' : '#fff',
+                    borderRadius: 14,
+                    background: selected ? 'linear-gradient(180deg,#fff8f1,#fffdf9)' : primaryNamed ? 'linear-gradient(180deg,#fbfffc,#f5fbf6)' : '#fff',
                     cursor: 'pointer',
                     padding: '8px 4px 8px',
+                    padding: '10px 6px 9px',
                     textAlign: 'center',
                     minHeight: hasHighlight ? 106 + (phaseBadges.length * 16) : 84,
+                    minHeight: hasHighlight ? 132 + (phaseBadges.length * 16) : 116,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -297,6 +310,7 @@ export default function PanchangCalendar() {
                   {named.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%', marginTop: 2, padding: '0 2px' }}>
                       {named.map((festival, festivalIndex) => (
+                      {named.slice(0, 2).map((festival, festivalIndex) => (
                         <button type="button" key={`${festival.slug || festival.id || festival.name}-${festivalIndex}`} className="panchang-festival-badge" onClick={(event) => {
                           event.stopPropagation();
                           setSelectedKey(key);
@@ -308,6 +322,13 @@ export default function PanchangCalendar() {
                           width: '100%', cursor: 'pointer',
                         }} aria-label={`Open details for ${festival.name}`}>{festival.name}</button>
                       ))}
+                      {named.length > 2 && (
+                        <button type="button" className="panchang-more-festivals" onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedKey(key);
+                          setOpenFestivalList({ date: key, festivals: named, tithi, paksha });
+                        }}>+{named.length - 2} more festivals</button>
+                      )}
                     </div>
                   )}
 
@@ -431,6 +452,16 @@ export default function PanchangCalendar() {
       {openFestival && (
         <FestivalDetailsModal festival={openFestival} onClose={() => setOpenFestival(null)} />
       )}
+      {openFestivalList && (
+        <FestivalListModal
+          data={openFestivalList}
+          onClose={() => setOpenFestivalList(null)}
+          onSelect={(festival) => {
+            setOpenFestivalList(null);
+            setOpenFestival({ ...festival, date: openFestivalList.date, tithi: openFestivalList.tithi, paksha: openFestivalList.paksha });
+          }}
+        />
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -438,9 +469,16 @@ export default function PanchangCalendar() {
         .panchang-calendar-container,
         .panchang-calendar-card { min-width: 0; box-sizing: border-box; }
         .panchang-calendar-section * { box-sizing: border-box; }
+        .panchang-calendar-grid { background:#f3e8d8; border-radius:18px; margin:0 14px 16px; padding:5px !important; gap:5px !important; }
+        .panchang-day-cell { transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease; box-shadow:0 1px 2px rgba(70,38,10,.04); }
+        .panchang-day-cell:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(70,38,10,.10); border-color:#e4bc92 !important; z-index:2; }
         .panchang-day-cell:focus-visible { outline: 3px solid rgba(232,101,10,.35); outline-offset: 1px; }
         .panchang-festival-badge:hover { filter: brightness(.96); transform: translateY(-1px); }
+        .panchang-festival-badge { min-height:22px; transition:filter .15s,transform .15s,box-shadow .15s; }
+        .panchang-festival-badge:hover { filter:brightness(.97); transform:translateY(-1px); box-shadow:0 3px 8px rgba(22,101,52,.12); }
         .panchang-festival-badge:focus-visible { outline: 2px solid #16a34a; outline-offset: 1px; }
+        .panchang-more-festivals { width:100%; border:0; background:transparent; color:#9a4b12; padding:3px 2px; font-family:${UI_FONT}; font-size:8.5px; font-weight:800; cursor:pointer; }
+        .panchang-more-festivals:hover { color:#E8650A; text-decoration:underline; }
         .panchang-festival-overlay { position:fixed; inset:0; z-index:10000; padding:24px; overflow-y:auto; background:rgba(30,20,8,.62); backdrop-filter:blur(5px); display:flex; align-items:flex-start; justify-content:center; }
         .panchang-festival-modal { width:min(680px,100%); margin:auto; overflow:hidden; border-radius:22px; background:#fffaf2; box-shadow:0 35px 100px rgba(0,0,0,.45); animation:panchangFestivalIn .25s ease; }
         @keyframes panchangFestivalIn { from { opacity:0; transform:translateY(20px) scale(.98); } to { opacity:1; transform:none; } }
@@ -465,6 +503,20 @@ export default function PanchangCalendar() {
         .panchang-festival-back { width:100%; margin-top:24px; padding:12px 18px; border:1.5px solid #d9c4a9; border-radius:999px; background:#fff; color:#6f3510; font-family:${UI_FONT}; font-size:13px; font-weight:800; cursor:pointer; transition:background .15s,border-color .15s,transform .15s; }
         .panchang-festival-back:hover { background:#fff3e5; border-color:#E8650A; transform:translateY(-1px); }
         .panchang-festival-back:focus-visible { outline:3px solid rgba(232,101,10,.3); outline-offset:2px; }
+        .panchang-list-modal { width:min(540px,100%); margin:auto; padding:0 22px 22px; overflow:hidden; border-radius:22px; background:#fffaf2; box-shadow:0 35px 100px rgba(0,0,0,.45); animation:panchangFestivalIn .25s ease; }
+        .panchang-list-head { margin:0 -22px 18px; padding:22px 24px; background:linear-gradient(135deg,#6f2d08,#b95312); color:#fff; display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+        .panchang-list-head span { font-family:${UI_FONT}; font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; opacity:.75; }
+        .panchang-list-head h2 { margin:4px 0 0; font-family:var(--font-display,${UI_FONT}); font-size:22px; line-height:1.2; }
+        .panchang-list-head button { width:36px; height:36px; border:0; border-radius:50%; background:rgba(255,255,255,.18); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+        .panchang-list-body { display:grid; gap:9px; }
+        .panchang-list-body>button { width:100%; padding:12px; border:1px solid #eadbc7; border-radius:13px; background:#fff; display:flex; align-items:center; gap:12px; text-align:left; cursor:pointer; transition:transform .15s,border-color .15s,box-shadow .15s; }
+        .panchang-list-body>button:hover { transform:translateX(3px); border-color:#e89a60; box-shadow:0 6px 16px rgba(70,38,10,.08); }
+        .panchang-list-icon { width:42px; height:42px; flex:0 0 42px; border-radius:12px; background:#fff4e7; display:flex; align-items:center; justify-content:center; font-size:22px; }
+        .panchang-list-body button>span:nth-child(2) { flex:1; min-width:0; }
+        .panchang-list-body strong,.panchang-list-body small { display:block; font-family:${UI_FONT}; }
+        .panchang-list-body strong { color:#2f1c0d; font-size:14px; }
+        .panchang-list-body small { color:#927050; font-size:11px; margin-top:3px; }
+        .panchang-list-arrow { color:#c76620; font-size:26px; line-height:1; }
         @media (max-width: 720px) {
           .festival-detail-grid { grid-template-columns: 1fr !important; }
           .panchang-calendar-section { padding-bottom: 36px !important; }
@@ -510,6 +562,33 @@ export default function PanchangCalendar() {
         }
       `}</style>
     </section>
+  );
+}
+
+function FestivalListModal({ data, onClose, onSelect }) {
+  const displayDate = parseDateKey(data.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return (
+    <div className="panchang-festival-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="panchang-list-modal" role="dialog" aria-modal="true" aria-labelledby="festival-list-title">
+        <div className="panchang-list-head">
+          <div>
+            <span>Festivals on</span>
+            <h2 id="festival-list-title">{displayDate}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close festival list"><X size={19} /></button>
+        </div>
+        <div className="panchang-list-body">
+          {data.festivals.map((festival, index) => (
+            <button type="button" key={`${festival.slug || festival.id || festival.name}-${index}`} onClick={() => onSelect(festival)}>
+              <span className="panchang-list-icon">{festival.emoji || '🌿'}</span>
+              <span><strong>{festival.name}</strong><small>{festival.hindu_tithi || festival.deity || 'Hindu Festival'}</small></span>
+              <span className="panchang-list-arrow">›</span>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="panchang-festival-back" onClick={onClose}>← Back to Panchang Calendar</button>
+      </section>
+    </div>
   );
 }
 
@@ -588,6 +667,10 @@ const calendarCardStyle = {
   borderRadius: 12,
   background: '#fff',
   boxShadow: '0 1px 8px rgba(61,31,0,0.06)',
+  border: '1px solid #ead8c0',
+  borderRadius: 22,
+  background: 'rgba(255,255,255,.94)',
+  boxShadow: '0 18px 55px rgba(78,42,11,0.10), 0 2px 8px rgba(78,42,11,0.05)',
   overflow: 'hidden',
   marginBottom: 22,
 };
@@ -597,12 +680,22 @@ const monthHeaderStyle = {
   padding: '16px 20px',
   borderBottom: '1px solid #f0e8da',
 };
+const monthHeaderStyle = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  padding: '22px 26px',
+  borderBottom: '1px solid #f0e8da',
+  background: 'linear-gradient(135deg,#fffdf9,#fff6e9)',
+};
 
 const navBtnStyle = {
   width: 32, height: 32, borderRadius: '50%',
   background: '#f9f5f0',
   border: '1px solid #e5d9c8',
   color: '#6b7280',
+  width: 40, height: 40, borderRadius: '50%',
+  background: '#fff',
+  border: '1px solid #e7d3b8',
+  color: '#8b4518',
   cursor: 'pointer',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
 };
