@@ -49,6 +49,13 @@ ADMIN_REVIEW_ACTIONS = {
     "changes_requested",
 }
 
+VALID_MANAGING_AUTHORITIES = {
+    "Private / Family Trust",
+    "Community / Village Trust",
+    "State Govt Endowment Board",
+    "Archaeological Survey of India (ASI)",
+}
+
 ALLOWED_IMAGE_TYPES = {
     "image/jpeg",
     "image/png",
@@ -836,6 +843,23 @@ def review_volunteer_submission(
                 temple_values[field] = _clean_text(form_data.get(field))
             for field in TEMPLE_BOOLEAN_FIELDS:
                 temple_values[field] = bool(form_data.get(field, False))
+
+            # PostgreSQL stores managing_authority as a strict enum. The
+            # frontend uses "__custom__" only as a UI marker, so it must never
+            # be inserted into that enum column. Preserve the volunteer's
+            # custom authority text in trust_name instead.
+            submitted_authority = temple_values.get("managing_authority")
+            custom_authority = _clean_text(
+                form_data.get("managing_authority_custom")
+            )
+            if submitted_authority not in VALID_MANAGING_AUTHORITIES:
+                authority_name = custom_authority
+                if submitted_authority and submitted_authority != "__custom__":
+                    authority_name = authority_name or submitted_authority
+                temple_values["managing_authority"] = None
+                temple_values["trust_name"] = (
+                    temple_values.get("trust_name") or authority_name
+                )
 
             # Use the submission summary as a fallback for older drafts.
             temple_values.update({
